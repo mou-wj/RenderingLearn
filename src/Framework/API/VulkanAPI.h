@@ -5,7 +5,7 @@
 #include <vector>
 namespace VulkanAPI {
 
-	void Init();
+	void Initialize();
 	//platform
 	std::vector<const char*> GetWinGLFWExtensionNames();
 	GLFWwindow* CreateWin32Window(int width, int height, const char* windowName);
@@ -24,11 +24,15 @@ namespace VulkanAPI {
 	std::vector<VkQueueFamilyProperties> GetQueueFamilyProperties(VkPhysicalDevice physicalDevice);
 	//physical device
 	VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice);
+	VkPhysicalDeviceMemoryProperties GetMemoryProperties(VkPhysicalDevice physicalDevice);
+
 
 	//device
 	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, std::vector<std::pair<uint32_t,uint32_t>> wantQueueFamilyAndQueueCounts,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures& enableFeatues);
 	void DestroyDevice(VkDevice device);
 	VkQueue GetQueue(VkDevice device, uint32_t familyIndex,uint32_t queueIndex);
+
+
 
 	//surface
 	VkSurfaceKHR CreateWin32Surface(VkInstance instance, GLFWwindow* window);
@@ -44,6 +48,8 @@ namespace VulkanAPI {
 	void DestroySwapchain(VkDevice device, VkSwapchainKHR swapchain);
 	std::vector<VkImage> GetSwapchainImages(VkDevice device, VkSwapchainKHR swapchain);
 
+
+	
 	//image
 	VkImage CreateImage(VkDevice device, VkImageCreateFlags       flags,
 		VkImageType              imageType,
@@ -57,6 +63,10 @@ namespace VulkanAPI {
 		VkSharingMode            sharingMode,
 		std::vector<uint32_t> queueFamilyIndices = {},
 		VkImageLayout            initialLayout = VK_IMAGE_LAYOUT_UNDEFINED);
+	void DestroyImage(VkDevice device, VkImage image);
+
+	VkMemoryRequirements GetImageMemoryRequirments(VkDevice device, VkImage image);
+
 
 	//image view
 	VkImageView CreateImageView(VkDevice device, VkImageViewCreateFlags     flags,
@@ -65,6 +75,8 @@ namespace VulkanAPI {
 	VkFormat                   format,
 	VkComponentMapping         components,
 	VkImageSubresourceRange    subresourceRange);
+	void DestroyImageView(VkDevice device, VkImageView imageView);
+
 
 	//buffer
 	VkBuffer CreateBuffer(VkDevice device ,   VkBufferCreateFlags    flags,
@@ -72,9 +84,26 @@ namespace VulkanAPI {
 	VkBufferUsageFlags     usage,
 	VkSharingMode          sharingMode,
 	std::vector<uint32_t> queueFamilyIndices);
+	void DestroyBuffer(VkDevice device, VkBuffer buffer);
+
 
 	//buffer view   
 	VkBufferView CreateBufferView(VkDevice device, VkBufferViewCreateFlags flags, VkBuffer buffer, VkFormat format, VkDeviceSize offset, VkDeviceSize range);
+	void DestroyBufferView(VkDevice device, VkBufferView bufferView);
+
+
+	//memory 
+	VkDeviceMemory AllocateMemory(VkDevice device,
+		VkDeviceSize       allocationSize,
+		uint32_t           memoryTypeIndex);
+	void ReleaseMemory(VkDevice device, VkDeviceMemory deviceMemory);
+
+	void* MapMemory(VkDevice device, VkDeviceMemory deviceMemory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags mapFlags);
+	void UnmapMemory(VkDevice device, VkDeviceMemory deviceMemory);
+	void BindMemoryToImage(VkDevice device, VkDeviceMemory deviceMemory, VkImage image, VkDeviceSize offset);
+	void BindMemoryToBuffer(VkDevice device, VkDeviceMemory deviceMemory, VkBuffer buffer, VkDeviceSize offset);
+
+
 
 	//render pass
 	VkRenderPass CreateRenderPass(VkDevice device, VkRenderPassCreateFlags           flags,
@@ -90,17 +119,25 @@ namespace VulkanAPI {
 	uint32_t                    width,
 	uint32_t                    height,
 	uint32_t                    layers);
+	void DestroyFrameBuffer(VkDevice device, VkFramebuffer frameBuffer);
+
 
 	
 	
 	//descriptor set layout
 	VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice device, VkDescriptorSetLayoutCreateFlags flags,const std::vector<VkDescriptorSetLayoutBinding>& bindings);
-	
+	void DestroyDesctriptorSetLayout(VkDevice device, VkDescriptorSetLayout desctriptorSetLayout);
+
+
 	//pipeline layout
 	VkPipelineLayout CreatePipelineLayout(VkDevice device, VkPipelineLayoutCreateFlags     flags,
-	const std::vector<VkDescriptorSetLayout> pSetLayouts,
-	const std::vector<VkPushConstantRange> pushConstantRanges);
-	
+			const std::vector<VkDescriptorSetLayout> pSetLayouts,
+			const std::vector<VkPushConstantRange> pushConstantRanges);
+	void DestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout);
+
+	//shader module
+	VkShaderModule CreateShaderModule(VkDevice device,VkShaderModuleCreateFlags flags,const std::vector<uint32_t>& spirv_code);
+
 	//graphics pipeline
 	VkPipeline CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFlags                            flags,
 	const std::vector<VkPipelineShaderStageCreateInfo> shaderStages,
@@ -118,10 +155,153 @@ namespace VulkanAPI {
 	uint32_t                                         subpass,
 	VkPipeline                                       basePipelineHandle,
 	int32_t                                          basePipelineIndex);
+	void DestroyPipeline(VkDevice device, VkPipeline pipeline);
+
+	//descriptor pool
+	VkDescriptorPool CreateDescriptorPool(VkDevice device,
+		VkDescriptorPoolCreateFlags    flags,
+		uint32_t                       maxSets,
+		const std::vector<VkDescriptorPoolSize> poolSizes);
+	void DestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool);
+
+ 
+	//descriptor set
+	VkDescriptorSet AllocateDescriptorSet(VkDevice device,
+		VkDescriptorPool                descriptorPool,
+		const std::vector<VkDescriptorSetLayout> setLayouts);
+	void ReleaseDescriptorSets(VkDevice device,VkDescriptorPool descriptorPool,const std::vector<VkDescriptorSet>& descriptorSets);
+
+	//update descriptor set
+	void UpdateDescriptorSetBindingResources(VkDevice device,
+											 VkDescriptorSet                  dstSet,
+											 uint32_t                         dstBinding,
+											 uint32_t                         dstArrayElement,
+											 uint32_t                         descriptorCount,
+											 VkDescriptorType                 descriptorType,
+											 const std::vector<VkDescriptorImageInfo> imageInfos,
+											 const std::vector<VkDescriptorBufferInfo> bufferInfos,
+											 const std::vector<VkBufferView> texelBufferViews);
+	
+	//command pool
+	VkCommandPool CreateCommandPool(VkDevice device, VkCommandPoolCreateFlags flags,uint32_t queueFamilyIndex);
+	void DesctroyCommandPool(VkDevice device, VkCommandPool commandPool);
+	
+	//command buffer
+	VkCommandBuffer AllocateCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBufferLevel    level);
+	void ReleaseCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer);
+	
+	std::vector<VkCommandBuffer> AllocateCommandBuffers(VkDevice device, VkCommandPool commandPool,VkCommandBufferLevel  level, uint32_t commandBufferCount);
+	void ReleaseCommandBuffers(VkDevice device, VkCommandPool commandPool, const std::vector<VkCommandBuffer>& commandBuffers);;
+
+	//fence
+	VkFence CreateFence(VkDevice device, VkFenceCreateFlags flags);
+	void DestroyFence(VkDevice device, VkFence fence);
+
+	//semaphore
+	VkSemaphore CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags);
+	void DestroySemaphore(VkDevice device, VkSemaphore semaphore);
+
+	//event
+	VkEvent CreateEvent(VkDevice device, VkEventCreateFlags flags);
+	void DestroyEvent(VkDevice device, VkEvent c_event);
 
 
+	//---------------------------------------------------------------------------------
+	// commands
+	
+	void BeginRecord(VkCommandBuffer commandBuffer, VkCommandBufferUsageFlags  flags);
+	void EndRecord(VkCommandBuffer commandBuffer);
+	void CmdBeginRenderPass(VkCommandBuffer commandBuffer, 
+							VkRenderPass           renderPass,
+							VkFramebuffer          framebuffer,
+							VkRect2D               renderArea,
+							const std::vector<VkClearValue>& cleatValues,
+							VkSubpassContents  subpassContents);
+	void CmdEndRenderPass(VkCommandBuffer commandBuffer);
+	void CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents  subpassContents);
 
+	//动态绘制,可以不使用begin pass
+	void CmdBeginRendering(VkCommandBuffer commandBuffer, 
+						VkRenderingFlags                    flags,
+						VkRect2D                            renderArea,
+						uint32_t                            layerCount,
+						uint32_t                            viewMask,
+						const std::vector<VkRenderingAttachmentInfo>& colorAttachments,
+						const VkRenderingAttachmentInfo* depthAttachment,
+						const VkRenderingAttachmentInfo* stencilAttachment);
+	void CmdEndRendering(VkCommandBuffer commandBuffer);
+
+	void CmdBindVertexBuffers(VkCommandBuffer  commandBuffer,
+							uint32_t  firstBinding,
+							const std::vector<VkBuffer>& buffers,
+							const std::vector<VkDeviceSize>& offsets);
+	void CmdBindIndexBuffer(VkCommandBuffer  commandBuffer,
+							VkBuffer      buffer,
+							VkDeviceSize  offset,
+							VkIndexType   indexType);
+
+	void CmdBindPipeline(VkCommandBuffer  commandBuffer,
+						VkPipelineBindPoint  pipelineBindPoint,
+						VkPipeline  pipeline);
+
+	//dynamic state
+	void CmdDynamicSetViewPorts(VkCommandBuffer commandBuffer, uint32_t firstViewport, const std::vector<VkViewport>& viewports);
+
+
+	void CmdDrawVertex(VkCommandBuffer  commandBuffer,
+						uint32_t  vertexCount,
+						uint32_t  instanceCount,
+						uint32_t  firstVertex,
+						uint32_t  firstInstance);
+
+
+	void CmdDrawIndex(VkCommandBuffer   commandBuffer,
+					uint32_t  indexCount,
+					uint32_t  instanceCount,
+					uint32_t  firstIndex,
+					int32_t   vertexOffset,
+					uint32_t  firstInstance);
+
+	void CmdCopyImageToImage(VkCommandBuffer commandBuffer,
+					VkImage                                     srcImage,
+					VkImageLayout                               srcImageLayout,
+					VkImage                                     dstImage,
+					VkImageLayout                               dstImageLayout,
+					const std::vector<VkImageCopy> copyRegions);
+
+	void CmdMemoryBarrier(VkCommandBuffer                             commandBuffer,
+						 VkPipelineStageFlags                        srcStageMask,
+						 VkPipelineStageFlags                        dstStageMask,
+						 VkDependencyFlags                           dependencyFlags,
+						 const std::vector<VkMemoryBarrier> memoryBarriers,
+						 const std::vector<VkBufferMemoryBarrier> bufferMemoryBarriers,
+						 const std::vector<VkImageMemoryBarrier> imageMemoryBarriers);
+
+	
+	//-------------------------------------------------------------------------------------
+	//submit and present
+	void SubmitCommands(VkQueue  queue,
+						const std::vector<VkSemaphore>& waitSemaphores,
+						const std::vector<VkPipelineStageFlags> waitDstStageMask,
+						const std::vector<VkCommandBuffer> commandBuffers,
+						const std::vector<VkSemaphore> signalSemaphores,
+						VkFence allCommandFinishedFence);
+	void SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence);
+
+	void Present(VkQueue queue,
+				const std::vector<VkSemaphore>& waitSemaphores,
+				const std::vector<VkSwapchainKHR>& swapchains,
+				const std::vector<uint32_t>& swapchainImageIndices,
+				std::vector<VkResult>& outResults);
+
+	//
+	
+	
+	
 	//utils
 	int32_t GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice);
+
+
+
 
 };
