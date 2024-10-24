@@ -22,6 +22,8 @@ namespace VulkanAPI {
 	std::vector<VkPhysicalDevice> EnumeratePhysicalDevice(VkInstance instance);
 	std::vector<VkPhysicalDeviceProperties> EnumeratePhysicalDeviceProperties(VkInstance instance);
 	std::vector<VkQueueFamilyProperties> GetQueueFamilyProperties(VkPhysicalDevice physicalDevice);
+	bool GetQueueFamilySurfaceSupport(VkPhysicalDevice  physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface);
+	
 	//physical device
 	VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice);
 	VkPhysicalDeviceMemoryProperties GetMemoryProperties(VkPhysicalDevice physicalDevice);
@@ -39,7 +41,7 @@ namespace VulkanAPI {
 	void DestroySurface(VkInstance instance, VkSurfaceKHR surface);
 	std::vector<VkSurfaceFormatKHR> GetSurfaceFormats(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
 	VkSurfaceCapabilitiesKHR GetSurfaceCapabilities(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
-
+	std::vector<VkPresentModeKHR> GetSurfacePresentModes(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
 
 	//resource
 	
@@ -47,7 +49,7 @@ namespace VulkanAPI {
 	VkSwapchainKHR CreateSwapchain(VkDevice device, VkSurfaceKHR surface, VkFormat format,VkColorSpaceKHR colorSpace, VkExtent2D extent,uint32_t numLayers,uint32_t numMips, uint32_t imageCount, VkImageUsageFlags imageUsage, VkSharingMode sharingMode, std::vector<uint32_t> queueFamilyIndices,VkPresentModeKHR presentMode);
 	void DestroySwapchain(VkDevice device, VkSwapchainKHR swapchain);
 	std::vector<VkImage> GetSwapchainImages(VkDevice device, VkSwapchainKHR swapchain);
-
+	uint32_t GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain ,VkSemaphore  semaphore,VkFence  fence);
 
 	
 	//image
@@ -128,6 +130,25 @@ namespace VulkanAPI {
 	VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice device, VkDescriptorSetLayoutCreateFlags flags,const std::vector<VkDescriptorSetLayoutBinding>& bindings);
 	void DestroyDesctriptorSetLayout(VkDevice device, VkDescriptorSetLayout desctriptorSetLayout);
 
+	VkSampler CreateSampler(VkDevice device,
+				VkSamplerCreateFlags    flags,
+				VkFilter                magFilter,
+				VkFilter                minFilter,
+				VkSamplerMipmapMode     mipmapMode,
+				VkSamplerAddressMode    addressModeU,
+				VkSamplerAddressMode    addressModeV,
+				VkSamplerAddressMode    addressModeW,
+				float                   mipLodBias,
+				VkBool32                anisotropyEnable,
+				float                   maxAnisotropy,
+				VkBool32                compareEnable,
+				VkCompareOp             compareOp,
+				float                   minLod,
+				float                   maxLod,
+				VkBorderColor           borderColor,
+				VkBool32                unnormalizedCoordinates);
+	VkSampler CreateDefaultSampler(VkDevice device,float maxLod);
+	void DesctroySampler(VkDevice device,VkSampler sampler);
 
 	//pipeline layout
 	VkPipelineLayout CreatePipelineLayout(VkDevice device, VkPipelineLayoutCreateFlags     flags,
@@ -196,10 +217,16 @@ namespace VulkanAPI {
 	//fence
 	VkFence CreateFence(VkDevice device, VkFenceCreateFlags flags);
 	void DestroyFence(VkDevice device, VkFence fence);
+	void WaitFence(VkDevice device, const std::vector<VkFence>& fences, bool waitAll);
+	void ResetFences(VkDevice device, const std::vector<VkFence>& fences);
 
 	//semaphore
 	VkSemaphore CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags);
 	void DestroySemaphore(VkDevice device, VkSemaphore semaphore);
+	void WaitSemaphores(VkDevice device, VkSemaphoreWaitFlags    flags,
+						const std::vector<VkSemaphore> semaphores,
+						const std::vector<uint64_t> semaphoreValues);
+	void SignalSemaphores(VkDevice device,VkSemaphore semaphore, uint64_t value = 0/*只对timeline semaphore有用*/);
 
 	//event
 	VkEvent CreateEvent(VkDevice device, VkEventCreateFlags flags);
@@ -299,8 +326,6 @@ namespace VulkanAPI {
 	
 	
 	//utils
-	int32_t GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice);
-
 
 
 

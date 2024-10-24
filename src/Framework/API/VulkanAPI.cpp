@@ -40,6 +40,13 @@ std::vector<VkQueueFamilyProperties> VulkanAPI::GetQueueFamilyProperties(VkPhysi
 	return queueFamilyProperties;
 }
 
+bool VulkanAPI::GetQueueFamilySurfaceSupport(VkPhysicalDevice  physicalDevice,uint32_t queueFamilyIndex,VkSurfaceKHR surface)
+{
+	VkBool32 support = VK_FALSE;
+	vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndex, surface, &support);
+	return support;
+}
+
 VkPhysicalDeviceFeatures VulkanAPI::GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice)
 {
 	VkPhysicalDeviceFeatures features;
@@ -141,6 +148,26 @@ VkSurfaceCapabilitiesKHR VulkanAPI::GetSurfaceCapabilities(VkPhysicalDevice phys
 	return surfaceCapabilities;
 }
 
+std::vector<VkPresentModeKHR> VulkanAPI::GetSurfacePresentModes(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
+{
+	uint32_t presentModeCount = 0;
+	std::vector<VkPresentModeKHR> presentModes;
+
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface,&presentModeCount,nullptr);
+	presentModes.resize(presentModeCount);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data());
+	LogFunc(presentModes.size());
+	return presentModes;
+
+
+
+
+
+
+
+
+}
+
 
 
 VkSwapchainKHR VulkanAPI::CreateSwapchain(VkDevice device, VkSurfaceKHR surface, VkFormat format, VkColorSpaceKHR colorSpace, VkExtent2D extent, uint32_t numLayers, uint32_t numMips, uint32_t imageCount, VkImageUsageFlags imageUsage, VkSharingMode sharingMode, std::vector<uint32_t> queueFamilyIndices, VkPresentModeKHR presentMode)
@@ -186,6 +213,13 @@ std::vector<VkImage> VulkanAPI::GetSwapchainImages(VkDevice device, VkSwapchainK
 	vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images.data());
 	LogFunc(imageCount);
 	return images;
+}
+
+uint32_t VulkanAPI::GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain, VkSemaphore  semaphore, VkFence  fence)
+{
+	uint32_t imageIndex = 0;
+	vkAcquireNextImageKHR(device, swapchain, VK_TIMEOUT, semaphore, fence, &imageIndex);
+	return imageIndex;
 }
 
 VkDeviceMemory VulkanAPI::AllocateMemory(VkDevice device, VkDeviceSize allocationSize, uint32_t memoryTypeIndex)
@@ -398,6 +432,46 @@ void VulkanAPI::DestroyDesctriptorSetLayout(VkDevice device, VkDescriptorSetLayo
 	vkDestroyDescriptorSetLayout(device, desctriptorSetLayout, nullptr);
 }
 
+VkSampler VulkanAPI::CreateSampler(VkDevice device, VkSamplerCreateFlags flags, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressModeU, VkSamplerAddressMode addressModeV, VkSamplerAddressMode addressModeW, float mipLodBias, VkBool32 anisotropyEnable, float maxAnisotropy, VkBool32 compareEnable, VkCompareOp compareOp, float minLod, float maxLod, VkBorderColor borderColor, VkBool32 unnormalizedCoordinates)
+{
+	VkSampler sampler = VK_NULL_HANDLE;
+	VkSamplerCreateInfo samplerCreateInfo{};
+	samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerCreateInfo.pNext = nullptr;
+	samplerCreateInfo.flags = flags;
+	samplerCreateInfo.magFilter = magFilter;
+	samplerCreateInfo.minFilter = minFilter;
+	samplerCreateInfo.mipmapMode = mipmapMode;
+	samplerCreateInfo.addressModeU = addressModeU;
+	samplerCreateInfo.addressModeV = addressModeV;
+	samplerCreateInfo.addressModeW = addressModeW;
+	samplerCreateInfo.mipLodBias = mipLodBias;
+	samplerCreateInfo.anisotropyEnable = anisotropyEnable;
+	samplerCreateInfo.maxAnisotropy = maxAnisotropy;
+	samplerCreateInfo.compareEnable = compareEnable;
+	samplerCreateInfo.compareOp = compareOp;
+	samplerCreateInfo.minLod = minLod;
+	samplerCreateInfo.maxLod = maxLod;
+	samplerCreateInfo.borderColor = borderColor;
+	samplerCreateInfo.unnormalizedCoordinates = unnormalizedCoordinates;
+	vkCreateSampler(device, &samplerCreateInfo, nullptr, &sampler);
+	LogFunc(sampler);
+	return sampler;
+}
+
+VkSampler VulkanAPI::CreateDefaultSampler(VkDevice device, float maxLod)
+{
+
+	return CreateSampler(device, 0, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, 0, VK_FALSE, 0, VK_FALSE, VK_COMPARE_OP_ALWAYS, 0, maxLod, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, VK_FALSE);
+}
+
+void VulkanAPI::DesctroySampler(VkDevice device, VkSampler sampler)
+{
+	vkDestroySampler(device, sampler, nullptr);
+}
+
+
+
 VkPipelineLayout VulkanAPI::CreatePipelineLayout(VkDevice device, VkPipelineLayoutCreateFlags flags, const std::vector<VkDescriptorSetLayout> setLayouts, const std::vector<VkPushConstantRange> pushConstantRanges)
 {
 	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
@@ -554,6 +628,17 @@ void VulkanAPI::DestroyFence(VkDevice device, VkFence fence)
 	vkDestroyFence(device, fence, nullptr);
 }
 
+void VulkanAPI::WaitFence(VkDevice device,const std::vector<VkFence>& fences,bool waitAll)
+{
+	vkWaitForFences(device, fences.size(), fences.data(), waitAll, VK_TIMEOUT);
+
+}
+
+void VulkanAPI::ResetFences(VkDevice device, const std::vector<VkFence>& fences)
+{
+	vkResetFences(device, fences.size(), fences.data());
+}
+
 VkSemaphore VulkanAPI::CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags)
 {
 	VkSemaphore semaphore = VK_NULL_HANDLE;
@@ -573,6 +658,31 @@ void VulkanAPI::DestroySemaphore(VkDevice device, VkSemaphore semaphore)
 {
 	vkDestroySemaphore(device, semaphore, nullptr);
 }
+
+void VulkanAPI::WaitSemaphores(VkDevice device, VkSemaphoreWaitFlags flags,const std::vector<VkSemaphore> semaphores, const std::vector<uint64_t> semaphoreValues)
+{
+	VkSemaphoreWaitInfo waitInfo{ };
+	waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+	waitInfo.pNext = nullptr;
+	waitInfo.flags = flags;
+	waitInfo.semaphoreCount = semaphores.size();
+	waitInfo.pSemaphores = semaphores.data();
+	waitInfo.pValues = semaphoreValues.size() ? semaphoreValues.data() : nullptr;
+	vkWaitSemaphores(device, &waitInfo, VK_TIMEOUT);
+}
+
+void VulkanAPI::SignalSemaphores(VkDevice device, VkSemaphore semaphore, uint64_t value/*只对timeline semaphore有用*/)
+{
+
+	VkSemaphoreSignalInfo signalInfo{};
+	signalInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO;
+	signalInfo.pNext = nullptr;
+	signalInfo.semaphore = semaphore;
+	signalInfo.value = value;
+	vkSignalSemaphore(device, &signalInfo);
+
+}
+
 
 VkEvent VulkanAPI::CreateEvent(VkDevice device, VkEventCreateFlags flags)
 {
@@ -741,18 +851,7 @@ void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemap
 
 
 
-int32_t VulkanAPI::GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice)
-{
-	auto queueFamilyProperties = GetQueueFamilyProperties(physicalDevice);
-	for (int32_t queueFamilyIndex = 0; queueFamilyIndex < static_cast<int32_t>(queueFamilyProperties.size()); queueFamilyIndex++)
-	{
-		if (queueFamilyProperties[queueFamilyIndex].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-		{
-			return queueFamilyIndex;
-		}
-	}
-	return -1;
-}
+
 
 void VulkanAPI::UpdateDescriptorSetBindingResources(VkDevice device, VkDescriptorSet dstSet, uint32_t dstBinding, uint32_t dstArrayElement, uint32_t descriptorCount, VkDescriptorType descriptorType, const std::vector<VkDescriptorImageInfo> imageInfos, const std::vector<VkDescriptorBufferInfo> bufferInfos, const std::vector<VkBufferView> texelBufferViews)
 {
