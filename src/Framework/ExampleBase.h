@@ -161,20 +161,49 @@ struct GraphicPipelineInfos {
 struct Buffer {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
+	void* hostMapPointer = nullptr;
 };
-struct Texture {
+
+struct Image {
 	VkImage image;
 	VkImageView imageView;
 	VkDeviceMemory memory;
+	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	uint32_t numLayer = 0, numMip = 1;
+	VkExtent3D extent;
+	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
+};
+
+struct Texture {
+	Image image;
 	VkSampler sampler;
-	VkImageLayout imageCurrentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
 };
 struct Geometry
 {
 	Buffer vertexBuffer;
-	Buffer indexBuffer;
+	std::vector<Buffer> indexBuffers;//一个indexbuffer 代表模型中的一个区域
+	 
 
 
+};
+
+enum VertexAttributeType {
+	VAT_Position_float32,//x,y,z float
+	VAT_TextureCoordinates_float32,//u,v,w
+	VAT_Normal_float32,//nx,ny,nz
+	VAT_Color_float32,//r,g,b
+	VAT_AUX1_float32,//辅助属性1,x,y,z
+	VAT_AUX2_float32//辅助属性2,x,y,z
+};
+
+struct Attachment {
+	VkAttachmentDescription attachmentDesc;
+	Image attachmentImage;
+};
+struct RenderTargets {
+	Attachment colorAttachment;
+	Attachment depthAttachment;
 };
 
 
@@ -200,22 +229,28 @@ protected:
 	virtual void InitAttanchmentDesc();
 	virtual void InitFrameBuffer();
 
+	void CreateGraphicPipelines();
+
 protected:
 	//utils
 	int32_t GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice);
 	void PickValidPhysicalDevice();
 	int32_t GetMemoryTypeIndex();
+	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height,uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT,VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
+	
+	
 	Texture Load2DTexture(const std::string& texFilePath);
 	Texture LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths/*+x,-x,+y,-y,+z,-z*/);
 	Geometry LoadObj(const std::string& objFilePath);
+	
 	Buffer CreateVertexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
+	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
 
 	void TransferImageLayout(VkImage image, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange);
 
 private:
-	
-	void CreateGraphicPipelines();
+
 
 
 private:
@@ -249,6 +284,7 @@ private:
 	uint32_t windowWidth = 512, windowHeight = 512;
 	GLFWwindow* window = nullptr;
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+	const VkImageTiling imageTiling = VK_IMAGE_TILING_LINEAR;
 	VkColorSpaceKHR colorSpace;
 	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//以srgb编码的格式
 	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//只含深度值的格式
@@ -260,18 +296,26 @@ private:
 
 	std::map<std::string, Texture> textures;
 
-
+	const std::array<VertexAttributeType, 6> vertexAttributes = {
+		VAT_Position_float32,
+		VAT_Normal_float32,
+		VAT_Color_float32,
+		VAT_TextureCoordinates_float32,
+		VAT_AUX1_float32,
+		VAT_AUX2_float32
+	};//每个shader 的顶点属性数据输入都需要和这个匹配
 
 
 	int32_t usedMemoryTypeIndex;
 
 	VkSemaphore transferOperationFinish;
+	const uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
 
 	//先不管compute pipeline
 	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
 
 	//render pass 只有一个
-	std::vector<VkAttachmentDescription> attachments;
+	RenderTargets renderTargets;
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 

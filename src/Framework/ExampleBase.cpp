@@ -122,6 +122,47 @@ void ExampleBase::InitContex()
 
 }
 
+void ExampleBase::InitAttanchmentDesc()
+{
+	auto& colorAttachment = renderTargets.colorAttachment.attachmentDesc;
+	colorAttachment.flags = 0;
+	colorAttachment.format = colorFormat;
+	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
+	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE;
+	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	//创建color attachment的资源
+	auto& colorImage = renderTargets.colorAttachment.attachmentImage;
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+
+
+
+	auto& depthAttachment = renderTargets.depthAttachment.attachmentDesc;
+	depthAttachment.flags = 0;
+	depthAttachment.format = colorFormat;
+	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_NONE_EXT;
+	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE;
+	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+
+
+
+
+
+
+
+
+
+
+}
+
 int32_t ExampleBase::GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice)
 {
 
@@ -180,12 +221,18 @@ void ExampleBase::PickValidPhysicalDevice()
 			{
 				continue;
 			}
-			auto presentSupport = GetQueueFamilySurfaceSupport(physicalDevice, familyIndex, surface);
+			auto presentSupport = GetQueueFamilySurfaceSupport(physicalDevices[i], familyIndex, surface);
 			if (!presentSupport)
 			{
 				continue;
 			}
 
+			//检查format是否支持linear tiling
+			auto colorFormatProps = GetFormatPropetirs(physicalDevices[i], colorFormat);
+			if (!(colorFormatProps.linearTilingFeatures & (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)))
+			{
+				continue;//如果color format的linear tiling 不支持采样和颜色附件则跳过该物理设备
+			}
 
 			queueFamilyIndex = familyIndex;
 			physicalDevice = physicalDevices[i];
@@ -219,15 +266,27 @@ int32_t ExampleBase::GetMemoryTypeIndex()
 	return -1;
 }
 
+Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,VkFormat format,uint32_t width,uint32_t height, uint32_t depth,uint32_t numMip,uint32_t numLayer,VkImageUsageFlags usage, VkImageAspectFlags aspect,VkSampleCountFlagBits sample, VkImageLayout layout)
+{
+	Image image;
+	image.currentLayout = layout;
+	image.sample = sample;
+	image.extent = VkExtent3D{ .width = width,.height = height,.depth = depth };
+	image.image = VulkanAPI::CreateImage(device, 0, imageType, format, image.extent,
+		1, 1, image.sample, imageTiling, VK_IMAGE_USAGE_SAMPLED_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
+	image.imageView = CreateImageView(device, 0, image.image, viewType, format, VkComponentMapping{}, VkImageSubresourceRange{ .aspectMask = aspect,.baseMipLevel = 0,.levelCount = image.numMip ,.baseArrayLayer = 0,.layerCount = image.numLayer });
+
+
+	return image;
+}
+
 Texture ExampleBase::Load2DTexture(const std::string& texFilePath)
 {
 	int x = 0, y = 0, numChannel = 0;
 	auto imageData = stbi_load(texFilePath.c_str(), &x, &y, &numChannel,4);//强制加载4通道，数据的编码为sRGB
 	//创建texture
 	Texture texture;
-	texture.image = CreateImage(device, 0, VK_IMAGE_TYPE_2D, colorFormat, VkExtent3D{ .width = (uint32_t)x,.height = (uint32_t)y,.depth = 1 },
-		1, 1, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_SAMPLED_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
-	texture.imageView = CreateImageView(device, 0, texture.image, VK_IMAGE_VIEW_TYPE_2D, colorFormat, VkComponentMapping{}, VkImageSubresourceRange{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,.baseMipLevel = 0,.levelCount = 1 ,.baseArrayLayer = 0,.layerCount = 1});
+	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, x, y, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
 	stbi_image_free(imageData);
 	return texture;
@@ -243,9 +302,7 @@ Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFi
 	}
 	//创建texture
 	Texture texture;
-	texture.image = CreateImage(device, 0, VK_IMAGE_TYPE_2D, colorFormat, VkExtent3D{ .width = (uint32_t)x,.height = (uint32_t)y,.depth = 1 },
-		1, 6, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_SAMPLED_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
-	texture.imageView = CreateImageView(device, 0, texture.image, VK_IMAGE_VIEW_TYPE_CUBE, colorFormat, VkComponentMapping{}, VkImageSubresourceRange{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,.baseMipLevel = 0,.levelCount = 1 ,.baseArrayLayer = 0,.layerCount = 6 });
+	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE, colorFormat, x, y, 1, 1, 6, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
 	return texture;
 }
@@ -261,6 +318,48 @@ Geometry ExampleBase::LoadObj(const std::string& objFilePath)
 	{
 		LogFunc(0);
 	}
+	uint32_t numVertex = vertexAttrib.vertices.size() / 3;
+	Geometry geometry;
+	//创建vertex buffer
+	geometry.vertexBuffer = CreateVertexBuffer(nullptr, vertexAttributeInputStride * numVertex);
+	for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
+	{
+		//填充顶点位置数据
+		FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(vertexAttrib.vertices.data() + vertexId * 3));
+
+		//填充其他数据
+
+
+	}
+
+
+
+	geometry.indexBuffers.resize(shapes.size());
+	std::vector<uint32_t> indicesData;
+	
+	for (uint32_t i = 0; i < geometry.indexBuffers.size(); i++)
+	{
+		
+		for (uint32_t cellId; cellId < shapes[i].mesh.num_face_vertices.size(); cellId)
+		{
+			if (shapes[i].mesh.num_face_vertices[cellId] != 3)
+			{
+				LogFunc(0);//如果不是三角形的模型就直接报错
+			}
+		}
+		indicesData.resize(shapes[i].mesh.num_face_vertices.size() * 3);
+		for (uint32_t attriIndexId = 0; attriIndexId < shapes[i].mesh.indices.size() ; attriIndexId++)
+		{
+			indicesData[attriIndexId] = shapes[i].mesh.indices[attriIndexId].vertex_index;//存放顶点索引
+		}
+
+		geometry.indexBuffers[i] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
+
+
+	}
+
+
+
 
 
 	return Geometry();
@@ -273,8 +372,16 @@ Buffer ExampleBase::CreateVertexBuffer(const char* buf, VkDeviceSize size)
 	buffer.buffer = CreateBuffer(device, 0, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
 	//分配内存
 	buffer.memory = AllocateMemory(device, size, usedMemoryTypeIndex);
-	auto m_ptr = MapMemory(device, buffer.memory, 0, size, 0);
-	std::memcpy(m_ptr, buf, size);
+	buffer.hostMapPointer = MapMemory(device, buffer.memory, 0, size, 0);
+	if (buf)
+	{
+		std::memcpy(buffer.hostMapPointer, buf, size);
+	}
+	else {
+		std::memset(buffer.hostMapPointer, 0, size);
+	}
+	
+
 	return buffer;
 }
 
@@ -284,9 +391,23 @@ Buffer ExampleBase::CreateIndexBuffer(const char* buf, VkDeviceSize size)
 	buffer.buffer = CreateBuffer(device, 0, size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
 	//分配内存
 	buffer.memory = AllocateMemory(device, size, usedMemoryTypeIndex);
-	auto m_ptr = MapMemory(device, buffer.memory, 0, size, 0);
-	std::memcpy(m_ptr, buf, size);
+	buffer.hostMapPointer = MapMemory(device, buffer.memory, 0, size, 0);
+	if (buf)
+	{
+		std::memcpy(buffer.hostMapPointer, buf, size);
+	}
+	else {
+		std::memset(buffer.hostMapPointer, 0, size);
+	}
+
 	return buffer;
+}
+
+void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data)
+{
+	char* dst = (char*)buffer.hostMapPointer + offset;
+	std::memcpy(dst, data, size);
+
 }
 
 void ExampleBase::TransferImageLayout(VkImage image, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange)
@@ -333,15 +454,25 @@ void ExampleBase::CreateGraphicPipelines()
 					//初始化pipeline的input state
 					auto& inputState = graphcisPipelineInfos[pipeID].pipelineStates.vertexInputState;
 					auto& shaderAttributeInputInfo = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.inputAttributesInfo;
-					attributeDescs.resize(shaderAttributeInputInfo.size());
-					for (uint32_t attriId = 0; attriId < shaderAttributeInputInfo.size(); attriId++)
+					//attributeDescs.resize(shaderAttributeInputInfo.size());
+					//for (uint32_t attriId = 0; attriId < shaderAttributeInputInfo.size(); attriId++)
+					//{
+					//	attributeDescs[attriId].binding = 0;//默认使用绑定点0，对应绑定到0号位的定点缓冲
+					//	attributeDescs[attriId].format = shaderAttributeInputInfo[attriId].format;
+					//	attributeDescs[attriId].location = shaderAttributeInputInfo[attriId].location;
+					//	attributeDescs[attriId].offset = shaderAttributeInputInfo[attriId].offset;
+					//}
+					//使用固定的vertex attribute 数据
+					attributeDescs.resize(vertexAttributes.size());
+					for (uint32_t attriId = 0; attriId < vertexAttributes.size(); attriId++)
 					{
 						attributeDescs[attriId].binding = 0;//默认使用绑定点0，对应绑定到0号位的定点缓冲
-						attributeDescs[attriId].format = shaderAttributeInputInfo[attriId].format;
-						attributeDescs[attriId].location = shaderAttributeInputInfo[attriId].location;
-						attributeDescs[attriId].offset = shaderAttributeInputInfo[attriId].offset;
+						attributeDescs[attriId].format = VK_FORMAT_R32G32B32_SFLOAT;
+						attributeDescs[attriId].location = attriId;
+						attributeDescs[attriId].offset = attriId * 3 * sizeof(float);
 					}
-					inputBindingDesc.stride = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.vertexIputStride;
+					//inputBindingDesc.stride = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.vertexIputStride;
+					inputBindingDesc.stride = vertexAttributeInputStride;
 					inputBindingDesc.binding = 0;//只设置一个绑定点为0的绑定信息
 					inputBindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;//先不使用instance绘制
 
@@ -519,6 +650,10 @@ bool ExampleBase::CompileGLSLToSPIRV(VkShaderStageFlagBits shaderStage, const st
 
 void ExampleBase::ParseVertexAttributes(const spirv_cross::ShaderResources& srcShaderResource, const spirv_cross::CompilerGLSL& compiler, std::vector<VertexAttributeInfo>& dstCacheAttributeInfo)
 {
+
+	//打印信息，shader vertex属性信息以及提供的属性信息
+
+	
 	//vertex attribute
 	dstCacheAttributeInfo.resize(srcShaderResource.stage_inputs.size());
 	for (uint32_t attributeIndex = 0; attributeIndex < srcShaderResource.stage_inputs.size(); attributeIndex++)
@@ -527,9 +662,9 @@ void ExampleBase::ParseVertexAttributes(const spirv_cross::ShaderResources& srcS
 		auto& shaderVertexAttributeInfo = srcShaderResource.stage_inputs[attributeIndex];
 		vertexAttributeInfo.name = shaderVertexAttributeInfo.name;
 		vertexAttributeInfo.location = compiler.get_decoration(shaderVertexAttributeInfo.id, spv::DecorationLocation);
-
 		auto type = compiler.get_type(shaderVertexAttributeInfo.base_type_id);
 		//inputAttri.columns = type.columns;
+		std::string vertexAttributeFormatStr = "";
 		switch (type.basetype)
 		{
 		case spirv_cross::SPIRType::Float: {
@@ -537,18 +672,22 @@ void ExampleBase::ParseVertexAttributes(const spirv_cross::ShaderResources& srcS
 			{
 			case 1: {
 				vertexAttributeInfo.format = VkFormat::VK_FORMAT_R32_SFLOAT;
+				vertexAttributeFormatStr = "VK_FORMAT_R32_SFLOAT";
 				break;
 			}
 			case 2: {
 				vertexAttributeInfo.format = VkFormat::VK_FORMAT_R32G32_SFLOAT;
+				vertexAttributeFormatStr = "VK_FORMAT_R32G32_SFLOAT";
 				break;
 			}
 			case 3: {
 				vertexAttributeInfo.format = VkFormat::VK_FORMAT_R32G32B32_SFLOAT;
+				vertexAttributeFormatStr = "VK_FORMAT_R32G32B32_SFLOAT";
 				break;
 			}
 			case 4: {
 				vertexAttributeInfo.format = VkFormat::VK_FORMAT_R32G32B32A32_SFLOAT;
+				vertexAttributeFormatStr = "VK_FORMAT_R32G32B32A32_SFLOAT";
 				break;
 			}
 			default:
@@ -560,10 +699,15 @@ void ExampleBase::ParseVertexAttributes(const spirv_cross::ShaderResources& srcS
 			LogFunc(0);
 			break;
 		}
-
+		Log("vertex shader中输入属性数据 : " << "location： " << vertexAttributeInfo.location << " 名字:  " <<
+			vertexAttributeInfo.name << " 类型: " << vertexAttributeFormatStr, vertexAttributeFormatStr == std::string("VK_FORMAT_R32G32B32_SFLOAT"));
 
 
 	}
+
+
+
+
 
 }
 

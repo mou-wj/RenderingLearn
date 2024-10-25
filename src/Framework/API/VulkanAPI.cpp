@@ -106,6 +106,15 @@ VkPhysicalDeviceMemoryProperties VulkanAPI::GetMemoryProperties(VkPhysicalDevice
 
 }
 
+VkFormatProperties VulkanAPI::GetFormatPropetirs(VkPhysicalDevice physicalDevice, VkFormat format)
+{
+	VkFormatProperties formatProperties{};
+	vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProperties);
+
+
+	return formatProperties;
+}
+
 VkMemoryRequirements VulkanAPI::GetImageMemoryRequirments(VkDevice device, VkImage image)
 {
 	VkMemoryRequirements memoryRequiremens{};

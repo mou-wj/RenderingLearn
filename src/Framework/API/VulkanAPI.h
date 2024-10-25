@@ -27,7 +27,7 @@ namespace VulkanAPI {
 	//physical device
 	VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice);
 	VkPhysicalDeviceMemoryProperties GetMemoryProperties(VkPhysicalDevice physicalDevice);
-
+	VkFormatProperties GetFormatPropetirs(VkPhysicalDevice physicalDevice, VkFormat format);
 
 	//device
 	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, std::vector<std::pair<uint32_t,uint32_t>> wantQueueFamilyAndQueueCounts,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures& enableFeatues);
