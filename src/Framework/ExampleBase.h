@@ -51,11 +51,11 @@ struct GraphicsPipelineStates {
 	VkRect2D scissor;
 	GraphicsPipelineStates() = default;
 	void Init(uint32_t width, uint32_t height) {
-		//²»¶Ôshader stage½øĞĞ³õÊ¼»¯
+		//ï¿½ï¿½ï¿½ï¿½shader stageï¿½ï¿½ï¿½Ğ³ï¿½Ê¼ï¿½ï¿½
 
 		vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 		vertexInputState.flags = 0;
-		//vertex inputµÄÈë¿Ú°ó¶¨ĞÅÏ¢¸ù¾İshaderÀ´
+		//vertex inputï¿½ï¿½ï¿½ï¿½Ú°ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½shaderï¿½ï¿½
 
 		inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		inputAssemblyState.pNext = nullptr;
@@ -63,7 +63,7 @@ struct GraphicsPipelineStates {
 		inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		inputAssemblyState.primitiveRestartEnable = VK_FALSE;
 
-		//Ä¬ÈÏ²»¿ªÆô
+		//Ä¬ï¿½Ï²ï¿½ï¿½ï¿½ï¿½ï¿½
 		tessellationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
 		tessellationState.pNext = nullptr;
 		tessellationState.flags = 0;
@@ -118,12 +118,12 @@ struct GraphicsPipelineStates {
 		depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 		depthStencilState.depthBoundsTestEnable = VK_TRUE;
 		depthStencilState.stencilTestEnable = VK_FALSE;
-		depthStencilState.front;//ÏÈ²»¹ÜstancilµÄ²Ù×÷
-		depthStencilState.back;//ÏÈ²»¹ÜstancilµÄ²Ù×÷
+		depthStencilState.front;//ï¿½È²ï¿½ï¿½ï¿½stancilï¿½Ä²ï¿½ï¿½ï¿½
+		depthStencilState.back;//ï¿½È²ï¿½ï¿½ï¿½stancilï¿½Ä²ï¿½ï¿½ï¿½
 		depthStencilState.minDepthBounds = 0.0f;
 		depthStencilState.maxDepthBounds = 1.0f;
 
-		//color blend Ä¬ÈÏ²»¿ªÆô
+		//color blend Ä¬ï¿½Ï²ï¿½ï¿½ï¿½ï¿½ï¿½
 		colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		colorBlendState.pNext = nullptr;
 		colorBlendState.flags = 0;
@@ -133,7 +133,7 @@ struct GraphicsPipelineStates {
 		colorBlendState.pAttachments = nullptr;
 		colorBlendState.blendConstants[4];
 
-		//dynamic state  Ä¬ÈÏ²»¿ªÆô
+		//dynamic state  Ä¬ï¿½Ï²ï¿½ï¿½ï¿½ï¿½ï¿½
 		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 		dynamicState.pNext = nullptr;
 		dynamicState.flags = 0;
@@ -170,8 +170,10 @@ struct Image {
 	VkDeviceMemory memory;
 	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	uint32_t numLayer = 0, numMip = 1;
+	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
 	VkExtent3D extent;
 	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
+	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 };
 
 struct Texture {
@@ -182,7 +184,7 @@ struct Texture {
 struct Geometry
 {
 	Buffer vertexBuffer;
-	std::vector<Buffer> indexBuffers;//Ò»¸öindexbuffer ´ú±íÄ£ĞÍÖĞµÄÒ»¸öÇøÓò
+	std::vector<Buffer> indexBuffers;//Ò»ï¿½ï¿½indexbuffer ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½Ğµï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	 
 
 
@@ -193,8 +195,8 @@ enum VertexAttributeType {
 	VAT_TextureCoordinates_float32,//u,v,w
 	VAT_Normal_float32,//nx,ny,nz
 	VAT_Color_float32,//r,g,b
-	VAT_AUX1_float32,//¸¨ÖúÊôĞÔ1,x,y,z
-	VAT_AUX2_float32//¸¨ÖúÊôĞÔ2,x,y,z
+	VAT_AUX1_float32,//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1,x,y,z
+	VAT_AUX2_float32//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½2,x,y,z
 };
 
 struct Attachment {
@@ -202,10 +204,18 @@ struct Attachment {
 	Image attachmentImage;
 };
 struct RenderTargets {
-	Attachment colorAttachment;
-	Attachment depthAttachment;
+	Attachment colorAttachment;//render passï¿½ï¿½0ï¿½Å¸ï¿½ï¿½ï¿½
+	Attachment depthAttachment;//render passï¿½ï¿½1ï¿½Å¸ï¿½ï¿½ï¿½
+	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 };
 
+struct SubpassInfo {
+	std::vector<VkSubpassDescription> subpassDescs;
+	std::vector<VkSubpassDependency> subpassDepends;
+
+		
+
+};
 
 class ExampleBase {
 	//
@@ -214,29 +224,40 @@ class ExampleBase {
 
 public:
 	ExampleBase() = default;
+	static void Run(ExampleBase* example);
+
+protected:
 	void Init();
+	virtual void InitResources() = 0;//ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½Ô´
+	virtual void Loop() = 0;//ï¿½ï¿½È¾Ñ­ï¿½ï¿½
 	struct ShaderCodePaths {
 		std::string vertexShaderPath = "";
 		std::string geometryShaderPath = "";
 		std::string fragmentShaderPath = "";
 	};
-	void ParseShaderFiles(std::vector<ShaderCodePaths>& shaderPaths);
+	void ParseShaderFiles(const std::vector<ShaderCodePaths>& shaderPaths);
+
 protected:
-	virtual void InitVertexAndIndexBuffer() = 0;
-	virtual void InitTextures() = 0;
-	virtual void InitRenderPass() = 0;
+	void Draw();
+	void Present();
+
+
+protected:
+	//virtual void InitTextures() = 0;
+	virtual void InitSubPassInfo() = 0;
 	virtual void InitContex();
 	virtual void InitAttanchmentDesc();
+	virtual void InitRenderPass();
 	virtual void InitFrameBuffer();
-
-	void CreateGraphicPipelines();
+	void InitDefaultGraphicSubpassInfo();
+	virtual void InitGraphicPipelines();
 
 protected:
 	//utils
 	int32_t GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice);
 	void PickValidPhysicalDevice();
 	int32_t GetMemoryTypeIndex();
-	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height,uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT,VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
+	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height,uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT,VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
 	
 	
 	Texture Load2DTexture(const std::string& texFilePath);
@@ -247,6 +268,7 @@ protected:
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
 	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
 
+	void TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout);
 	void TransferImageLayout(VkImage image, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange);
 
 private:
@@ -254,11 +276,14 @@ private:
 
 
 private:
+	
 	//shader parse
 	void ReadGLSLShaderFile(const std::string& shaderPath, std::vector<char>& shaderCode);
 	bool CompileGLSLToSPIRV(VkShaderStageFlagBits shaderStage, const std::vector<char>& srcCode, std::vector<uint32_t>& outSpirvCode);
 	void ParseVertexAttributes(const spirv_cross::ShaderResources& srcShaderResource, const spirv_cross::CompilerGLSL& compiler, std::vector<VertexAttributeInfo>& dstCacheAttributeInfo);
 	void ParseShaderResource(const spirv_cross::ShaderResources& srcShaderResource, const spirv_cross::CompilerGLSL& compiler, ShaderResourceInfo& dstCacheShaderResource);
+	void TransferGLSLFileToSPIRVFile(const std::string& srcGLSLFile, const std::string& dstSPIRVFile);
+	void ReadSPIRVFile(const std::string& spirvFile,std::vector<uint32_t>& outSpirvCode);
 
 	//create descriptor set layout
 
@@ -274,36 +299,37 @@ private:
 	bool initFlag = false;
 
 	VkInstance instance = VK_NULL_HANDLE;
+	VkDebugUtilsMessengerEXT debugUtilMessager = VK_NULL_HANDLE;
 	
 	VkPhysicalDeviceProperties physicalDeviceProps;
 	VkPhysicalDeviceFeatures physicalDeviceFeatures;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-	
+	;
 	VkDevice device = VK_NULL_HANDLE;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 	uint32_t windowWidth = 512, windowHeight = 512;
 	GLFWwindow* window = nullptr;
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-	const VkImageTiling imageTiling = VK_IMAGE_TILING_LINEAR;
 	VkColorSpaceKHR colorSpace;
-	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//ÒÔsrgb±àÂëµÄ¸ñÊ½
-	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//Ö»º¬Éî¶ÈÖµµÄ¸ñÊ½
-	VkPresentModeKHR presentMode;
+	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//ï¿½ï¿½srgbï¿½ï¿½ï¿½ï¿½Ä¸ï¿½Ê½
+	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//Ö»ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½Ä¸ï¿½Ê½
+	VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
-	std::vector<VkImage> swapchainImages;
+	std::vector<Image> swapchainImages;
 	std::vector<VkSemaphore> swapchainImageValidSemaphores;
+
 
 
 	std::map<std::string, Texture> textures;
 
 	const std::array<VertexAttributeType, 6> vertexAttributes = {
-		VAT_Position_float32,
-		VAT_Normal_float32,
-		VAT_Color_float32,
-		VAT_TextureCoordinates_float32,
-		VAT_AUX1_float32,
-		VAT_AUX2_float32
-	};//Ã¿¸öshader µÄ¶¥µãÊôĞÔÊı¾İÊäÈë¶¼ĞèÒªºÍÕâ¸öÆ¥Åä
+		VAT_Position_float32,//location 0
+		VAT_Normal_float32,//location 1
+		VAT_Color_float32,//location 2
+		VAT_TextureCoordinates_float32,//location 3
+		VAT_AUX1_float32,//location 4
+		VAT_AUX2_float32//location 5
+	};//
 
 
 	int32_t usedMemoryTypeIndex;
@@ -311,19 +337,21 @@ private:
 	VkSemaphore transferOperationFinish;
 	const uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
 
-	//ÏÈ²»¹Ücompute pipeline
+	//å…ˆä¸è€ƒè™‘compute pipeline
 	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
 
-	//render pass Ö»ÓĞÒ»¸ö
+	//render pass Ö»
 	RenderTargets renderTargets;
 	VkRenderPass renderPass = VK_NULL_HANDLE;
+	SubpassInfo subpassInfo;
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 
-
+	Geometry geom;
 
 
 
 	VkQueue graphicQueue = VK_NULL_HANDLE,presentQueue = VK_NULL_HANDLE,transferQueue = VK_NULL_HANDLE;
+	VkFence graphicFence = VK_NULL_HANDLE,presentFence = VK_NULL_HANDLE, transferFence = VK_NULL_HANDLE;
 	uint32_t queueFamilyIndex = 0;
 
 

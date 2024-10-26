@@ -115,6 +115,30 @@ VkFormatProperties VulkanAPI::GetFormatPropetirs(VkPhysicalDevice physicalDevice
 	return formatProperties;
 }
 
+std::vector<VkExtensionProperties> VulkanAPI::EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice,const char* layerName)
+{
+	uint32_t extensionCount = 0;
+	std::vector<VkExtensionProperties> extensionProps;
+	vkEnumerateDeviceExtensionProperties(physicalDevice, layerName, &extensionCount, nullptr);
+	extensionProps.resize(extensionCount);
+	vkEnumerateDeviceExtensionProperties(physicalDevice, layerName, &extensionCount, extensionProps.data());
+	return extensionProps;
+
+
+}
+
+std::vector<VkLayerProperties> VulkanAPI::EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice)
+{
+	uint32_t layerCount = 0;
+	std::vector<VkLayerProperties> layerPropetries;
+	vkEnumerateDeviceLayerProperties(physicalDevice, &layerCount, nullptr);
+	layerPropetries.resize(layerCount);
+	vkEnumerateDeviceLayerProperties(physicalDevice, &layerCount, layerPropetries.data());
+
+
+	return layerPropetries;
+}
+
 VkMemoryRequirements VulkanAPI::GetImageMemoryRequirments(VkDevice device, VkImage image)
 {
 	VkMemoryRequirements memoryRequiremens{};
@@ -127,7 +151,7 @@ VkSurfaceKHR VulkanAPI::CreateWin32Surface(VkInstance instance,GLFWwindow* windo
 {
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 
-	glfwCreateWindowSurface(instance, window, nullptr, &surface);
+	auto res = glfwCreateWindowSurface(instance, window, nullptr, &surface);
 	LogFunc(surface);
 	return surface;
 }
@@ -201,9 +225,7 @@ VkSwapchainKHR VulkanAPI::CreateSwapchain(VkDevice device, VkSurfaceKHR surface,
 	swapchainCreateInfoKHR.presentMode = presentMode;
 	swapchainCreateInfoKHR.clipped = VK_FALSE;
 	swapchainCreateInfoKHR.oldSwapchain = VK_NULL_HANDLE;
-
-
-	vkCreateSwapchainKHR(device, &swapchainCreateInfoKHR, nullptr, &swapchainKHR);
+	auto res = vkCreateSwapchainKHR(device, &swapchainCreateInfoKHR, nullptr, &swapchainKHR);
 	LogFunc(swapchainKHR);
 	return swapchainKHR;
 }
@@ -294,7 +316,7 @@ VkImage VulkanAPI::CreateImage(VkDevice device, VkImageCreateFlags flags, VkImag
 	imageCreateInfo.queueFamilyIndexCount = queueFamilyIndices.size();
 	imageCreateInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 	imageCreateInfo.initialLayout = initialLayout;
-	vkCreateImage(device, &imageCreateInfo, nullptr, &image);
+	auto res = vkCreateImage(device, &imageCreateInfo, nullptr, &image);
 	LogFunc(image);
 
 	return image;
@@ -627,7 +649,7 @@ VkFence VulkanAPI::CreateFence(VkDevice device, VkFenceCreateFlags flags)
 	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceCreateInfo.pNext = nullptr;
 	fenceCreateInfo.flags = flags;
-	vkCreateFence(device, &fenceCreateInfo, nullptr, &fence);
+	auto res = vkCreateFence(device, &fenceCreateInfo, nullptr, &fence);
 	LogFunc(fence);
 	return fence;
 }
@@ -668,7 +690,7 @@ void VulkanAPI::DestroySemaphore(VkDevice device, VkSemaphore semaphore)
 	vkDestroySemaphore(device, semaphore, nullptr);
 }
 
-void VulkanAPI::WaitSemaphores(VkDevice device, VkSemaphoreWaitFlags flags,const std::vector<VkSemaphore> semaphores, const std::vector<uint64_t> semaphoreValues)
+void VulkanAPI::WaitTimelineSemaphores(VkDevice device, VkSemaphoreWaitFlags flags,const std::vector<VkSemaphore>& semaphores, const std::vector<uint64_t>& semaphoreValues)
 {
 	VkSemaphoreWaitInfo waitInfo{ };
 	waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
@@ -676,8 +698,8 @@ void VulkanAPI::WaitSemaphores(VkDevice device, VkSemaphoreWaitFlags flags,const
 	waitInfo.flags = flags;
 	waitInfo.semaphoreCount = semaphores.size();
 	waitInfo.pSemaphores = semaphores.data();
-	waitInfo.pValues = semaphoreValues.size() ? semaphoreValues.data() : nullptr;
-	vkWaitSemaphores(device, &waitInfo, VK_TIMEOUT);
+	waitInfo.pValues = semaphoreValues.data();
+	auto res = vkWaitSemaphores(device, &waitInfo, VK_TIMEOUT);
 }
 
 void VulkanAPI::SignalSemaphores(VkDevice device, VkSemaphore semaphore, uint64_t value/*只对timeline semaphore有用*/)
@@ -938,7 +960,7 @@ VkInstance VulkanAPI::CreateInstance(std::vector<const char*> enableLayers, std:
 	instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(enableExtensions.size());
 	instanceCreateInfo.ppEnabledLayerNames = enableLayers.data();
 	instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(enableLayers.size());
-	vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
+	auto res = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
 	LogFunc(instance);
 	return instance;
 }
@@ -953,9 +975,9 @@ void VulkanAPI::Initialize()
 	glfwInit();
 }
 
-std::vector<const char*> VulkanAPI::GetWinGLFWExtensionNames()
+std::vector<const char*> VulkanAPI::GetInstanceNeedWinGLFWExtensionNames()
 {
-	uint32_t extensionCount;
+	uint32_t extensionCount = 0;
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
 	std::vector<const char*> extensions{ glfwExtensions, glfwExtensions + extensionCount };
 	return extensions;
@@ -963,13 +985,14 @@ std::vector<const char*> VulkanAPI::GetWinGLFWExtensionNames()
 
 GLFWwindow* VulkanAPI::CreateWin32Window(int width, int height, const char* windowName)
 {
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	auto window = glfwCreateWindow(width, height, windowName, nullptr, nullptr);
 	LogFunc(window);
 
 	return window;
 }
 
-std::vector<VkLayerProperties> VulkanAPI::EnumerateInstanceSupportLayerProperties()
+std::vector<VkLayerProperties> VulkanAPI::EnumerateLayerProperties()
 {
 	
 	std::vector<VkLayerProperties> supportLayes;
@@ -981,18 +1004,7 @@ std::vector<VkLayerProperties> VulkanAPI::EnumerateInstanceSupportLayerPropertie
 	return supportLayes;
 }
 
-std::vector<VkExtensionProperties> VulkanAPI::EnumerateInstanceSupportExtensionProperties()
-{
-	std::vector<VkExtensionProperties> extensionProperties;
-	uint32_t extensionCount = 0;
-	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-	extensionProperties.resize(extensionCount);
-	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensionProperties.data());
-	LogFunc(extensionCount);
-	return extensionProperties;
-}
-
-std::vector<VkExtensionProperties> VulkanAPI::EnumerateInstanceSupportLayerExtensionProperties( const char* layerName)
+std::vector<VkExtensionProperties> VulkanAPI::EnumerateExtensionProperties(const char* layerName)
 {
 	std::vector<VkExtensionProperties> extensionProperties;
 	uint32_t extensionCount = 0;
@@ -1003,11 +1015,13 @@ std::vector<VkExtensionProperties> VulkanAPI::EnumerateInstanceSupportLayerExten
 	return extensionProperties;
 }
 
+
 VkBool32 DebugCallBack(
 	VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
 	VkDebugUtilsMessageTypeFlagsEXT                  messageTypes,
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData) {
+	Log(pCallbackData->pMessage, 1);
 	LogFunc(1);
 	return VK_TRUE;
 }
@@ -1020,11 +1034,11 @@ VkDebugUtilsMessengerEXT VulkanAPI::CreateDebugInfoMessager(VkInstance instance)
 	debugUtilsMessagerCreateInfoEXT.pNext = nullptr;
 	debugUtilsMessagerCreateInfoEXT.flags = 0;
 	debugUtilsMessagerCreateInfoEXT.pUserData = nullptr;
-	debugUtilsMessagerCreateInfoEXT.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;//只看校验信息
-	debugUtilsMessagerCreateInfoEXT.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;//只看错误信息
+	debugUtilsMessagerCreateInfoEXT.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;//只看校验信息	
+	debugUtilsMessagerCreateInfoEXT.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;//只看错误信息
 	debugUtilsMessagerCreateInfoEXT.pfnUserCallback = &DebugCallBack;
 	
-	((PFN_vkCreateDebugUtilsMessengerEXT)InstanceFuncLoader(instance, "vkCreateDebugUtilsMessengerEXT"))(instance,&debugUtilsMessagerCreateInfoEXT,nullptr,&debugUtilsMessenger);
+	auto res = ((PFN_vkCreateDebugUtilsMessengerEXT)InstanceFuncLoader(instance, "vkCreateDebugUtilsMessengerEXT"))(instance,&debugUtilsMessagerCreateInfoEXT,nullptr,&debugUtilsMessenger);
 
 	LogFunc(debugUtilsMessenger);
 	return debugUtilsMessenger;

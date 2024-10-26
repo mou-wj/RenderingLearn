@@ -7,14 +7,13 @@ namespace VulkanAPI {
 
 	void Initialize();
 	//platform
-	std::vector<const char*> GetWinGLFWExtensionNames();
+	std::vector<const char*> GetInstanceNeedWinGLFWExtensionNames();
 	GLFWwindow* CreateWin32Window(int width, int height, const char* windowName);
 
 
 	//instance
-	std::vector<VkLayerProperties> EnumerateInstanceSupportLayerProperties();
-	std::vector<VkExtensionProperties> EnumerateInstanceSupportExtensionProperties();
-	std::vector<VkExtensionProperties> EnumerateInstanceSupportLayerExtensionProperties(const char* layerName);
+	std::vector<VkLayerProperties> EnumerateLayerProperties();
+	std::vector<VkExtensionProperties> EnumerateExtensionProperties(const char* layerName);
 	VkInstance CreateInstance(std::vector<const char*> enableLayers,std::vector<const char*> enableExtensions);
 	void DestroyInstance(VkInstance instance);
 	void* InstanceFuncLoader(VkInstance instance, const char* funcName);
@@ -28,6 +27,10 @@ namespace VulkanAPI {
 	VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice);
 	VkPhysicalDeviceMemoryProperties GetMemoryProperties(VkPhysicalDevice physicalDevice);
 	VkFormatProperties GetFormatPropetirs(VkPhysicalDevice physicalDevice, VkFormat format);
+	std::vector<VkExtensionProperties> EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* layerName);
+	std::vector<VkLayerProperties> EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice);
+
+
 
 	//device
 	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, std::vector<std::pair<uint32_t,uint32_t>> wantQueueFamilyAndQueueCounts,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures& enableFeatues);
@@ -223,9 +226,9 @@ namespace VulkanAPI {
 	//semaphore
 	VkSemaphore CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags);
 	void DestroySemaphore(VkDevice device, VkSemaphore semaphore);
-	void WaitSemaphores(VkDevice device, VkSemaphoreWaitFlags    flags,
-						const std::vector<VkSemaphore> semaphores,
-						const std::vector<uint64_t> semaphoreValues);
+	void WaitTimelineSemaphores(VkDevice device, VkSemaphoreWaitFlags    flags,
+						const std::vector<VkSemaphore>& semaphores,
+						const std::vector<uint64_t>& semaphoreValues);
 	void SignalSemaphores(VkDevice device,VkSemaphore semaphore, uint64_t value = 0/*只对timeline semaphore有用*/);
 
 	//event

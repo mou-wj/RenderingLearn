@@ -16,6 +16,16 @@
 using namespace VulkanAPI;
 
 
+void ExampleBase::Run(ExampleBase* example)
+{
+	example->InitResources();
+	example->Init();
+	example->Loop();
+
+
+
+}
+
 void ExampleBase::Init()
 {
 	if (initFlag)
@@ -26,12 +36,13 @@ void ExampleBase::Init()
 	Initialize();
 	InitContex();
 	InitAttanchmentDesc();
-	InitFrameBuffer();
+	InitSubPassInfo();
 	InitRenderPass();
-	CreateGraphicPipelines();
+	InitFrameBuffer();
+	InitGraphicPipelines();
 }
 
-void ExampleBase::ParseShaderFiles(std::vector<ShaderCodePaths>& shaderPaths)
+void ExampleBase::ParseShaderFiles(const std::vector<ShaderCodePaths>& shaderPaths)
 {
 	graphcisPipelineInfos.resize(shaderPaths.size());
 	std::vector<char> tmpCode;
@@ -39,11 +50,16 @@ void ExampleBase::ParseShaderFiles(std::vector<ShaderCodePaths>& shaderPaths)
 	{
 		auto& pipelineShaderResourceInfo = graphcisPipelineInfos[i].pipelineShaderResourceInfo;
 		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].shaderFilePath = shaderPaths[i].vertexShaderPath;
-		ReadGLSLShaderFile(shaderPaths[i].vertexShaderPath, tmpCode);
-		CompileGLSLToSPIRV(VK_SHADER_STAGE_VERTEX_BIT,tmpCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode);
-		//½âÎövertex attribute info
+		TransferGLSLFileToSPIRVFile(shaderPaths[i].vertexShaderPath, "tmp.spv");
+		ReadSPIRVFile("tmp.spv", pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode);
+		
+		//ReadGLSLShaderFile(shaderPaths[i].vertexShaderPath, tmpCode);
+
+		//CompileGLSLToSPIRV(VK_SHADER_STAGE_VERTEX_BIT,tmpCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode);
+		//vertex attribute info
 		//spirv_cross::Compiler shaderCompiler(spirvCode32);
-		spirv_cross::CompilerGLSL shaderCompiler(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode);
+		std::vector<unsigned int> spirv = pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode;
+		spirv_cross::CompilerGLSL shaderCompiler(spirv);
 
 		auto resources = shaderCompiler.get_shader_resources();
 		auto entry_points = shaderCompiler.get_entry_points_and_stages();
@@ -59,29 +75,113 @@ void ExampleBase::ParseShaderFiles(std::vector<ShaderCodePaths>& shaderPaths)
 
 }
 
+void ExampleBase::Draw()
+{
+	//BeginRecord(renderCommandBuffer,0);
+	//CmdBeginRenderPass(RenderCommandBuffer,renderPass,frameBuffer,VkRect2D{.width = windowWidth,.height = windowHeight},0);
+	////bind pipelines
+	//for(uint32_t i = 0; i < graphcisPipelineInfos.size();i++)
+	//{
+	//	CmdBindPipeline(renderCommandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,graphcisPipelineInfos[i].pipeline);
+	//	
+	//}
+	//CmdBindVertexBuffers(renderCommandBuffer,activeGeom.vertexBuffer.buffer,1);
+	//for(uint32_t i = 0;i < activeGeom.vertexBuffer.indexBuffers.size();i++)
+	//{
+	//	CmdBindIndexBuffer(renderCommandBuffer,activeGeom.vertexBuffer.buffer,0,VK_INDEX_TYPE_UINT32);
+	//	CmdDrawIndex(renderCommandBuffer,)
+	//}
+
+
+
+
+
+
+	//EndRecord();
+
+
+
+}
+
 void ExampleBase::InitContex()
 {
-	//´´½¨´°¿Ú
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	window = CreateWin32Window(windowWidth, windowHeight, "MainWindow");
 
-	//´´½¨instance
-	instance = CreateInstance({ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, { VK_KHR_SWAPCHAIN_EXTENSION_NAME });
-	//´´½¨surface
+	auto requiredExtension = GetInstanceNeedWinGLFWExtensionNames();
+	std::vector<const char*> wantExtensions = { VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
+	wantExtensions.insert(wantExtensions.end(), requiredExtension.begin(), requiredExtension.end());
+	//ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½extension
+	auto instanceExtensions = EnumerateExtensionProperties(nullptr);
+	uint32_t numSatisfiedExtensions = 0;
+	for (uint32_t i = 0; i < instanceExtensions.size(); i++)
+	{
+		for (uint32_t j = 0; j < wantExtensions.size(); j++)
+		{
+			if (strcmp(instanceExtensions[i].extensionName, wantExtensions[j]) == 0)
+			{
+				numSatisfiedExtensions++;
+			}
+		}
+
+
+	}
+	if (numSatisfiedExtensions != wantExtensions.size())
+	{
+		Log("Ä³ï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½Ö§ï¿½ï¿½",0);
+	}
+	//auto 
+
+	//ï¿½ï¿½ï¿½ï¿½instance
+	instance = CreateInstance({ }, wantExtensions);
+	//ï¿½ï¿½ï¿½ï¿½surface
 	surface = CreateWin32Surface(instance, window);
-	
+	debugUtilMessager = CreateDebugInfoMessager(instance);
 	PickValidPhysicalDevice();
-	physicalDeviceFeatures.geometryShader = VK_TRUE;//¿ªÆôgeometry shader
-	device = CreateDevice(physicalDevice, { {queueFamilyIndex,3} }, {}, {}, physicalDeviceFeatures);
+	physicalDeviceFeatures.geometryShader = VK_TRUE;//ï¿½ï¿½ï¿½ï¿½geometry shader
+	device = CreateDevice(physicalDevice, { {queueFamilyIndex,3} }, {}, {VK_KHR_SWAPCHAIN_EXTENSION_NAME}, physicalDeviceFeatures);
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
+	graphicFence = CreateFence(device, 0);
 	presentQueue = GetQueue(device, queueFamilyIndex, 1);
+	presentFence = CreateFence(device, 0);
 	transferQueue = GetQueue(device, queueFamilyIndex, 2);
+	transferFence = CreateFence(device, 0);
 
-	//´´½¨swapchain
-	swapchain = CreateSwapchain(device, surface, colorFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, presentMode);
+
+	//ï¿½ï¿½ï¿½ï¿½swapchain
+	swapchain = CreateSwapchain(device, surface, colorFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
 	
-	swapchainImages = GetSwapchainImages(device, swapchain);
+	//ï¿½ï¿½ï¿½ï¿½command pool
+	commandPool = CreateCommandPool(device, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, queueFamilyIndex);
+	renderCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	toolCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
-	//´´½¨swapchain image valid semaphore
+
+	//ï¿½ï¿½ï¿½ï¿½transferï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Éµï¿½semaphore
+	transferOperationFinish = CreateSemaphore(device, 0);
+
+
+	auto swapImages = GetSwapchainImages(device, swapchain);
+	swapchainImages.resize(swapImages.size());
+	for (uint32_t i = 0; i < swapImages.size(); i++)
+	{
+		swapchainImages[i].image = swapImages[i];
+		swapchainImages[i].aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+		swapchainImages[i].currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		swapchainImages[i].numLayer = 1;
+		swapchainImages[i].numMip = 1;
+		swapchainImages[i].extent = VkExtent3D{.width = windowWidth ,.height = windowHeight,.depth = 1};
+		swapchainImages[i].sample = VK_SAMPLE_COUNT_1_BIT;
+		swapchainImages[i].memory = VK_NULL_HANDLE;
+		
+		//×ªï¿½ï¿½swapchain imageï¿½ï¿½image layout
+		TransferWholeImageLayout(swapchainImages[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);//ï¿½È´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½ï¿½ï¿½
+
+
+	}
+
+
+	//ï¿½ï¿½ï¿½ï¿½swapchain image valid semaphore
 	swapchainImageValidSemaphores.resize(swapchainImages.size());
 	for (uint32_t i = 0; i < swapchainImageValidSemaphores.size(); i++)
 	{
@@ -91,27 +191,8 @@ void ExampleBase::InitContex()
 
 
 
-	//´´½¨command pool
-	commandPool = CreateCommandPool(device, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, queueFamilyIndex);
-	renderCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-	toolCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 
-	//´´½¨transfer²Ù×÷Íê³ÉµÄsemaphore
-	transferOperationFinish = CreateSemaphore(device, 0);
-
-
-	//×ª»»swapchain imageµÄimage layout
-	for (uint32_t i = 0; i < swapchainImages.size(); i++)
-	{
-		VkImageSubresourceRange subRange;
-		subRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		subRange.baseArrayLayer = 0;
-		subRange.baseMipLevel = 0;
-		subRange.layerCount = 1;
-		subRange.levelCount = 1;
-		TransferImageLayout(swapchainImages[i], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subRange);//µÈ´ý¿½±´äÖÈ¾½á¹û
-	}
 
 
 
@@ -135,10 +216,10 @@ void ExampleBase::InitAttanchmentDesc()
 	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	//´´½¨color attachmentµÄ×ÊÔ´
+	//ï¿½ï¿½ï¿½ï¿½color attachmentï¿½ï¿½ï¿½ï¿½Ô´
 	auto& colorImage = renderTargets.colorAttachment.attachmentImage;
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+	TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
 
 	auto& depthAttachment = renderTargets.depthAttachment.attachmentDesc;
@@ -153,12 +234,56 @@ void ExampleBase::InitAttanchmentDesc()
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 
 
+	auto& depthImage = renderTargets.depthAttachment.attachmentImage;
+	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT,VK_IMAGE_TILING_OPTIMAL);
+	TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 
 
 
 
 
+}
+
+void ExampleBase::InitRenderPass()
+{
+	
+	renderPass = CreateRenderPass(device, 0, { renderTargets.colorAttachment.attachmentDesc,renderTargets.depthAttachment.attachmentDesc }, subpassInfo.subpassDescs,subpassInfo.subpassDepends);
+
+
+
+}
+
+void ExampleBase::InitFrameBuffer()
+{
+	frameBuffer = CreateFrameBuffer(device, 0, renderPass, { renderTargets.colorAttachment.attachmentImage.imageView,renderTargets.depthAttachment.attachmentImage.imageView }, windowWidth, windowHeight,1);
+
+}
+
+void ExampleBase::InitDefaultGraphicSubpassInfo()
+{
+	subpassInfo.subpassDescs.resize(1);
+	auto& subpassDesc1 = subpassInfo.subpassDescs[0];
+	subpassDesc1.flags = 0;
+	subpassDesc1.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpassDesc1.inputAttachmentCount = 0;
+	subpassDesc1.pInputAttachments = nullptr;
+	subpassDesc1.colorAttachmentCount = 1;
+	subpassDesc1.pColorAttachments = &renderTargets.colorRef;
+	subpassDesc1.pResolveAttachments = nullptr;
+	subpassDesc1.pDepthStencilAttachment = &renderTargets.depthRef;
+	subpassDesc1.preserveAttachmentCount = 0;
+	subpassDesc1.pPreserveAttachments = nullptr;
+
+	subpassInfo.subpassDepends.resize(1);
+	auto& subpassDepend1 = subpassInfo.subpassDepends[0];
+	subpassDepend1.srcSubpass = VK_SUBPASS_EXTERNAL;
+	subpassDepend1.dstSubpass = 0;
+	subpassDepend1.srcStageMask = VK_PIPELINE_STAGE_NONE;
+	subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+	subpassDepend1.srcAccessMask = VK_ACCESS_NONE;
+	subpassDepend1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	subpassDepend1.dependencyFlags =  0;
 
 
 }
@@ -185,25 +310,33 @@ void ExampleBase::PickValidPhysicalDevice()
 	for (uint32_t i = 0; i < physicalDevices.size(); i++)
 	{
 		auto familyIndex = GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(physicalDevices[i]);
-		auto surfaceCapabilities = GetSurfaceCapabilities(physicalDevice, surface);
-		auto surfaceFormatsCapabilities = GetSurfaceFormats(physicalDevice, surface);
+		auto surfaceCapabilities = GetSurfaceCapabilities(physicalDevices[i], surface);
+		auto surfaceFormatsCapabilities = GetSurfaceFormats(physicalDevices[i], surface);
 		
 		if (familyIndex != -1 && surfaceCapabilities.maxImageCount >=2 
-			//ÕâÀï¿ÉÒÔ¼ì²ésurface¿Éµ÷ÕûµÄ´óÐ¡·¶Î§£¬µ«Ä¿Ç°²»×¼±¸ÐÞ¸Ä´óÐ¡ËùÒÔ²»¼ì²é
+			//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½surfaceï¿½Éµï¿½ï¿½ï¿½ï¿½Ä´ï¿½Ð¡ï¿½ï¿½Î§ï¿½ï¿½ï¿½ï¿½Ä¿Ç°ï¿½ï¿½×¼ï¿½ï¿½ï¿½Þ¸Ä´ï¿½Ð¡ï¿½ï¿½ï¿½Ô²ï¿½ï¿½ï¿½ï¿½
 			)
 		{
-			//¼ì²éÖ§³ÖcolorºÍdepthµÄformat
-			bool surpportColorAndDethFormat = false;
+			//ï¿½ï¿½ï¿½depthï¿½ï¿½format
+			auto depthFormatFeatures = GetFormatPropetirs(physicalDevices[i], depthFormat);
+			if (!(depthFormatFeatures.optimalTilingFeatures & (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)))
+			{
+				continue;
+			}
+
+
+			//ï¿½ï¿½ï¿½Ö§ï¿½ï¿½colorï¿½ï¿½format
+			bool surpportColorFormat = false;
 			for (auto& surfaceFormatCapabilities : surfaceFormatsCapabilities)
 			{
-				if (surfaceFormatCapabilities.format & (colorFormat | depthFormat))
+				if (surfaceFormatCapabilities.format == colorFormat )
 				{
-					surpportColorAndDethFormat = true;
+					surpportColorFormat = true;
 					colorSpace = surfaceFormatCapabilities.colorSpace;
 				}
 
 			}
-			if (!surpportColorAndDethFormat)
+			if (!surpportColorFormat)
 			{
 				continue;
 			}
@@ -211,7 +344,7 @@ void ExampleBase::PickValidPhysicalDevice()
 			auto presentModes = GetSurfacePresentModes(physicalDevices[i], surface);
 			for (auto& presentMode : presentModes)
 			{
-				if (presentMode == VK_PRESENT_MODE_FIFO_KHR)
+				if (presentMode == swapchainPresentMode)
 				{
 					surpportPresentMode = true;
 				}
@@ -226,12 +359,12 @@ void ExampleBase::PickValidPhysicalDevice()
 			{
 				continue;
 			}
-
-			//¼ì²éformatÊÇ·ñÖ§³Ölinear tiling
+			
+			//ï¿½ï¿½ï¿½formatï¿½Ç·ï¿½Ö§ï¿½ï¿½linear tiling
 			auto colorFormatProps = GetFormatPropetirs(physicalDevices[i], colorFormat);
-			if (!(colorFormatProps.linearTilingFeatures & (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)))
+			if (!(colorFormatProps.linearTilingFeatures & (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT)))
 			{
-				continue;//Èç¹ûcolor formatµÄlinear tiling ²»Ö§³Ö²ÉÑùºÍÑÕÉ«¸½¼þÔòÌø¹ý¸ÃÎïÀíÉè±¸
+				continue;//ï¿½ï¿½ï¿½color formatï¿½ï¿½linear tiling ï¿½ï¿½Ö§ï¿½Ö²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½è±¸
 			}
 
 			queueFamilyIndex = familyIndex;
@@ -266,14 +399,18 @@ int32_t ExampleBase::GetMemoryTypeIndex()
 	return -1;
 }
 
-Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,VkFormat format,uint32_t width,uint32_t height, uint32_t depth,uint32_t numMip,uint32_t numLayer,VkImageUsageFlags usage, VkImageAspectFlags aspect,VkSampleCountFlagBits sample, VkImageLayout layout)
+Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,VkFormat format,uint32_t width,uint32_t height, uint32_t depth,uint32_t numMip,uint32_t numLayer,VkImageUsageFlags usage, VkImageAspectFlags aspect, VkImageTiling tiling,VkSampleCountFlagBits sample, VkImageLayout layout)
 {
 	Image image;
 	image.currentLayout = layout;
 	image.sample = sample;
 	image.extent = VkExtent3D{ .width = width,.height = height,.depth = depth };
+	image.aspect = aspect;
+	image.numLayer = numLayer;
+	image.numMip = numMip;
+	image.tiling = tiling;
 	image.image = VulkanAPI::CreateImage(device, 0, imageType, format, image.extent,
-		1, 1, image.sample, imageTiling, VK_IMAGE_USAGE_SAMPLED_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
+		1, 1, image.sample, image.tiling, VK_IMAGE_USAGE_SAMPLED_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
 	image.imageView = CreateImageView(device, 0, image.image, viewType, format, VkComponentMapping{}, VkImageSubresourceRange{ .aspectMask = aspect,.baseMipLevel = 0,.levelCount = image.numMip ,.baseArrayLayer = 0,.layerCount = image.numLayer });
 
 
@@ -283,8 +420,8 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 Texture ExampleBase::Load2DTexture(const std::string& texFilePath)
 {
 	int x = 0, y = 0, numChannel = 0;
-	auto imageData = stbi_load(texFilePath.c_str(), &x, &y, &numChannel,4);//Ç¿ÖÆ¼ÓÔØ4Í¨µÀ£¬Êý¾ÝµÄ±àÂëÎªsRGB
-	//´´½¨texture
+	auto imageData = stbi_load(texFilePath.c_str(), &x, &y, &numChannel,4);//Ç¿ï¿½Æ¼ï¿½ï¿½ï¿½4Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÝµÄ±ï¿½ï¿½ï¿½ÎªsRGB
+	//ï¿½ï¿½ï¿½ï¿½texture
 	Texture texture;
 	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, x, y, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
@@ -298,9 +435,9 @@ Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFi
 	std::array<const char*, 6> imageFaceDatas;
 	for (uint32_t i = 0; i < 6; i++)
 	{
-		imageFaceDatas[i] = (const char*)stbi_load(faceTexFilePaths[i].c_str(), &x, &y, &numChannel, 4);//Ç¿ÖÆ¼ÓÔØ4Í¨µÀ£¬Êý¾ÝµÄ±àÂëÎªsRGB
+		imageFaceDatas[i] = (const char*)stbi_load(faceTexFilePaths[i].c_str(), &x, &y, &numChannel, 4);//Ç¿ï¿½Æ¼ï¿½ï¿½ï¿½4Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÝµÄ±ï¿½ï¿½ï¿½ÎªsRGB
 	}
-	//´´½¨texture
+	//ï¿½ï¿½ï¿½ï¿½texture
 	Texture texture;
 	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE, colorFormat, x, y, 1, 1, 6, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
@@ -320,14 +457,14 @@ Geometry ExampleBase::LoadObj(const std::string& objFilePath)
 	}
 	uint32_t numVertex = vertexAttrib.vertices.size() / 3;
 	Geometry geometry;
-	//´´½¨vertex buffer
+	//ï¿½ï¿½ï¿½ï¿½vertex buffer
 	geometry.vertexBuffer = CreateVertexBuffer(nullptr, vertexAttributeInputStride * numVertex);
 	for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
 	{
-		//Ìî³ä¶¥µãÎ»ÖÃÊý¾Ý
+		//ï¿½ï¿½ä¶¥ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(vertexAttrib.vertices.data() + vertexId * 3));
 
-		//Ìî³äÆäËûÊý¾Ý
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 
 	}
@@ -344,13 +481,13 @@ Geometry ExampleBase::LoadObj(const std::string& objFilePath)
 		{
 			if (shapes[i].mesh.num_face_vertices[cellId] != 3)
 			{
-				LogFunc(0);//Èç¹û²»ÊÇÈý½ÇÐÎµÄÄ£ÐÍ¾ÍÖ±½Ó±¨´í
+				LogFunc(0);//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îµï¿½Ä£ï¿½Í¾ï¿½Ö±ï¿½Ó±ï¿½ï¿½ï¿½
 			}
 		}
 		indicesData.resize(shapes[i].mesh.num_face_vertices.size() * 3);
 		for (uint32_t attriIndexId = 0; attriIndexId < shapes[i].mesh.indices.size() ; attriIndexId++)
 		{
-			indicesData[attriIndexId] = shapes[i].mesh.indices[attriIndexId].vertex_index;//´æ·Å¶¥µãË÷Òý
+			indicesData[attriIndexId] = shapes[i].mesh.indices[attriIndexId].vertex_index;//ï¿½ï¿½Å¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		}
 
 		geometry.indexBuffers[i] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
@@ -370,7 +507,7 @@ Buffer ExampleBase::CreateVertexBuffer(const char* buf, VkDeviceSize size)
 
 	Buffer buffer;
 	buffer.buffer = CreateBuffer(device, 0, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
-	//·ÖÅäÄÚ´æ
+	//ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½
 	buffer.memory = AllocateMemory(device, size, usedMemoryTypeIndex);
 	buffer.hostMapPointer = MapMemory(device, buffer.memory, 0, size, 0);
 	if (buf)
@@ -389,7 +526,7 @@ Buffer ExampleBase::CreateIndexBuffer(const char* buf, VkDeviceSize size)
 {
 	Buffer buffer;
 	buffer.buffer = CreateBuffer(device, 0, size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
-	//·ÖÅäÄÚ´æ
+	//ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½
 	buffer.memory = AllocateMemory(device, size, usedMemoryTypeIndex);
 	buffer.hostMapPointer = MapMemory(device, buffer.memory, 0, size, 0);
 	if (buf)
@@ -410,6 +547,13 @@ void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize si
 
 }
 
+void ExampleBase::TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout)
+{
+	TransferImageLayout(image.image, image.currentLayout, dstImageLayout, VkImageSubresourceRange{ .aspectMask = image.aspect,.baseMipLevel = 0,.levelCount = image.numMip,.baseArrayLayer = 0,.layerCount = image.numLayer });
+
+
+}
+
 void ExampleBase::TransferImageLayout(VkImage image, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange)
 {
 	BeginRecord(toolCommandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -427,64 +571,65 @@ void ExampleBase::TransferImageLayout(VkImage image, VkImageLayout srcImageLayou
 	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, {});
 	EndRecord(toolCommandBuffer);
 	
-	SubmitCommands(transferQueue, {}, {}, { toolCommandBuffer }, {transferOperationFinish}, nullptr);
-	WaitSemaphores(device, 0, {transferOperationFinish}, {});
+	SubmitCommands(transferQueue, {}, {}, { toolCommandBuffer }, {}, transferFence);
+	WaitFence(device, { transferFence }, true);
+	//WaitSemaphores(device, 0, {transferOperationFinish}, {});
 
 
 
 }
 
-void ExampleBase::CreateGraphicPipelines()
+void ExampleBase::InitGraphicPipelines()
 {
 	
-	//³õÊ¼»¯shader stage
+	//ï¿½ï¿½Ê¼ï¿½ï¿½shader stage
 	for (uint32_t pipeID = 0; pipeID < graphcisPipelineInfos.size(); pipeID++)
 	{
 		std::map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> descriptorSetBindings;
 		VkDescriptorSetLayoutBinding binding;
 		std::map<VkDescriptorType, uint32_t> needNumDescriptor;
 		std::vector<VkVertexInputAttributeDescription> attributeDescs;
-		VkVertexInputBindingDescription inputBindingDesc;//Ö»°ó¶¨0ºÅÎ»£¬ËùÒÔÕâÀïÖ»ÓÐÒ»¸ö
+		VkVertexInputBindingDescription inputBindingDesc;//Ö»ï¿½ï¿½0ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½Ò»ï¿½ï¿½
 		for (auto kv : graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.shaderResourceInfos)
 		{
 			if (kv.second.spirvCode.size() != 0)
 			{
 				if (kv.first == VK_SHADER_STAGE_VERTEX_BIT)
 				{
-					//³õÊ¼»¯pipelineµÄinput state
+					//ï¿½ï¿½Ê¼ï¿½ï¿½pipelineï¿½ï¿½input state
 					auto& inputState = graphcisPipelineInfos[pipeID].pipelineStates.vertexInputState;
 					auto& shaderAttributeInputInfo = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.inputAttributesInfo;
 					//attributeDescs.resize(shaderAttributeInputInfo.size());
 					//for (uint32_t attriId = 0; attriId < shaderAttributeInputInfo.size(); attriId++)
 					//{
-					//	attributeDescs[attriId].binding = 0;//Ä¬ÈÏÊ¹ÓÃ°ó¶¨µã0£¬¶ÔÓ¦°ó¶¨µ½0ºÅÎ»µÄ¶¨µã»º³å
+					//	attributeDescs[attriId].binding = 0;//Ä¬ï¿½ï¿½Ê¹ï¿½Ã°ó¶¨µï¿½0ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ó¶¨µï¿½0ï¿½ï¿½Î»ï¿½Ä¶ï¿½ï¿½ã»ºï¿½ï¿½
 					//	attributeDescs[attriId].format = shaderAttributeInputInfo[attriId].format;
 					//	attributeDescs[attriId].location = shaderAttributeInputInfo[attriId].location;
 					//	attributeDescs[attriId].offset = shaderAttributeInputInfo[attriId].offset;
 					//}
-					//Ê¹ÓÃ¹Ì¶¨µÄvertex attribute Êý¾Ý
+					//Ê¹ï¿½Ã¹Ì¶ï¿½ï¿½ï¿½vertex attribute ï¿½ï¿½ï¿½ï¿½
 					attributeDescs.resize(vertexAttributes.size());
 					for (uint32_t attriId = 0; attriId < vertexAttributes.size(); attriId++)
 					{
-						attributeDescs[attriId].binding = 0;//Ä¬ÈÏÊ¹ÓÃ°ó¶¨µã0£¬¶ÔÓ¦°ó¶¨µ½0ºÅÎ»µÄ¶¨µã»º³å
+						attributeDescs[attriId].binding = 0;//Ä¬ï¿½ï¿½Ê¹ï¿½Ã°ó¶¨µï¿½0ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ó¶¨µï¿½0ï¿½ï¿½Î»ï¿½Ä¶ï¿½ï¿½ã»ºï¿½ï¿½
 						attributeDescs[attriId].format = VK_FORMAT_R32G32B32_SFLOAT;
 						attributeDescs[attriId].location = attriId;
 						attributeDescs[attriId].offset = attriId * 3 * sizeof(float);
 					}
 					//inputBindingDesc.stride = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.vertexIputStride;
 					inputBindingDesc.stride = vertexAttributeInputStride;
-					inputBindingDesc.binding = 0;//Ö»ÉèÖÃÒ»¸ö°ó¶¨µãÎª0µÄ°ó¶¨ÐÅÏ¢
-					inputBindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;//ÏÈ²»Ê¹ÓÃinstance»æÖÆ
+					inputBindingDesc.binding = 0;//Ö»ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ó¶¨µï¿½Îª0ï¿½Ä°ï¿½ï¿½ï¿½Ï¢
+					inputBindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;//ï¿½È²ï¿½Ê¹ï¿½ï¿½instanceï¿½ï¿½ï¿½ï¿½
 
 				}
 
 
-				//¸ù¾Ýspirv code´´½¨shader module
+				//ï¿½ï¿½ï¿½ï¿½spirv codeï¿½ï¿½ï¿½ï¿½shader module
 				auto shaderModule = CreateShaderModule(device, 0, kv.second.spirvCode);
 
 
 
-				//³õÊ¼»¯shader state ÐÅÏ¢
+				//ï¿½ï¿½Ê¼ï¿½ï¿½shader state ï¿½ï¿½Ï¢
 				VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo{ };
 				pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 				pipelineShaderStageCreateInfo.pNext = nullptr;
@@ -494,7 +639,7 @@ void ExampleBase::CreateGraphicPipelines()
 				pipelineShaderStageCreateInfo.pName = kv.second.entryName.c_str();
 				pipelineShaderStageCreateInfo.pSpecializationInfo = nullptr;
 
-				//»ñÈ¡°ó¶¨ºÍsetÐÅÏ¢
+				//ï¿½ï¿½È¡ï¿½ó¶¨ºï¿½setï¿½ï¿½Ï¢
 				//auto& bindins = kv.second.descriptorSetBindings;
 
 				for (auto& setAndBindings : kv.second.descriptorSetBindings)
@@ -505,10 +650,10 @@ void ExampleBase::CreateGraphicPipelines()
 						binding.binding = setAndBindings.second[bindingId].binding;
 						binding.descriptorCount = setAndBindings.second[bindingId].numDescriptor;
 						binding.descriptorType = setAndBindings.second[bindingId].descriptorType;
-						binding.pImmutableSamplers = nullptr;//ÔÝÊ±²»Ê¹ÓÃ²»±äµÄsampler
+						binding.pImmutableSamplers = nullptr;//ï¿½ï¿½Ê±ï¿½ï¿½Ê¹ï¿½Ã²ï¿½ï¿½ï¿½ï¿½sampler
 						binding.stageFlags = kv.first;
 						needNumDescriptor[binding.descriptorType] += binding.descriptorCount;
-						descriptorSetBindings[setId].push_back(binding);//²åÈëdescriptor set
+						descriptorSetBindings[setId].push_back(binding);//ï¿½ï¿½ï¿½ï¿½descriptor set
 					}
 					
 				}
@@ -518,7 +663,7 @@ void ExampleBase::CreateGraphicPipelines()
 			}
 		}
 
-		//´´½¨descriptor pool
+		//ï¿½ï¿½ï¿½ï¿½descriptor pool
 		std::vector<VkDescriptorPoolSize> poolSizes;
 		for (const auto& needDescriptor : needNumDescriptor)
 		{
@@ -531,11 +676,11 @@ void ExampleBase::CreateGraphicPipelines()
 		graphcisPipelineInfos[pipeID].descriptorPool = descriptorPool;
 
 
-		//·ÖÅädescriptor set
+		//ï¿½ï¿½ï¿½ï¿½descriptor set
 		std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 		for (const auto& setAndBindingInfos : descriptorSetBindings)
 		{
-			//´´½¨descriptor set layout
+			//ï¿½ï¿½ï¿½ï¿½descriptor set layout
 			auto descriptorSetLayout = CreateDescriptorSetLayout(device, 0, setAndBindingInfos.second);
 			graphcisPipelineInfos[pipeID].descriptorSetInfos[setAndBindingInfos.first].setLayout = descriptorSetLayout;
 			auto descriptorSet = AllocateDescriptorSet(device, graphcisPipelineInfos[pipeID].descriptorPool, { descriptorSetLayout });
@@ -543,13 +688,13 @@ void ExampleBase::CreateGraphicPipelines()
 			descriptorSetLayouts.push_back(descriptorSetLayout);
 		}
 		
-		//´´½¨pipeline layout
+		//ï¿½ï¿½ï¿½ï¿½pipeline layout
 		auto pipelineLayout =  CreatePipelineLayout(device, 0, descriptorSetLayouts, {});
 		graphcisPipelineInfos[pipeID].pipelineLayout = pipelineLayout;
 
 
 
-		//³õÊ¼»¯pipeline states
+		//ï¿½ï¿½Ê¼ï¿½ï¿½pipeline states
 		
 		auto& pipelineStates = graphcisPipelineInfos[pipeID].pipelineStates;
 		pipelineStates.Init(512, 512);
@@ -578,7 +723,7 @@ void ExampleBase::ReadGLSLShaderFile(const std::string& shaderPath, std::vector<
 
 	file.seekg(0);
 	file.read(shaderCode.data(), fileSize);
-
+	shaderCode.push_back('\0');
 	file.close();
 
 }
@@ -610,13 +755,12 @@ bool ExampleBase::CompileGLSLToSPIRV(VkShaderStageFlagBits shaderStage, const st
 	}
 
 
-	// ³õÊ¼»¯ glslang
+	// ï¿½ï¿½Ê¼ï¿½ï¿½ glslang
 	glslang::InitializeProcess();
 
-	// ±àÒë GLSL ´úÂëÎª SPIR-V ´úÂë
-	glslang::TShader shader(shaderType); // ÀýÈç£¬ÕâÀï¼ÙÉèÊÇÒ»¸ö¶¥µã×ÅÉ«Æ÷
+	// ï¿½ï¿½ï¿½ï¿½ GLSL ï¿½ï¿½ï¿½ï¿½Îª SPIR-V ï¿½ï¿½ï¿½ï¿½
+	glslang::TShader shader(shaderType); // ï¿½ï¿½ï¿½ç£¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É«ï¿½ï¿½
 	const char* source = srcCode.data();
-
 	shader.setStrings(&source, 1);
 	std::cout << "shader compile " << std::endl << std::string(srcCode.begin(), srcCode.end()) << std::endl << std::endl;;
 	if (!shader.parse(reinterpret_cast<const TBuiltInResource*>(glslang_default_resource()), 110, false, EShMessages::EShMsgDefault)) {
@@ -642,17 +786,18 @@ bool ExampleBase::CompileGLSLToSPIRV(VkShaderStageFlagBits shaderStage, const st
 
 	glslang::GlslangToSpv(*program.getIntermediate(shaderType), outSpirvCode);
 
-	// ÇåÀí glslang
+
+
+	// ï¿½ï¿½ï¿½ï¿½ glslang
 	glslang::FinalizeProcess();
+		
 	return true;
-	return false;
 }
 
 void ExampleBase::ParseVertexAttributes(const spirv_cross::ShaderResources& srcShaderResource, const spirv_cross::CompilerGLSL& compiler, std::vector<VertexAttributeInfo>& dstCacheAttributeInfo)
 {
 
-	//´òÓ¡ÐÅÏ¢£¬shader vertexÊôÐÔÐÅÏ¢ÒÔ¼°Ìá¹©µÄÊôÐÔÐÅÏ¢
-
+	
 	
 	//vertex attribute
 	dstCacheAttributeInfo.resize(srcShaderResource.stage_inputs.size());
@@ -699,8 +844,8 @@ void ExampleBase::ParseVertexAttributes(const spirv_cross::ShaderResources& srcS
 			LogFunc(0);
 			break;
 		}
-		Log("vertex shaderÖÐÊäÈëÊôÐÔÊý¾Ý : " << "location£º " << vertexAttributeInfo.location << " Ãû×Ö:  " <<
-			vertexAttributeInfo.name << " ÀàÐÍ: " << vertexAttributeFormatStr, vertexAttributeFormatStr == std::string("VK_FORMAT_R32G32B32_SFLOAT"));
+		Log("vertex shader input attribute data : " << "location =  " << vertexAttributeInfo.location << ", name :  " <<
+			vertexAttributeInfo.name << ", type : " << vertexAttributeFormatStr , vertexAttributeFormatStr == std::string("VK_FORMAT_R32G32B32_SFLOAT"));
 
 
 	}
@@ -713,7 +858,7 @@ void ExampleBase::ParseVertexAttributes(const spirv_cross::ShaderResources& srcS
 
 void ExampleBase::ParseShaderResource(const spirv_cross::ShaderResources& srcShaderResource, const spirv_cross::CompilerGLSL& compiler, ShaderResourceInfo& dstCacheShaderResource)
 {
-	//½âÎöuniform buffer ÐÅÏ¢
+	//ï¿½ï¿½ï¿½ï¿½uniform buffer ï¿½ï¿½Ï¢
 	//shaderInfos.shaderUniformBufferInfos.resize(resources.uniform_buffers.size());
 
 	DescriptorBinding bindingInfo{ };
@@ -732,7 +877,7 @@ void ExampleBase::ParseShaderResource(const spirv_cross::ShaderResources& srcSha
 		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
 	}
 
-	//½âÎösampler imageÐÅÏ¢
+	//ï¿½ï¿½ï¿½ï¿½sampler imageï¿½ï¿½Ï¢
 	for (uint32_t i = 0; i < srcShaderResource.sampled_images.size(); i++)
 	{
 		auto& samplerImage = srcShaderResource.sampled_images[i];
@@ -746,6 +891,42 @@ void ExampleBase::ParseShaderResource(const spirv_cross::ShaderResources& srcSha
 	}
 
 
+
+}
+
+void ExampleBase::TransferGLSLFileToSPIRVFile(const std::string& srcGLSLFile, const std::string& dstSPIRVFile)
+{
+	std::string vulkanIncludeDir(VULKAN_INCLUDE_DIRS);
+	uint32_t pos = vulkanIncludeDir.find_last_of("/");
+	std::string vulkanInstallDir = vulkanIncludeDir.substr(0, pos);
+	std::string glslcDir = vulkanInstallDir + "/Bin/glslc.exe";
+	std::string generateCmd = glslcDir + " " + srcGLSLFile + " -o " + dstSPIRVFile;
+	int ret = system(generateCmd.c_str());
+	if (ret != 0)
+	{
+		LogFunc(0);
+	}
+
+}
+
+void ExampleBase::ReadSPIRVFile(const std::string& spirvFile, std::vector<uint32_t>& outSpirvCode)
+{
+	std::ifstream spvfile(spirvFile, std::ios::ate | std::ios::binary);
+	if (!spvfile.is_open()) {
+		throw std::runtime_error("failed to open file!");
+	}
+	std::vector<char> spvShaderCode;
+	size_t spvfileSize = (size_t)spvfile.tellg();
+	spvShaderCode.resize(spvfileSize);
+
+	spvfile.seekg(0);
+	spvfile.read(spvShaderCode.data(), spvfileSize);
+	spvfile.close();
+
+	std::vector<uint32_t> spirvCode32(
+		reinterpret_cast<uint32_t*>(spvShaderCode.data()),
+		reinterpret_cast<uint32_t*>(spvShaderCode.data() + spvShaderCode.size()));
+	outSpirvCode = spirvCode32;
 
 }
 
