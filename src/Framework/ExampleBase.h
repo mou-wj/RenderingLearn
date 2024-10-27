@@ -1,10 +1,13 @@
 #pragma once
 #include "API/VulkanAPI.h"
+#include "Common/tiny_obj_loader.h"
 #include <map>
 #include <string>
 #include <array>
 #include <spirv_glsl.hpp>
 #include <spirv_cross.hpp>
+
+
 struct DescriptorBinding {
 	std::string name = "";
 	uint32_t binding;
@@ -21,12 +24,13 @@ struct ShaderResourceInfo {
 	std::string entryName = "";
 	std::vector<uint32_t> spirvCode;
 };
-struct VertexAttributeInfo {
+struct ShaderInputAttributeInfo {
 	uint32_t location;
 	uint32_t offset;
 	std::string name;
 	VkFormat format;
 };
+using VertexAttributeInfo = ShaderInputAttributeInfo;
 struct GraphicsPiplineShaderInfo {
 	std::vector<VertexAttributeInfo> inputAttributesInfo;
 	uint32_t vertexIputStride;
@@ -44,6 +48,7 @@ struct GraphicsPipelineStates {
 	VkPipelineRasterizationStateCreateInfo rasterizationState;
 	VkPipelineMultisampleStateCreateInfo multisampleState;
 	VkPipelineDepthStencilStateCreateInfo depthStencilState;
+	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachmentStates;
 	VkPipelineColorBlendStateCreateInfo colorBlendState;
 	VkPipelineDynamicStateCreateInfo dynamicState;
 
@@ -129,8 +134,21 @@ struct GraphicsPipelineStates {
 		colorBlendState.flags = 0;
 		colorBlendState.logicOpEnable = VK_FALSE;
 		colorBlendState.logicOp = VK_LOGIC_OP_AND;
-		colorBlendState.attachmentCount = 0;
-		colorBlendState.pAttachments = nullptr;
+		colorBlendAttachmentStates.resize(2);
+		colorBlendState.attachmentCount = 2;
+		for (uint32_t i = 0; i < 2; i++)
+		{
+			colorBlendAttachmentStates[i].blendEnable = VK_FALSE;
+			colorBlendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+			colorBlendAttachmentStates[i].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+			colorBlendAttachmentStates[i].colorBlendOp = VK_BLEND_OP_ADD;
+			colorBlendAttachmentStates[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			colorBlendAttachmentStates[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			colorBlendAttachmentStates[i].alphaBlendOp = VK_BLEND_OP_ADD;
+			colorBlendAttachmentStates[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		}
+		
+		colorBlendState.pAttachments = colorBlendAttachmentStates.data();
 		colorBlendState.blendConstants[4];
 
 		//dynamic state  Ĭ�ϲ�����
@@ -161,6 +179,8 @@ struct GraphicPipelineInfos {
 struct Buffer {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
+	VkDeviceSize size = 0;
+	VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
 	void* hostMapPointer = nullptr;
 };
 
@@ -174,6 +194,19 @@ struct Image {
 	VkExtent3D extent;
 	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
 	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+	void* hostMapPointer = nullptr;
+	bool Compatible(const Image& other) {
+		return tiling == other.tiling || numLayer == other.numLayer || numMip == other.numMip || aspect == other.aspect ||
+			extent.width == other.extent.width || extent.height == other.extent.height || extent.depth == other.extent.depth;
+	}
+	VkExtent3D GetMipLevelExtent(uint32_t mipLevel)
+	{
+		VkExtent3D size;
+		size.width = extent.width / pow(2, mipLevel) >= 1 ? extent.width / pow(2, mipLevel) : 1;
+		size.height = extent.height / pow(2, mipLevel) >= 1 ? extent.height / pow(2, mipLevel) : 1;
+		size.depth = extent.depth / pow(2, mipLevel) >= 1 ? extent.depth / pow(2, mipLevel) : 1;
+		return size;
+	}
 };
 
 struct Texture {
@@ -183,9 +216,14 @@ struct Texture {
 };
 struct Geometry
 {
+	std::string geoPath = "";
+	tinyobj::attrib_t vertexAttrib;
+	std::vector<tinyobj::shape_t> shapes;
+	std::vector<tinyobj::material_t> materials;
 	Buffer vertexBuffer;
 	std::vector<Buffer> indexBuffers;//һ��indexbuffer ����ģ���е�һ������
-	 
+	uint32_t numVertex = 0;
+	std::vector<uint32_t> numIndexPerZone;
 
 
 };
@@ -202,6 +240,7 @@ enum VertexAttributeType {
 struct Attachment {
 	VkAttachmentDescription attachmentDesc;
 	Image attachmentImage;
+	VkClearValue clearValue;
 };
 struct RenderTargets {
 	Attachment colorAttachment;//render pass��0�Ÿ���
@@ -228,7 +267,7 @@ public:
 
 protected:
 	void Init();
-	virtual void InitResources() = 0;//��ʼ����Ҫ����Դ
+	virtual void InitResourceInfos() = 0;//��ʼ����Ҫ����Դ
 	virtual void Loop() = 0;//��Ⱦѭ��
 	struct ShaderCodePaths {
 		std::string vertexShaderPath = "";
@@ -238,9 +277,6 @@ protected:
 	void ParseShaderFiles(const std::vector<ShaderCodePaths>& shaderPaths);
 
 protected:
-	void Draw();
-	void Present();
-
 
 protected:
 	//virtual void InitTextures() = 0;
@@ -251,40 +287,53 @@ protected:
 	virtual void InitFrameBuffer();
 	void InitDefaultGraphicSubpassInfo();
 	virtual void InitGraphicPipelines();
+	virtual void InitSyncObject();
+	virtual void InitRecources();
+
+protected:
+	void InitGeometryResources(Geometry& geo);
+	void InitTextureResources();
 
 protected:
 	//utils
 	int32_t GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice);
 	void PickValidPhysicalDevice();
-	int32_t GetMemoryTypeIndex();
-	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height,uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT,VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
+	int32_t GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits,VkMemoryPropertyFlags wantMemoryFlags);
+	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height,uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies,VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT,VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
 	
 	
 	Texture Load2DTexture(const std::string& texFilePath);
 	Texture LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths/*+x,-x,+y,-y,+z,-z*/);
-	Geometry LoadObj(const std::string& objFilePath);
+	void LoadObj(const std::string& objFilePath, Geometry& geo);
 	
 	Buffer CreateVertexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
+	Buffer CreateUniformBuffer(const char* buf, VkDeviceSize size);
 	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
 
 	void TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout);
 	void TransferImageLayout(VkImage image, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange);
+	//transfer
+	void CopyImageToImage(Image srcImage, Image dstImagem, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
+	uint32_t GetNextPresentImageIndex();
 
-private:
 
-
+protected:
+	Geometry geom;
+	//render
+	void DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
+	VkResult Present(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores, uint32_t swapchainImageIndex);
+	VkFence graphicFence = VK_NULL_HANDLE, presentFence = VK_NULL_HANDLE, transferFence = VK_NULL_HANDLE;
+	VkSemaphore graphicSemaphore = VK_NULL_HANDLE;
 
 private:
 	
 	//shader parse
 	void ReadGLSLShaderFile(const std::string& shaderPath, std::vector<char>& shaderCode);
 	bool CompileGLSLToSPIRV(VkShaderStageFlagBits shaderStage, const std::vector<char>& srcCode, std::vector<uint32_t>& outSpirvCode);
-	void ParseVertexAttributes(const spirv_cross::ShaderResources& srcShaderResource, const spirv_cross::CompilerGLSL& compiler, std::vector<VertexAttributeInfo>& dstCacheAttributeInfo);
-	void ParseShaderResource(const spirv_cross::ShaderResources& srcShaderResource, const spirv_cross::CompilerGLSL& compiler, ShaderResourceInfo& dstCacheShaderResource);
-	void TransferGLSLFileToSPIRVFile(const std::string& srcGLSLFile, const std::string& dstSPIRVFile);
-	void ReadSPIRVFile(const std::string& spirvFile,std::vector<uint32_t>& outSpirvCode);
-
+	void TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLSLFile, std::vector<uint32_t>& outSpirvCode);
+	void ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo);
+	void ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spirvCode, ShaderResourceInfo& dstCacheShaderResource);
 	//create descriptor set layout
 
 	//create pipeline layout
@@ -293,10 +342,29 @@ private:
 
 
 	//utils
+	Buffer CreateBuffer(VkBufferUsageFlags usage,const char* buf, VkDeviceSize size,VkMemoryPropertyFlags memoryPropties);
+
+
+
+
+protected:
+	//render pass ֻ
+	RenderTargets renderTargets;
+	std::vector<Image> swapchainImages;
+	VkSemaphore swapchainImageValidSemaphore;
 
 private:
 
 	bool initFlag = false;
+	//struct DeviceRequirement
+	//{
+	//	VkQueueFlags queueType = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT;
+	//	uint32_t numQueue = 3;
+	//	const bool needPresent = true;
+
+
+	//};
+
 
 	VkInstance instance = VK_NULL_HANDLE;
 	VkDebugUtilsMessengerEXT debugUtilMessager = VK_NULL_HANDLE;
@@ -315,8 +383,7 @@ private:
 	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ�����ֵ�ĸ�ʽ
 	VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
-	std::vector<Image> swapchainImages;
-	std::vector<VkSemaphore> swapchainImageValidSemaphores;
+
 
 
 
@@ -332,7 +399,6 @@ private:
 	};//
 
 
-	int32_t usedMemoryTypeIndex;
 
 	VkSemaphore transferOperationFinish;
 	const uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
@@ -340,18 +406,17 @@ private:
 	//先不考虑compute pipeline
 	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
 
-	//render pass ֻ
-	RenderTargets renderTargets;
+
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 	SubpassInfo subpassInfo;
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 
-	Geometry geom;
+
 
 
 
 	VkQueue graphicQueue = VK_NULL_HANDLE,presentQueue = VK_NULL_HANDLE,transferQueue = VK_NULL_HANDLE;
-	VkFence graphicFence = VK_NULL_HANDLE,presentFence = VK_NULL_HANDLE, transferFence = VK_NULL_HANDLE;
+
 	uint32_t queueFamilyIndex = 0;
 
 

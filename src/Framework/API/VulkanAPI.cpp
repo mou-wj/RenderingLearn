@@ -54,24 +54,23 @@ VkPhysicalDeviceFeatures VulkanAPI::GetPhysicalDeviceFeatures(VkPhysicalDevice p
 	return features;
 }
 
-VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice, std::vector<std::pair<uint32_t, uint32_t>> wantQueueFamilyAndQueueCounts, std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions, const VkPhysicalDeviceFeatures& enableFeatues)
+VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice,const std::vector<std::pair<uint32_t, std::vector<float>>>& wantQueueFamilyAndQueuePriorities, std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions, const VkPhysicalDeviceFeatures& enableFeatues)
 {
 	VkDevice device = VK_NULL_HANDLE;
 	VkDeviceCreateInfo deviceCreateInfo{};
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	deviceCreateInfo.pNext = nullptr;
 	deviceCreateInfo.flags = 0;
-	deviceCreateInfo.queueCreateInfoCount = wantQueueFamilyAndQueueCounts.size();
-	std::vector<VkDeviceQueueCreateInfo> queueCreaetInfos(wantQueueFamilyAndQueueCounts.size());
+	deviceCreateInfo.queueCreateInfoCount = wantQueueFamilyAndQueuePriorities.size();
+	std::vector<VkDeviceQueueCreateInfo> queueCreaetInfos(wantQueueFamilyAndQueuePriorities.size());
 	for (uint32_t i = 0; i < queueCreaetInfos.size(); i++)
 	{
 		VkDeviceQueueCreateInfo& queueCreateInfo = queueCreaetInfos[i];
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.pNext = nullptr;
-		float priority = 1.0f;
-		queueCreateInfo.pQueuePriorities = &priority;
-		queueCreateInfo.queueFamilyIndex = wantQueueFamilyAndQueueCounts[i].first;
-		queueCreateInfo.queueCount = wantQueueFamilyAndQueueCounts[i].second;
+		queueCreateInfo.pQueuePriorities = wantQueueFamilyAndQueuePriorities[i].second.data();
+		queueCreateInfo.queueFamilyIndex = wantQueueFamilyAndQueuePriorities[i].first;
+		queueCreateInfo.queueCount = wantQueueFamilyAndQueuePriorities[i].second.size();
 	}
 
 	deviceCreateInfo.pQueueCreateInfos = queueCreaetInfos.data();
@@ -79,8 +78,8 @@ VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice, std::vector<st
 	deviceCreateInfo.ppEnabledLayerNames = enableLayers.data();
 	deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(enableExtensions.size());
 	deviceCreateInfo.ppEnabledExtensionNames = enableExtensions.data();
-	deviceCreateInfo.pEnabledFeatures = &enableFeatues;
-	vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
+	deviceCreateInfo.pEnabledFeatures = nullptr;
+	auto res = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
 	LogFunc(device);
 	return device;
 }
@@ -101,7 +100,7 @@ VkPhysicalDeviceMemoryProperties VulkanAPI::GetMemoryProperties(VkPhysicalDevice
 {
 	VkPhysicalDeviceMemoryProperties deviceMemoryProperties{};
 
-	vkGetPhysicalDeviceMemoryProperties(nullptr, &deviceMemoryProperties);
+	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
 	return deviceMemoryProperties;
 
 }
@@ -221,7 +220,7 @@ VkSwapchainKHR VulkanAPI::CreateSwapchain(VkDevice device, VkSurfaceKHR surface,
 	swapchainCreateInfoKHR.queueFamilyIndexCount = queueFamilyIndices.size();
 	swapchainCreateInfoKHR.pQueueFamilyIndices = queueFamilyIndices.data();
 	swapchainCreateInfoKHR.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;//不进行变换
-	swapchainCreateInfoKHR.compositeAlpha = (VkCompositeAlphaFlagBitsKHR)0;//不执行任何混合
+	swapchainCreateInfoKHR.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;//不执行任何混合
 	swapchainCreateInfoKHR.presentMode = presentMode;
 	swapchainCreateInfoKHR.clipped = VK_FALSE;
 	swapchainCreateInfoKHR.oldSwapchain = VK_NULL_HANDLE;
@@ -274,7 +273,7 @@ void VulkanAPI::ReleaseMemory(VkDevice device, VkDeviceMemory deviceMemory)
 void* VulkanAPI::MapMemory(VkDevice device, VkDeviceMemory deviceMemory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags mapFlags)
 {
 	void* p = nullptr;
-	vkMapMemory(device, deviceMemory, offset, size, mapFlags, &p);
+	auto res = vkMapMemory(device, deviceMemory, offset, size, mapFlags, &p);
 	LogFunc(p);
 	return p;
 }
@@ -374,6 +373,14 @@ void VulkanAPI::DestroyBuffer(VkDevice device, VkBuffer buffer)
 	vkDestroyBuffer(device, buffer, nullptr);
 }
 
+VkMemoryRequirements VulkanAPI::GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer)
+{
+	VkMemoryRequirements requirements;
+	vkGetBufferMemoryRequirements(device, buffer, &requirements);
+
+	return requirements;
+}
+
 VkBufferView VulkanAPI::CreateBufferView(VkDevice device, VkBufferViewCreateFlags flags, VkBuffer buffer, VkFormat format, VkDeviceSize offset, VkDeviceSize range)
 {
 	VkBufferView bufferView = VK_NULL_HANDLE;
@@ -409,7 +416,7 @@ VkRenderPass VulkanAPI::CreateRenderPass(VkDevice device, VkRenderPassCreateFlag
 	renderPassCreateInfo.dependencyCount = dependencies.size();
 	renderPassCreateInfo.pDependencies = dependencies.data();
 
-	vkCreateRenderPass(device, &renderPassCreateInfo, nullptr, &renderPass);
+	auto res = vkCreateRenderPass(device, &renderPassCreateInfo, nullptr, &renderPass);
 	LogFunc(renderPass);
 
 	return renderPass;
@@ -429,7 +436,7 @@ VkFramebuffer VulkanAPI::CreateFrameBuffer(VkDevice device, VkFramebufferCreateF
 	frameBufferCreateInfo.height = height;
 	frameBufferCreateInfo.layers = layers;
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
-	vkCreateFramebuffer(device, &frameBufferCreateInfo, nullptr, &frameBuffer);
+	auto res = vkCreateFramebuffer(device, &frameBufferCreateInfo, nullptr, &frameBuffer);
 
 	LogFunc(frameBuffer);
 
@@ -540,7 +547,12 @@ VkShaderModule VulkanAPI::CreateShaderModule(VkDevice device, VkShaderModuleCrea
 	return shaderModule;
 }
 
-VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFlags flags, const std::vector<VkPipelineShaderStageCreateInfo> shaderStages, const VkPipelineVertexInputStateCreateInfo* vertexInputState, const VkPipelineInputAssemblyStateCreateInfo* inputAssemblyState, const VkPipelineTessellationStateCreateInfo* tessellationState, const VkPipelineViewportStateCreateInfo* viewportState, const VkPipelineRasterizationStateCreateInfo* rasterizationState, const VkPipelineMultisampleStateCreateInfo* multisampleState, const VkPipelineDepthStencilStateCreateInfo* depthStencilState, const VkPipelineColorBlendStateCreateInfo* colorBlendState, const VkPipelineDynamicStateCreateInfo* dynamicState, VkPipelineLayout layout, VkRenderPass renderPass, uint32_t subpass, VkPipeline basePipelineHandle, int32_t basePipelineIndex)
+void VulkanAPI::DestroyShaderModule(VkDevice device, VkShaderModule shaderModule)
+{
+	vkDestroyShaderModule(device, shaderModule, nullptr);
+}
+
+VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFlags flags, const std::vector<VkPipelineShaderStageCreateInfo>& shaderStages, const VkPipelineVertexInputStateCreateInfo* vertexInputState, const VkPipelineInputAssemblyStateCreateInfo* inputAssemblyState, const VkPipelineTessellationStateCreateInfo* tessellationState, const VkPipelineViewportStateCreateInfo* viewportState, const VkPipelineRasterizationStateCreateInfo* rasterizationState, const VkPipelineMultisampleStateCreateInfo* multisampleState, const VkPipelineDepthStencilStateCreateInfo* depthStencilState, const VkPipelineColorBlendStateCreateInfo* colorBlendState, const VkPipelineDynamicStateCreateInfo* dynamicState, VkPipelineLayout layout, VkRenderPass renderPass, uint32_t subpass, VkPipeline basePipelineHandle, int32_t basePipelineIndex)
 {
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
@@ -563,7 +575,7 @@ VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFl
 	graphicsPipelineCreateInfo.subpass = subpass;
 	graphicsPipelineCreateInfo.basePipelineHandle = basePipelineHandle;
 	graphicsPipelineCreateInfo.basePipelineIndex = basePipelineIndex;
-	vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipeline);
+	auto res = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipeline);
 	LogFunc(pipeline);
 
 
@@ -828,7 +840,7 @@ void VulkanAPI::CmdDrawIndex(VkCommandBuffer commandBuffer, uint32_t indexCount,
 	vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void VulkanAPI::CmdCopyImageToImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, const std::vector<VkImageCopy> copyRegions)
+void VulkanAPI::CmdCopyImageToImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, const std::vector<VkImageCopy>& copyRegions)
 {
 	vkCmdCopyImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, copyRegions.size(), copyRegions.data());
 }
@@ -877,6 +889,11 @@ void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemap
 	presentInfo.pImageIndices = swapchainImageIndices.data();
 
 	vkQueuePresentKHR(queue, &presentInfo);
+}
+
+void VulkanAPI::WaitQueueIdle(VkQueue queue)
+{
+	vkQueueWaitIdle(queue);
 }
 
 
@@ -1021,8 +1038,9 @@ VkBool32 DebugCallBack(
 	VkDebugUtilsMessageTypeFlagsEXT                  messageTypes,
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData) {
-	Log(pCallbackData->pMessage, 1);
-	LogFunc(1);
+	LogInfo(pCallbackData->pMessage);
+	assert(0);
+	//LogFunc(1);
 	return VK_TRUE;
 }
 
@@ -1034,8 +1052,8 @@ VkDebugUtilsMessengerEXT VulkanAPI::CreateDebugInfoMessager(VkInstance instance)
 	debugUtilsMessagerCreateInfoEXT.pNext = nullptr;
 	debugUtilsMessagerCreateInfoEXT.flags = 0;
 	debugUtilsMessagerCreateInfoEXT.pUserData = nullptr;
-	debugUtilsMessagerCreateInfoEXT.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;//只看校验信息	
-	debugUtilsMessagerCreateInfoEXT.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;//只看错误信息
+	debugUtilsMessagerCreateInfoEXT.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;//只看校验信息	
+	debugUtilsMessagerCreateInfoEXT.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;//只看错误信息
 	debugUtilsMessagerCreateInfoEXT.pfnUserCallback = &DebugCallBack;
 	
 	auto res = ((PFN_vkCreateDebugUtilsMessengerEXT)InstanceFuncLoader(instance, "vkCreateDebugUtilsMessengerEXT"))(instance,&debugUtilsMessagerCreateInfoEXT,nullptr,&debugUtilsMessenger);

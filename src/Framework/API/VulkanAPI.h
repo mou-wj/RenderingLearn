@@ -33,7 +33,7 @@ namespace VulkanAPI {
 
 
 	//device
-	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, std::vector<std::pair<uint32_t,uint32_t>> wantQueueFamilyAndQueueCounts,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures& enableFeatues);
+	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, const std::vector<std::pair<uint32_t,std::vector<float>>>& wantQueueFamilyAndQueuePriorities,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures& enableFeatues);
 	void DestroyDevice(VkDevice device);
 	VkQueue GetQueue(VkDevice device, uint32_t familyIndex,uint32_t queueIndex);
 
@@ -90,6 +90,7 @@ namespace VulkanAPI {
 	VkSharingMode          sharingMode,
 	std::vector<uint32_t> queueFamilyIndices);
 	void DestroyBuffer(VkDevice device, VkBuffer buffer);
+	VkMemoryRequirements GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer);
 
 
 	//buffer view   
@@ -161,10 +162,12 @@ namespace VulkanAPI {
 
 	//shader module
 	VkShaderModule CreateShaderModule(VkDevice device,VkShaderModuleCreateFlags flags,const std::vector<uint32_t>& spirv_code);
+	void DestroyShaderModule(VkDevice device, VkShaderModule shaderModule);
+
 
 	//graphics pipeline
 	VkPipeline CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFlags                            flags,
-	const std::vector<VkPipelineShaderStageCreateInfo> shaderStages,
+	const std::vector<VkPipelineShaderStageCreateInfo>& shaderStages,
 	const VkPipelineVertexInputStateCreateInfo* vertexInputState,
 	const VkPipelineInputAssemblyStateCreateInfo* inputAssemblyState,
 	const VkPipelineTessellationStateCreateInfo* tessellationState,
@@ -297,7 +300,7 @@ namespace VulkanAPI {
 					VkImageLayout                               srcImageLayout,
 					VkImage                                     dstImage,
 					VkImageLayout                               dstImageLayout,
-					const std::vector<VkImageCopy> copyRegions);
+					const std::vector<VkImageCopy>& copyRegions);
 
 	void CmdMemoryBarrier(VkCommandBuffer                             commandBuffer,
 						 VkPipelineStageFlags                        srcStageMask,
@@ -323,6 +326,7 @@ namespace VulkanAPI {
 				const std::vector<VkSwapchainKHR>& swapchains,
 				const std::vector<uint32_t>& swapchainImageIndices,
 				std::vector<VkResult>& outResults);
+	void WaitQueueIdle(VkQueue queue);
 
 	//
 	
