@@ -200,7 +200,7 @@ void ExampleBase::InitAttanchmentDesc()
 
 	//����color attachment����Դ
 	auto& colorImage = renderTargets.colorAttachment.attachmentImage;
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL);
 	TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
@@ -593,7 +593,7 @@ void ExampleBase::InitGraphicPipelines()
 			poolSize.descriptorCount = needDescriptor.second;
 			poolSizes.push_back(poolSize);
 		}
-		auto descriptorPool = CreateDescriptorPool(device, 0, descriptorSetBindings.size(), poolSizes);
+		auto descriptorPool = CreateDescriptorPool(device, 0, descriptorSetBindings.size() + 1, poolSizes);
 		graphcisPipelineInfos[pipeID].descriptorPool = descriptorPool;
 
 
@@ -1034,6 +1034,7 @@ uint32_t ExampleBase::GetNextPresentImageIndex()
 
 	return nextImageIndex;
 }
+
 
 void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {

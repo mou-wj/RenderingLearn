@@ -121,7 +121,7 @@ struct GraphicsPipelineStates {
 		depthStencilState.depthTestEnable = VK_TRUE;
 		depthStencilState.depthWriteEnable = VK_TRUE;
 		depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-		depthStencilState.depthBoundsTestEnable = VK_TRUE;
+		depthStencilState.depthBoundsTestEnable = VK_FALSE;
 		depthStencilState.stencilTestEnable = VK_FALSE;
 		depthStencilState.front;//�Ȳ���stancil�Ĳ���
 		depthStencilState.back;//�Ȳ���stancil�Ĳ���
@@ -134,9 +134,9 @@ struct GraphicsPipelineStates {
 		colorBlendState.flags = 0;
 		colorBlendState.logicOpEnable = VK_FALSE;
 		colorBlendState.logicOp = VK_LOGIC_OP_AND;
-		colorBlendAttachmentStates.resize(2);
-		colorBlendState.attachmentCount = 2;
-		for (uint32_t i = 0; i < 2; i++)
+		colorBlendAttachmentStates.resize(1);
+		colorBlendState.attachmentCount = colorBlendAttachmentStates.size();
+		for (uint32_t i = 0; i < colorBlendAttachmentStates.size(); i++)
 		{
 			colorBlendAttachmentStates[i].blendEnable = VK_FALSE;
 			colorBlendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;

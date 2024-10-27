@@ -539,7 +539,7 @@ VkShaderModule VulkanAPI::CreateShaderModule(VkDevice device, VkShaderModuleCrea
 	shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	shaderModuleCreateInfo.pNext = nullptr;
 	shaderModuleCreateInfo.flags = flags;
-	shaderModuleCreateInfo.codeSize = spirv_code.size();
+	shaderModuleCreateInfo.codeSize = spirv_code.size() * 4;
 	shaderModuleCreateInfo.pCode = spirv_code.data();
 
 	vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
