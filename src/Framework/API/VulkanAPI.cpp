@@ -361,7 +361,7 @@ VkBuffer VulkanAPI::CreateBuffer(VkDevice device, VkBufferCreateFlags flags, VkD
 	bufferCreateInfo.sharingMode = sharingMode;
 	bufferCreateInfo.queueFamilyIndexCount = queueFamilyIndices.size();
 	bufferCreateInfo.pQueueFamilyIndices = queueFamilyIndices.data();
-	vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer);
+	auto res = vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer);
 	LogFunc(buffer);
 
 
@@ -702,6 +702,7 @@ void VulkanAPI::DestroySemaphore(VkDevice device, VkSemaphore semaphore)
 	vkDestroySemaphore(device, semaphore, nullptr);
 }
 
+
 void VulkanAPI::WaitTimelineSemaphores(VkDevice device, VkSemaphoreWaitFlags flags,const std::vector<VkSemaphore>& semaphores, const std::vector<uint64_t>& semaphoreValues)
 {
 	VkSemaphoreWaitInfo waitInfo{ };
@@ -842,18 +843,26 @@ void VulkanAPI::CmdDrawIndex(VkCommandBuffer commandBuffer, uint32_t indexCount,
 
 void VulkanAPI::CmdCopyImageToImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, const std::vector<VkImageCopy>& copyRegions)
 {
+
 	vkCmdCopyImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, copyRegions.size(), copyRegions.data());
 }
 
+void VulkanAPI::CmdBlitImageToImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, const std::vector<VkImageBlit> blitRegions, VkFilter filter)
+{
+	vkCmdBlitImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, blitRegions.size(), blitRegions.data(), filter);
+}
+
+
 void VulkanAPI::CmdMemoryBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, const std::vector<VkMemoryBarrier> memoryBarriers, const std::vector<VkBufferMemoryBarrier> bufferMemoryBarriers, const std::vector<VkImageMemoryBarrier> imageMemoryBarriers)
 {
+	ASSERT(memoryBarriers.size() || bufferMemoryBarriers.size() || imageMemoryBarriers.size());
 	vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarriers.size(), memoryBarriers.data(), bufferMemoryBarriers.size(), bufferMemoryBarriers.data(), imageMemoryBarriers.size(), imageMemoryBarriers.data());
 }
 
 
 
 
-void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkPipelineStageFlags> waitDstStageMask, const std::vector<VkCommandBuffer> commandBuffers, const std::vector<VkSemaphore> signalSemaphores, VkFence allCommandFinishedFence)
+void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitDstStageMask, const std::vector<VkCommandBuffer>& commandBuffers, const std::vector<VkSemaphore>& signalSemaphores, VkFence allCommandFinishedFence)
 {
 	LogFunc(waitDstStageMask.size() == waitSemaphores.size());
 	VkSubmitInfo submitInfo{};
@@ -879,6 +888,7 @@ void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& s
 void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores , const std::vector<VkSwapchainKHR>& swapchains, const std::vector<uint32_t>& swapchainImageIndices, std::vector<VkResult>& outResults)
 {
 	LogFunc(swapchains.size() <= swapchainImageIndices.size());
+	outResults.resize(swapchains.size());
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.pNext = nullptr;
@@ -887,7 +897,7 @@ void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemap
 	presentInfo.swapchainCount = swapchains.size();
 	presentInfo.pSwapchains = swapchains.data();
 	presentInfo.pImageIndices = swapchainImageIndices.data();
-
+	presentInfo.pResults = outResults.data();
 	vkQueuePresentKHR(queue, &presentInfo);
 }
 

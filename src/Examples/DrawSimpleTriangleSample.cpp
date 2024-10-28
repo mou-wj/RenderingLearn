@@ -25,11 +25,14 @@ void DrawSimpleTriangleSample::Loop()
 {
 	while (1)
 	{
-		DrawGeom({}, { graphicSemaphore });
-		auto nexIndex = GetNextPresentImageIndex();
-		CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore }, { graphicSemaphore });
-		Present({ graphicSemaphore }, {}, nexIndex);
-
+		//确保presentFence在创建时已经触发
+		WaitAllFence({ presentFence });
+		DrawGeom({}, { drawSemaphore });
+		auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);
+		CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore,drawSemaphore }, { presentValidSemaphore });
+		Present({ presentValidSemaphore }, {presentFinishSemaphore}, nexIndex);
+		WaitSemaphrore({ presentFinishSemaphore }, presentFence);
+		ResetAllFence({ presentFence });
 
 	}
 

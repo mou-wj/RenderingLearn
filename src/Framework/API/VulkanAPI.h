@@ -302,6 +302,14 @@ namespace VulkanAPI {
 					VkImageLayout                               dstImageLayout,
 					const std::vector<VkImageCopy>& copyRegions);
 
+	void CmdBlitImageToImage(VkCommandBuffer commandBuffer,
+					VkImage    srcImage,
+					VkImageLayout srcImageLayout,
+					VkImage  dstImage,
+					VkImageLayout dstImageLayout,
+					const std::vector<VkImageBlit> blitRegions,
+					VkFilter  filter = VK_FILTER_LINEAR);
+
 	void CmdMemoryBarrier(VkCommandBuffer                             commandBuffer,
 						 VkPipelineStageFlags                        srcStageMask,
 						 VkPipelineStageFlags                        dstStageMask,
@@ -315,9 +323,9 @@ namespace VulkanAPI {
 	//submit and present
 	void SubmitCommands(VkQueue  queue,
 						const std::vector<VkSemaphore>& waitSemaphores,
-						const std::vector<VkPipelineStageFlags> waitDstStageMask,
-						const std::vector<VkCommandBuffer> commandBuffers,
-						const std::vector<VkSemaphore> signalSemaphores,
+						const std::vector<VkPipelineStageFlags>& waitDstStageMask,
+						const std::vector<VkCommandBuffer>& commandBuffers,
+						const std::vector<VkSemaphore>& signalSemaphores,
 						VkFence allCommandFinishedFence);
 	void SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence);
 

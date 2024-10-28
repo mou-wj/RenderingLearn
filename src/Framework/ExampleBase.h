@@ -1,6 +1,6 @@
 #pragma once
 #include "API/VulkanAPI.h"
-#include "Common/tiny_obj_loader.h"
+#include "Utils/tiny_obj_loader.h"
 #include <map>
 #include <string>
 #include <array>
@@ -187,6 +187,7 @@ struct Buffer {
 struct Image {
 	VkImage image;
 	VkImageView imageView;
+	VkFormat format;
 	VkDeviceMemory memory;
 	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	uint32_t numLayer = 0, numMip = 1;
@@ -195,9 +196,36 @@ struct Image {
 	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
 	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 	void* hostMapPointer = nullptr;
-	bool Compatible(const Image& other) {
-		return tiling == other.tiling || numLayer == other.numLayer || numMip == other.numMip || aspect == other.aspect ||
-			extent.width == other.extent.width || extent.height == other.extent.height || extent.depth == other.extent.depth;
+	uint32_t GetFormatNumBits(VkFormat format) {
+		switch (format)
+		{
+		case VK_FORMAT_R8G8B8A8_SRGB:;
+		case VK_FORMAT_B8G8R8A8_SRGB:;
+		case VK_FORMAT_D32_SFLOAT:
+			return 32;
+		case VK_FORMAT_MAX_ENUM:
+			
+			break;
+		default:
+			break;
+		}
+		assert(0);
+		return 0;
+
+	}
+	bool WholeCopyCompatible(const Image& other) {
+		return tiling == other.tiling && numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
+			extent.width == other.extent.width && extent.height == other.extent.height && extent.depth == other.extent.depth && ChechFormatSizeCompatible(other.format);
+	}
+	bool WholeBlitCompatible(const Image& other)
+	{
+		return tiling == other.tiling && numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
+			 ChechFormatSizeCompatible(other.format);
+	}
+	bool ChechFormatSizeCompatible(VkFormat otherFormat)
+	{
+		return GetFormatNumBits(format) == GetFormatNumBits(otherFormat);
+
 	}
 	VkExtent3D GetMipLevelExtent(uint32_t mipLevel)
 	{
@@ -296,7 +324,7 @@ protected:
 
 protected:
 	//utils
-	int32_t GetPhysicalDeviceSurportGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice);
+	int32_t GetSuitableQueueFamilyIndex(VkPhysicalDevice physicalDevice,VkQueueFlags wantQueueFlags,bool needSupportPresent,uint32_t wantNumQueue);
 	void PickValidPhysicalDevice();
 	int32_t GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits,VkMemoryPropertyFlags wantMemoryFlags);
 	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height,uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies,VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT,VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
@@ -312,19 +340,27 @@ protected:
 	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
 
 	void TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout);
-	void TransferImageLayout(VkImage image, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange);
+	void TransferImageLayout(Image& image,VkImageLayout dstImageLayout, VkImageSubresourceRange subRange);
 	//transfer
-	void CopyImageToImage(Image srcImage, Image dstImagem, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
-	uint32_t GetNextPresentImageIndex();
+	void CopyImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
+	void BlitImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
+	uint32_t GetNextPresentImageIndex(VkSemaphore sigValidSemaphore);
 
 
 protected:
+	//runtime
 	Geometry geom;
 	//render
 	void DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
 	VkResult Present(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores, uint32_t swapchainImageIndex);
+
+
+	void WaitAllFence(const std::vector<VkFence>& fences);
+	void ResetAllFence(const std::vector<VkFence>& fences);
+	void WaitSemaphrore(const std::vector<VkSemaphore>& waitSemaphore, VkFence sigFence);
+	
 	VkFence graphicFence = VK_NULL_HANDLE, presentFence = VK_NULL_HANDLE, transferFence = VK_NULL_HANDLE;
-	VkSemaphore graphicSemaphore = VK_NULL_HANDLE;
+	VkSemaphore drawSemaphore = VK_NULL_HANDLE,presentValidSemaphore = VK_NULL_HANDLE, presentFinishSemaphore = VK_NULL_HANDLE;;
 
 private:
 	
@@ -379,7 +415,7 @@ private:
 	GLFWwindow* window = nullptr;
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 	VkColorSpaceKHR colorSpace;
-	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//��srgb����ĸ�ʽ
+	const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A
 	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ�����ֵ�ĸ�ʽ
 	VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
@@ -424,7 +460,7 @@ private:
 
 	//command
 	VkCommandPool commandPool = VK_NULL_HANDLE;
-	VkCommandBuffer renderCommandBuffer = VK_NULL_HANDLE, toolCommandBuffer = VK_NULL_HANDLE;
+	VkCommandBuffer renderCommandBuffer = VK_NULL_HANDLE, toolCommandBuffer = VK_NULL_HANDLE,fenceCommandBuffer = VK_NULL_HANDLE/*用于在host使用fence等待semaphore*/;
 
 
 
