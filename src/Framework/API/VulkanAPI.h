@@ -209,6 +209,11 @@ namespace VulkanAPI {
 											 const std::vector<VkDescriptorBufferInfo> bufferInfos,
 											 const std::vector<VkBufferView> texelBufferViews);
 	
+	//query pool
+	VkQueryPool CreateQueryPool(VkDevice device, VkQueryPoolCreateFlags  flags,VkQueryType     queryType, uint32_t    queryCount, VkQueryPipelineStatisticFlags    pipelineStatistics);
+	void DestroyQueryPool(VkDevice device, VkQueryPool pool);
+	std::vector<uint64_t> GetQueryResult(VkDevice device, VkQueryPool pool, uint32_t firstQuery, uint32_t numQuery, VkQueryResultFlags resultFlags);
+
 	//command pool
 	VkCommandPool CreateCommandPool(VkDevice device, VkCommandPoolCreateFlags flags,uint32_t queueFamilyIndex);
 	void DesctroyCommandPool(VkDevice device, VkCommandPool commandPool);
@@ -252,6 +257,9 @@ namespace VulkanAPI {
 							VkSubpassContents  subpassContents);
 	void CmdEndRenderPass(VkCommandBuffer commandBuffer);
 	void CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents  subpassContents);
+
+	void CmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex, VkQueryControlFlags flags);
+	void CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex);
 
 	//动态绘制,可以不使用begin pass
 	void CmdBeginRendering(VkCommandBuffer commandBuffer, 

@@ -39,6 +39,7 @@ void ExampleBase::Init()
 	InitRenderPass();
 	InitFrameBuffer();
 	InitGraphicPipelines();
+	InitQueryPool();
 	//InitSyncObject();
 	InitGeometryResources(geom);
 }
@@ -261,9 +262,9 @@ void ExampleBase::InitDefaultGraphicSubpassInfo()
 	auto& subpassDepend1 = subpassInfo.subpassDepends[0];
 	subpassDepend1.srcSubpass = VK_SUBPASS_EXTERNAL;
 	subpassDepend1.dstSubpass = 0;
-	subpassDepend1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-	subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-	subpassDepend1.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	subpassDepend1.srcStageMask = 0 ;
+	subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ;
+	subpassDepend1.srcAccessMask = 0;
 	subpassDepend1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 	subpassDepend1.dependencyFlags =  0;
 
@@ -655,6 +656,13 @@ void ExampleBase::InitSyncObject()
 void ExampleBase::InitRecources()
 {
 	InitGeometryResources(geom);
+}
+
+void ExampleBase::InitQueryPool()
+{
+	queryPool = CreateQueryPool(device, 0, VK_QUERY_TYPE_PIPELINE_STATISTICS, 1, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT);
+
+
 }
 
 void ExampleBase::InitGeometryResources(Geometry& geo)
@@ -1156,6 +1164,7 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 	imageMemoryBarrier.image = renderTargets.depthAttachment.attachmentImage.image;
 	imageMemoryBarrier.subresourceRange = depthClearRegion;
 
+	auto queryres = GetQueryResult(device, queryPool, 0, 1, VK_QUERY_RESULT_64_BIT);
 	WaitAllFence({ renderCommandBufferFence });
 	ResetAllFence({ renderCommandBufferFence });
 	BeginRecord(renderCommandBuffer,0);
@@ -1165,6 +1174,14 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 	imageMemoryBarrier.newLayout = renderTargets.depthAttachment.attachmentImage.currentLayout;
 	CmdMemoryBarrier(renderCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
 	
+	imageMemoryBarrier.oldLayout = renderTargets.colorAttachment.attachmentImage.currentLayout;
+	imageMemoryBarrier.newLayout = renderTargets.colorAttachment.attachmentImage.currentLayout;
+	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
+	imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	imageMemoryBarrier.image = renderTargets.colorAttachment.attachmentImage.image;
+	CmdMemoryBarrier(renderCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+
+
 	CmdBeginRenderPass(renderCommandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
 	CmdClearAttachments(renderCommandBuffer, { colorClear }, { clearRegion });
 	
@@ -1178,7 +1195,9 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 	for(uint32_t i = 0; i < graphcisPipelineInfos.size();i++)
 	{
 		CmdBindPipeline(renderCommandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,graphcisPipelineInfos[i].pipeline);
+		CmdBeginQuery(renderCommandBuffer, queryPool, 0, VK_QUERY_CONTROL_PRECISE_BIT);
 		CmdDrawIndex(renderCommandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+		CmdEndQuery(renderCommandBuffer, queryPool, 0);
 		if (i != graphcisPipelineInfos.size() - 1)
 		{
 			CmdNextSubpass(renderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE);

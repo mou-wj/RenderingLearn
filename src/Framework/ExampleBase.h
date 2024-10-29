@@ -92,10 +92,10 @@ struct GraphicsPipelineStates {
 		rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		rasterizationState.pNext = nullptr;
 		rasterizationState.flags = 0;
-		rasterizationState.depthClampEnable = VK_TRUE;
+		rasterizationState.depthClampEnable = VK_FALSE;
 		rasterizationState.rasterizerDiscardEnable = VK_FALSE;
 		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-		rasterizationState.cullMode = VK_FALSE;
+		rasterizationState.cullMode = VK_CULL_MODE_NONE;
 		rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
 		rasterizationState.depthBiasEnable = VK_FALSE;
 		rasterizationState.depthBiasConstantFactor = 0.0f;
@@ -119,8 +119,8 @@ struct GraphicsPipelineStates {
 		depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 		depthStencilState.pNext = nullptr;
 		depthStencilState.flags = 0;
-		depthStencilState.depthTestEnable = VK_TRUE;
-		depthStencilState.depthWriteEnable = VK_TRUE;
+		depthStencilState.depthTestEnable = VK_FALSE;
+		depthStencilState.depthWriteEnable = VK_FALSE;
 		depthStencilState.depthCompareOp = VK_COMPARE_OP_ALWAYS;
 		depthStencilState.depthBoundsTestEnable = VK_FALSE;
 		depthStencilState.stencilTestEnable = VK_FALSE;
@@ -191,6 +191,7 @@ struct Image {
 	VkFormat format;
 	VkDeviceMemory memory;
 	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkAccessFlags accessFlag = VK_ACCESS_NONE;
 	uint32_t numLayer = 0, numMip = 1;
 	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
 	VkExtent3D extent;
@@ -318,6 +319,7 @@ protected:
 	virtual void InitGraphicPipelines();
 	virtual void InitSyncObject();
 	virtual void InitRecources();
+	virtual void InitQueryPool();
 
 protected:
 	void InitGeometryResources(Geometry& geo);
@@ -466,6 +468,7 @@ private:
 	VkFence renderCommandBufferFence = VK_NULL_HANDLE, toolCommmandBufferFence = VK_NULL_HANDLE;
 
 
-
+	VkQueryPool queryPool = VK_NULL_HANDLE;
+	
 
 };

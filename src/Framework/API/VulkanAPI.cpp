@@ -798,6 +798,16 @@ void VulkanAPI::CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents 
 	vkCmdNextSubpass(commandBuffer, subpassContents);
 }
 
+void VulkanAPI::CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex)
+{
+	vkCmdEndQuery(commandBuffer, queryPool, queryIndex);
+}
+
+void VulkanAPI::CmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex, VkQueryControlFlags flags)
+{
+	vkCmdBeginQuery(commandBuffer, queryPool, queryIndex, flags);
+}
+
 void VulkanAPI::CmdBeginRendering(VkCommandBuffer commandBuffer, VkRenderingFlags flags, VkRect2D renderArea, uint32_t layerCount, uint32_t viewMask, const std::vector<VkRenderingAttachmentInfo>& colorAttachments, const VkRenderingAttachmentInfo* depthAttachment, const VkRenderingAttachmentInfo* stencilAttachment)
 {
 	VkRenderingInfo renderingInfo{};
@@ -952,6 +962,35 @@ void VulkanAPI::UpdateDescriptorSetBindingResources(VkDevice device, VkDescripto
 
 
 
+}
+
+VkQueryPool VulkanAPI::CreateQueryPool(VkDevice device, VkQueryPoolCreateFlags  flags, VkQueryType  queryType, uint32_t queryCount, VkQueryPipelineStatisticFlags  pipelineStatistics)
+{
+	VkQueryPool queryPool = VK_NULL_HANDLE;
+	VkQueryPoolCreateInfo queryPoolCreateInfo{};
+	queryPoolCreateInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+	queryPoolCreateInfo.pNext = nullptr;
+	queryPoolCreateInfo.flags = flags;
+	queryPoolCreateInfo.queryType = queryType;
+	queryPoolCreateInfo.queryCount = queryCount;
+	queryPoolCreateInfo.pipelineStatistics = pipelineStatistics;
+	auto res = vkCreateQueryPool(device, &queryPoolCreateInfo, nullptr, &queryPool);
+	ASSERT(res == VK_SUCCESS);
+	ASSERT(queryPool);
+	return queryPool;
+}
+
+void VulkanAPI::DestroyQueryPool(VkDevice device, VkQueryPool pool)
+{
+	vkDestroyQueryPool(device, pool, nullptr);
+}
+
+std::vector<uint64_t> VulkanAPI::GetQueryResult(VkDevice device, VkQueryPool pool,uint32_t firstQuery,uint32_t numQuery,VkQueryResultFlags resultFlags)
+{
+	std::vector<uint64_t> res;
+	res.resize(numQuery);
+	vkGetQueryPoolResults(device, pool, firstQuery, numQuery, res.size() * sizeof(uint64_t), res.data(), sizeof(uint64_t), resultFlags);
+	return res;
 }
 
 VkCommandPool VulkanAPI::CreateCommandPool(VkDevice device, VkCommandPoolCreateFlags flags, uint32_t queueFamilyIndex)
