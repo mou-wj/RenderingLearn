@@ -39,7 +39,7 @@ void ExampleBase::Init()
 	InitRenderPass();
 	InitFrameBuffer();
 	InitGraphicPipelines();
-	InitSyncObject();
+	//InitSyncObject();
 	InitGeometryResources(geom);
 }
 
@@ -129,7 +129,7 @@ void ExampleBase::InitContex()
 	PickValidPhysicalDevice();
 	physicalDeviceFeatures.geometryShader = VK_TRUE;//����geometry shader
 
-
+	physicalDeviceFeatures.depthClamp ;
 	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1,1,1}} }, { }, { VK_KHR_SWAPCHAIN_EXTENSION_NAME }, physicalDeviceFeatures);
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
 	presentQueue = GetQueue(device, queueFamilyIndex, 1);
@@ -139,10 +139,11 @@ void ExampleBase::InitContex()
 	commandPool = CreateCommandPool(device, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, queueFamilyIndex);
 	renderCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 	toolCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-	fenceCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	//����swapchain
 	swapchain = CreateSwapchain(device, surface, colorFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
+
+	InitSyncObject();
 
 	auto swapImages = GetSwapchainImages(device, swapchain);
 	swapchainImages.resize(swapImages.size());
@@ -480,7 +481,8 @@ void ExampleBase::TransferWholeImageLayout(Image& image, VkImageLayout dstImageL
 
 void ExampleBase::TransferImageLayout(Image& image, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange)
 {
-
+	WaitAllFence({ toolCommmandBufferFence });
+	ResetAllFence({ toolCommmandBufferFence });
 	BeginRecord(toolCommandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 	VkImageMemoryBarrier imageMemoryBarrier{ };
 	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -497,7 +499,7 @@ void ExampleBase::TransferImageLayout(Image& image, VkImageLayout dstImageLayout
 	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
 	EndRecord(toolCommandBuffer);
 	
-	SubmitCommands(transferQueue, {}, {}, { toolCommandBuffer }, {}, nullptr);
+	SubmitCommands(transferQueue, {}, {}, { toolCommandBuffer }, {}, toolCommmandBufferFence);
 	WaitQueueIdle(transferQueue);
 	//WaitSemaphores(device, 0, {transferOperationFinish}, {});
 
@@ -635,9 +637,8 @@ void ExampleBase::InitGraphicPipelines()
 
 void ExampleBase::InitSyncObject()
 {
-	graphicFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
-	presentFence = CreateFence(device, 0);
-	transferFence = CreateFence(device, 0);
+	renderCommandBufferFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
+	toolCommmandBufferFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
 
 	//����transfer������ɵ�semaphore
 	transferOperationFinish = CreateSemaphore(device, 0);
@@ -972,7 +973,8 @@ Buffer ExampleBase::CreateBuffer(VkBufferUsageFlags usage, const char* buf, VkDe
 
 void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {
-
+	WaitAllFence({ toolCommmandBufferFence });
+	ResetAllFence({ toolCommmandBufferFence });
 	std::vector<VkPipelineStageFlags> waitPipelineStages(waitSemaphores.size(),VK_PIPELINE_STAGE_TRANSFER_BIT);
 	//检查两个image是否尺寸相同
 	if (!srcImage.WholeCopyCompatible(dstImage))
@@ -1040,12 +1042,14 @@ void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::ve
 	EndRecord(toolCommandBuffer);
 	
 	LogInfo("src image " << std::hex << (long long)srcImage.image << "dstimage " << (long long)dstImage.image);
-	SubmitCommands(transferQueue, waitSemaphores, waitPipelineStages, { toolCommandBuffer }, sigSemaphores, nullptr);
-
+	SubmitCommands(transferQueue, waitSemaphores, waitPipelineStages, { toolCommandBuffer }, sigSemaphores, toolCommmandBufferFence);
+	
 }
 
 void ExampleBase::BlitImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {
+	WaitAllFence({ toolCommmandBufferFence });
+	ResetAllFence({ toolCommmandBufferFence });
 	//检查两个image是否尺寸相同
 	if (!srcImage.WholeBlitCompatible(dstImage))
 	{
@@ -1114,7 +1118,7 @@ void ExampleBase::BlitImageToImage(Image srcImage, Image dstImage, const std::ve
 
 	EndRecord(toolCommandBuffer);
 
-	SubmitCommands(transferQueue, waitSemaphores, {}, { toolCommandBuffer }, sigSemaphores, nullptr);
+	SubmitCommands(transferQueue, waitSemaphores, {}, { toolCommandBuffer }, sigSemaphores, toolCommmandBufferFence);
 
 }
 
@@ -1129,8 +1133,41 @@ uint32_t ExampleBase::GetNextPresentImageIndex(VkSemaphore sigValidSemaphore)
 
 void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {
+
+	auto colorClear = VkClearAttachment{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,.colorAttachment = 0,.clearValue = renderTargets.colorAttachment.clearValue };
+	auto depthClear = VkClearAttachment{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,.colorAttachment = 1,.clearValue = renderTargets.depthAttachment.clearValue };
+	auto clearRegion = VkClearRect{ .rect = VkRect2D{.offset = VkOffset2D{0,0},.extent = VkExtent2D{windowWidth,windowHeight}},.baseArrayLayer = 0,.layerCount = 1 };
+	auto depthClearRegion = VkImageSubresourceRange{
+							.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+							.baseMipLevel = 0 ,
+							.levelCount = 1,
+							.baseArrayLayer = 0,
+							.layerCount = 1
+							};
+	VkImageMemoryBarrier imageMemoryBarrier{ };
+	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	imageMemoryBarrier.pNext = nullptr;
+	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
+	imageMemoryBarrier.dstAccessMask = VK_ACCESS_NONE;
+	imageMemoryBarrier.oldLayout = renderTargets.depthAttachment.attachmentImage.currentLayout;
+	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	imageMemoryBarrier.image = renderTargets.depthAttachment.attachmentImage.image;
+	imageMemoryBarrier.subresourceRange = depthClearRegion;
+
+	WaitAllFence({ renderCommandBufferFence });
+	ResetAllFence({ renderCommandBufferFence });
 	BeginRecord(renderCommandBuffer,0);
+	CmdMemoryBarrier(renderCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	CmdClearDepthImage(renderCommandBuffer, renderTargets.depthAttachment.attachmentImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, renderTargets.depthAttachment.clearValue.depthStencil, { depthClearRegion });
+	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	imageMemoryBarrier.newLayout = renderTargets.depthAttachment.attachmentImage.currentLayout;
+	CmdMemoryBarrier(renderCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	
 	CmdBeginRenderPass(renderCommandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
+	CmdClearAttachments(renderCommandBuffer, { colorClear }, { clearRegion });
+	
 	CmdBindVertexBuffers(renderCommandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
 	for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
 	{
@@ -1150,7 +1187,7 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 	CmdEndRenderPass(renderCommandBuffer);
 	EndRecord(renderCommandBuffer);
 
-	SubmitCommands(graphicQueue, waitSemaphores, {}, { renderCommandBuffer }, sigSemaphores, nullptr);
+	SubmitCommands(graphicQueue, waitSemaphores, {}, { renderCommandBuffer }, sigSemaphores, renderCommandBufferFence);
 
 
 
@@ -1174,17 +1211,5 @@ void ExampleBase::WaitAllFence(const std::vector<VkFence>& fences)
 void ExampleBase::ResetAllFence(const std::vector<VkFence>& fences)
 {
 	ResetFences(device, fences);
-}
-
-void ExampleBase::WaitSemaphrore(const std::vector<VkSemaphore>& waitSemaphore, VkFence sigFence)
-{
-	//创建一个空的submit来等待semaphore的操作完成
-	BeginRecord(fenceCommandBuffer,VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-	EndRecord(fenceCommandBuffer);
-	std::vector<VkShaderStageFlags> waitStages(waitSemaphore.size(), VK_SHADER_STAGE_ALL_GRAPHICS);
-	SubmitCommands(transferQueue, waitSemaphore, waitStages, { fenceCommandBuffer }, {}, sigFence);
-
-
 }
 

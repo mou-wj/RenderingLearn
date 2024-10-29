@@ -2,6 +2,7 @@
 #include <Public/ShaderLang.h>
 #include <Include/ResourceLimits.h>
 #include <Public/resource_limits_c.h>
+#include "Framework/Utils/RenderDocTool.h"
 
 #include <shaderc/shaderc.h>
 #include <fstream>
@@ -97,5 +98,17 @@ void GLSL2SPIRV()
 
 	// ���� glslang
 	glslang::FinalizeProcess();
+
+}
+
+void RenderDocCapTest() {
+	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/capture.rdc")
+	CaptureBeginMacro
+	if (IsRenderDocCapturing)
+	{
+		std::cout << "sss";
+	}
+	CaptureEndMacro
+
 
 }

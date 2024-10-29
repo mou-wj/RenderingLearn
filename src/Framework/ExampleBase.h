@@ -1,6 +1,7 @@
 #pragma once
 #include "API/VulkanAPI.h"
 #include "Utils/tiny_obj_loader.h"
+#include "Utils/RenderDocTool.h"
 #include <map>
 #include <string>
 #include <array>
@@ -91,10 +92,10 @@ struct GraphicsPipelineStates {
 		rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		rasterizationState.pNext = nullptr;
 		rasterizationState.flags = 0;
-		rasterizationState.depthClampEnable = VK_FALSE;
+		rasterizationState.depthClampEnable = VK_TRUE;
 		rasterizationState.rasterizerDiscardEnable = VK_FALSE;
 		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-		rasterizationState.cullMode = VK_TRUE;
+		rasterizationState.cullMode = VK_FALSE;
 		rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
 		rasterizationState.depthBiasEnable = VK_FALSE;
 		rasterizationState.depthBiasConstantFactor = 0.0f;
@@ -120,7 +121,7 @@ struct GraphicsPipelineStates {
 		depthStencilState.flags = 0;
 		depthStencilState.depthTestEnable = VK_TRUE;
 		depthStencilState.depthWriteEnable = VK_TRUE;
-		depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+		depthStencilState.depthCompareOp = VK_COMPARE_OP_ALWAYS;
 		depthStencilState.depthBoundsTestEnable = VK_FALSE;
 		depthStencilState.stencilTestEnable = VK_FALSE;
 		depthStencilState.front;//�Ȳ���stancil�Ĳ���
@@ -357,9 +358,7 @@ protected:
 
 	void WaitAllFence(const std::vector<VkFence>& fences);
 	void ResetAllFence(const std::vector<VkFence>& fences);
-	void WaitSemaphrore(const std::vector<VkSemaphore>& waitSemaphore, VkFence sigFence);
-	
-	VkFence graphicFence = VK_NULL_HANDLE, presentFence = VK_NULL_HANDLE, transferFence = VK_NULL_HANDLE;
+
 	VkSemaphore drawSemaphore = VK_NULL_HANDLE,presentValidSemaphore = VK_NULL_HANDLE, presentFinishSemaphore = VK_NULL_HANDLE;;
 
 private:
@@ -381,6 +380,8 @@ private:
 	Buffer CreateBuffer(VkBufferUsageFlags usage,const char* buf, VkDeviceSize size,VkMemoryPropertyFlags memoryPropties);
 
 
+	//runtime
+	
 
 
 protected:
@@ -452,6 +453,7 @@ private:
 
 
 	VkQueue graphicQueue = VK_NULL_HANDLE,presentQueue = VK_NULL_HANDLE,transferQueue = VK_NULL_HANDLE;
+	
 
 	uint32_t queueFamilyIndex = 0;
 
@@ -460,8 +462,8 @@ private:
 
 	//command
 	VkCommandPool commandPool = VK_NULL_HANDLE;
-	VkCommandBuffer renderCommandBuffer = VK_NULL_HANDLE, toolCommandBuffer = VK_NULL_HANDLE,fenceCommandBuffer = VK_NULL_HANDLE/*用于在host使用fence等待semaphore*/;
-
+	VkCommandBuffer renderCommandBuffer = VK_NULL_HANDLE, toolCommandBuffer = VK_NULL_HANDLE;
+	VkFence renderCommandBufferFence = VK_NULL_HANDLE, toolCommmandBufferFence = VK_NULL_HANDLE;
 
 
 

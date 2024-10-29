@@ -9,7 +9,7 @@ std::vector<VkPhysicalDevice> VulkanAPI::EnumeratePhysicalDevice(VkInstance inst
 	validPhysicalDevices.resize(validPhysicalDeviceCount);
 	vkEnumeratePhysicalDevices(instance, &validPhysicalDeviceCount, validPhysicalDevices.data());
 	
-	LogFunc(validPhysicalDeviceCount);
+	ASSERT(validPhysicalDeviceCount);
 	return validPhysicalDevices;
 }
 
@@ -23,7 +23,7 @@ std::vector<VkPhysicalDeviceProperties> VulkanAPI::EnumeratePhysicalDeviceProper
 		vkGetPhysicalDeviceProperties(physicalDevices[i], validePhyscailDeviceProperties.data() + i);
 	}
 	
-	LogFunc(validePhyscailDeviceProperties.size());
+	ASSERT(validePhyscailDeviceProperties.size());
 
 	return validePhyscailDeviceProperties;
 }
@@ -36,7 +36,7 @@ std::vector<VkQueueFamilyProperties> VulkanAPI::GetQueueFamilyProperties(VkPhysi
 	queueFamilyProperties.resize(queueFamilyPropertiesCount);
 	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyPropertiesCount, queueFamilyProperties.data());
 
-	LogFunc(queueFamilyPropertiesCount);
+	ASSERT(queueFamilyPropertiesCount);
 	return queueFamilyProperties;
 }
 
@@ -78,9 +78,10 @@ VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice,const std::vect
 	deviceCreateInfo.ppEnabledLayerNames = enableLayers.data();
 	deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(enableExtensions.size());
 	deviceCreateInfo.ppEnabledExtensionNames = enableExtensions.data();
-	deviceCreateInfo.pEnabledFeatures = nullptr;
+	deviceCreateInfo.pEnabledFeatures = &enableFeatues;
 	auto res = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
-	LogFunc(device);
+	ASSERT(device);
+	ASSERT(res == VK_SUCCESS);
 	return device;
 }
 
@@ -151,7 +152,8 @@ VkSurfaceKHR VulkanAPI::CreateWin32Surface(VkInstance instance,GLFWwindow* windo
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 
 	auto res = glfwCreateWindowSurface(instance, window, nullptr, &surface);
-	LogFunc(surface);
+	ASSERT(surface);
+	ASSERT(res == VK_SUCCESS);
 	return surface;
 }
 
@@ -167,7 +169,7 @@ std::vector<VkSurfaceFormatKHR> VulkanAPI::GetSurfaceFormats(VkPhysicalDevice ph
 	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatsCount, nullptr);
 	surfaceFormats.resize(surfaceFormatsCount);
 	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatsCount, surfaceFormats.data());
-	LogFunc(surfaceFormatsCount);
+	ASSERT(surfaceFormatsCount);
 	return surfaceFormats;
 
 
@@ -188,7 +190,7 @@ std::vector<VkPresentModeKHR> VulkanAPI::GetSurfacePresentModes(VkPhysicalDevice
 	vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface,&presentModeCount,nullptr);
 	presentModes.resize(presentModeCount);
 	vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data());
-	LogFunc(presentModes.size());
+	ASSERT(presentModes.size());
 	return presentModes;
 
 
@@ -225,7 +227,8 @@ VkSwapchainKHR VulkanAPI::CreateSwapchain(VkDevice device, VkSurfaceKHR surface,
 	swapchainCreateInfoKHR.clipped = VK_FALSE;
 	swapchainCreateInfoKHR.oldSwapchain = VK_NULL_HANDLE;
 	auto res = vkCreateSwapchainKHR(device, &swapchainCreateInfoKHR, nullptr, &swapchainKHR);
-	LogFunc(swapchainKHR);
+	ASSERT(swapchainKHR);
+	ASSERT(res == VK_SUCCESS);
 	return swapchainKHR;
 }
 
@@ -241,7 +244,7 @@ std::vector<VkImage> VulkanAPI::GetSwapchainImages(VkDevice device, VkSwapchainK
 	vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
 	images.resize(imageCount);
 	vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images.data());
-	LogFunc(imageCount);
+	ASSERT(imageCount);
 	return images;
 }
 
@@ -260,8 +263,9 @@ VkDeviceMemory VulkanAPI::AllocateMemory(VkDevice device, VkDeviceSize allocatio
 	memoryAllocateInfo.pNext = nullptr;
 	memoryAllocateInfo.allocationSize = allocationSize;
 	memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
-	vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &deviceMemory);
-	LogFunc(deviceMemory);
+	auto res = vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &deviceMemory);
+	ASSERT(deviceMemory);
+	ASSERT(res == VK_SUCCESS);
 	return deviceMemory;
 }
 
@@ -274,7 +278,8 @@ void* VulkanAPI::MapMemory(VkDevice device, VkDeviceMemory deviceMemory, VkDevic
 {
 	void* p = nullptr;
 	auto res = vkMapMemory(device, deviceMemory, offset, size, mapFlags, &p);
-	LogFunc(p);
+	ASSERT(p);
+	ASSERT(res == VK_SUCCESS);
 	return p;
 }
 
@@ -286,7 +291,7 @@ void VulkanAPI::UnmapMemory(VkDevice device, VkDeviceMemory deviceMemory)
 void VulkanAPI::BindMemoryToImage(VkDevice device, VkDeviceMemory deviceMemory, VkImage image, VkDeviceSize offset)
 {
 	auto result = vkBindImageMemory(device, image, deviceMemory, offset);
-	LogFunc(result == VK_SUCCESS);
+	ASSERT(result == VK_SUCCESS);
 
 }
 
@@ -316,7 +321,8 @@ VkImage VulkanAPI::CreateImage(VkDevice device, VkImageCreateFlags flags, VkImag
 	imageCreateInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 	imageCreateInfo.initialLayout = initialLayout;
 	auto res = vkCreateImage(device, &imageCreateInfo, nullptr, &image);
-	LogFunc(image);
+	ASSERT(res == VK_SUCCESS);
+	ASSERT(image);
 
 	return image;
 }
@@ -338,9 +344,9 @@ VkImageView VulkanAPI::CreateImageView(VkDevice device, VkImageViewCreateFlags f
 	imageViewCreateInfo.format = format;
 	imageViewCreateInfo.components = components;
 	imageViewCreateInfo.subresourceRange = subresourceRange;
-	vkCreateImageView(device, &imageViewCreateInfo, nullptr, &imageView);
-	LogFunc(imageView);
-
+	auto res = vkCreateImageView(device, &imageViewCreateInfo, nullptr, &imageView);
+	ASSERT(imageView);
+	ASSERT(res == VK_SUCCESS);
 	return imageView;
 }
 
@@ -362,8 +368,8 @@ VkBuffer VulkanAPI::CreateBuffer(VkDevice device, VkBufferCreateFlags flags, VkD
 	bufferCreateInfo.queueFamilyIndexCount = queueFamilyIndices.size();
 	bufferCreateInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 	auto res = vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer);
-	LogFunc(buffer);
-
+	ASSERT(buffer);
+	ASSERT(res == VK_SUCCESS);
 
 	return buffer;
 }
@@ -392,8 +398,9 @@ VkBufferView VulkanAPI::CreateBufferView(VkDevice device, VkBufferViewCreateFlag
 	bufferViewCreateInfo.format = format;
 	bufferViewCreateInfo.offset = offset;
 	bufferViewCreateInfo.range = range;
-	vkCreateBufferView(device, &bufferViewCreateInfo, nullptr, &bufferView);
-	LogFunc(bufferView);
+	auto res = vkCreateBufferView(device, &bufferViewCreateInfo, nullptr, &bufferView);
+	ASSERT(bufferView);
+	ASSERT(res == VK_SUCCESS);
 	return bufferView;
 }
 
@@ -417,8 +424,8 @@ VkRenderPass VulkanAPI::CreateRenderPass(VkDevice device, VkRenderPassCreateFlag
 	renderPassCreateInfo.pDependencies = dependencies.data();
 
 	auto res = vkCreateRenderPass(device, &renderPassCreateInfo, nullptr, &renderPass);
-	LogFunc(renderPass);
-
+	ASSERT(renderPass);
+	ASSERT(res == VK_SUCCESS);
 	return renderPass;
 }
 
@@ -438,8 +445,8 @@ VkFramebuffer VulkanAPI::CreateFrameBuffer(VkDevice device, VkFramebufferCreateF
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 	auto res = vkCreateFramebuffer(device, &frameBufferCreateInfo, nullptr, &frameBuffer);
 
-	LogFunc(frameBuffer);
-
+	ASSERT(frameBuffer);
+	ASSERT(res == VK_SUCCESS);
 	return frameBuffer;
 }
 
@@ -459,9 +466,9 @@ VkDescriptorSetLayout VulkanAPI::CreateDescriptorSetLayout(VkDevice device, VkDe
 	descritporSetLayerCreateInfo.flags = flags;
 	descritporSetLayerCreateInfo.bindingCount = bindings.size();
 	descritporSetLayerCreateInfo.pBindings = bindings.data();
-	vkCreateDescriptorSetLayout(device, &descritporSetLayerCreateInfo, nullptr, &descriptorSetLayout);
-	LogFunc(descriptorSetLayout);
-
+	auto res = vkCreateDescriptorSetLayout(device, &descritporSetLayerCreateInfo, nullptr, &descriptorSetLayout);
+	ASSERT(descriptorSetLayout);
+	ASSERT(res == VK_SUCCESS);
 	return descriptorSetLayout;
 }
 
@@ -492,8 +499,9 @@ VkSampler VulkanAPI::CreateSampler(VkDevice device, VkSamplerCreateFlags flags, 
 	samplerCreateInfo.maxLod = maxLod;
 	samplerCreateInfo.borderColor = borderColor;
 	samplerCreateInfo.unnormalizedCoordinates = unnormalizedCoordinates;
-	vkCreateSampler(device, &samplerCreateInfo, nullptr, &sampler);
-	LogFunc(sampler);
+	auto res = vkCreateSampler(device, &samplerCreateInfo, nullptr, &sampler);
+	ASSERT(sampler);
+	ASSERT(res == VK_SUCCESS);
 	return sampler;
 }
 
@@ -520,9 +528,9 @@ VkPipelineLayout VulkanAPI::CreatePipelineLayout(VkDevice device, VkPipelineLayo
 	pipelineLayoutCreateInfo.pNext = setLayouts.data();
 	pipelineLayoutCreateInfo.pushConstantRangeCount = pushConstantRanges.size();
 	pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
-	vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
-	LogFunc(pipelineLayout);
-
+	auto res = vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
+	ASSERT(pipelineLayout);
+	ASSERT(res == VK_SUCCESS);
 
 	return pipelineLayout;
 }
@@ -542,8 +550,9 @@ VkShaderModule VulkanAPI::CreateShaderModule(VkDevice device, VkShaderModuleCrea
 	shaderModuleCreateInfo.codeSize = spirv_code.size() * 4;
 	shaderModuleCreateInfo.pCode = spirv_code.data();
 
-	vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
-
+	auto res = vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
+	ASSERT(shaderModule);
+	ASSERT(res == VK_SUCCESS);
 	return shaderModule;
 }
 
@@ -576,8 +585,8 @@ VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFl
 	graphicsPipelineCreateInfo.basePipelineHandle = basePipelineHandle;
 	graphicsPipelineCreateInfo.basePipelineIndex = basePipelineIndex;
 	auto res = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipeline);
-	LogFunc(pipeline);
-
+	ASSERT(pipeline);
+	ASSERT(res == VK_SUCCESS);
 
 
 	return pipeline;
@@ -598,8 +607,9 @@ VkDescriptorPool VulkanAPI::CreateDescriptorPool(VkDevice device, VkDescriptorPo
 	descriptorPoolCreateInfo.maxSets = maxSets;
 	descriptorPoolCreateInfo.poolSizeCount = poolSizes.size();
 	descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
-	vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
-	LogFunc(descriptorPool);
+	auto res = vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
+	ASSERT(descriptorPool);
+	ASSERT(res == VK_SUCCESS);
 	return descriptorPool;
 }
 
@@ -618,9 +628,9 @@ VkDescriptorSet VulkanAPI::AllocateDescriptorSet(VkDevice device, VkDescriptorPo
 	descriptorSetAllocateInfo.descriptorPool = descriptorPool;
 	descriptorSetAllocateInfo.descriptorSetCount = setLayouts.size();
 	descriptorSetAllocateInfo.pSetLayouts = setLayouts.data();
-	vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet);
-	LogFunc(descriptorSet);
-
+	auto res = vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet);
+	ASSERT(descriptorSet);
+	ASSERT(res == VK_SUCCESS);
 	return descriptorSet;
 }
 
@@ -642,11 +652,10 @@ std::vector<VkCommandBuffer> VulkanAPI::AllocateCommandBuffers(VkDevice device, 
 	commandBufferAllocateInfo.commandBufferCount = commandBufferCount;
 	commandBufferAllocateInfo.level = level;
 
-	vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers.data());
-
+	auto res = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers.data());
+	ASSERT(res == VK_SUCCESS);
 	return commandBuffers;
 
-	return std::vector<VkCommandBuffer>();
 }
 
 void VulkanAPI::ReleaseCommandBuffers(VkDevice device, VkCommandPool commandPool, const std::vector<VkCommandBuffer>& commandBuffers)
@@ -662,7 +671,8 @@ VkFence VulkanAPI::CreateFence(VkDevice device, VkFenceCreateFlags flags)
 	fenceCreateInfo.pNext = nullptr;
 	fenceCreateInfo.flags = flags;
 	auto res = vkCreateFence(device, &fenceCreateInfo, nullptr, &fence);
-	LogFunc(fence);
+	ASSERT(fence);
+	ASSERT(res == VK_SUCCESS);
 	return fence;
 }
 
@@ -689,8 +699,9 @@ VkSemaphore VulkanAPI::CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags f
 	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	semaphoreCreateInfo.pNext = nullptr;
 	semaphoreCreateInfo.flags = flags;
-	vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphore);
-	LogFunc(semaphore);
+	auto res = vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphore);
+	ASSERT(semaphore);
+	ASSERT(res == VK_SUCCESS);
 	return semaphore;
 
 
@@ -735,8 +746,9 @@ VkEvent VulkanAPI::CreateEvent(VkDevice device, VkEventCreateFlags flags)
 	eventCreateInfo.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
 	eventCreateInfo.pNext = nullptr;
 	eventCreateInfo.flags = flags;
-	vkCreateEvent(device, &eventCreateInfo, nullptr, &c_event);
-	LogFunc(c_event);
+	auto res = vkCreateEvent(device, &eventCreateInfo, nullptr, &c_event);
+	ASSERT(c_event);
+	ASSERT(res == VK_SUCCESS);
 	return c_event;
 }
 
@@ -810,7 +822,7 @@ void VulkanAPI::CmdEndRendering(VkCommandBuffer commandBuffer)
 
 void VulkanAPI::CmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBinding, const std::vector<VkBuffer>& buffers, const std::vector<VkDeviceSize>& offsets)
 {
-	LogFunc(offsets.size() >= buffers.size());
+	ASSERT(offsets.size() >= buffers.size());
 	vkCmdBindVertexBuffers(commandBuffer, firstBinding, buffers.size(), buffers.data(), offsets.data());
 }
 
@@ -827,6 +839,18 @@ void VulkanAPI::CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoi
 void VulkanAPI::CmdDynamicSetViewPorts(VkCommandBuffer commandBuffer, uint32_t firstViewport, const std::vector<VkViewport>& viewports)
 {
 	vkCmdSetViewport(commandBuffer, firstViewport, viewports.size(), viewports.data());
+}
+
+void VulkanAPI::CmdClearAttachments(VkCommandBuffer commandBuffer, const std::vector<VkClearAttachment>& clearAttachments, const std::vector<VkClearRect>& clearRegions)
+{
+
+	vkCmdClearAttachments(commandBuffer, clearAttachments.size(), clearAttachments.data(), clearRegions.size(), clearRegions.data());
+}
+
+void VulkanAPI::CmdClearDepthImage(VkCommandBuffer commandBuffer,VkImage depthImage,VkImageLayout imageLayout,const VkClearDepthStencilValue& clearValue,const std::vector<VkImageSubresourceRange>& clearRegions)
+{
+	vkCmdClearDepthStencilImage(commandBuffer, depthImage, imageLayout, &clearValue, clearRegions.size(), clearRegions.data());
+
 }
 
 
@@ -864,7 +888,7 @@ void VulkanAPI::CmdMemoryBarrier(VkCommandBuffer commandBuffer, VkPipelineStageF
 
 void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitDstStageMask, const std::vector<VkCommandBuffer>& commandBuffers, const std::vector<VkSemaphore>& signalSemaphores, VkFence allCommandFinishedFence)
 {
-	LogFunc(waitDstStageMask.size() == waitSemaphores.size());
+	ASSERT(waitDstStageMask.size() == waitSemaphores.size());
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.pNext = nullptr;
@@ -887,7 +911,7 @@ void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& s
 
 void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores , const std::vector<VkSwapchainKHR>& swapchains, const std::vector<uint32_t>& swapchainImageIndices, std::vector<VkResult>& outResults)
 {
-	LogFunc(swapchains.size() <= swapchainImageIndices.size());
+	ASSERT(swapchains.size() <= swapchainImageIndices.size());
 	outResults.resize(swapchains.size());
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -938,8 +962,9 @@ VkCommandPool VulkanAPI::CreateCommandPool(VkDevice device, VkCommandPoolCreateF
 	commandPoolCreateInfo.pNext = nullptr;
 	commandPoolCreateInfo.flags = flags;
 	commandPoolCreateInfo.queueFamilyIndex = queueFamilyIndex;
-	vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool);
-	LogFunc(commandPool);
+	auto res = vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool);
+	ASSERT(commandPool);
+	ASSERT(res == VK_SUCCESS);
 	return commandPool;
 }
 
@@ -951,7 +976,7 @@ void VulkanAPI::DesctroyCommandPool(VkDevice device, VkCommandPool commandPool)
 VkCommandBuffer VulkanAPI::AllocateCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBufferLevel  level)
 {
 	auto commandBuffers = AllocateCommandBuffers(device, commandPool, level, 1);
-	LogFunc(commandBuffers.size());
+	ASSERT(commandBuffers.size());
 	return commandBuffers[0];
 }
 
@@ -963,7 +988,7 @@ void VulkanAPI::ReleaseCommandBuffer(VkDevice device, VkCommandPool commandPool,
 void* VulkanAPI::InstanceFuncLoader(VkInstance instance, const char* funcName)
 {
 	auto func = vkGetInstanceProcAddr(instance, funcName);
-	LogFunc(func);
+	ASSERT(func);
 	return func;
 }
 
@@ -977,7 +1002,7 @@ VkInstance VulkanAPI::CreateInstance(std::vector<const char*> enableLayers, std:
 	VkApplicationInfo appInfo{};
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	appInfo.pNext = nullptr;
-	appInfo.apiVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
+	appInfo.apiVersion = VK_MAKE_API_VERSION(0, 1, 3, 0);
 	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 	appInfo.pApplicationName = "TestApplication";
@@ -988,7 +1013,8 @@ VkInstance VulkanAPI::CreateInstance(std::vector<const char*> enableLayers, std:
 	instanceCreateInfo.ppEnabledLayerNames = enableLayers.data();
 	instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(enableLayers.size());
 	auto res = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
-	LogFunc(instance);
+	ASSERT(instance);
+	ASSERT(res == VK_SUCCESS);
 	return instance;
 }
 
@@ -1014,7 +1040,7 @@ GLFWwindow* VulkanAPI::CreateWin32Window(int width, int height, const char* wind
 {
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	auto window = glfwCreateWindow(width, height, windowName, nullptr, nullptr);
-	LogFunc(window);
+	ASSERT(window);
 
 	return window;
 }
@@ -1027,7 +1053,7 @@ std::vector<VkLayerProperties> VulkanAPI::EnumerateLayerProperties()
 	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 	supportLayes.resize(layerCount);
 	vkEnumerateInstanceLayerProperties(&layerCount, supportLayes.data());
-	LogFunc(layerCount);
+	ASSERT(layerCount);
 	return supportLayes;
 }
 
@@ -1038,7 +1064,7 @@ std::vector<VkExtensionProperties> VulkanAPI::EnumerateExtensionProperties(const
 	vkEnumerateInstanceExtensionProperties(layerName, &extensionCount, nullptr);
 	extensionProperties.resize(extensionCount);
 	vkEnumerateInstanceExtensionProperties(layerName, &extensionCount, extensionProperties.data());
-	LogFunc(extensionCount);
+	ASSERT(extensionCount);
 	return extensionProperties;
 }
 
@@ -1049,8 +1075,12 @@ VkBool32 DebugCallBack(
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData) {
 	LogInfo(pCallbackData->pMessage);
-	assert(0);
-	//LogFunc(1);
+	//if (messageSeverity & (VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT))
+	//{
+	//	assert(0);
+	//}
+
+	//ASSERT(1);
 	return VK_TRUE;
 }
 
@@ -1063,12 +1093,12 @@ VkDebugUtilsMessengerEXT VulkanAPI::CreateDebugInfoMessager(VkInstance instance)
 	debugUtilsMessagerCreateInfoEXT.flags = 0;
 	debugUtilsMessagerCreateInfoEXT.pUserData = nullptr;
 	debugUtilsMessagerCreateInfoEXT.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;//只看校验信息	
-	debugUtilsMessagerCreateInfoEXT.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;//只看错误信息
+	debugUtilsMessagerCreateInfoEXT.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;//只看错误信息
 	debugUtilsMessagerCreateInfoEXT.pfnUserCallback = &DebugCallBack;
 	
 	auto res = ((PFN_vkCreateDebugUtilsMessengerEXT)InstanceFuncLoader(instance, "vkCreateDebugUtilsMessengerEXT"))(instance,&debugUtilsMessagerCreateInfoEXT,nullptr,&debugUtilsMessenger);
 
-	LogFunc(debugUtilsMessenger);
+	ASSERT(debugUtilsMessenger);
 	return debugUtilsMessenger;
 
 }
