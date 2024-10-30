@@ -97,6 +97,11 @@ VkQueue VulkanAPI::GetQueue(VkDevice device, uint32_t familyIndex, uint32_t queu
 	return queue;
 }
 
+void VulkanAPI::DeviceWaitIdle(VkDevice device)
+{
+	vkDeviceWaitIdle(device);
+}
+
 VkPhysicalDeviceMemoryProperties VulkanAPI::GetMemoryProperties(VkPhysicalDevice physicalDevice)
 {
 	VkPhysicalDeviceMemoryProperties deviceMemoryProperties{};
@@ -427,6 +432,11 @@ VkRenderPass VulkanAPI::CreateRenderPass(VkDevice device, VkRenderPassCreateFlag
 	ASSERT(renderPass);
 	ASSERT(res == VK_SUCCESS);
 	return renderPass;
+}
+
+void VulkanAPI::DestroyRenderPass(VkDevice device, VkRenderPass renderPass)
+{
+	vkDestroyRenderPass(device, renderPass, nullptr);
 }
 
 
@@ -803,6 +813,11 @@ void VulkanAPI::CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool
 	vkCmdEndQuery(commandBuffer, queryPool, queryIndex);
 }
 
+void VulkanAPI::CmdResetQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQueryIndex,uint32_t numQuery)
+{
+	vkCmdResetQueryPool(commandBuffer,queryPool,firstQueryIndex,numQuery);
+}
+
 void VulkanAPI::CmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex, VkQueryControlFlags flags)
 {
 	vkCmdBeginQuery(commandBuffer, queryPool, queryIndex, flags);
@@ -985,6 +1000,11 @@ void VulkanAPI::DestroyQueryPool(VkDevice device, VkQueryPool pool)
 	vkDestroyQueryPool(device, pool, nullptr);
 }
 
+void VulkanAPI::ResetQueryPool(VkDevice device, VkQueryPool pool, uint32_t firstQuery, uint32_t numQuery)
+{
+	vkResetQueryPool(device, pool, firstQuery, numQuery);
+}
+
 std::vector<uint64_t> VulkanAPI::GetQueryResult(VkDevice device, VkQueryPool pool,uint32_t firstQuery,uint32_t numQuery,VkQueryResultFlags resultFlags)
 {
 	std::vector<uint64_t> res;
@@ -1082,6 +1102,11 @@ GLFWwindow* VulkanAPI::CreateWin32Window(int width, int height, const char* wind
 	ASSERT(window);
 
 	return window;
+}
+
+void VulkanAPI::DestroyGLFWWin32Window(GLFWwindow* window)
+{
+	glfwDestroyWindow(window);
 }
 
 std::vector<VkLayerProperties> VulkanAPI::EnumerateLayerProperties()

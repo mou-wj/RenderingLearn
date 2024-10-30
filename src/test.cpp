@@ -61,6 +61,14 @@ void GLSL2SPIRV()
 	shaderCode.push_back('\0');
 	file.close();
 
+	std::string shaderCodeStr(shaderCode.begin(), shaderCode.end());
+
+
+	std::string vertexCode = "#version 450\n"\
+		"void main(){\n"\
+		"gl_Position = vec4(1.0,1.0,1.0,1.0);\n"\
+		"}"
+		;
 
 	EShLanguage shaderType = EShLangVertex;
 
@@ -69,7 +77,7 @@ void GLSL2SPIRV()
 
 	// ���� GLSL ����Ϊ SPIR-V ����
 	glslang::TShader shader(shaderType); // ���磬���������һ��������ɫ��
-	const char* source = shaderCode.data();
+	const char* source = shaderCodeStr.data();
 	shader.setStrings(&source, 1);
 	std::cout << "shader compile " << std::endl << std::string(shaderCode.begin(), shaderCode.end()) << std::endl << std::endl;;
 	if (!shader.parse(reinterpret_cast<const TBuiltInResource*>(glslang_default_resource()), 110, false, EShMessages::EShMsgDefault)) {
@@ -110,5 +118,19 @@ void RenderDocCapTest() {
 	}
 	CaptureEndMacro
 
+
+}
+void TransferGLSLToSpirv(const std::string& srcGLSLFile,const std::string& outSpirvFile){
+
+    std::string vulkanIncludeDir(VULKAN_INCLUDE_DIRS);
+    uint32_t pos = vulkanIncludeDir.find_last_of("/");
+    std::string vulkanInstallDir = vulkanIncludeDir.substr(0, pos);
+    std::string glslcDir = vulkanInstallDir + "/Bin/glslc.exe";
+    std::string generateCmd = glslcDir + " " + srcGLSLFile + " -o " + outSpirvFile;
+    int ret = system(generateCmd.c_str());
+    if (ret != 0)
+    {
+        //LogFunc(0);
+    }
 
 }

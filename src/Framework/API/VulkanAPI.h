@@ -9,7 +9,7 @@ namespace VulkanAPI {
 	//platform
 	std::vector<const char*> GetInstanceNeedWinGLFWExtensionNames();
 	GLFWwindow* CreateWin32Window(int width, int height, const char* windowName);
-
+	void DestroyGLFWWin32Window(GLFWwindow* window);
 
 	//instance
 	std::vector<VkLayerProperties> EnumerateLayerProperties();
@@ -36,7 +36,7 @@ namespace VulkanAPI {
 	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, const std::vector<std::pair<uint32_t,std::vector<float>>>& wantQueueFamilyAndQueuePriorities,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures& enableFeatues);
 	void DestroyDevice(VkDevice device);
 	VkQueue GetQueue(VkDevice device, uint32_t familyIndex,uint32_t queueIndex);
-
+	void DeviceWaitIdle(VkDevice device);
 
 
 	//surface
@@ -116,7 +116,7 @@ namespace VulkanAPI {
 	const std::vector<VkAttachmentDescription>& attachments,
 	const std::vector<VkSubpassDescription>& subpasses,
 	const std::vector<VkSubpassDependency> dependencies);
-
+	void DestroyRenderPass(VkDevice device, VkRenderPass renderPass);
 
 	//framebuffer
 	VkFramebuffer CreateFrameBuffer(VkDevice device , VkFramebufferCreateFlags    flags,
@@ -212,6 +212,7 @@ namespace VulkanAPI {
 	//query pool
 	VkQueryPool CreateQueryPool(VkDevice device, VkQueryPoolCreateFlags  flags,VkQueryType     queryType, uint32_t    queryCount, VkQueryPipelineStatisticFlags    pipelineStatistics);
 	void DestroyQueryPool(VkDevice device, VkQueryPool pool);
+	void ResetQueryPool(VkDevice device, VkQueryPool pool, uint32_t firstQuery, uint32_t numQuery);
 	std::vector<uint64_t> GetQueryResult(VkDevice device, VkQueryPool pool, uint32_t firstQuery, uint32_t numQuery, VkQueryResultFlags resultFlags);
 
 	//command pool
@@ -260,6 +261,8 @@ namespace VulkanAPI {
 
 	void CmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex, VkQueryControlFlags flags);
 	void CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex);
+	void CmdResetQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQueryIndex, uint32_t numQuery);
+
 
 	//动态绘制,可以不使用begin pass
 	void CmdBeginRendering(VkCommandBuffer commandBuffer, 

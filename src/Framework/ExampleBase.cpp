@@ -15,6 +15,11 @@
 using namespace VulkanAPI;
 
 
+ExampleBase::~ExampleBase()
+{
+	Clear();
+}
+
 void ExampleBase::Run(ExampleBase* example)
 {
 	example->InitResourceInfos();
@@ -41,7 +46,7 @@ void ExampleBase::Init()
 	InitGraphicPipelines();
 	InitQueryPool();
 	//InitSyncObject();
-	InitGeometryResources(geom);
+	InitRecources();
 }
 
 void ExampleBase::ParseShaderFiles(const std::vector<ShaderCodePaths>& shaderPaths)
@@ -186,6 +191,13 @@ void ExampleBase::InitContex()
 
 void ExampleBase::InitAttanchmentDesc()
 {
+	//����color attachment����Դ
+	auto& colorImage = renderTargets.colorAttachment.attachmentImage;
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL);
+	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
+
+
 	auto& colorAttachment = renderTargets.colorAttachment.attachmentDesc;
 	colorAttachment.flags = 0;
 	colorAttachment.format = colorFormat;
@@ -194,14 +206,15 @@ void ExampleBase::InitAttanchmentDesc()
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	colorAttachment.initialLayout = renderTargets.colorAttachment.attachmentImage.currentLayout;
 	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	renderTargets.colorAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	//����color attachment����Դ
-	auto& colorImage = renderTargets.colorAttachment.attachmentImage;
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL);
-	TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
+
+	auto& depthImage = renderTargets.depthAttachment.attachmentImage;
+	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL);
+	//TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+	renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
 
 
 
@@ -213,14 +226,9 @@ void ExampleBase::InitAttanchmentDesc()
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depthAttachment.initialLayout = renderTargets.depthAttachment.attachmentImage.currentLayout;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-
-	auto& depthImage = renderTargets.depthAttachment.attachmentImage;
-	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ,VK_IMAGE_TILING_OPTIMAL);
-	TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-	renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
+	renderTargets.depthAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 
 
@@ -262,11 +270,16 @@ void ExampleBase::InitDefaultGraphicSubpassInfo()
 	auto& subpassDepend1 = subpassInfo.subpassDepends[0];
 	subpassDepend1.srcSubpass = VK_SUBPASS_EXTERNAL;
 	subpassDepend1.dstSubpass = 0;
-	subpassDepend1.srcStageMask = 0 ;
-	subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ;
-	subpassDepend1.srcAccessMask = 0;
-	subpassDepend1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	//subpassDepend1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	//subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ;
+	//subpassDepend1.srcAccessMask = 0;
+	//subpassDepend1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	subpassDepend1.dependencyFlags =  0;
+
+	subpassDepend1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	subpassDepend1.srcAccessMask = 0;
+	subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+	subpassDepend1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 }
 
@@ -655,7 +668,11 @@ void ExampleBase::InitSyncObject()
 
 void ExampleBase::InitRecources()
 {
-	InitGeometryResources(geom);
+	for (uint32_t i = 0; i < geoms.size(); i++)
+	{
+		InitGeometryResources(geoms[i]);
+	}
+
 }
 
 void ExampleBase::InitQueryPool()
@@ -664,6 +681,108 @@ void ExampleBase::InitQueryPool()
 
 
 }
+
+void ExampleBase::Clear()
+{
+	//清除所有vulkan资源
+	DeviceWaitIdle(device);
+	ClearGraphicPipelines();
+	ClearRenderPass();
+	ClearFrameBuffer();
+	ClearAttanchment();
+	ClearRecources();
+	ClearContex();
+}
+
+void ExampleBase::ClearContex()
+{				  
+	DestroySwapchain(device, swapchain);
+	DestroyDevice(device);
+	DestroySurface(instance, surface);
+	DestroyGLFWWin32Window(window);
+	DestroyInstance(instance);
+}				  
+				  
+void ExampleBase::ClearAttanchment()
+{				  
+	DestroyImageView(device,renderTargets.colorAttachment.attachmentImage.imageView);
+	DestroyImage(device, renderTargets.colorAttachment.attachmentImage.image);
+	DestroyImageView(device, renderTargets.depthAttachment.attachmentImage.imageView);
+	DestroyImage(device, renderTargets.depthAttachment.attachmentImage.image);
+}				  
+				  
+void ExampleBase::ClearRenderPass()
+{			
+	DestroyRenderPass(device, renderPass);
+
+}				  
+				  
+void ExampleBase::ClearFrameBuffer()
+{				 
+	DestroyFrameBuffer(device, frameBuffer);
+}				  
+				  
+void ExampleBase::ClearGraphicPipelines()
+{				 
+	for (uint32_t i = 0; i < graphcisPipelineInfos.size(); i++)
+	{
+
+		DestroyPipeline(device, graphcisPipelineInfos[i].pipeline);
+		DestroyPipelineLayout(device, graphcisPipelineInfos[i].pipelineLayout);
+		for (uint32_t setId = 0; setId < graphcisPipelineInfos[i].descriptorSetInfos.size(); setId++)
+		{
+			ReleaseDescriptorSets(device, graphcisPipelineInfos[i].descriptorPool, { graphcisPipelineInfos[i].descriptorSetInfos[setId].descriptorSet });
+			DestroyDesctriptorSetLayout(device, graphcisPipelineInfos[i].descriptorSetInfos[setId].setLayout);
+		}
+
+		DestroyDescriptorPool(device,graphcisPipelineInfos[i].descriptorPool);
+	}
+
+
+}				  
+				  
+void ExampleBase::ClearSyncObject()
+{				  
+	DestroyFence(device, renderCommandBufferFence);
+	DestroyFence(device, toolCommmandBufferFence);
+
+	DestroySemaphore(device, transferOperationFinish);
+
+	DestroySemaphore(device, swapchainImageValidSemaphore);
+	DestroySemaphore(device, drawSemaphore);
+	DestroySemaphore(device, presentValidSemaphore);
+	DestroySemaphore(device, presentFinishSemaphore);
+
+
+}				  
+				  
+void ExampleBase::ClearRecources()
+{			
+	//清除textures
+	for (auto iter = textures.begin(); iter != textures.end(); iter++)
+	{
+		DestroyImageView(device, (*iter).second.image.imageView);
+		VulkanAPI::DestroyImage(device, (*iter).second.image.image);
+	}
+
+	//清除geometry
+	for (uint32_t i = 0; i < geoms.size(); i++)
+	{
+		DestroyBuffer(device,geoms[i].vertexBuffer.buffer);
+		for (uint32_t zoneId = 0; zoneId < geoms[i].indexBuffers.size(); zoneId++)
+		{
+			DestroyBuffer(device, geoms[i].indexBuffers[zoneId].buffer);
+		}
+	}
+
+}				  
+				  
+void ExampleBase::ClearQueryPool()
+{
+	DestroyQueryPool(device, queryPool);
+}
+
+
 
 void ExampleBase::InitGeometryResources(Geometry& geo)
 {
@@ -1142,68 +1261,41 @@ uint32_t ExampleBase::GetNextPresentImageIndex(VkSemaphore sigValidSemaphore)
 void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {
 
-	auto colorClear = VkClearAttachment{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,.colorAttachment = 0,.clearValue = renderTargets.colorAttachment.clearValue };
-	auto depthClear = VkClearAttachment{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,.colorAttachment = 1,.clearValue = renderTargets.depthAttachment.clearValue };
-	auto clearRegion = VkClearRect{ .rect = VkRect2D{.offset = VkOffset2D{0,0},.extent = VkExtent2D{windowWidth,windowHeight}},.baseArrayLayer = 0,.layerCount = 1 };
-	auto depthClearRegion = VkImageSubresourceRange{
-							.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-							.baseMipLevel = 0 ,
-							.levelCount = 1,
-							.baseArrayLayer = 0,
-							.layerCount = 1
-							};
-	VkImageMemoryBarrier imageMemoryBarrier{ };
-	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	imageMemoryBarrier.pNext = nullptr;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.oldLayout = renderTargets.depthAttachment.attachmentImage.currentLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.image = renderTargets.depthAttachment.attachmentImage.image;
-	imageMemoryBarrier.subresourceRange = depthClearRegion;
+
 
 	auto queryres = GetQueryResult(device, queryPool, 0, 1, VK_QUERY_RESULT_64_BIT);
 	WaitAllFence({ renderCommandBufferFence });
 	ResetAllFence({ renderCommandBufferFence });
 	BeginRecord(renderCommandBuffer,0);
-	CmdMemoryBarrier(renderCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-	CmdClearDepthImage(renderCommandBuffer, renderTargets.depthAttachment.attachmentImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, renderTargets.depthAttachment.clearValue.depthStencil, { depthClearRegion });
-	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	imageMemoryBarrier.newLayout = renderTargets.depthAttachment.attachmentImage.currentLayout;
-	CmdMemoryBarrier(renderCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	CmdResetQuery(renderCommandBuffer, queryPool, 0, 1);
 	
-	imageMemoryBarrier.oldLayout = renderTargets.colorAttachment.attachmentImage.currentLayout;
-	imageMemoryBarrier.newLayout = renderTargets.colorAttachment.attachmentImage.currentLayout;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	imageMemoryBarrier.image = renderTargets.colorAttachment.attachmentImage.image;
-	CmdMemoryBarrier(renderCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-
-
-	CmdBeginRenderPass(renderCommandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
-	CmdClearAttachments(renderCommandBuffer, { colorClear }, { clearRegion });
-	
-	CmdBindVertexBuffers(renderCommandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-	for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+	for (uint32_t i = 0; i < geoms.size(); i++)
 	{
-		CmdBindIndexBuffer(renderCommandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-		
-	}
-	//bind pipelines
-	for(uint32_t i = 0; i < graphcisPipelineInfos.size();i++)
-	{
-		CmdBindPipeline(renderCommandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,graphcisPipelineInfos[i].pipeline);
-		CmdBeginQuery(renderCommandBuffer, queryPool, 0, VK_QUERY_CONTROL_PRECISE_BIT);
-		CmdDrawIndex(renderCommandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
-		CmdEndQuery(renderCommandBuffer, queryPool, 0);
-		if (i != graphcisPipelineInfos.size() - 1)
+		const auto& geom = geoms[i];
+		CmdBeginRenderPass(renderCommandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
+		CmdBindVertexBuffers(renderCommandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+		for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
 		{
-			CmdNextSubpass(renderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+			CmdBindIndexBuffer(renderCommandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+
 		}
+		//bind pipelines
+		for (uint32_t i = 0; i < graphcisPipelineInfos.size(); i++)
+		{
+			CmdBindPipeline(renderCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipeline);
+
+			CmdBeginQuery(renderCommandBuffer, queryPool, 0, 0);
+			CmdDrawIndex(renderCommandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+			CmdEndQuery(renderCommandBuffer, queryPool, 0);
+			if (i != graphcisPipelineInfos.size() - 1)
+			{
+				CmdNextSubpass(renderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+			}
+		}
+		CmdEndRenderPass(renderCommandBuffer);
 	}
-	CmdEndRenderPass(renderCommandBuffer);
+	
+
 	EndRecord(renderCommandBuffer);
 
 	SubmitCommands(graphicQueue, waitSemaphores, {}, { renderCommandBuffer }, sigSemaphores, renderCommandBufferFence);

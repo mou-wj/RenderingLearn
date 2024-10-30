@@ -39,6 +39,27 @@ struct GraphicsPiplineShaderInfo {
 
 };
 
+struct Barrier {
+	VkImageMemoryBarrier imageMemoryBarrier;
+	VkBufferMemoryBarrier bufferMemoryBarrier;
+	Barrier() {
+		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		imageMemoryBarrier.pNext = nullptr;
+		imageMemoryBarrier.srcAccessMask;
+		imageMemoryBarrier.dstAccessMask;
+		imageMemoryBarrier.oldLayout;
+		imageMemoryBarrier.newLayout;
+		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.image = nullptr;
+		imageMemoryBarrier.subresourceRange;
+
+
+	}
+
+
+
+};
 
 struct GraphicsPipelineStates {
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
@@ -47,6 +68,7 @@ struct GraphicsPipelineStates {
 	VkPipelineTessellationStateCreateInfo tessellationState;
 	VkPipelineViewportStateCreateInfo viewportState;
 	VkPipelineRasterizationStateCreateInfo rasterizationState;
+	VkSampleMask sampleMask = 0xFFFFFFFF;
 	VkPipelineMultisampleStateCreateInfo multisampleState;
 	VkPipelineDepthStencilStateCreateInfo depthStencilState;
 	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachmentStates;
@@ -96,7 +118,7 @@ struct GraphicsPipelineStates {
 		rasterizationState.rasterizerDiscardEnable = VK_FALSE;
 		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
 		rasterizationState.cullMode = VK_CULL_MODE_NONE;
-		rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasterizationState.depthBiasEnable = VK_FALSE;
 		rasterizationState.depthBiasConstantFactor = 0.0f;
 		rasterizationState.depthBiasClamp = 0.0f;
@@ -110,8 +132,8 @@ struct GraphicsPipelineStates {
 		multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 		multisampleState.sampleShadingEnable = VK_FALSE;
 		multisampleState.minSampleShading = 1.0f;
-		VkSampleMask sampleMask = 0x00000000;
-		multisampleState.pSampleMask = &sampleMask;
+
+		multisampleState.pSampleMask = &sampleMask;//这里如果参数是一个临时变量的地址，那么在渲染管线的多重采样阶段可能会应为错误的信息导致光栅化的片段被剔除
 		multisampleState.alphaToCoverageEnable = VK_FALSE;
 		multisampleState.alphaToOneEnable = VK_FALSE;
 
@@ -293,6 +315,7 @@ class ExampleBase {
 
 public:
 	ExampleBase() = default;
+	~ExampleBase();
 	static void Run(ExampleBase* example);
 
 protected:
@@ -320,6 +343,22 @@ protected:
 	virtual void InitSyncObject();
 	virtual void InitRecources();
 	virtual void InitQueryPool();
+
+protected:
+	virtual void Clear();
+	virtual void ClearContex();
+	virtual void ClearAttanchment();
+	virtual void ClearRenderPass();
+	virtual void ClearFrameBuffer();
+	virtual void ClearGraphicPipelines();
+	virtual void ClearSyncObject();
+	virtual void ClearRecources();
+	virtual void ClearQueryPool();
+
+
+//
+protected:
+
 
 protected:
 	void InitGeometryResources(Geometry& geo);
@@ -352,7 +391,7 @@ protected:
 
 protected:
 	//runtime
-	Geometry geom;
+	std::vector<Geometry> geoms;
 	//render
 	void DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
 	VkResult Present(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores, uint32_t swapchainImageIndex);
@@ -403,6 +442,7 @@ private:
 
 
 	//};
+
 
 
 	VkInstance instance = VK_NULL_HANDLE;
@@ -460,7 +500,7 @@ private:
 	uint32_t queueFamilyIndex = 0;
 
 
-
+	Barrier barrier;
 
 	//command
 	VkCommandPool commandPool = VK_NULL_HANDLE;
