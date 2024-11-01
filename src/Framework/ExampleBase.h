@@ -2,6 +2,7 @@
 #include "API/VulkanAPI.h"
 #include "Utils/tiny_obj_loader.h"
 #include "Utils/RenderDocTool.h"
+#include "Utils/WindowEventHandler.h"
 #include <map>
 #include <string>
 #include <array>
@@ -369,10 +370,12 @@ protected:
 	int32_t GetSuitableQueueFamilyIndex(VkPhysicalDevice physicalDevice,VkQueueFlags wantQueueFlags,bool needSupportPresent,uint32_t wantNumQueue);
 	void PickValidPhysicalDevice();
 	int32_t GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits,VkMemoryPropertyFlags wantMemoryFlags);
-	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height,uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies,VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT,VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
-	
+	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping = VkComponentMapping{}, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
+	void FillImage(Image& image, uint32_t layer,uint32_t mip, VkImageAspectFlags aspect,VkDeviceSize size, const char* data);
+	void FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data);
 	
 	Texture Load2DTexture(const std::string& texFilePath);
+	Texture Create2DTexture(uint32_t width, uint32_t height, const char* textureDatas);
 	Texture LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths/*+x,-x,+y,-y,+z,-z*/);
 	void LoadObj(const std::string& objFilePath, Geometry& geo);
 	
@@ -396,6 +399,7 @@ protected:
 	void DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
 	VkResult Present(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores, uint32_t swapchainImageIndex);
 
+	void WaitIdle();
 
 	void WaitAllFence(const std::vector<VkFence>& fences);
 	void ResetAllFence(const std::vector<VkFence>& fences);
@@ -458,7 +462,7 @@ private:
 	GLFWwindow* window = nullptr;
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 	VkColorSpaceKHR colorSpace;
-	const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A
+	const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A ,在该格式情况下，片段着色器输出会对调R和B分量，即片段着色器输出（1，0，0，1），实际写入到附件中的是（0，0，1，1），对swapchain中的image，存储在其中的pixel的值为（1，0，0，1）则会显示蓝色
 	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ�����ֵ�ĸ�ʽ
 	VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 

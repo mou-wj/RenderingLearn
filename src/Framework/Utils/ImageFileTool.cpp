@@ -2,7 +2,7 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
-void LoadUint8SRGBJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<uint8_t>& outImageData, uint32_t& outWidth, uint32_t& outHeight)
+void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<char>& outImageData, uint32_t& outWidth, uint32_t& outHeight)
 {
 	int x = 0, y = 0, numChannel = 0;
 	auto imageData = stbi_load(imageFile.c_str(), &x, &y, &numChannel, 4);

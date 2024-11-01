@@ -71,6 +71,7 @@ namespace VulkanAPI {
 	void DestroyImage(VkDevice device, VkImage image);
 
 	VkMemoryRequirements GetImageMemoryRequirments(VkDevice device, VkImage image);
+	VkSubresourceLayout GetImageSubresourceLayout(VkDevice device,VkImage image,const VkImageSubresource& subresource);
 
 
 	//image view

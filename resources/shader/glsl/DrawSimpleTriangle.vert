@@ -7,6 +7,6 @@ layout(location = 4) in vec3 in4;
 layout(location = 5) in vec3 in5;
 layout(location = 0) out vec3 outColor;
 void main(){
-	gl_Position =vec4(inPosition * 0.5f,1.0f);
-	outColor = vec3(1.0,1.0,0.0);
+	gl_Position =vec4(inPosition,1.0f);
+	outColor = vec3(1.0,0.0,0.0);
 }

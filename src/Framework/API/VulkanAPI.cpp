@@ -151,6 +151,13 @@ VkMemoryRequirements VulkanAPI::GetImageMemoryRequirments(VkDevice device, VkIma
 	return memoryRequiremens;
 }
 
+VkSubresourceLayout VulkanAPI::GetImageSubresourceLayout(VkDevice device, VkImage image, const VkImageSubresource& subresource)
+{
+	VkSubresourceLayout layout{};
+	vkGetImageSubresourceLayout(device, image, &subresource, &layout);
+	return layout;
+}
+
 
 VkSurfaceKHR VulkanAPI::CreateWin32Surface(VkInstance instance,GLFWwindow* window)
 {

@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 
+
 using namespace VulkanAPI;
 
 
@@ -85,6 +86,9 @@ void ExampleBase::InitContex()
 {
 	//��������
 	window = CreateWin32Window(windowWidth, windowHeight, "MainWindow");
+
+	//绑定回调
+	WindowEventHandler::BindWindow(window);
 
 	auto requiredExtension = GetInstanceNeedWinGLFWExtensionNames();
 	std::vector<const char*> wantExtensions = { VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
@@ -193,7 +197,7 @@ void ExampleBase::InitAttanchmentDesc()
 {
 	//����color attachment����Դ
 	auto& colorImage = renderTargets.colorAttachment.attachmentImage;
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL);
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
@@ -212,7 +216,7 @@ void ExampleBase::InitAttanchmentDesc()
 
 
 	auto& depthImage = renderTargets.depthAttachment.attachmentImage;
-	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL);
+	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 	renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
 
@@ -395,7 +399,7 @@ int32_t ExampleBase::GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits, VkMemoryPr
 	return -1;
 }
 
-Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,VkFormat format,uint32_t width,uint32_t height, uint32_t depth,uint32_t numMip,uint32_t numLayer,VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkImageTiling tiling,VkSampleCountFlagBits sample, VkImageLayout layout)
+Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,VkFormat format,uint32_t width,uint32_t height, uint32_t depth,uint32_t numMip,uint32_t numLayer,VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping, VkImageTiling tiling,VkSampleCountFlagBits sample, VkImageLayout layout)
 {
 	Image image;
 	image.currentLayout = layout;
@@ -416,37 +420,75 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	{
 		image.hostMapPointer = MapMemory(device, image.memory, 0, imageMemRequiredments.size, 0);
 	}
-	image.imageView = CreateImageView(device, 0, image.image, viewType, format, VkComponentMapping{}, VkImageSubresourceRange{ .aspectMask = aspect,.baseMipLevel = 0,.levelCount = image.numMip ,.baseArrayLayer = 0,.layerCount = image.numLayer });
+	image.imageView = CreateImageView(device, 0, image.image, viewType, format, viewMapping, VkImageSubresourceRange{ .aspectMask = aspect,.baseMipLevel = 0,.levelCount = image.numMip ,.baseArrayLayer = 0,.layerCount = image.numLayer });
 
 
 	return image;
 }
 
+void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, VkDeviceSize size, const char* data)
+{
+	VkImageSubresource subresource;
+	subresource.aspectMask = aspect;
+	subresource.mipLevel = mip;
+	subresource.arrayLayer = layer;
+	auto sublayout = GetImageSubresourceLayout(device, image.image, subresource);
+	FillImage(image, sublayout.offset, size, data);
+}
+
+void ExampleBase::FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data)
+{
+	char* dst = (char*)image.hostMapPointer + offset;
+	std::memcpy(dst, data, size);
+}
+
+
+
 Texture ExampleBase::Load2DTexture(const std::string& texFilePath)
 {
 	uint32_t x = 0, y = 0;
-	std::vector<uint8_t> imageData;
-	LoadUint8SRGBJpeg(texFilePath, { B,G,R,A }, imageData, x, y);
+	std::vector<char> imageData;
+	LoadCharSRGBJpeg(texFilePath, { B,G,R,A }, imageData, x, y);
 
 	//����texture
 	Texture texture;
 	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, x, y, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
+	FillImage(texture.image, 0,0,VK_IMAGE_ASPECT_COLOR_BIT, x * y * 4, imageData.data());
+	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	return texture;
+}
+
+Texture ExampleBase::Create2DTexture(uint32_t width, uint32_t height, const char* textureDatas)
+{
+	Texture texture;
+	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, width, height, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	texture.sampler = CreateDefaultSampler(device, 1);
+	FillImage(texture.image, 0, 0, VK_IMAGE_ASPECT_COLOR_BIT, width * height * 4, textureDatas);
+	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	return texture;
+
+
+	return Texture();
 }
 
 Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths)
 {
 	uint32_t x = 0, y = 0;
-	std::array<std::vector<uint8_t>, 6> imageFaceDatas;
+	std::array<std::vector<char>, 6> imageFaceDatas;
 	for (uint32_t i = 0; i < 6; i++)
 	{
-		LoadUint8SRGBJpeg(faceTexFilePaths[i], { B,G,R,A }, imageFaceDatas[i], x, y);
+		LoadCharSRGBJpeg(faceTexFilePaths[i], { B,G,R,A }, imageFaceDatas[i], x, y);
 	}
 	//����texture
 	Texture texture;
 	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE, colorFormat, x, y, 1, 1, 6, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
+	for (uint32_t i = 0; i < 6; i++)
+	{
+		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x * y * 4, imageFaceDatas[i].data());
+	}
+	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	return texture;
 }
 
@@ -1312,6 +1354,14 @@ VkResult ExampleBase::Present(const std::vector<VkSemaphore>& waitSemaphores, co
 	VkResult returnRes;
 	returnRes = res[0];
 	return returnRes;
+}
+
+void ExampleBase::WaitIdle()
+{
+	WaitQueueIdle(graphicQueue);
+	WaitQueueIdle(transferQueue);
+	WaitQueueIdle(presentQueue);
+
 }
 
 void ExampleBase::WaitAllFence(const std::vector<VkFence>& fences)

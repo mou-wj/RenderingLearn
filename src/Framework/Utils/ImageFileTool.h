@@ -9,4 +9,4 @@ enum PixelComponent:uint32_t
 	A = 3
 };
 
-void LoadUint8SRGBJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<uint8_t>& outImageData, uint32_t& outWidth, uint32_t& outHeight);;
+void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<char>& outImageData, uint32_t& outWidth, uint32_t& outHeight);;
