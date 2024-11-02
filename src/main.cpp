@@ -1,11 +1,13 @@
-#include "Examples/DrawSimpleTriangleSample.h"
+#include "Examples/SimpleExamples/DrawSimpleTriangleSample.h"
+#include "Examples/SimpleExamples/UniformExample.h"
 int main()
 {
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 
-	DrawSimpleTriangleSample sample;
-	sample.Run(&sample);
+	//DrawSimpleTriangleSample exsample;
+	UniformExample exsample;
+	ExampleBase::Run(&exsample);
 
 
 	return 0;

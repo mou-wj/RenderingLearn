@@ -1,9 +1,10 @@
 #pragma once
-#include "../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBase.h"
 class DrawSimpleTriangleSample : public ExampleBase
 {
 public:
 	DrawSimpleTriangleSample() = default;
+
 
 
 protected:

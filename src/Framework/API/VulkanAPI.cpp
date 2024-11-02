@@ -542,7 +542,7 @@ VkPipelineLayout VulkanAPI::CreatePipelineLayout(VkDevice device, VkPipelineLayo
 	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutCreateInfo.pNext = nullptr;
 	pipelineLayoutCreateInfo.setLayoutCount = setLayouts.size();
-	pipelineLayoutCreateInfo.pNext = setLayouts.data();
+	pipelineLayoutCreateInfo.pSetLayouts = setLayouts.data();
 	pipelineLayoutCreateInfo.pushConstantRangeCount = pushConstantRanges.size();
 	pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
 	auto res = vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout);
@@ -868,6 +868,13 @@ void VulkanAPI::CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoi
 	vkCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline);
 }
 
+void VulkanAPI::CmdBindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, const std::vector<VkDescriptorSet> descriptorSets, const std::vector<uint32_t> dynamicOffsets)
+{
+	vkCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSets.size(), descriptorSets.data(), dynamicOffsets.size(), dynamicOffsets.size() ? dynamicOffsets.data() : nullptr);
+}
+
+
+
 void VulkanAPI::CmdDynamicSetViewPorts(VkCommandBuffer commandBuffer, uint32_t firstViewport, const std::vector<VkViewport>& viewports)
 {
 	vkCmdSetViewport(commandBuffer, firstViewport, viewports.size(), viewports.data());
@@ -1172,4 +1179,9 @@ VkDebugUtilsMessengerEXT VulkanAPI::CreateDebugInfoMessager(VkInstance instance)
 	ASSERT(debugUtilsMessenger);
 	return debugUtilsMessenger;
 
+}
+
+void VulkanAPI::DestroyDebugInfoMessager(VkInstance instance, VkDebugUtilsMessengerEXT debugMessager)
+{
+	((PFN_vkDestroyDebugUtilsMessengerEXT)InstanceFuncLoader(instance, "vkDestroyDebugUtilsMessengerEXT"))(instance, debugMessager, nullptr);
 }

@@ -37,6 +37,7 @@ void ExampleBase::Init()
 	{
 		return;
 	}
+	ParseShaderFiles();
 	initFlag = true;
 	Initialize();
 	InitContex();
@@ -50,8 +51,9 @@ void ExampleBase::Init()
 	InitRecources();
 }
 
-void ExampleBase::ParseShaderFiles(const std::vector<ShaderCodePaths>& shaderPaths)
+void ExampleBase::ParseShaderFiles()
 {
+	const auto & shaderPaths = pipelinesShaderCodePaths;
 	graphcisPipelineInfos.resize(shaderPaths.size());
 	std::vector<char> tmpCode;
 	for (uint32_t i = 0; i < shaderPaths.size(); i++)
@@ -442,6 +444,13 @@ void ExampleBase::FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size
 	std::memcpy(dst, data, size);
 }
 
+void ExampleBase::DestroyImage(const Image& image)
+{
+	VulkanAPI::DestroyImage(device, image.image);
+	DestroyImageView(device, image.imageView);
+	ReleaseMemory(device, image.memory);
+}
+
 
 
 Texture ExampleBase::Load2DTexture(const std::string& texFilePath)
@@ -526,6 +535,12 @@ void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize si
 	char* dst = (char*)buffer.hostMapPointer + offset;
 	std::memcpy(dst, data, size);
 
+}
+
+void ExampleBase::DestroyBuffer(Buffer& buffer)
+{
+	VulkanAPI::DestroyBuffer(device, buffer.buffer);
+	ReleaseMemory(device, buffer.memory);
 }
 
 void ExampleBase::TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout)
@@ -715,6 +730,11 @@ void ExampleBase::InitRecources()
 		InitGeometryResources(geoms[i]);
 	}
 
+	InitTextureResources();
+
+	InitUniformBufferResources();
+
+
 }
 
 void ExampleBase::InitQueryPool()
@@ -733,24 +753,27 @@ void ExampleBase::Clear()
 	ClearFrameBuffer();
 	ClearAttanchment();
 	ClearRecources();
+	ClearSyncObject();
+	ClearQueryPool();
 	ClearContex();
 }
 
 void ExampleBase::ClearContex()
-{				  
+{				
+	DesctroyCommandPool(device, commandPool);
+
 	DestroySwapchain(device, swapchain);
 	DestroyDevice(device);
 	DestroySurface(instance, surface);
 	DestroyGLFWWin32Window(window);
+	DestroyDebugInfoMessager(instance,debugUtilMessager);
 	DestroyInstance(instance);
 }				  
 				  
 void ExampleBase::ClearAttanchment()
 {				  
-	DestroyImageView(device,renderTargets.colorAttachment.attachmentImage.imageView);
-	DestroyImage(device, renderTargets.colorAttachment.attachmentImage.image);
-	DestroyImageView(device, renderTargets.depthAttachment.attachmentImage.imageView);
-	DestroyImage(device, renderTargets.depthAttachment.attachmentImage.image);
+	DestroyImage(renderTargets.colorAttachment.attachmentImage);
+	DestroyImage(renderTargets.depthAttachment.attachmentImage);
 }				  
 				  
 void ExampleBase::ClearRenderPass()
@@ -803,19 +826,25 @@ void ExampleBase::ClearRecources()
 	//清除textures
 	for (auto iter = textures.begin(); iter != textures.end(); iter++)
 	{
-		DestroyImageView(device, (*iter).second.image.imageView);
-		VulkanAPI::DestroyImage(device, (*iter).second.image.image);
+		DestroyImage((*iter).second.image);
 	}
 
 	//清除geometry
 	for (uint32_t i = 0; i < geoms.size(); i++)
 	{
-		DestroyBuffer(device,geoms[i].vertexBuffer.buffer);
+		DestroyBuffer(geoms[i].vertexBuffer);
 		for (uint32_t zoneId = 0; zoneId < geoms[i].indexBuffers.size(); zoneId++)
 		{
-			DestroyBuffer(device, geoms[i].indexBuffers[zoneId].buffer);
+			DestroyBuffer(geoms[i].indexBuffers[zoneId]);
 		}
 	}
+
+	//清除Uniform buffer
+	for (auto& uniformBuffer : uniformBuffers)
+	{
+		DestroyBuffer(uniformBuffer.second);
+	}
+
 
 }				  
 				  
@@ -877,6 +906,61 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 
 
 
+
+}
+
+void ExampleBase::InitTextureResources()
+{
+	//根据texture infos创建texture并更新
+	for (const auto& textureInfo : textureInfos)
+	{
+		Texture texture;
+		ASSERT(textureInfo.second.textureDataSources.size());
+		switch (textureInfo.second.viewType)
+		{
+		case VK_IMAGE_VIEW_TYPE_2D: {
+
+			auto& textureDataSource = textureInfo.second.textureDataSources[0];
+			if (textureInfo.second.textureDataSources[0].picturePath != "")
+			{
+				texture = Load2DTexture(textureDataSource.picturePath);
+			}
+			else {
+				texture = Create2DTexture(textureDataSource.width, textureDataSource.height, textureDataSource.imagePixelDatas.data());
+			}
+			textures[textureInfo.first] = texture;
+
+			break;
+		}
+		case VK_IMAGE_VIEW_TYPE_CUBE: {
+			ASSERT(textureInfo.second.textureDataSources.size() == 6);
+			Texture texture;
+			std::array<std::string, 6> cubeFaceFiles;
+			for (uint32_t i = 0; i < 6; i++)
+			{
+				ASSERT(textureInfo.second.textureDataSources[i].picturePath != "");
+				cubeFaceFiles[i] = textureInfo.second.textureDataSources[i].picturePath;
+			}
+			texture = LoadCubeTexture(cubeFaceFiles);
+			textures[textureInfo.first] = texture;
+		}
+		default:
+			break;
+		}
+		//绑定texture
+		BindTexture(texture, textureInfo.second.pipeId, textureInfo.second.setId, textureInfo.second.binding, textureInfo.second.elementId);
+
+	}
+
+}
+
+void ExampleBase::InitUniformBufferResources()
+{
+	for (const auto& unifomBufferInfo : uniformBufferInfos)
+	{
+		uniformBuffers[unifomBufferInfo.first] = CreateUniformBuffer(nullptr, unifomBufferInfo.second.size);
+		BindUniformBuffer(uniformBuffers[unifomBufferInfo.first], unifomBufferInfo.second.pipeId, unifomBufferInfo.second.setId, unifomBufferInfo.second.binding, unifomBufferInfo.second.elementId);
+	}
 
 }
 
@@ -1091,7 +1175,14 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		bindingInfo.binding = shaderCompiler.get_decoration(uniBuff.id, spv::DecorationBinding);
 		bindingInfo.setId = shaderCompiler.get_decoration(uniBuff.id, spv::DecorationDescriptorSet);
 		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
+		if (type.array.empty())
+		{
+			bindingInfo.numDescriptor = 1;
+		}
+		else {
+			bindingInfo.numDescriptor = type.array[0];
+		}
+		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
 		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
 	}
 
@@ -1103,9 +1194,16 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		bindingInfo.setId = shaderCompiler.get_decoration(samplerImage.id, spv::Decoration::DecorationDescriptorSet);
 		bindingInfo.binding = shaderCompiler.get_decoration(samplerImage.id, spv::DecorationBinding);
 		bindingInfo.name = samplerImage.name;
-		bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
-		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-
+		if (type.array.empty())
+		{
+			bindingInfo.numDescriptor = 1;
+		}
+		else {
+			bindingInfo.numDescriptor = type.array[0];
+		}
+		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
+		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
 	}
 
 
@@ -1210,7 +1308,7 @@ void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::ve
 
 	EndRecord(toolCommandBuffer);
 	
-	LogInfo("src image " << std::hex << (long long)srcImage.image << "dstimage " << (long long)dstImage.image);
+	//LogInfo("src image " << std::hex << (long long)srcImage.image << "dstimage " << (long long)dstImage.image);
 	SubmitCommands(transferQueue, waitSemaphores, waitPipelineStages, { toolCommandBuffer }, sigSemaphores, toolCommmandBufferFence);
 	
 }
@@ -1299,6 +1397,27 @@ uint32_t ExampleBase::GetNextPresentImageIndex(VkSemaphore sigValidSemaphore)
 	return nextImageIndex;
 }
 
+void ExampleBase::BindTexture(const Texture& texture, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId)
+{
+	VkDescriptorImageInfo descriptorImageInfo{};
+	descriptorImageInfo.sampler = texture.sampler;
+	descriptorImageInfo.imageLayout = texture.image.currentLayout;
+	descriptorImageInfo.imageView = texture.image.imageView;
+	UpdateDescriptorSetBindingResources(device, graphcisPipelineInfos[pipeId].descriptorSetInfos[set].descriptorSet, binding, elemenId, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, { descriptorImageInfo }, {}, {});
+
+
+}
+
+void ExampleBase::BindUniformBuffer(const Buffer& uniformBuffer, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId)
+{
+	VkDescriptorBufferInfo descriptorBufferInfo{};
+	descriptorBufferInfo.buffer = uniformBuffer.buffer;
+	descriptorBufferInfo.offset = 0;
+	descriptorBufferInfo.range = uniformBuffer.size;
+	UpdateDescriptorSetBindingResources(device, graphcisPipelineInfos[pipeId].descriptorSetInfos[set].descriptorSet, binding, elemenId, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, {  }, { descriptorBufferInfo }, {});
+
+}
+
 
 void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {
@@ -1325,7 +1444,10 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 		for (uint32_t i = 0; i < graphcisPipelineInfos.size(); i++)
 		{
 			CmdBindPipeline(renderCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipeline);
-
+			for (const auto& setInfo : graphcisPipelineInfos[i].descriptorSetInfos)
+			{
+				CmdBindDescriptorSet(renderCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
+			}
 			CmdBeginQuery(renderCommandBuffer, queryPool, 0, 0);
 			CmdDrawIndex(renderCommandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
 			CmdEndQuery(renderCommandBuffer, queryPool, 0);

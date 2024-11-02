@@ -239,12 +239,12 @@ struct Image {
 
 	}
 	bool WholeCopyCompatible(const Image& other) {
-		return tiling == other.tiling && numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
+		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
 			extent.width == other.extent.width && extent.height == other.extent.height && extent.depth == other.extent.depth && ChechFormatSizeCompatible(other.format);
 	}
 	bool WholeBlitCompatible(const Image& other)
 	{
-		return tiling == other.tiling && numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
+		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
 			 ChechFormatSizeCompatible(other.format);
 	}
 	bool ChechFormatSizeCompatible(VkFormat otherFormat)
@@ -262,6 +262,17 @@ struct Image {
 	}
 };
 
+struct TextureDataSource {
+	std::string picturePath = "";
+	std::vector<char> imagePixelDatas;//VK_FORMAT_B8G8R8A8_SRGB
+	uint32_t width = 0, height = 0;
+
+};
+struct TextureInfo {
+	std::vector<TextureDataSource> textureDataSources;
+	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
+};
 struct Texture {
 	Image image;
 	VkSampler sampler;
@@ -309,6 +320,11 @@ struct SubpassInfo {
 
 };
 
+struct UniformBufferInfo {
+	uint32_t size;
+	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
+};
+
 class ExampleBase {
 	//
 
@@ -328,12 +344,11 @@ protected:
 		std::string geometryShaderPath = "";
 		std::string fragmentShaderPath = "";
 	};
-	void ParseShaderFiles(const std::vector<ShaderCodePaths>& shaderPaths);
+
 
 protected:
 
 protected:
-	//virtual void InitTextures() = 0;
 	virtual void InitSubPassInfo() = 0;
 	virtual void InitContex();
 	virtual void InitAttanchmentDesc();
@@ -344,7 +359,9 @@ protected:
 	virtual void InitSyncObject();
 	virtual void InitRecources();
 	virtual void InitQueryPool();
-
+	void InitGeometryResources(Geometry& geo);
+	void InitTextureResources();
+	void InitUniformBufferResources();
 protected:
 	virtual void Clear();
 	virtual void ClearContex();
@@ -362,8 +379,7 @@ protected:
 
 
 protected:
-	void InitGeometryResources(Geometry& geo);
-	void InitTextureResources();
+
 
 protected:
 	//utils
@@ -373,7 +389,8 @@ protected:
 	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping = VkComponentMapping{}, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
 	void FillImage(Image& image, uint32_t layer,uint32_t mip, VkImageAspectFlags aspect,VkDeviceSize size, const char* data);
 	void FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data);
-	
+	void DestroyImage(const Image& image);
+
 	Texture Load2DTexture(const std::string& texFilePath);
 	Texture Create2DTexture(uint32_t width, uint32_t height, const char* textureDatas);
 	Texture LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths/*+x,-x,+y,-y,+z,-z*/);
@@ -383,6 +400,7 @@ protected:
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateUniformBuffer(const char* buf, VkDeviceSize size);
 	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
+	void DestroyBuffer(Buffer& buffer);
 
 	void TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout);
 	void TransferImageLayout(Image& image,VkImageLayout dstImageLayout, VkImageSubresourceRange subRange);
@@ -390,6 +408,10 @@ protected:
 	void CopyImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
 	void BlitImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
 	uint32_t GetNextPresentImageIndex(VkSemaphore sigValidSemaphore);
+
+	//descriptor
+	void BindTexture(const Texture& texture, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId = 0);
+	void BindUniformBuffer(const Buffer& uniformBuffer, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId = 0);
 
 
 protected:
@@ -406,6 +428,9 @@ protected:
 
 	VkSemaphore drawSemaphore = VK_NULL_HANDLE,presentValidSemaphore = VK_NULL_HANDLE, presentFinishSemaphore = VK_NULL_HANDLE;;
 
+	std::map<std::string, TextureInfo> textureInfos;
+	std::map<std::string, UniformBufferInfo> uniformBufferInfos;
+	std::vector<ShaderCodePaths> pipelinesShaderCodePaths;
 private:
 	
 	//shader parse
@@ -414,6 +439,7 @@ private:
 	void TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLSLFile, std::vector<uint32_t>& outSpirvCode);
 	void ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo);
 	void ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spirvCode, ShaderResourceInfo& dstCacheShaderResource);
+	void ParseShaderFiles();
 	//create descriptor set layout
 
 	//create pipeline layout
@@ -434,7 +460,7 @@ protected:
 	RenderTargets renderTargets;
 	std::vector<Image> swapchainImages;
 	VkSemaphore swapchainImageValidSemaphore;
-
+	uint32_t windowWidth = 512, windowHeight = 512;
 private:
 
 	bool initFlag = false;
@@ -458,7 +484,7 @@ private:
 	;
 	VkDevice device = VK_NULL_HANDLE;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
-	uint32_t windowWidth = 512, windowHeight = 512;
+
 	GLFWwindow* window = nullptr;
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 	VkColorSpaceKHR colorSpace;
@@ -469,8 +495,8 @@ private:
 
 
 
-
 	std::map<std::string, Texture> textures;
+	std::map<std::string, Buffer> uniformBuffers;
 
 	const std::array<VertexAttributeType, 6> vertexAttributes = {
 		VAT_Position_float32,//location 0

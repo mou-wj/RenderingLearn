@@ -18,6 +18,8 @@ namespace VulkanAPI {
 	void DestroyInstance(VkInstance instance);
 	void* InstanceFuncLoader(VkInstance instance, const char* funcName);
 	VkDebugUtilsMessengerEXT CreateDebugInfoMessager(VkInstance instance);
+	void DestroyDebugInfoMessager(VkInstance instance, VkDebugUtilsMessengerEXT debugMessager);
+
 	std::vector<VkPhysicalDevice> EnumeratePhysicalDevice(VkInstance instance);
 	std::vector<VkPhysicalDeviceProperties> EnumeratePhysicalDeviceProperties(VkInstance instance);
 	std::vector<VkQueueFamilyProperties> GetQueueFamilyProperties(VkPhysicalDevice physicalDevice);
@@ -288,6 +290,9 @@ namespace VulkanAPI {
 	void CmdBindPipeline(VkCommandBuffer  commandBuffer,
 						VkPipelineBindPoint  pipelineBindPoint,
 						VkPipeline  pipeline);
+	void CmdBindPipelineLayout(VkCommandBuffer  commandBuffer);
+	void CmdBindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout,
+						uint32_t firstSet, const std::vector<VkDescriptorSet> descriptorSets, const std::vector<uint32_t> dynamicOffsets);
 
 	//dynamic state
 	void CmdDynamicSetViewPorts(VkCommandBuffer commandBuffer, uint32_t firstViewport, const std::vector<VkViewport>& viewports);

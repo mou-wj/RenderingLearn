@@ -1,18 +1,18 @@
-#include "DrawSimpleTriangleSample.h"
+#include "UniformExample.h"
 
-void DrawSimpleTriangleSample::InitSubPassInfo()
+void UniformExample::InitSubPassInfo()
 {
 	InitDefaultGraphicSubpassInfo();
 
 
 }
 
-void DrawSimpleTriangleSample::InitResourceInfos()
+void UniformExample::InitResourceInfos()
 {
 	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/resources/shader/glsl/DrawSimpleTriangle.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/resources/shader/glsl/DrawSimgleTriangle.frag";
-	ParseShaderFiles({ shaderCodePath });
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.frag";
+	pipelinesShaderCodePaths = { shaderCodePath };
 	//LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geom);
 	geoms.resize(1);
 	auto& geom = geoms[0];
@@ -41,11 +41,17 @@ void DrawSimpleTriangleSample::InitResourceInfos()
 	geom.shapes.push_back(triangle);
 
 
+	//	
+	TextureDataSource dataSource;
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/OIP.jpg";
+	textureInfos["OIP"].textureDataSources.push_back(dataSource);
+	textureInfos["OIP"].binding = 1;
 
+	uniformBufferInfos["Buffer"].size = 9;
 
 }
 
-void DrawSimpleTriangleSample::Loop()
+void UniformExample::Loop()
 {
 	uint32_t i = 0;;
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
@@ -66,7 +72,16 @@ void DrawSimpleTriangleSample::Loop()
 	//}
 
 	//Texture testTexture = Create2DTexture(512, 512, testImageData.data());
-	while (1)
+	struct Buffer {
+		float width, height;
+		bool enableTexture;
+	} buffer;
+	buffer.width = windowWidth;
+	buffer.height = windowHeight;
+	buffer.enableTexture = true;
+
+
+	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
 		WindowEventHandler::ProcessEvent();
@@ -74,7 +89,7 @@ void DrawSimpleTriangleSample::Loop()
 		DrawGeom({}, { drawSemaphore });
 		auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);
 		CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore,drawSemaphore }, { presentValidSemaphore });
-		
+
 		//CopyImageToImage(testTexture.image, swapchainImages[nexIndex], { swapchainImageValidSemaphore }, { presentValidSemaphore });
 		//CopyImageToImage(renderTargets.colorAttachment.attachmentImage,testTexture.image, { drawSemaphore }, { presentValidSemaphore });
 		//WaitIdle();
@@ -84,7 +99,7 @@ void DrawSimpleTriangleSample::Loop()
 		//auto b = rgba[2];
 		//auto a = rgba[3];
 
-		Present({ presentValidSemaphore }, {presentFinishSemaphore}, nexIndex);
+		Present({ presentValidSemaphore }, { presentFinishSemaphore }, nexIndex);
 
 	}
 

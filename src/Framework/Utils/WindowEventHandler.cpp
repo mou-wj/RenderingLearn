@@ -1,5 +1,7 @@
 #include "WindowEventHandler.h"
 
+GLFWwindow* WindowEventHandler::currentWidnow = nullptr;
+
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     //if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
         // 处理左键按下事件
@@ -16,6 +18,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
 void WindowEventHandler::BindWindow(GLFWwindow* window)
 {
+    currentWidnow = window;
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
     glfwSetKeyCallback(window, key_callback);
@@ -25,4 +28,9 @@ void WindowEventHandler::BindWindow(GLFWwindow* window)
 void WindowEventHandler::ProcessEvent()
 {
     glfwPollEvents();
+}
+
+bool WindowEventHandler::WindowShouldClose()
+{
+    return glfwWindowShouldClose(currentWidnow);
 }
