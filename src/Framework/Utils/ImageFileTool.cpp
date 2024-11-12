@@ -5,15 +5,15 @@
 void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<char>& outImageData, uint32_t& outWidth, uint32_t& outHeight)
 {
 	int x = 0, y = 0, numChannel = 0;
-	auto imageData = stbi_load(imageFile.c_str(), &x, &y, &numChannel, 4);
+	auto imageData = stbi_load(imageFile.c_str(), &x, &y, &numChannel,4);
 	outWidth = x;
 	outHeight = y;
 	uint32_t wantNumComps = wantPixelComponents.size();
 	outImageData.resize(outWidth * outHeight * wantNumComps);
-
-	for (uint32_t row = 0; row < x; row++)
+	stbi_write_jpg("test1.jpg", x, y, 4, imageData, 0);
+	for (uint32_t row = 0; row < y; row++)
 	{
-		for (uint32_t col = 0; col < y; col++)
+		for (uint32_t col = 0; col < x; col++)
 		{
 			for (uint32_t i = 0; i < wantPixelComponents.size(); i++)
 			{
@@ -21,5 +21,6 @@ void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelCompo
 			}
 		}
 	}
+	stbi_write_jpg("test2.jpg", x, y, 4, outImageData.data(), 0);
 	stbi_image_free(imageData);
 }

@@ -528,7 +528,7 @@ VkSampler VulkanAPI::CreateDefaultSampler(VkDevice device, float maxLod)
 	return CreateSampler(device, 0, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, 0, VK_FALSE, 0, VK_FALSE, VK_COMPARE_OP_ALWAYS, 0, maxLod, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, VK_FALSE);
 }
 
-void VulkanAPI::DesctroySampler(VkDevice device, VkSampler sampler)
+void VulkanAPI::DestroySampler(VkDevice device, VkSampler sampler)
 {
 	vkDestroySampler(device, sampler, nullptr);
 }

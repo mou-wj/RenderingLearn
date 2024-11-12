@@ -1,57 +1,43 @@
-#include "UniformExample.h"
+#include "SkyBoxExample.h"
+#include "glm/mat4x4.hpp"
 
-void UniformExample::InitSubPassInfo()
+void SkyBoxExample::InitSubPassInfo()
 {
 	InitDefaultGraphicSubpassInfo();
 
 
 }
 
-void UniformExample::InitResourceInfos()
+void SkyBoxExample::InitResourceInfos()
 {
 	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.frag";
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.frag";
 	pipelinesShaderCodePaths = { shaderCodePath };
-	//LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geom);
 	geoms.resize(1);
-	auto& geom = geoms[0];
-	geom.vertexAttrib.vertices = {
-		-1,1,0,
-		1,1,0,
-		1,-1,0,
-		-1,-1,0
-	};
-	tinyobj::shape_t triangle;
-	tinyobj::index_t index;
-	index.vertex_index = 0;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 1;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 2;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	index.vertex_index = 0;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 2;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 3;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	geom.shapes.push_back(triangle);
-
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 
 	//	
 	TextureDataSource dataSource;
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/OIP.jpg";
-	textureInfos["OIP"].textureDataSources.push_back(dataSource);
-	textureInfos["OIP"].binding = 1;
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg";//+x
+	textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg";//-x
+	textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg";//+y
+	textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//-x
+	textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg";//+z
+	textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg";//-z
+	textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	textureInfos["skybox"].binding = 1;
 
-	uniformBufferInfos["Buffer"].size = 12;
-
+	uniformBufferInfos["Buffer"].size = sizeof(glm::mat4) * 4;
+	uniformBufferInfos["Buffer"].binding = 0;
 }
 
-void UniformExample::Loop()
+void SkyBoxExample::Loop()
 {
 	uint32_t i = 0;;
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
@@ -79,8 +65,8 @@ void UniformExample::Loop()
 	buffer.width = windowWidth;
 	buffer.height = windowHeight;
 	buffer.enableTexture = true;
-	
-	FillBuffer(uniformBuffers["Buffer"], 0, 12, (const char*)& buffer);
+
+	FillBuffer(uniformBuffers["Buffer"], 0, 12, (const char*)&buffer);
 
 	uint32_t numCap = 4;
 	while (!WindowEventHandler::WindowShouldClose())
@@ -89,11 +75,11 @@ void UniformExample::Loop()
 		WindowEventHandler::ProcessEvent();
 		//if (numCap != 0)
 		//{
-			CaptureBeginMacro
-//		}
-		//确保presentFence在创建时已经触发
-		DrawGeom({}, { drawSemaphore });
-			CaptureEndMacro;
+		CaptureBeginMacro
+			//		}
+					//确保presentFence在创建时已经触发
+			DrawGeom({}, { drawSemaphore });
+		CaptureEndMacro;
 
 		auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);
 		CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore,drawSemaphore }, { presentValidSemaphore });
@@ -110,7 +96,7 @@ void UniformExample::Loop()
 		Present({ presentValidSemaphore }, { presentFinishSemaphore }, nexIndex);
 		//if (numCap != 0)
 		//{
-			;
+		;
 		//	numCap--;
 		//}
 

@@ -155,7 +155,7 @@ namespace VulkanAPI {
 				VkBorderColor           borderColor,
 				VkBool32                unnormalizedCoordinates);
 	VkSampler CreateDefaultSampler(VkDevice device,float maxLod);
-	void DesctroySampler(VkDevice device,VkSampler sampler);
+	void DestroySampler(VkDevice device,VkSampler sampler);
 
 	//pipeline layout
 	VkPipelineLayout CreatePipelineLayout(VkDevice device, VkPipelineLayoutCreateFlags     flags,

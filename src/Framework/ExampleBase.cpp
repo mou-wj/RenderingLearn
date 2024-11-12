@@ -428,14 +428,23 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	return image;
 }
 
-void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, VkDeviceSize size, const char* data)
+void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data)
 {
 	VkImageSubresource subresource;
 	subresource.aspectMask = aspect;
 	subresource.mipLevel = mip;
 	subresource.arrayLayer = layer;
 	auto sublayout = GetImageSubresourceLayout(device, image.image, subresource);
-	FillImage(image, sublayout.offset, size, data);
+	VkDeviceSize rowOffset = sublayout.offset;
+	for (uint32_t i = 0; i < height; i++)
+	{
+		//填充每一行
+		rowOffset = i * sublayout.rowPitch;
+		FillImage(image, rowOffset, width * numComponets, data + i * width * numComponets);
+
+
+	}
+
 }
 
 void ExampleBase::FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data)
@@ -463,7 +472,7 @@ Texture ExampleBase::Load2DTexture(const std::string& texFilePath)
 	Texture texture;
 	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, x, y, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
-	FillImage(texture.image, 0,0,VK_IMAGE_ASPECT_COLOR_BIT, x * y * 4, imageData.data());
+	FillImage(texture.image, 0,0,VK_IMAGE_ASPECT_COLOR_BIT, x,  y, 4, imageData.data());
 	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	return texture;
 }
@@ -473,7 +482,7 @@ Texture ExampleBase::Create2DTexture(uint32_t width, uint32_t height, const char
 	Texture texture;
 	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, width, height, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 	texture.sampler = CreateDefaultSampler(device, 1);
-	FillImage(texture.image, 0, 0, VK_IMAGE_ASPECT_COLOR_BIT, width * height * 4, textureDatas);
+	FillImage(texture.image, 0, 0, VK_IMAGE_ASPECT_COLOR_BIT, width , height , 4, textureDatas);
 	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	return texture;
 
@@ -495,7 +504,7 @@ Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFi
 	texture.sampler = CreateDefaultSampler(device, 1);
 	for (uint32_t i = 0; i < 6; i++)
 	{
-		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x * y * 4, imageFaceDatas[i].data());
+		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x , y , 4, imageFaceDatas[i].data());
 	}
 	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	return texture;
@@ -827,6 +836,7 @@ void ExampleBase::ClearRecources()
 	for (auto iter = textures.begin(); iter != textures.end(); iter++)
 	{
 		DestroyImage((*iter).second.image);
+		DestroySampler(device, (*iter).second.sampler);
 	}
 
 	//清除geometry

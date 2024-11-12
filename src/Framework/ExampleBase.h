@@ -387,7 +387,7 @@ protected:
 	void PickValidPhysicalDevice();
 	int32_t GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits,VkMemoryPropertyFlags wantMemoryFlags);
 	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping = VkComponentMapping{}, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
-	void FillImage(Image& image, uint32_t layer,uint32_t mip, VkImageAspectFlags aspect,VkDeviceSize size, const char* data);
+	void FillImage(Image& image, uint32_t layer,uint32_t mip, VkImageAspectFlags aspect, uint32_t width,uint32_t height,uint32_t numComponets, const char* data);
 	void FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data);
 	void DestroyImage(const Image& image);
 
@@ -426,6 +426,7 @@ protected:
 	void WaitAllFence(const std::vector<VkFence>& fences);
 	void ResetAllFence(const std::vector<VkFence>& fences);
 
+
 	VkSemaphore drawSemaphore = VK_NULL_HANDLE,presentValidSemaphore = VK_NULL_HANDLE, presentFinishSemaphore = VK_NULL_HANDLE;;
 
 	std::map<std::string, TextureInfo> textureInfos;
@@ -456,11 +457,14 @@ private:
 
 
 protected:
+	//这里的数据不能被派生类创建和析构
 	//render pass ֻ
 	RenderTargets renderTargets;
 	std::vector<Image> swapchainImages;
 	VkSemaphore swapchainImageValidSemaphore;
 	uint32_t windowWidth = 512, windowHeight = 512;
+	std::map<std::string, Texture> textures;
+	std::map<std::string, Buffer> uniformBuffers;
 private:
 
 	bool initFlag = false;
@@ -488,15 +492,14 @@ private:
 	GLFWwindow* window = nullptr;
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 	VkColorSpaceKHR colorSpace;
-	const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A ,在该格式情况下，片段着色器输出会对调R和B分量，即片段着色器输出（1，0，0，1），实际写入到附件中的是（0，0，1，1），对swapchain中的image，存储在其中的pixel的值为（1，0，0，1）则会显示蓝色
+	const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A ,在该格式情况下，片段着色器输出会对调R和B分量，即片段着色器输出（1，0，0，1），实际写入到附件中的是（0，0，1，1），对swapchain中的image，存储在其中的pixel的值为（1，0，0，1）则会显示蓝色,着色器中采样获取的格式为（R,G,B,A）,要想正常的在该格式下进行显示，在片段着色其中的颜色输出需要按照正常的R，G，B，A格式，采样得到的颜色也是按照R，G，B，A格式
 	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ�����ֵ�ĸ�ʽ
 	VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
 
 
 
-	std::map<std::string, Texture> textures;
-	std::map<std::string, Buffer> uniformBuffers;
+
 
 	const std::array<VertexAttributeType, 6> vertexAttributes = {
 		VAT_Position_float32,//location 0
