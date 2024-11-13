@@ -3,14 +3,22 @@
 #include <Windows.h>
 void RenderDocTool::CaptureBegin()
 {
-
+    if (numCaptures == 0)
+    {
+        return;
+    }
 
     // 启动 RenderDoc 捕获
     rdoc_api->StartFrameCapture(nullptr, nullptr);
+    numCaptures--;
 }
 
 void RenderDocTool::CaptureEnd()
 {
+    if (numCaptures == 0)
+    {
+        return;
+    }
     // 使用之前获取到的 API 指针
     // ...
 
@@ -24,6 +32,11 @@ void RenderDocTool::SetCaptureOutPath(std::string outPath)
     captureOutPath = outPath;
     rdoc_api->SetCaptureFilePathTemplate(captureOutPath.c_str());
     //rdoc_api->SetLogFilePathTemplate(captureOutPath.c_str());
+}
+
+void RenderDocTool::SetNumCaptures(uint32_t numCapture)
+{
+    numCaptures = numCapture;
 }
 
 void RenderDocTool::WriteCaptureOut()

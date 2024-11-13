@@ -32,8 +32,12 @@ void SkyBoxExample::InitResourceInfos()
 	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg";//-z
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
 	textureInfos["skybox"].binding = 1;
+	textureInfos["skybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 
-	uniformBufferInfos["Buffer"].size = sizeof(glm::mat4) * 4;
+
+
+
+	uniformBufferInfos["Buffer"].size = sizeof(glm::mat4) * 3;
 	uniformBufferInfos["Buffer"].binding = 0;
 }
 
@@ -59,26 +63,23 @@ void SkyBoxExample::Loop()
 
 	//Texture testTexture = Create2DTexture(512, 512, testImageData.data());
 	struct Buffer {
-		float width, height;
-		uint32_t enableTexture;
+		glm::mat4 world;
+		glm::mat4 view;
+		glm::mat4 proj;
 	} buffer;
-	buffer.width = windowWidth;
-	buffer.height = windowHeight;
-	buffer.enableTexture = true;
+	buffer.world = Transform::GetTransformMatrixFromRH();
+	buffer.view = Transform::GetViewMatrix(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0));;
+	buffer.proj = Transform::GetPerspectiveProj(0.1,100,90,1);
 
-	FillBuffer(uniformBuffers["Buffer"], 0, 12, (const char*)&buffer);
+	FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 	uint32_t numCap = 4;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
 		WindowEventHandler::ProcessEvent();
-		//if (numCap != 0)
-		//{
 		CaptureBeginMacro
-			//		}
-					//确保presentFence在创建时已经触发
-			DrawGeom({}, { drawSemaphore });
+		DrawGeom({}, { drawSemaphore });
 		CaptureEndMacro;
 
 		auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);

@@ -3,6 +3,7 @@
 #include "Utils/tiny_obj_loader.h"
 #include "Utils/RenderDocTool.h"
 #include "Utils/WindowEventHandler.h"
+#include "Common/Transform.h"
 #include <map>
 #include <string>
 #include <array>

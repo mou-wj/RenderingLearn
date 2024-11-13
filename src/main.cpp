@@ -1,5 +1,6 @@
 #include "Examples/SimpleExamples/DrawSimpleTriangleSample.h"
 #include "Examples/SimpleExamples/UniformExample.h"
+#include "Examples/SimpleExamples/SkyBoxExample.h"
 
 /*
 
@@ -26,8 +27,8 @@ int main()
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	//DrawSimpleTriangleSample exsample;
-	UniformExample exsample;
+	DrawSimpleTriangleSample exsample;
+	//SkyBoxExample exsample;
 	ExampleBase::Run(&exsample);
 
 

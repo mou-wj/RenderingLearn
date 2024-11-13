@@ -100,3 +100,27 @@ glm::mat4 Transform::GetTransformMatrixFromRH()
 	return matrix;
 }
 
+
+
+glm::mat4 Transform::GetPerspectiveProj(float near, float far, float viewAngle, float ratioWH)
+{
+	glm::mat4 proj(1.0);
+	near = -near;
+	far = -far;
+	float halfRadias = glm::radians(viewAngle) / 2;
+	float nearPlaneH = near * glm::tan(halfRadias);
+	float nearPlaneW = nearPlaneH * ratioWH;
+	proj[0][0] = 1 ;
+	proj[1][1] = 1 ;
+	proj[2][2] = (near + far) / near;
+	proj[2][3] = -far;
+	proj[3][2] = 1 / near;
+	glm::mat4 scale(1.0);
+	scale[0][0] = 1 / nearPlaneW;
+	scale[1][1] = 1 / nearPlaneH;
+	scale[2][2] = 1 / (far - near);
+	scale[2][3] = near / (near - far);
+
+	return scale * proj;
+}
+
