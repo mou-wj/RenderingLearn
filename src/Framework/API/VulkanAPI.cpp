@@ -700,13 +700,17 @@ void VulkanAPI::DestroyFence(VkDevice device, VkFence fence)
 
 void VulkanAPI::WaitFence(VkDevice device,const std::vector<VkFence>& fences,bool waitAll)
 {
-	vkWaitForFences(device, fences.size(), fences.data(), waitAll, VK_TIMEOUT);
-
+	auto res = vkWaitForFences(device, fences.size(), fences.data(), waitAll, VK_TIMEOUT);
+	if (res != VK_SUCCESS)
+	{
+		assert(0);
+	}
 }
 
 void VulkanAPI::ResetFences(VkDevice device, const std::vector<VkFence>& fences)
 {
-	vkResetFences(device, fences.size(), fences.data());
+	auto res = vkResetFences(device, fences.size(), fences.data());
+	ASSERT(res == VK_SUCCESS);
 }
 
 VkSemaphore VulkanAPI::CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags)
@@ -946,6 +950,10 @@ void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& wa
 void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence)
 {
 	auto result = vkQueueSubmit(queue, submitInfos.size(), submitInfos.data(), allCommandFinishedFence);
+	if (result != VK_SUCCESS)
+	{
+		assert(0);
+	}
 }
 
 void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores , const std::vector<VkSwapchainKHR>& swapchains, const std::vector<uint32_t>& swapchainImageIndices, std::vector<VkResult>& outResults)
@@ -1153,10 +1161,6 @@ VkBool32 DebugCallBack(
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData) {
 	LogInfo(pCallbackData->pMessage);
-	//if (messageSeverity & (VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT))
-	//{
-	//	assert(0);
-	//}
 
 	//ASSERT(1);
 	return VK_TRUE;

@@ -61,7 +61,7 @@ namespace Transform {
 	glm::mat4 GetQuaternionMatrix(glm::vec4 center);
 
 	/**
-	 * @brief 左手系，获取view矩阵，其中up为相机坐标的-y，对应vulkan的NDC的向下，target-pos对应相机坐标的-z方向，对应vulkan的NDC向内方向
+	 * @brief 不区分坐标系，获取view矩阵，其中up为相机坐标的-y，对应vulkan的NDC的向下，target-pos对应相机坐标的-z方向，对应vulkan的NDC向内方向
 	 * @param pos 相机位置，target 相机视点，up向上向量
 	 * @return 返回view矩阵
 	*/
@@ -75,7 +75,7 @@ namespace Transform {
 
 
 	/**
-	 * @brief 获取投影矩阵，左手系
+	 * @brief 获取投影矩阵，不区分坐标系，看向z轴正方向
 	 * @param near 近平面，far 远平面，viewAngle，视锥上下之间的夹角，角度值（0-180），ratioWH，视锥近平面的宽高比,near和far必须都大于0，且far大于near
 	 * @return 返回透视投影矩阵,视锥体中所有x，y坐标变换到-1到1之间，近平面为0，远平面为1
 	*/

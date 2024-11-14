@@ -142,15 +142,13 @@ void ExampleBase::InitContex()
 	physicalDeviceFeatures.geometryShader = VK_TRUE;//����geometry shader
 
 	physicalDeviceFeatures.depthClamp ;
-	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1,1,1}} }, { }, { VK_KHR_SWAPCHAIN_EXTENSION_NAME }, physicalDeviceFeatures);
+	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, { }, { VK_KHR_SWAPCHAIN_EXTENSION_NAME }, physicalDeviceFeatures);
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
-	presentQueue = GetQueue(device, queueFamilyIndex, 1);
-	transferQueue = GetQueue(device, queueFamilyIndex, 2);
 
 	//����command pool
 	commandPool = CreateCommandPool(device, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, queueFamilyIndex);
 	renderCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-	toolCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	oneSubmitCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	//����swapchain
 	swapchain = CreateSwapchain(device, surface, colorFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
@@ -312,7 +310,7 @@ void ExampleBase::PickValidPhysicalDevice()
 
 	for (uint32_t i = 0; i < physicalDevices.size(); i++)
 	{
-		auto familyIndex = GetSuitableQueueFamilyIndex(physicalDevices[i], VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, true, 3);;
+		auto familyIndex = GetSuitableQueueFamilyIndex(physicalDevices[i], VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, true, 1);;
 		auto surfaceCapabilities = GetSurfaceCapabilities(physicalDevices[i], surface);
 		
 		auto queueFamilyProps = GetQueueFamilyProperties(physicalDevices[i]);
@@ -413,7 +411,7 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	image.tiling = tiling;
 	image.format = format;
 	image.image = VulkanAPI::CreateImage(device, 0, imageType, image.format, image.extent,
-		1, 1, image.sample, image.tiling, usage, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
+		image.numMip, image.numLayer, image.sample, image.tiling, usage, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
 	auto imageMemRequiredments = GetImageMemoryRequirments(device, image.image);
 	auto memtypeIndex = GetMemoryTypeIndex(imageMemRequiredments.memoryTypeBits, memoryProperies);
 	image.memory = AllocateMemory(device, imageMemRequiredments.size, memtypeIndex);
@@ -466,7 +464,7 @@ Texture ExampleBase::Load2DTexture(const std::string& texFilePath)
 {
 	uint32_t x = 0, y = 0;
 	std::vector<char> imageData;
-	LoadCharSRGBJpeg(texFilePath, { B,G,R,A }, imageData, x, y);
+	LoadCharSRGBJpeg(texFilePath, { R,G,B,A }, imageData, x, y);
 
 	//����texture
 	Texture texture;
@@ -496,7 +494,7 @@ Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFi
 	std::array<std::vector<char>, 6> imageFaceDatas;
 	for (uint32_t i = 0; i < 6; i++)
 	{
-		LoadCharSRGBJpeg(faceTexFilePaths[i], { B,G,R,A }, imageFaceDatas[i], x, y);
+		LoadCharSRGBJpeg(faceTexFilePaths[i], { R,G,B,A }, imageFaceDatas[i], x, y);
 	}
 	//����texture
 	Texture texture;
@@ -561,9 +559,9 @@ void ExampleBase::TransferWholeImageLayout(Image& image, VkImageLayout dstImageL
 
 void ExampleBase::TransferImageLayout(Image& image, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange)
 {
-	WaitAllFence({ toolCommmandBufferFence });
-	ResetAllFence({ toolCommmandBufferFence });
-	BeginRecord(toolCommandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+	WaitAllFence({ oneSubmitCommmandBufferFence });
+	ResetAllFence({ oneSubmitCommmandBufferFence });
+	BeginRecord(oneSubmitCommandBuffer, 0);
 	VkImageMemoryBarrier imageMemoryBarrier{ };
 	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	imageMemoryBarrier.pNext = nullptr;
@@ -576,11 +574,11 @@ void ExampleBase::TransferImageLayout(Image& image, VkImageLayout dstImageLayout
 	imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	imageMemoryBarrier.image = image.image;
 	imageMemoryBarrier.subresourceRange = subRange;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-	EndRecord(toolCommandBuffer);
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	EndRecord(oneSubmitCommandBuffer);
 	
-	SubmitCommands(transferQueue, {}, {}, { toolCommandBuffer }, {}, toolCommmandBufferFence);
-	WaitQueueIdle(transferQueue);
+	SubmitCommands(graphicQueue, {}, {}, { oneSubmitCommandBuffer }, {}, oneSubmitCommmandBufferFence);
+	WaitQueueIdle(graphicQueue);
 	//WaitSemaphores(device, 0, {transferOperationFinish}, {});
 
 
@@ -718,7 +716,7 @@ void ExampleBase::InitGraphicPipelines()
 void ExampleBase::InitSyncObject()
 {
 	renderCommandBufferFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
-	toolCommmandBufferFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
+	oneSubmitCommmandBufferFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
 
 	//����transfer������ɵ�semaphore
 	transferOperationFinish = CreateSemaphore(device, 0);
@@ -818,7 +816,7 @@ void ExampleBase::ClearGraphicPipelines()
 void ExampleBase::ClearSyncObject()
 {				  
 	DestroyFence(device, renderCommandBufferFence);
-	DestroyFence(device, toolCommmandBufferFence);
+	DestroyFence(device, oneSubmitCommmandBufferFence);
 
 	DestroySemaphore(device, transferOperationFinish);
 
@@ -1250,8 +1248,8 @@ Buffer ExampleBase::CreateBuffer(VkBufferUsageFlags usage, const char* buf, VkDe
 
 void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {
-	WaitAllFence({ toolCommmandBufferFence });
-	ResetAllFence({ toolCommmandBufferFence });
+	WaitAllFence({ oneSubmitCommmandBufferFence });
+	ResetAllFence({ oneSubmitCommmandBufferFence });
 	std::vector<VkPipelineStageFlags> waitPipelineStages(waitSemaphores.size(),VK_PIPELINE_STAGE_TRANSFER_BIT);
 	//检查两个image是否尺寸相同
 	if (!srcImage.WholeCopyCompatible(dstImage))
@@ -1259,7 +1257,7 @@ void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::ve
 		Log("copy : two image are not compatible ! ", 0);
 	}
 
-	BeginRecord(toolCommandBuffer, 0);
+	BeginRecord(oneSubmitCommandBuffer, 0);
 	//转换image layout
 	VkImageMemoryBarrier imageMemoryBarrier{};
 	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1276,13 +1274,13 @@ void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::ve
 	imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
 	imageMemoryBarrier.subresourceRange.layerCount = srcImage.numLayer;
 	imageMemoryBarrier.subresourceRange.levelCount = srcImage.numMip;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
 	imageMemoryBarrier.srcAccessMask = 0;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
 	imageMemoryBarrier.image = dstImage.image;
 	imageMemoryBarrier.oldLayout = dstImage.currentLayout;
 	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
 	
 	//拷贝
 	VkImageCopy copyRegion{};
@@ -1299,7 +1297,7 @@ void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::ve
 		copyRegion.dstSubresource = copyRegion.srcSubresource;
 		copyRegions.push_back(copyRegion);
 	}
-	CmdCopyImageToImage(toolCommandBuffer, srcImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions);
+	CmdCopyImageToImage(oneSubmitCommandBuffer, srcImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions);
 	
 
 	//转换回去image layout
@@ -1308,32 +1306,32 @@ void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::ve
 	imageMemoryBarrier.newLayout = srcImage.currentLayout;
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
 	imageMemoryBarrier.dstAccessMask = 0;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
 	imageMemoryBarrier.dstAccessMask = 0;
 	imageMemoryBarrier.image = dstImage.image;
 	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	imageMemoryBarrier.newLayout = dstImage.currentLayout;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
 
-	EndRecord(toolCommandBuffer);
+	EndRecord(oneSubmitCommandBuffer);
 	
 	//LogInfo("src image " << std::hex << (long long)srcImage.image << "dstimage " << (long long)dstImage.image);
-	SubmitCommands(transferQueue, waitSemaphores, waitPipelineStages, { toolCommandBuffer }, sigSemaphores, toolCommmandBufferFence);
+	SubmitCommands(graphicQueue, waitSemaphores, waitPipelineStages, { oneSubmitCommandBuffer }, sigSemaphores, oneSubmitCommmandBufferFence);
 	
 }
 
 void ExampleBase::BlitImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
 {
-	WaitAllFence({ toolCommmandBufferFence });
-	ResetAllFence({ toolCommmandBufferFence });
+	WaitAllFence({ oneSubmitCommmandBufferFence });
+	ResetAllFence({ oneSubmitCommmandBufferFence });
 	//检查两个image是否尺寸相同
 	if (!srcImage.WholeBlitCompatible(dstImage))
 	{
 		Log("copy : two image are not compatible ! ", 0);
 	}
 
-	BeginRecord(toolCommandBuffer, 0);
+	BeginRecord(oneSubmitCommandBuffer, 0);
 	//转换image layout
 	VkImageMemoryBarrier imageMemoryBarrier{};
 	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1350,13 +1348,13 @@ void ExampleBase::BlitImageToImage(Image srcImage, Image dstImage, const std::ve
 	imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
 	imageMemoryBarrier.subresourceRange.layerCount = srcImage.numLayer;
 	imageMemoryBarrier.subresourceRange.levelCount = srcImage.numMip;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
 	imageMemoryBarrier.image = dstImage.image;
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
 	imageMemoryBarrier.oldLayout = dstImage.currentLayout;
 	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
 
 	VkImageBlit blitRegion{};
 	blitRegion.srcOffsets[0] = VkOffset3D{ 0,0,0 };
@@ -1377,7 +1375,7 @@ void ExampleBase::BlitImageToImage(Image srcImage, Image dstImage, const std::ve
 		blitRegion.dstSubresource = blitRegion.srcSubresource;
 		blitRegions.push_back(blitRegion);
 	}
-	CmdBlitImageToImage(toolCommandBuffer, srcImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, blitRegions);
+	CmdBlitImageToImage(oneSubmitCommandBuffer, srcImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, blitRegions);
 
 	//转换回去image layout
 	imageMemoryBarrier.image = srcImage.image;
@@ -1385,17 +1383,17 @@ void ExampleBase::BlitImageToImage(Image srcImage, Image dstImage, const std::ve
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_NONE;
 	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 	imageMemoryBarrier.newLayout = srcImage.currentLayout;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
 	imageMemoryBarrier.image = dstImage.image;
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_NONE;
 	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	imageMemoryBarrier.newLayout = dstImage.currentLayout;
-	CmdMemoryBarrier(toolCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
+	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
 
-	EndRecord(toolCommandBuffer);
+	EndRecord(oneSubmitCommandBuffer);
 
-	SubmitCommands(transferQueue, waitSemaphores, {}, { toolCommandBuffer }, sigSemaphores, toolCommmandBufferFence);
+	SubmitCommands(graphicQueue, waitSemaphores, {}, { oneSubmitCommandBuffer }, sigSemaphores, oneSubmitCommmandBufferFence);
 
 }
 
@@ -1434,7 +1432,7 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 
 
 
-	auto queryres = GetQueryResult(device, queryPool, 0, 1, VK_QUERY_RESULT_64_BIT);
+	
 	WaitAllFence({ renderCommandBufferFence });
 	ResetAllFence({ renderCommandBufferFence });
 	BeginRecord(renderCommandBuffer,0);
@@ -1473,7 +1471,7 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 	EndRecord(renderCommandBuffer);
 
 	SubmitCommands(graphicQueue, waitSemaphores, {}, { renderCommandBuffer }, sigSemaphores, renderCommandBufferFence);
-
+	auto queryres = GetQueryResult(device, queryPool, 0, 1, VK_QUERY_RESULT_64_BIT);
 
 
 
@@ -1482,7 +1480,7 @@ void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const
 VkResult ExampleBase::Present(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores, uint32_t swapchainImageIndex)
 {
 	std::vector<VkResult> res;
-	VulkanAPI::Present(presentQueue, waitSemaphores, { swapchain }, { swapchainImageIndex }, res);
+	VulkanAPI::Present(graphicQueue, waitSemaphores, { swapchain }, { swapchainImageIndex }, res);
 	VkResult returnRes;
 	returnRes = res[0];
 	return returnRes;
@@ -1491,8 +1489,6 @@ VkResult ExampleBase::Present(const std::vector<VkSemaphore>& waitSemaphores, co
 void ExampleBase::WaitIdle()
 {
 	WaitQueueIdle(graphicQueue);
-	WaitQueueIdle(transferQueue);
-	WaitQueueIdle(presentQueue);
 
 }
 

@@ -8,16 +8,34 @@
 vulkan的framge coordinate
   (0,0)				(width,0)
   +-----------------+
-  |					|
+  |		screen   	|
   |					|
   +-----------------+
   (0,height)	    (width,height)
 
+vulkan的采样 coordinate
+  (0,0)				(1,0)
+  +-----------------+
+  |		screen   	|
+  |					|
+  +-----------------+
+  (0,1)	           (1,1)
 
-vulkan的NDC，左手系
-向右为x正向，向下为y正向，向外为z正向
-
-
+vulkan的NDC，右手系
+向右为x正向，向下为y正向，向内为z正向
++--------------------------------------------+
+|	screen					z 内			 |
+|						 +                   |
+|				 	   +					 |
+|				 	 +						 |
+|				   +						 |
+|				 + + + + + + x	右			 |
+|				 +							 |
+|				 +							 |
+|				 +							 |
+|				 +							 |
+|				 y	下						 |
++--------------------------------------------+
 
  */
 
@@ -27,9 +45,10 @@ int main()
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	DrawSimpleTriangleSample exsample;
-	//SkyBoxExample exsample;
-	ExampleBase::Run(&exsample);
+	//DrawSimpleTriangleSample example;
+	UniformExample example;
+	//SkyBoxExample example;
+	ExampleBase::Run(&example);
 
 
 	return 0;

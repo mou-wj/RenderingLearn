@@ -10,7 +10,7 @@ void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelCompo
 	outHeight = y;
 	uint32_t wantNumComps = wantPixelComponents.size();
 	outImageData.resize(outWidth * outHeight * wantNumComps);
-	stbi_write_jpg("test1.jpg", x, y, 4, imageData, 0);
+
 	for (uint32_t row = 0; row < y; row++)
 	{
 		for (uint32_t col = 0; col < x; col++)
@@ -21,6 +21,6 @@ void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelCompo
 			}
 		}
 	}
-	stbi_write_jpg("test2.jpg", x, y, 4, outImageData.data(), 0);
+
 	stbi_image_free(imageData);
 }

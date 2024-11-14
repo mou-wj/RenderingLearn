@@ -108,6 +108,7 @@ void UniformExample::Loop()
 		//auto a = rgba[3];
 
 		Present({ presentValidSemaphore }, { presentFinishSemaphore }, nexIndex);
+		int a = 10;
 		//if (numCap != 0)
 		//{
 			;

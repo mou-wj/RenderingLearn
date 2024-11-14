@@ -86,9 +86,9 @@ glm::mat4 Transform::GetViewMatrix(glm::vec3 pos, glm::vec3 target, glm::vec3 up
 	view[0][0] = z.x;
 	view[0][1] = z.y;
 	view[0][2] = z.z;
-	view[0][3] = - pos.x;
-	view[1][3] = - pos.y;
-	view[2][3] = - pos.z;
+	view[0][3] = - glm::dot(x ,pos);
+	view[1][3] = - glm::dot(y, pos);
+	view[2][3] = - glm::dot(z, pos);
 	return view;
 }
 
@@ -104,23 +104,21 @@ glm::mat4 Transform::GetTransformMatrixFromRH()
 
 glm::mat4 Transform::GetPerspectiveProj(float near, float far, float viewAngle, float ratioWH)
 {
-	glm::mat4 proj(1.0);
-	near = -near;
-	far = -far;
+	glm::mat4 press(1.0);
 	float halfRadias = glm::radians(viewAngle) / 2;
 	float nearPlaneH = near * glm::tan(halfRadias);
 	float nearPlaneW = nearPlaneH * ratioWH;
-	proj[0][0] = 1 ;
-	proj[1][1] = 1 ;
-	proj[2][2] = (near + far) / near;
-	proj[2][3] = -far;
-	proj[3][2] = 1 / near;
+	press[0][0] = 1 ;
+	press[1][1] = 1 ;
+	press[2][2] = (near + far) / near;
+	press[2][3] = -far;
+	press[3][2] = 1 / near;
 	glm::mat4 scale(1.0);
 	scale[0][0] = 1 / nearPlaneW;
 	scale[1][1] = 1 / nearPlaneH;
 	scale[2][2] = 1 / (far - near);
 	scale[2][3] = near / (near - far);
 
-	return scale * proj;
+	return scale * press;
 }
 

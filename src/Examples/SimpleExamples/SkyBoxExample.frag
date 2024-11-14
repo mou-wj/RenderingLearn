@@ -11,6 +11,4 @@ void main(){
 	vec4 texColor = texture(testTexture,inSampleVec);
 	outColor = texColor;
 
-
-
 }

@@ -25,11 +25,11 @@ void SkyBoxExample::InitResourceInfos()
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
 	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg";//+y
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//-x
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//-y
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg";//+z
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg";//+z
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg";//-z
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg";//-z
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
 	textureInfos["skybox"].binding = 1;
 	textureInfos["skybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
