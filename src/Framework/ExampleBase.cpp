@@ -24,6 +24,7 @@ ExampleBase::~ExampleBase()
 void ExampleBase::Run(ExampleBase* example)
 {
 	example->InitResourceInfos();
+	example->InitSyncObjectNumInfo();
 	example->Init();
 	example->Loop();
 
@@ -47,7 +48,7 @@ void ExampleBase::Init()
 	InitFrameBuffer();
 	InitGraphicPipelines();
 	InitQueryPool();
-	//InitSyncObject();
+	InitSyncObject();
 	InitRecources();
 }
 
@@ -147,13 +148,11 @@ void ExampleBase::InitContex()
 
 	//����command pool
 	commandPool = CreateCommandPool(device, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, queueFamilyIndex);
-	renderCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-	oneSubmitCommandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	InitCommandList();
 
 	//����swapchain
 	swapchain = CreateSwapchain(device, surface, colorFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
 
-	InitSyncObject();
 
 	auto swapImages = GetSwapchainImages(device, swapchain);
 	swapchainImages.resize(swapImages.size());
@@ -173,8 +172,6 @@ void ExampleBase::InitContex()
 
 
 	}
-
-
 
 
 	
@@ -253,6 +250,12 @@ void ExampleBase::InitFrameBuffer()
 {
 	frameBuffer = CreateFrameBuffer(device, 0, renderPass, { renderTargets.colorAttachment.attachmentImage.imageView,renderTargets.depthAttachment.attachmentImage.imageView }, windowWidth, windowHeight,1);
 
+}
+
+void ExampleBase::InitSyncObject()
+{
+	//CreateFence(device,numFences);
+	CreateSemaphores(numSemaphores);
 }
 
 void ExampleBase::InitDefaultGraphicSubpassInfo()
@@ -544,43 +547,185 @@ void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize si
 
 }
 
+void ExampleBase::CmdListReset(CommandList& cmdList)
+{
+	CommandBufferReset(cmdList.commandBuffer);
+}
+
+void ExampleBase::CmdListRecordBegin(CommandList& cmdList)
+{
+	BeginRecord(cmdList.commandBuffer, cmdList.commandBufferUsage);
+}
+
+void ExampleBase::CmdListRecordEnd(CommandList& cmdList)
+{
+	EndRecord(cmdList.commandBuffer);
+}
+
+void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
+{
+	auto imageBarrier = barrier.ImageBarrier(image, dstAccess, dstImageLayout);
+	CmdMemoryBarrier(cmdList.commandBuffer, srcStageMask, dstStageMask, 0, {}, {}, { imageBarrier });
+	image.accessFlag = dstAccess;
+	image.currentLayout = dstImageLayout;
+}
+
+
+void ExampleBase::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image srcImage, Image dstImage)
+{
+	//检查两个image是否尺寸相同
+	if (!srcImage.WholeCopyCompatible(dstImage))
+	{
+		Log("copy : two image are not compatible ! ", 0);
+	}
+	VkAccessFlags srcOldAccess = srcImage.accessFlag, dstOldAccess = dstImage.accessFlag;
+	VkImageLayout srcOldLayout = srcImage.currentLayout, dstOldLayout = dstImage.currentLayout;
+	//转换image layout
+	//CmdOpsImageMemoryBarrer(cmdList, srcImage, VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	//CmdOpsImageMemoryBarrer(cmdList, dstImage, VK_ACCESS_MEMORY_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+	//拷贝
+	VkImageCopy copyRegion{};
+	copyRegion.srcOffset = VkOffset3D{ 0,0,0 };
+	copyRegion.dstOffset = VkOffset3D{ 0,0,0 };
+	std::vector<VkImageCopy> copyRegions;
+	for (uint32_t i = 0; i < srcImage.numMip; i++)
+	{
+		copyRegion.extent = srcImage.GetMipLevelExtent(i);
+		copyRegion.srcSubresource = VkImageSubresourceLayers{ .aspectMask = srcImage.aspect,
+															  .mipLevel = i,
+															  .baseArrayLayer = 0,
+															  .layerCount = srcImage.numLayer };
+		copyRegion.dstSubresource = copyRegion.srcSubresource;
+		copyRegions.push_back(copyRegion);
+	}
+	if (srcImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL || dstImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	{
+		ASSERT(0);
+	}
+	CmdCopyImageToImage(cmdList.commandBuffer, srcImage.image, srcImage.currentLayout, dstImage.image, dstImage.currentLayout, copyRegions);
+
+
+	////转换回去image layout
+	//CmdOpsImageMemoryBarrer(cmdList, srcImage, srcOldAccess, srcOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	//CmdOpsImageMemoryBarrer(cmdList, dstImage, dstOldAccess, dstOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+
+}
+
+void ExampleBase::CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage)
+{
+	VkImageBlit blitRegion{};
+	blitRegion.srcOffsets[0] = VkOffset3D{ 0,0,0 };
+
+	blitRegion.dstOffsets[0] = VkOffset3D{ 0,0,0 };
+	//拷贝
+	std::vector<VkImageBlit> blitRegions;
+	for (uint32_t i = 0; i < srcImage.numMip; i++)
+	{
+		blitRegion.srcSubresource = VkImageSubresourceLayers{ .aspectMask = srcImage.aspect,
+															  .mipLevel = i,
+															  .baseArrayLayer = 0,
+															  .layerCount = srcImage.numLayer };
+		auto srcMipSize = srcImage.GetMipLevelExtent(i);
+		blitRegion.srcOffsets[1] = VkOffset3D{ (int32_t)srcMipSize.width,(int32_t)srcMipSize.width,(int32_t)srcMipSize.depth };
+		auto dstMipSize = dstImage.GetMipLevelExtent(i);
+		blitRegion.dstOffsets[1] = VkOffset3D{ (int32_t)dstMipSize.width,(int32_t)dstMipSize.width,(int32_t)dstMipSize.depth };
+		blitRegion.dstSubresource = blitRegion.srcSubresource;
+		blitRegions.push_back(blitRegion);
+	}
+	if (srcImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL || dstImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	{
+		ASSERT(0);
+	}
+	CmdBlitImageToImage(cmdList.commandBuffer, srcImage.image, srcImage.currentLayout, dstImage.image, dstImage.currentLayout, blitRegions);
+
+}
+
+void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList)
+{
+	//
+	//if (renderTargets.colorAttachment.attachmentImage.currentLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL || renderTargets.depthAttachment.attachmentImage.currentLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+	//{
+	//	ASSERT(0);
+	//}
+
+	for (uint32_t i = 0; i < geoms.size(); i++)
+	{
+		const auto& geom = geoms[i];
+		CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
+		CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+		for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+		{
+			CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+
+		}
+		//bind pipelines
+		for (uint32_t i = 0; i < graphcisPipelineInfos.size(); i++)
+		{
+			CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipeline);
+			for (const auto& setInfo : graphcisPipelineInfos[i].descriptorSetInfos)
+			{
+				CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
+			}
+			//CmdBeginQuery(cmdList.commandBuffer, queryPool, 0, 0);
+			CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+			//CmdEndQuery(cmdList.commandBuffer, queryPool, 0);
+			if (i != graphcisPipelineInfos.size() - 1)
+			{
+				CmdNextSubpass(cmdList.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+			}
+		}
+		CmdEndRenderPass(cmdList.commandBuffer);
+	}
+
+
+}
+
+void ExampleBase::CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info)
+{
+	SubmitCommands(graphicQueue, info.waitSemaphores, info.waitStages, { cmdList.commandBuffer }, {}, cmdList.commandFinishFence);
+}
+
+void ExampleBase::CmdListWaitFinish(CommandList& cmdList)
+{
+	WaitAllFence({ cmdList.commandFinishFence });
+	ResetAllFence({ cmdList.commandFinishFence });
+}
+
+VkResult ExampleBase::Present(uint32_t imageIndex, const std::vector<VkSemaphore>& waitSemaphores)
+{
+	std::vector<VkResult> res;
+	VulkanAPI::Present(graphicQueue, waitSemaphores, { swapchain }, { imageIndex }, res);
+	VkResult returnRes;
+	returnRes = res[0];
+	if (returnRes != VK_SUCCESS)
+	{
+		ASSERT(0);
+	}
+	return returnRes;
+}
+
+
+
+
+
 void ExampleBase::DestroyBuffer(Buffer& buffer)
 {
 	VulkanAPI::DestroyBuffer(device, buffer.buffer);
 	ReleaseMemory(device, buffer.memory);
 }
 
+
 void ExampleBase::TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout)
 {
-	TransferImageLayout(image, dstImageLayout, VkImageSubresourceRange{ .aspectMask = image.aspect,.baseMipLevel = 0,.levelCount = image.numMip,.baseArrayLayer = 0,.layerCount = image.numLayer });
-
-
-}
-
-void ExampleBase::TransferImageLayout(Image& image, VkImageLayout dstImageLayout, VkImageSubresourceRange subRange)
-{
-	WaitAllFence({ oneSubmitCommmandBufferFence });
-	ResetAllFence({ oneSubmitCommmandBufferFence });
-	BeginRecord(oneSubmitCommandBuffer, 0);
-	VkImageMemoryBarrier imageMemoryBarrier{ };
-	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	imageMemoryBarrier.pNext = nullptr;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.oldLayout = image.currentLayout;
-	image.currentLayout = dstImageLayout;
-	imageMemoryBarrier.newLayout = dstImageLayout;
-	imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.image = image.image;
-	imageMemoryBarrier.subresourceRange = subRange;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-	EndRecord(oneSubmitCommandBuffer);
+	CmdListWaitFinish(oneSubmitCommandList);
+	CmdListRecordBegin(oneSubmitCommandList);
+	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, image.accessFlag, dstImageLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	CmdListRecordEnd(oneSubmitCommandList);
 	
-	SubmitCommands(graphicQueue, {}, {}, { oneSubmitCommandBuffer }, {}, oneSubmitCommmandBufferFence);
-	WaitQueueIdle(graphicQueue);
-	//WaitSemaphores(device, 0, {transferOperationFinish}, {});
-
+	SubmitSynchronizationInfo info;
+	CmdListSubmit(oneSubmitCommandList, info);
 
 
 }
@@ -713,22 +858,6 @@ void ExampleBase::InitGraphicPipelines()
 
 }
 
-void ExampleBase::InitSyncObject()
-{
-	renderCommandBufferFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
-	oneSubmitCommmandBufferFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
-
-	//����transfer������ɵ�semaphore
-	transferOperationFinish = CreateSemaphore(device, 0);
-
-	//����swapchain image valid semaphore
-
-	swapchainImageValidSemaphore = CreateSemaphore(device, 0);
-
-	drawSemaphore = CreateSemaphore(device, 0);
-	presentValidSemaphore = CreateSemaphore(device, 0);
-	presentFinishSemaphore = CreateSemaphore(device, 0);
-}
 
 void ExampleBase::InitRecources()
 {
@@ -748,6 +877,17 @@ void ExampleBase::InitQueryPool()
 {
 	queryPool = CreateQueryPool(device, 0, VK_QUERY_TYPE_PIPELINE_STATISTICS, 1, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT);
 
+
+}
+
+void ExampleBase::InitCommandList()
+{
+	graphicCommandList.commandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	graphicCommandList.commandBufferUsage = 0;
+	graphicCommandList.commandFinishFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
+	oneSubmitCommandList.commandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	oneSubmitCommandList.commandBufferUsage = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	oneSubmitCommandList.commandFinishFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
 
 }
 
@@ -815,16 +955,14 @@ void ExampleBase::ClearGraphicPipelines()
 				  
 void ExampleBase::ClearSyncObject()
 {				  
-	DestroyFence(device, renderCommandBufferFence);
-	DestroyFence(device, oneSubmitCommmandBufferFence);
-
-	DestroySemaphore(device, transferOperationFinish);
-
-	DestroySemaphore(device, swapchainImageValidSemaphore);
-	DestroySemaphore(device, drawSemaphore);
-	DestroySemaphore(device, presentValidSemaphore);
-	DestroySemaphore(device, presentFinishSemaphore);
-
+	for (uint32_t i = 0; i < semaphores.size(); i++)
+	{
+		DestroySemaphore(device, semaphores[i]);
+	}
+	//for (uint32_t i = 0; i < fences.size(); i++)
+	//{
+	//	DestroyFence(device, fences[i]);
+	//}
 
 }				  
 				  
@@ -860,6 +998,8 @@ void ExampleBase::ClearQueryPool()
 {
 	DestroyQueryPool(device, queryPool);
 }
+
+
 
 
 
@@ -1246,162 +1386,12 @@ Buffer ExampleBase::CreateBuffer(VkBufferUsageFlags usage, const char* buf, VkDe
 	return buffer;
 }
 
-void ExampleBase::CopyImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
-{
-	WaitAllFence({ oneSubmitCommmandBufferFence });
-	ResetAllFence({ oneSubmitCommmandBufferFence });
-	std::vector<VkPipelineStageFlags> waitPipelineStages(waitSemaphores.size(),VK_PIPELINE_STAGE_TRANSFER_BIT);
-	//检查两个image是否尺寸相同
-	if (!srcImage.WholeCopyCompatible(dstImage))
-	{
-		Log("copy : two image are not compatible ! ", 0);
-	}
 
-	BeginRecord(oneSubmitCommandBuffer, 0);
-	//转换image layout
-	VkImageMemoryBarrier imageMemoryBarrier{};
-	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	imageMemoryBarrier.pNext = nullptr;
-	imageMemoryBarrier.srcAccessMask = 0;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-	imageMemoryBarrier.oldLayout = srcImage.currentLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.image = srcImage.image;
-	imageMemoryBarrier.subresourceRange.aspectMask = srcImage.aspect;
-	imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-	imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-	imageMemoryBarrier.subresourceRange.layerCount = srcImage.numLayer;
-	imageMemoryBarrier.subresourceRange.levelCount = srcImage.numMip;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-	imageMemoryBarrier.srcAccessMask = 0;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-	imageMemoryBarrier.image = dstImage.image;
-	imageMemoryBarrier.oldLayout = dstImage.currentLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-	
-	//拷贝
-	VkImageCopy copyRegion{};
-	copyRegion.srcOffset = VkOffset3D{ 0,0,0 };
-	copyRegion.dstOffset = VkOffset3D{ 0,0,0 };
-	std::vector<VkImageCopy> copyRegions;
-	for (uint32_t i = 0; i < srcImage.numMip; i++)
-	{
-		copyRegion.extent = srcImage.GetMipLevelExtent(i);
-		copyRegion.srcSubresource = VkImageSubresourceLayers{ .aspectMask = srcImage.aspect,
-															  .mipLevel = i,
-															  .baseArrayLayer = 0,
-															  .layerCount = srcImage.numLayer };
-		copyRegion.dstSubresource = copyRegion.srcSubresource;
-		copyRegions.push_back(copyRegion);
-	}
-	CmdCopyImageToImage(oneSubmitCommandBuffer, srcImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions);
-	
 
-	//转换回去image layout
-	imageMemoryBarrier.image = srcImage.image;
-	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	imageMemoryBarrier.newLayout = srcImage.currentLayout;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-	imageMemoryBarrier.dstAccessMask = 0;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-	imageMemoryBarrier.dstAccessMask = 0;
-	imageMemoryBarrier.image = dstImage.image;
-	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	imageMemoryBarrier.newLayout = dstImage.currentLayout;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, {}, {}, { imageMemoryBarrier });
-
-	EndRecord(oneSubmitCommandBuffer);
-	
-	//LogInfo("src image " << std::hex << (long long)srcImage.image << "dstimage " << (long long)dstImage.image);
-	SubmitCommands(graphicQueue, waitSemaphores, waitPipelineStages, { oneSubmitCommandBuffer }, sigSemaphores, oneSubmitCommmandBufferFence);
-	
-}
-
-void ExampleBase::BlitImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
-{
-	WaitAllFence({ oneSubmitCommmandBufferFence });
-	ResetAllFence({ oneSubmitCommmandBufferFence });
-	//检查两个image是否尺寸相同
-	if (!srcImage.WholeBlitCompatible(dstImage))
-	{
-		Log("copy : two image are not compatible ! ", 0);
-	}
-
-	BeginRecord(oneSubmitCommandBuffer, 0);
-	//转换image layout
-	VkImageMemoryBarrier imageMemoryBarrier{};
-	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	imageMemoryBarrier.pNext = nullptr;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-	imageMemoryBarrier.oldLayout = srcImage.currentLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	imageMemoryBarrier.image = srcImage.image;
-	imageMemoryBarrier.subresourceRange.aspectMask = srcImage.aspect;
-	imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-	imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-	imageMemoryBarrier.subresourceRange.layerCount = srcImage.numLayer;
-	imageMemoryBarrier.subresourceRange.levelCount = srcImage.numMip;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
-	imageMemoryBarrier.image = dstImage.image;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-	imageMemoryBarrier.oldLayout = dstImage.currentLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
-
-	VkImageBlit blitRegion{};
-	blitRegion.srcOffsets[0] = VkOffset3D{ 0,0,0 };
-	
-	blitRegion.dstOffsets[0] = VkOffset3D{ 0,0,0 };
-	//拷贝
-	std::vector<VkImageBlit> blitRegions;
-	for (uint32_t i = 0; i < srcImage.numMip; i++)
-	{
-		blitRegion.srcSubresource = VkImageSubresourceLayers{ .aspectMask = srcImage.aspect,
-															  .mipLevel = i,
-															  .baseArrayLayer = 0,
-															  .layerCount = srcImage.numLayer };
-		auto srcMipSize = srcImage.GetMipLevelExtent(i);
-		blitRegion.srcOffsets[1] = VkOffset3D{ (int32_t)srcMipSize.width,(int32_t)srcMipSize.width,(int32_t)srcMipSize.depth};
-		auto dstMipSize = dstImage.GetMipLevelExtent(i);
-		blitRegion.dstOffsets[1] = VkOffset3D{ (int32_t)dstMipSize.width,(int32_t)dstMipSize.width,(int32_t)dstMipSize.depth };
-		blitRegion.dstSubresource = blitRegion.srcSubresource;
-		blitRegions.push_back(blitRegion);
-	}
-	CmdBlitImageToImage(oneSubmitCommandBuffer, srcImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, blitRegions);
-
-	//转换回去image layout
-	imageMemoryBarrier.image = srcImage.image;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	imageMemoryBarrier.newLayout = srcImage.currentLayout;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
-	imageMemoryBarrier.image = dstImage.image;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_NONE;
-	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	imageMemoryBarrier.newLayout = dstImage.currentLayout;
-	CmdMemoryBarrier(oneSubmitCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, {}, {}, {});
-
-	EndRecord(oneSubmitCommandBuffer);
-
-	SubmitCommands(graphicQueue, waitSemaphores, {}, { oneSubmitCommandBuffer }, sigSemaphores, oneSubmitCommmandBufferFence);
-
-}
 
 uint32_t ExampleBase::GetNextPresentImageIndex(VkSemaphore sigValidSemaphore)
 {
-	uint32_t nextImageIndex = VulkanAPI::GetNextValidSwapchainImageIndex(device, swapchain, swapchainImageValidSemaphore, nullptr);
-
-
+	uint32_t nextImageIndex = VulkanAPI::GetNextValidSwapchainImageIndex(device, swapchain, sigValidSemaphore, nullptr);
 	return nextImageIndex;
 }
 
@@ -1427,65 +1417,6 @@ void ExampleBase::BindUniformBuffer(const Buffer& uniformBuffer, uint32_t pipeId
 }
 
 
-void ExampleBase::DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores)
-{
-
-
-
-	
-	WaitAllFence({ renderCommandBufferFence });
-	ResetAllFence({ renderCommandBufferFence });
-	BeginRecord(renderCommandBuffer,0);
-	CmdResetQuery(renderCommandBuffer, queryPool, 0, 1);
-	
-	for (uint32_t i = 0; i < geoms.size(); i++)
-	{
-		const auto& geom = geoms[i];
-		CmdBeginRenderPass(renderCommandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
-		CmdBindVertexBuffers(renderCommandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-		for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
-		{
-			CmdBindIndexBuffer(renderCommandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-
-		}
-		//bind pipelines
-		for (uint32_t i = 0; i < graphcisPipelineInfos.size(); i++)
-		{
-			CmdBindPipeline(renderCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipeline);
-			for (const auto& setInfo : graphcisPipelineInfos[i].descriptorSetInfos)
-			{
-				CmdBindDescriptorSet(renderCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
-			}
-			CmdBeginQuery(renderCommandBuffer, queryPool, 0, 0);
-			CmdDrawIndex(renderCommandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
-			CmdEndQuery(renderCommandBuffer, queryPool, 0);
-			if (i != graphcisPipelineInfos.size() - 1)
-			{
-				CmdNextSubpass(renderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-			}
-		}
-		CmdEndRenderPass(renderCommandBuffer);
-	}
-	
-
-	EndRecord(renderCommandBuffer);
-
-	SubmitCommands(graphicQueue, waitSemaphores, {}, { renderCommandBuffer }, sigSemaphores, renderCommandBufferFence);
-	auto queryres = GetQueryResult(device, queryPool, 0, 1, VK_QUERY_RESULT_64_BIT);
-
-
-
-}
-
-VkResult ExampleBase::Present(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores, uint32_t swapchainImageIndex)
-{
-	std::vector<VkResult> res;
-	VulkanAPI::Present(graphicQueue, waitSemaphores, { swapchain }, { swapchainImageIndex }, res);
-	VkResult returnRes;
-	returnRes = res[0];
-	return returnRes;
-}
-
 void ExampleBase::WaitIdle()
 {
 	WaitQueueIdle(graphicQueue);
@@ -1494,11 +1425,36 @@ void ExampleBase::WaitIdle()
 
 void ExampleBase::WaitAllFence(const std::vector<VkFence>& fences)
 {
-	WaitFence(device, fences, true);
+	auto res = WaitFence(device, fences, true);
+	if (res != VK_SUCCESS)
+	{
+		auto status = GetFenceStatus(device, fences[0]);
+		ASSERT(0);
+	}
 }
 
 void ExampleBase::ResetAllFence(const std::vector<VkFence>& fences)
 {
 	ResetFences(device, fences);
+}
+
+//void ExampleBase::CreateFences(uint32_t numFences)
+//{
+//	fences.resize(numFences);
+//	for (uint32_t i = 0; i < numFences; i++)
+//	{
+//		fences[i] = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
+//	}
+//}
+
+void ExampleBase::CreateSemaphores(uint32_t numSemaphores)
+{
+	semaphores.resize(numSemaphores);
+	for (uint32_t i = 0; i < numSemaphores; i++)
+	{
+		semaphores[i] = CreateSemaphore(device, 0);
+	}
+
+
 }
 

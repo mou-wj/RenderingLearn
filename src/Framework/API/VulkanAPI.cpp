@@ -263,7 +263,7 @@ std::vector<VkImage> VulkanAPI::GetSwapchainImages(VkDevice device, VkSwapchainK
 uint32_t VulkanAPI::GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain, VkSemaphore  semaphore, VkFence  fence)
 {
 	uint32_t imageIndex = 0;
-	vkAcquireNextImageKHR(device, swapchain, VK_TIMEOUT, semaphore, fence, &imageIndex);
+	vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, fence, &imageIndex);
 	return imageIndex;
 }
 
@@ -698,19 +698,21 @@ void VulkanAPI::DestroyFence(VkDevice device, VkFence fence)
 	vkDestroyFence(device, fence, nullptr);
 }
 
-void VulkanAPI::WaitFence(VkDevice device,const std::vector<VkFence>& fences,bool waitAll)
+VkResult VulkanAPI::WaitFence(VkDevice device,const std::vector<VkFence>& fences,bool waitAll)
 {
-	auto res = vkWaitForFences(device, fences.size(), fences.data(), waitAll, VK_TIMEOUT);
-	if (res != VK_SUCCESS)
-	{
-		assert(0);
-	}
+	return vkWaitForFences(device, fences.size(), fences.data(), waitAll, UINT64_MAX);
 }
 
 void VulkanAPI::ResetFences(VkDevice device, const std::vector<VkFence>& fences)
 {
 	auto res = vkResetFences(device, fences.size(), fences.data());
 	ASSERT(res == VK_SUCCESS);
+}
+
+VkResult VulkanAPI::GetFenceStatus(VkDevice device, VkFence fence)
+{
+	auto res = vkGetFenceStatus(device, fence);
+	return res;
 }
 
 VkSemaphore VulkanAPI::CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags)
@@ -776,6 +778,11 @@ VkEvent VulkanAPI::CreateEvent(VkDevice device, VkEventCreateFlags flags)
 void VulkanAPI::DestroyEvent(VkDevice device, VkEvent c_event)
 {
 	vkDestroyEvent(device, c_event, nullptr);
+}
+
+void VulkanAPI::CommandBufferReset(VkCommandBuffer commandBuffer)
+{
+	vkResetCommandBuffer(commandBuffer, 0);
 }
 
 void VulkanAPI::BeginRecord(VkCommandBuffer commandBuffer, VkCommandBufferUsageFlags  flags)
@@ -920,7 +927,7 @@ void VulkanAPI::CmdBlitImageToImage(VkCommandBuffer commandBuffer, VkImage srcIm
 }
 
 
-void VulkanAPI::CmdMemoryBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, const std::vector<VkMemoryBarrier> memoryBarriers, const std::vector<VkBufferMemoryBarrier> bufferMemoryBarriers, const std::vector<VkImageMemoryBarrier> imageMemoryBarriers)
+void VulkanAPI::CmdMemoryBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, const std::vector<VkMemoryBarrier>& memoryBarriers, const std::vector<VkBufferMemoryBarrier>& bufferMemoryBarriers, const std::vector<VkImageMemoryBarrier>& imageMemoryBarriers)
 {
 	ASSERT(memoryBarriers.size() || bufferMemoryBarriers.size() || imageMemoryBarriers.size());
 	vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarriers.size(), memoryBarriers.data(), bufferMemoryBarriers.size(), bufferMemoryBarriers.data(), imageMemoryBarriers.size(), imageMemoryBarriers.data());

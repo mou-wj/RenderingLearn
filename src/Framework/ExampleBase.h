@@ -41,24 +41,118 @@ struct GraphicsPiplineShaderInfo {
 
 };
 
+
+struct Buffer {
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+	VkDeviceSize size = 0;
+	VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+	void* hostMapPointer = nullptr;
+};
+
+struct Image {
+	VkImage image;
+	VkImageView imageView;
+	VkFormat format;
+	VkDeviceMemory memory;
+	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkAccessFlags accessFlag = VK_ACCESS_NONE;
+	uint32_t numLayer = 0, numMip = 1;
+	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
+	VkExtent3D extent;
+	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
+	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+	void* hostMapPointer = nullptr;
+	uint32_t GetFormatNumBits(VkFormat format) {
+		switch (format)
+		{
+		case VK_FORMAT_R8G8B8A8_SRGB:;
+		case VK_FORMAT_B8G8R8A8_SRGB:;
+		case VK_FORMAT_D32_SFLOAT:
+			return 32;
+		case VK_FORMAT_MAX_ENUM:
+
+			break;
+		default:
+			break;
+		}
+		assert(0);
+		return 0;
+
+	}
+	bool WholeCopyCompatible(const Image& other) {
+		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
+			extent.width == other.extent.width && extent.height == other.extent.height && extent.depth == other.extent.depth && ChechFormatSizeCompatible(other.format);
+	}
+	bool WholeBlitCompatible(const Image& other)
+	{
+		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
+			ChechFormatSizeCompatible(other.format);
+	}
+	bool ChechFormatSizeCompatible(VkFormat otherFormat)
+	{
+		return GetFormatNumBits(format) == GetFormatNumBits(otherFormat);
+
+	}
+	VkExtent3D GetMipLevelExtent(uint32_t mipLevel)
+	{
+		VkExtent3D size;
+		size.width = extent.width / pow(2, mipLevel) >= 1 ? extent.width / pow(2, mipLevel) : 1;
+		size.height = extent.height / pow(2, mipLevel) >= 1 ? extent.height / pow(2, mipLevel) : 1;
+		size.depth = extent.depth / pow(2, mipLevel) >= 1 ? extent.depth / pow(2, mipLevel) : 1;
+		return size;
+	}
+};
+
 struct Barrier {
 	VkImageMemoryBarrier imageMemoryBarrier;
 	VkBufferMemoryBarrier bufferMemoryBarrier;
 	Barrier() {
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		imageMemoryBarrier.pNext = nullptr;
-		imageMemoryBarrier.srcAccessMask;
-		imageMemoryBarrier.dstAccessMask;
-		imageMemoryBarrier.oldLayout;
-		imageMemoryBarrier.newLayout;
+		imageMemoryBarrier.srcAccessMask = 0;
+		imageMemoryBarrier.dstAccessMask = 0;
+		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		imageMemoryBarrier.image = nullptr;
-		imageMemoryBarrier.subresourceRange;
+		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+		imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+		imageMemoryBarrier.subresourceRange.layerCount = 0;
+		imageMemoryBarrier.subresourceRange.levelCount = 0;
 
+
+		bufferMemoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		bufferMemoryBarrier.pNext = nullptr;
+		bufferMemoryBarrier.srcAccessMask;
+		bufferMemoryBarrier.dstAccessMask;
+		bufferMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		bufferMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		bufferMemoryBarrier.buffer = VK_NULL_HANDLE;
+		bufferMemoryBarrier.offset = 0;
+		bufferMemoryBarrier.size = 0;
 
 	}
-
+	const VkImageMemoryBarrier& ImageBarrier(Image& image,VkAccessFlags dstAccess,VkImageLayout dstImageLayout)
+	{
+		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		imageMemoryBarrier.pNext = nullptr;
+		imageMemoryBarrier.srcAccessMask = image.accessFlag;
+		imageMemoryBarrier.dstAccessMask = dstAccess;
+		imageMemoryBarrier.oldLayout = image.currentLayout;
+		imageMemoryBarrier.newLayout = dstImageLayout;
+		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.image = image.image;
+		imageMemoryBarrier.subresourceRange.aspectMask = image.aspect;
+		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+		imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+		imageMemoryBarrier.subresourceRange.layerCount = image.numLayer;
+		imageMemoryBarrier.subresourceRange.levelCount = image.numMip;
+		return imageMemoryBarrier;
+	}
 
 
 };
@@ -201,67 +295,6 @@ struct GraphicPipelineInfos {
 
 
 };
-struct Buffer {
-	VkBuffer buffer;
-	VkDeviceMemory memory;
-	VkDeviceSize size = 0;
-	VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
-	void* hostMapPointer = nullptr;
-};
-
-struct Image {
-	VkImage image;
-	VkImageView imageView;
-	VkFormat format;
-	VkDeviceMemory memory;
-	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	VkAccessFlags accessFlag = VK_ACCESS_NONE;
-	uint32_t numLayer = 0, numMip = 1;
-	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
-	VkExtent3D extent;
-	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
-	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-	void* hostMapPointer = nullptr;
-	uint32_t GetFormatNumBits(VkFormat format) {
-		switch (format)
-		{
-		case VK_FORMAT_R8G8B8A8_SRGB:;
-		case VK_FORMAT_B8G8R8A8_SRGB:;
-		case VK_FORMAT_D32_SFLOAT:
-			return 32;
-		case VK_FORMAT_MAX_ENUM:
-			
-			break;
-		default:
-			break;
-		}
-		assert(0);
-		return 0;
-
-	}
-	bool WholeCopyCompatible(const Image& other) {
-		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
-			extent.width == other.extent.width && extent.height == other.extent.height && extent.depth == other.extent.depth && ChechFormatSizeCompatible(other.format);
-	}
-	bool WholeBlitCompatible(const Image& other)
-	{
-		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
-			 ChechFormatSizeCompatible(other.format);
-	}
-	bool ChechFormatSizeCompatible(VkFormat otherFormat)
-	{
-		return GetFormatNumBits(format) == GetFormatNumBits(otherFormat);
-
-	}
-	VkExtent3D GetMipLevelExtent(uint32_t mipLevel)
-	{
-		VkExtent3D size;
-		size.width = extent.width / pow(2, mipLevel) >= 1 ? extent.width / pow(2, mipLevel) : 1;
-		size.height = extent.height / pow(2, mipLevel) >= 1 ? extent.height / pow(2, mipLevel) : 1;
-		size.depth = extent.depth / pow(2, mipLevel) >= 1 ? extent.depth / pow(2, mipLevel) : 1;
-		return size;
-	}
-};
 
 struct TextureDataSource {
 	std::string picturePath = "";
@@ -326,6 +359,19 @@ struct UniformBufferInfo {
 	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
 };
 
+struct CommandList {
+	VkCommandBuffer commandBuffer  = VK_NULL_HANDLE;
+	VkFence commandFinishFence = VK_NULL_HANDLE;
+	VkCommandBufferUsageFlags commandBufferUsage = 0;
+};
+
+struct SubmitSynchronizationInfo {
+	std::vector<VkSemaphore> waitSemaphores;//指明要等待的信号量
+	std::vector<VkPipelineStageFlags> waitStages;//指明在哪个阶段进行等待信号量
+	std::vector<VkSemaphore> sigSemaphores;//指明要触发的信号量
+
+};
+
 class ExampleBase {
 	//
 
@@ -337,7 +383,7 @@ public:
 	static void Run(ExampleBase* example);
 
 protected:
-	void Init();
+
 	virtual void InitResourceInfos() = 0;//��ʼ����Ҫ����Դ
 	virtual void Loop() = 0;//��Ⱦѭ��
 	struct ShaderCodePaths {
@@ -346,24 +392,72 @@ protected:
 		std::string fragmentShaderPath = "";
 	};
 
-
-protected:
-
 protected:
 	virtual void InitSubPassInfo() = 0;
+	virtual void InitSyncObjectNumInfo() = 0;
+	void InitDefaultGraphicSubpassInfo();
+	//
+protected:
+	void LoadObj(const std::string& objFilePath, Geometry& geo);
+	//resource
+	void FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data);
+	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
+protected:
+	//runtime
+	void CmdListReset(CommandList& cmdList);
+	void CmdListRecordBegin(CommandList& cmdList);
+	void CmdListRecordEnd(CommandList& cmdList);
+	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
+	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
+	void CmdOpsDrawGeom(CommandList& cmdList);
+	void CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info);
+	void CmdListWaitFinish(CommandList& cmdList);
+	VkResult Present(uint32_t imageIndex, const std::vector<VkSemaphore>& waitSemaphores);
+	uint32_t GetNextPresentImageIndex(VkSemaphore sigValidSemaphore);
+
+protected:
+	//runtime
+	std::vector<Geometry> geoms;
+	CommandList graphicCommandList;
+	//uint32_t numFences = 1;
+	uint32_t numSemaphores = 1;
+	void WaitIdle();
+
+	void WaitAllFence(const std::vector<VkFence>& fences);
+	void ResetAllFence(const std::vector<VkFence>& fences);
+
+
+	std::vector<VkSemaphore> semaphores;//根据不同的场景动态创建
+	//std::vector<VkFence> fences;//根据不同场景创建
+
+	std::map<std::string, TextureInfo> textureInfos;
+	std::map<std::string, UniformBufferInfo> uniformBufferInfos;
+	std::vector<ShaderCodePaths> pipelinesShaderCodePaths;
+protected:
+	//这里的数据不能被派生类创建和析构
+	//render pass ֻ
+	RenderTargets renderTargets;
+	std::vector<Image> swapchainImages;
+	uint32_t windowWidth = 512, windowHeight = 512;
+	std::map<std::string, Texture> textures;
+	std::map<std::string, Buffer> uniformBuffers;
+
+private:
+	void Init();
 	virtual void InitContex();
 	virtual void InitAttanchmentDesc();
 	virtual void InitRenderPass();
 	virtual void InitFrameBuffer();
-	void InitDefaultGraphicSubpassInfo();
+	void InitSyncObject();
 	virtual void InitGraphicPipelines();
-	virtual void InitSyncObject();
 	virtual void InitRecources();
 	virtual void InitQueryPool();
+	virtual void InitCommandList();
 	void InitGeometryResources(Geometry& geo);
 	void InitTextureResources();
 	void InitUniformBufferResources();
-protected:
+private:
 	virtual void Clear();
 	virtual void ClearContex();
 	virtual void ClearAttanchment();
@@ -375,64 +469,39 @@ protected:
 	virtual void ClearQueryPool();
 
 
-//
-protected:
 
-
-protected:
-
-
-protected:
+private:
 	//utils
 	int32_t GetSuitableQueueFamilyIndex(VkPhysicalDevice physicalDevice,VkQueueFlags wantQueueFlags,bool needSupportPresent,uint32_t wantNumQueue);
 	void PickValidPhysicalDevice();
 	int32_t GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits,VkMemoryPropertyFlags wantMemoryFlags);
 	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping = VkComponentMapping{}, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
-	void FillImage(Image& image, uint32_t layer,uint32_t mip, VkImageAspectFlags aspect, uint32_t width,uint32_t height,uint32_t numComponets, const char* data);
+	
 	void FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data);
 	void DestroyImage(const Image& image);
 
 	Texture Load2DTexture(const std::string& texFilePath);
 	Texture Create2DTexture(uint32_t width, uint32_t height, const char* textureDatas);
 	Texture LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths/*+x,-x,+y,-y,+z,-z*/);
-	void LoadObj(const std::string& objFilePath, Geometry& geo);
+
 	
 	Buffer CreateVertexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateUniformBuffer(const char* buf, VkDeviceSize size);
-	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
+	
 	void DestroyBuffer(Buffer& buffer);
 
 	void TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout);
-	void TransferImageLayout(Image& image,VkImageLayout dstImageLayout, VkImageSubresourceRange subRange);
-	//transfer
-	void CopyImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
-	void BlitImageToImage(Image srcImage, Image dstImage, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
-	uint32_t GetNextPresentImageIndex(VkSemaphore sigValidSemaphore);
+	
+
 
 	//descriptor
 	void BindTexture(const Texture& texture, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId = 0);
 	void BindUniformBuffer(const Buffer& uniformBuffer, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId = 0);
 
+	void CreateSemaphores(uint32_t numSemaphores);
+	//void CreateFences(uint32_t numFences);
 
-protected:
-	//runtime
-	std::vector<Geometry> geoms;
-	//render
-	void DrawGeom(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores);
-	VkResult Present(const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkSemaphore>& sigSemaphores, uint32_t swapchainImageIndex);
-
-	void WaitIdle();
-
-	void WaitAllFence(const std::vector<VkFence>& fences);
-	void ResetAllFence(const std::vector<VkFence>& fences);
-
-
-	VkSemaphore drawSemaphore = VK_NULL_HANDLE,presentValidSemaphore = VK_NULL_HANDLE, presentFinishSemaphore = VK_NULL_HANDLE;;
-
-	std::map<std::string, TextureInfo> textureInfos;
-	std::map<std::string, UniformBufferInfo> uniformBufferInfos;
-	std::vector<ShaderCodePaths> pipelinesShaderCodePaths;
 private:
 	
 	//shader parse
@@ -452,20 +521,10 @@ private:
 	//utils
 	Buffer CreateBuffer(VkBufferUsageFlags usage,const char* buf, VkDeviceSize size,VkMemoryPropertyFlags memoryPropties);
 
-
-	//runtime
 	
 
 
-protected:
-	//这里的数据不能被派生类创建和析构
-	//render pass ֻ
-	RenderTargets renderTargets;
-	std::vector<Image> swapchainImages;
-	VkSemaphore swapchainImageValidSemaphore;
-	uint32_t windowWidth = 512, windowHeight = 512;
-	std::map<std::string, Texture> textures;
-	std::map<std::string, Buffer> uniformBuffers;
+
 private:
 
 	bool initFlag = false;
@@ -529,7 +588,7 @@ private:
 
 
 
-	VkQueue graphicQueue = VK_NULL_HANDLE;
+	VkQueue graphicQueue = VK_NULL_HANDLE;//该队列可以graphic，可以transfer，可以present
 	
 
 	uint32_t queueFamilyIndex = 0;
@@ -539,8 +598,11 @@ private:
 
 	//command
 	VkCommandPool commandPool = VK_NULL_HANDLE;
-	VkCommandBuffer renderCommandBuffer = VK_NULL_HANDLE, oneSubmitCommandBuffer = VK_NULL_HANDLE;
-	VkFence renderCommandBufferFence = VK_NULL_HANDLE, oneSubmitCommmandBufferFence = VK_NULL_HANDLE;
+
+	CommandList oneSubmitCommandList;
+
+	//VkCommandBuffer renderCommandBuffer = VK_NULL_HANDLE, oneSubmitCommandBuffer = VK_NULL_HANDLE;
+	//VkFence renderCommandBufferFence = VK_NULL_HANDLE, oneSubmitCommmandBufferFence = VK_NULL_HANDLE;
 
 
 	VkQueryPool queryPool = VK_NULL_HANDLE;

@@ -232,8 +232,9 @@ namespace VulkanAPI {
 	//fence
 	VkFence CreateFence(VkDevice device, VkFenceCreateFlags flags);
 	void DestroyFence(VkDevice device, VkFence fence);
-	void WaitFence(VkDevice device, const std::vector<VkFence>& fences, bool waitAll);
+	VkResult WaitFence(VkDevice device, const std::vector<VkFence>& fences, bool waitAll);
 	void ResetFences(VkDevice device, const std::vector<VkFence>& fences);
+	VkResult GetFenceStatus(VkDevice device, VkFence fence);
 
 	//semaphore
 	VkSemaphore CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags);
@@ -250,7 +251,7 @@ namespace VulkanAPI {
 
 	//---------------------------------------------------------------------------------
 	// commands
-	
+	void CommandBufferReset(VkCommandBuffer commandBuffer);
 	void BeginRecord(VkCommandBuffer commandBuffer, VkCommandBufferUsageFlags  flags);
 	void EndRecord(VkCommandBuffer commandBuffer);
 	void CmdBeginRenderPass(VkCommandBuffer commandBuffer, 
@@ -331,9 +332,9 @@ namespace VulkanAPI {
 						 VkPipelineStageFlags                        srcStageMask,
 						 VkPipelineStageFlags                        dstStageMask,
 						 VkDependencyFlags                           dependencyFlags,
-						 const std::vector<VkMemoryBarrier> memoryBarriers,
-						 const std::vector<VkBufferMemoryBarrier> bufferMemoryBarriers,
-						 const std::vector<VkImageMemoryBarrier> imageMemoryBarriers);
+						 const std::vector<VkMemoryBarrier>& memoryBarriers,
+						 const std::vector<VkBufferMemoryBarrier>& bufferMemoryBarriers,
+						 const std::vector<VkImageMemoryBarrier>& imageMemoryBarriers);
 
 	
 	//-------------------------------------------------------------------------------------

@@ -45,8 +45,8 @@ int main()
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	//DrawSimpleTriangleSample example;
-	UniformExample example;
+	DrawSimpleTriangleSample example;
+	//UniformExample example;
 	//SkyBoxExample example;
 	ExampleBase::Run(&example);
 

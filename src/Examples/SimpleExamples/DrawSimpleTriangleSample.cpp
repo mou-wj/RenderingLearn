@@ -66,14 +66,35 @@ void DrawSimpleTriangleSample::Loop()
 	//}
 
 	//Texture testTexture = Create2DTexture(512, 512, testImageData.data());
+	//记录command buffer
+
+	auto swapchainValidSemaphore = semaphores[0];
+	auto finishCopyTargetToSwapchain = semaphores[1];
+	SubmitSynchronizationInfo submitSyncInfo;
+	submitSyncInfo.waitSemaphores = { swapchainValidSemaphore };
+	submitSyncInfo.waitStages = {VK_PIPELINE_STAGE_TRANSFER_BIT};
+	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
+
+
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
 		WindowEventHandler::ProcessEvent();
 		//确保presentFence在创建时已经触发
-		DrawGeom({}, { drawSemaphore });
-		auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);
-		CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore,drawSemaphore }, { presentValidSemaphore });
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
+		CmdListWaitFinish(graphicCommandList);
+		CmdListReset(graphicCommandList);
+		CmdListRecordBegin(graphicCommandList);
+		CmdOpsDrawGeom(graphicCommandList);
+		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex]);
+		//CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdListRecordEnd(graphicCommandList);
+		CmdListSubmit(graphicCommandList, submitSyncInfo);
+		Present(nexIndex, { finishCopyTargetToSwapchain });
 		
 		//CopyImageToImage(testTexture.image, swapchainImages[nexIndex], { swapchainImageValidSemaphore }, { presentValidSemaphore });
 		//CopyImageToImage(renderTargets.colorAttachment.attachmentImage,testTexture.image, { drawSemaphore }, { presentValidSemaphore });
@@ -84,8 +105,13 @@ void DrawSimpleTriangleSample::Loop()
 		//auto b = rgba[2];
 		//auto a = rgba[3];
 
-		Present({ presentValidSemaphore }, {presentFinishSemaphore}, nexIndex);
+
 
 	}
 
+}
+
+void DrawSimpleTriangleSample::InitSyncObjectNumInfo()
+{
+	numSemaphores = 2;
 }

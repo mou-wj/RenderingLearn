@@ -92,11 +92,11 @@ void UniformExample::Loop()
 			CaptureBeginMacro
 //		}
 		//确保presentFence在创建时已经触发
-		DrawGeom({}, { drawSemaphore });
+		//DrawGeom({}, { drawSemaphore });
 			CaptureEndMacro;
 
-		auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);
-		CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore,drawSemaphore }, { presentValidSemaphore });
+		//auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);
+		//CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore,drawSemaphore }, { presentValidSemaphore });
 
 		//CopyImageToImage(testTexture.image, swapchainImages[nexIndex], { swapchainImageValidSemaphore }, { presentValidSemaphore });
 		//CopyImageToImage(renderTargets.colorAttachment.attachmentImage,testTexture.image, { drawSemaphore }, { presentValidSemaphore });
@@ -107,7 +107,7 @@ void UniformExample::Loop()
 		//auto b = rgba[2];
 		//auto a = rgba[3];
 
-		Present({ presentValidSemaphore }, { presentFinishSemaphore }, nexIndex);
+		//Present({ presentValidSemaphore }, { presentFinishSemaphore }, nexIndex);
 		int a = 10;
 		//if (numCap != 0)
 		//{
@@ -117,4 +117,10 @@ void UniformExample::Loop()
 
 	}
 
+}
+
+void UniformExample::InitSyncObjectNumInfo()
+{
+	//numFences = 1;
+	numSemaphores = 1;
 }
