@@ -943,12 +943,12 @@ void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& wa
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.pNext = nullptr;
 	submitInfo.waitSemaphoreCount = waitSemaphores.size();
-	submitInfo.pWaitSemaphores = waitSemaphores.data();
-	submitInfo.pWaitDstStageMask = waitDstStageMask.data();
+	submitInfo.pWaitSemaphores = waitSemaphores.empty() ? VK_NULL_HANDLE : waitSemaphores.data();
+	submitInfo.pWaitDstStageMask = waitSemaphores.empty() ? VK_NULL_HANDLE : waitDstStageMask.data();
 	submitInfo.commandBufferCount = commandBuffers.size();
-	submitInfo.pCommandBuffers = commandBuffers.data();
+	submitInfo.pCommandBuffers = commandBuffers.empty() ? VK_NULL_HANDLE : commandBuffers.data();
 	submitInfo.signalSemaphoreCount = signalSemaphores.size();
-	submitInfo.pSignalSemaphores = signalSemaphores.data();
+	submitInfo.pSignalSemaphores = signalSemaphores.empty() ? VK_NULL_HANDLE : signalSemaphores.data();
 
 	SubmitCommands(queue, { submitInfo }, allCommandFinishedFence);
 
@@ -971,11 +971,11 @@ void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemap
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.pNext = nullptr;
 	presentInfo.waitSemaphoreCount = waitSemaphores.size();
-	presentInfo.pWaitSemaphores = waitSemaphores.data();
+	presentInfo.pWaitSemaphores = waitSemaphores.empty() ? VK_NULL_HANDLE : waitSemaphores.data();
 	presentInfo.swapchainCount = swapchains.size();
-	presentInfo.pSwapchains = swapchains.data();
+	presentInfo.pSwapchains = swapchains.empty() ? VK_NULL_HANDLE : swapchains.data();
 	presentInfo.pImageIndices = swapchainImageIndices.data();
-	presentInfo.pResults = outResults.data();
+	presentInfo.pResults = outResults.empty() ? VK_NULL_HANDLE : outResults.data();
 	vkQueuePresentKHR(queue, &presentInfo);
 }
 

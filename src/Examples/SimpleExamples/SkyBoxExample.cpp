@@ -67,39 +67,49 @@ void SkyBoxExample::Loop()
 		glm::mat4 view;
 		glm::mat4 proj;
 	} buffer;
-	buffer.world = Transform::GetTransformMatrixFromRH();
-	buffer.view = Transform::GetViewMatrix(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0));;
+	buffer.world = glm::mat4(1.0);
+	buffer.view = Transform::GetViewMatrix(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0));;
 	buffer.proj = Transform::GetPerspectiveProj(0.1,100,90,1);
+	//ShowMat(buffer.view);
+	//ShowMat(buffer.proj);
+	//ShowVec(buffer.proj* buffer.view* glm::vec4(1, 1, 1, 1));
 
 	FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
-	uint32_t numCap = 4;
+
+	auto swapchainValidSemaphore = semaphores[0];
+	auto finishCopyTargetToSwapchain = semaphores[1];
+	SubmitSynchronizationInfo submitSyncInfo;
+	submitSyncInfo.waitSemaphores = { swapchainValidSemaphore };
+	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
+	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
+
+
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
 		WindowEventHandler::ProcessEvent();
+		//确保presentFence在创建时已经触发
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
+		CmdListWaitFinish(graphicCommandList);
+		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
-		//DrawGeom({}, { drawSemaphore });
-		CaptureEndMacro;
+		CmdListRecordBegin(graphicCommandList);
+		
+		CmdOpsDrawGeom(graphicCommandList);
+		
+		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex]);
+		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdListRecordEnd(graphicCommandList);
+		CmdListSubmit(graphicCommandList, submitSyncInfo);
+		CaptureEndMacro
+		Present(nexIndex, { finishCopyTargetToSwapchain });
 
-		//auto nexIndex = GetNextPresentImageIndex(swapchainImageValidSemaphore);
-		//CopyImageToImage(renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex], { swapchainImageValidSemaphore,drawSemaphore }, { presentValidSemaphore });
 
-		//CopyImageToImage(testTexture.image, swapchainImages[nexIndex], { swapchainImageValidSemaphore }, { presentValidSemaphore });
-		//CopyImageToImage(renderTargets.colorAttachment.attachmentImage,testTexture.image, { drawSemaphore }, { presentValidSemaphore });
-		//WaitIdle();
-		//auto rgba = (const char*)testTexture.image.hostMapPointer;
-		//auto r = rgba[0];
-		//auto g = rgba[1];
-		//auto b = rgba[2];
-		//auto a = rgba[3];
-
-		//Present({ presentValidSemaphore }, { presentFinishSemaphore }, nexIndex);
-		//if (numCap != 0)
-		//{
-		;
-		//	numCap--;
-		//}
 
 	}
 
@@ -108,5 +118,5 @@ void SkyBoxExample::Loop()
 
 void SkyBoxExample::InitSyncObjectNumInfo()
 {
-	numSemaphores = 1;
+	numSemaphores = 2;
 }

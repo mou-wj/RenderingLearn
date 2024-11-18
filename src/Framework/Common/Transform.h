@@ -61,17 +61,12 @@ namespace Transform {
 	glm::mat4 GetQuaternionMatrix(glm::vec4 center);
 
 	/**
-	 * @brief 不区分坐标系，获取view矩阵，其中up为相机坐标的-y，对应vulkan的NDC的向下，target-pos对应相机坐标的-z方向，对应vulkan的NDC向内方向
-	 * @param pos 相机位置，target 相机视点，up向上向量
+	 * @brief 不区分坐标系，获取view矩阵，其中down为相机坐标的y，对应vulkan的NDC的向下，target-pos对应相机坐标的z方向，对应vulkan的NDC向内方向
+	 * @param pos 相机位置，target 相机视点，down向下向量
 	 * @return 返回view矩阵
 	*/
-	glm::mat4 GetViewMatrix(glm::vec3 pos,glm::vec3 target, glm::vec3 up);
+	glm::mat4 GetViewMatrix(glm::vec3 pos,glm::vec3 target, glm::vec3 down);
 
-	/**
-	 * @brief 将右手系转为左手系
-	 * @return 返回右手系转左手系矩阵
-	*/
-	glm::mat4 GetTransformMatrixFromRH();
 
 
 	/**

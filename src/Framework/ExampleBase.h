@@ -4,6 +4,7 @@
 #include "Utils/RenderDocTool.h"
 #include "Utils/WindowEventHandler.h"
 #include "Common/Transform.h"
+#include "Common/GlmShowTool.hpp"
 #include <map>
 #include <string>
 #include <array>
@@ -56,7 +57,6 @@ struct Image {
 	VkFormat format;
 	VkDeviceMemory memory;
 	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	VkAccessFlags accessFlag = VK_ACCESS_NONE;
 	uint32_t numLayer = 0, numMip = 1;
 	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
 	VkExtent3D extent;
@@ -135,11 +135,11 @@ struct Barrier {
 		bufferMemoryBarrier.size = 0;
 
 	}
-	const VkImageMemoryBarrier& ImageBarrier(Image& image,VkAccessFlags dstAccess,VkImageLayout dstImageLayout)
+	const VkImageMemoryBarrier& ImageBarrier(Image& image,VkAccessFlags srcAccess, VkAccessFlags dstAccess,VkImageLayout dstImageLayout)
 	{
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		imageMemoryBarrier.pNext = nullptr;
-		imageMemoryBarrier.srcAccessMask = image.accessFlag;
+		imageMemoryBarrier.srcAccessMask = srcAccess;
 		imageMemoryBarrier.dstAccessMask = dstAccess;
 		imageMemoryBarrier.oldLayout = image.currentLayout;
 		imageMemoryBarrier.newLayout = dstImageLayout;
@@ -407,7 +407,7 @@ protected:
 	void CmdListReset(CommandList& cmdList);
 	void CmdListRecordBegin(CommandList& cmdList);
 	void CmdListRecordEnd(CommandList& cmdList);
-	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
 	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
 	void CmdOpsDrawGeom(CommandList& cmdList);

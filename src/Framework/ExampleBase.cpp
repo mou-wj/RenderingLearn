@@ -413,7 +413,12 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	image.numMip = numMip;
 	image.tiling = tiling;
 	image.format = format;
-	image.image = VulkanAPI::CreateImage(device, 0, imageType, image.format, image.extent,
+	VkImageCreateFlags imageCreatFlags = 0;
+	if (viewType == VK_IMAGE_VIEW_TYPE_CUBE || viewType == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
+	{
+		imageCreatFlags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+	}
+	image.image = VulkanAPI::CreateImage(device, imageCreatFlags, imageType, image.format, image.extent,
 		image.numMip, image.numLayer, image.sample, image.tiling, usage, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
 	auto imageMemRequiredments = GetImageMemoryRequirments(device, image.image);
 	auto memtypeIndex = GetMemoryTypeIndex(imageMemRequiredments.memoryTypeBits, memoryProperies);
@@ -562,11 +567,10 @@ void ExampleBase::CmdListRecordEnd(CommandList& cmdList)
 	EndRecord(cmdList.commandBuffer);
 }
 
-void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
+void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
 {
-	auto imageBarrier = barrier.ImageBarrier(image, dstAccess, dstImageLayout);
+	auto imageBarrier = barrier.ImageBarrier(image, srcAccess, dstAccess, dstImageLayout);
 	CmdMemoryBarrier(cmdList.commandBuffer, srcStageMask, dstStageMask, 0, {}, {}, { imageBarrier });
-	image.accessFlag = dstAccess;
 	image.currentLayout = dstImageLayout;
 }
 
@@ -578,7 +582,6 @@ void ExampleBase::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image srcImag
 	{
 		Log("copy : two image are not compatible ! ", 0);
 	}
-	VkAccessFlags srcOldAccess = srcImage.accessFlag, dstOldAccess = dstImage.accessFlag;
 	VkImageLayout srcOldLayout = srcImage.currentLayout, dstOldLayout = dstImage.currentLayout;
 	//转换image layout
 	//CmdOpsImageMemoryBarrer(cmdList, srcImage, VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -684,7 +687,7 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList)
 
 void ExampleBase::CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info)
 {
-	SubmitCommands(graphicQueue, info.waitSemaphores, info.waitStages, { cmdList.commandBuffer }, {}, cmdList.commandFinishFence);
+	SubmitCommands(graphicQueue, info.waitSemaphores, info.waitStages, { cmdList.commandBuffer }, info.sigSemaphores, cmdList.commandFinishFence);
 }
 
 void ExampleBase::CmdListWaitFinish(CommandList& cmdList)
@@ -721,7 +724,7 @@ void ExampleBase::TransferWholeImageLayout(Image& image, VkImageLayout dstImageL
 {
 	CmdListWaitFinish(oneSubmitCommandList);
 	CmdListRecordBegin(oneSubmitCommandList);
-	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, image.accessFlag, dstImageLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, VK_ACCESS_NONE, dstImageLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	CmdListRecordEnd(oneSubmitCommandList);
 	
 	SubmitSynchronizationInfo info;
@@ -1082,7 +1085,6 @@ void ExampleBase::InitTextureResources()
 		}
 		case VK_IMAGE_VIEW_TYPE_CUBE: {
 			ASSERT(textureInfo.second.textureDataSources.size() == 6);
-			Texture texture;
 			std::array<std::string, 6> cubeFaceFiles;
 			for (uint32_t i = 0; i < 6; i++)
 			{

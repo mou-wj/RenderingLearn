@@ -13,6 +13,6 @@ layout(set = 0,binding = 0,std140) uniform Buffer{
 };
 void main(){
 	gl_Position = proj * view * world *vec4(inPosition,1.0f);
-	gl_Position= gl_Position.xyww;
+	gl_Position= gl_Position.xyzw;
 	sampleVec = normalize(inPosition);
 }

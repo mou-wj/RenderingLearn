@@ -1,4 +1,5 @@
 #include "Transform.h"
+#include "GlmShowTool.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/ext/quaternion_transform.hpp>
@@ -71,54 +72,55 @@ glm::mat4 Transform::GetQuaternionMatrix(glm::vec4 center)
 	return result;
 }
 
-glm::mat4 Transform::GetViewMatrix(glm::vec3 pos, glm::vec3 target, glm::vec3 up)
+glm::mat4 Transform::GetViewMatrix(glm::vec3 pos, glm::vec3 target, glm::vec3 down)
 {
 	glm::mat4 view(1.0);
-	glm::vec3 z = glm::normalize(pos - target);
-	glm::vec3 y = glm::normalize(-up);
-	glm::vec3 x = glm::normalize(glm::cross(z, y));
+	glm::vec3 z = glm::normalize(target - pos);
+	glm::vec3 y = glm::normalize(down);
+	glm::vec3 x = glm::normalize(glm::cross(y, z));
+	//0列
 	view[0][0] = x.x;
-	view[0][1] = x.y;
-	view[0][2] = x.z;
-	view[0][0] = y.x;
-	view[0][1] = y.y;
-	view[0][2] = y.z;
-	view[0][0] = z.x;
-	view[0][1] = z.y;
-	view[0][2] = z.z;
-	view[0][3] = - glm::dot(x ,pos);
-	view[1][3] = - glm::dot(y, pos);
-	view[2][3] = - glm::dot(z, pos);
+	view[0][1] = y.x;
+	view[0][2] = z.x;
+	//1列
+	view[1][0] = x.y;
+	view[1][1] = y.y;
+	view[1][2] = z.y;
+	//2列
+	view[2][0] = x.z;
+	view[2][1] = y.z;
+	view[2][2] = z.z;
+	//3列
+	view[3][0] = - glm::dot(x ,pos);
+	view[3][1] = - glm::dot(y, pos);
+	view[3][2] = - glm::dot(z, pos);
 	return view;
-}
-
-glm::mat4 Transform::GetTransformMatrixFromRH()
-{
-	glm::mat4 matrix(1.0);
-	matrix[2][2] = -1.0f;
-
-	return matrix;
 }
 
 
 
 glm::mat4 Transform::GetPerspectiveProj(float near, float far, float viewAngle, float ratioWH)
 {
-	glm::mat4 press(1.0);
+	//列主序
+	glm::mat4 press(0.0);
 	float halfRadias = glm::radians(viewAngle) / 2;
 	float nearPlaneH = near * glm::tan(halfRadias);
 	float nearPlaneW = nearPlaneH * ratioWH;
 	press[0][0] = 1 ;
 	press[1][1] = 1 ;
 	press[2][2] = (near + far) / near;
-	press[2][3] = -far;
-	press[3][2] = 1 / near;
-	glm::mat4 scale(1.0);
+	press[3][2] = -far;
+	press[2][3] = 1 / near;
+	ShowMat(press);
+	ShowVec(press * glm::vec4(2, 1, 1, -1));
+	glm::mat4 scale(0.0);
 	scale[0][0] = 1 / nearPlaneW;
 	scale[1][1] = 1 / nearPlaneH;
 	scale[2][2] = 1 / (far - near);
-	scale[2][3] = near / (near - far);
-
+	scale[3][2] = near / (near - far);
+	scale[3][3] = 1.0;
+	ShowMat(scale * press);
+	ShowVec(scale * press * glm::vec4(2, 1, 1, -1));
 	return scale * press;
 }
 
