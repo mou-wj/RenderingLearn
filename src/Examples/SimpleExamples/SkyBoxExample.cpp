@@ -17,15 +17,20 @@ void SkyBoxExample::InitResourceInfos()
 	geoms.resize(1);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 
-	//	
+	//
 	TextureDataSource dataSource;
 	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg";//+x
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
 	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg";//-x
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg";//+y
+	//dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg";//+y
+	//textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	//dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//-y
+	//textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	//因为采样使用的是glsl的texture函数，其计算纹理坐标的方式是根据opengl的NDC坐标进行的，即按照opengl的NDC，其+y方向应该是向上的，而vulkan的+y是向下的，为了适配glsl的texture函数，这里反转上下所对应的图片
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//+y
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//-y
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg";//-y
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
 	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg";//+z
 	textureInfos["skybox"].textureDataSources.push_back(dataSource);
@@ -69,7 +74,7 @@ void SkyBoxExample::Loop()
 	} buffer;
 	buffer.world = glm::mat4(1.0);
 	buffer.view = Transform::GetViewMatrix(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0));;
-	buffer.proj = Transform::GetPerspectiveProj(0.1,100,90,1);
+	buffer.proj = Transform::GetPerspectiveProj(0.1,100,-90,1);
 	//ShowMat(buffer.view);
 	//ShowMat(buffer.proj);
 	//ShowVec(buffer.proj* buffer.view* glm::vec4(1, 1, 1, 1));
@@ -84,6 +89,8 @@ void SkyBoxExample::Loop()
 	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
+	buffer.view = Transform::GetEularRotateMatrix(0, -90, 0) * buffer.view;
+	FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 	while (!WindowEventHandler::WindowShouldClose())
 	{
@@ -91,6 +98,8 @@ void SkyBoxExample::Loop()
 		WindowEventHandler::ProcessEvent();
 		//确保presentFence在创建时已经触发
 		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
+
 
 		CmdListWaitFinish(graphicCommandList);
 		CmdListReset(graphicCommandList);

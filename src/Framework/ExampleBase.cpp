@@ -441,11 +441,11 @@ void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageA
 	subresource.mipLevel = mip;
 	subresource.arrayLayer = layer;
 	auto sublayout = GetImageSubresourceLayout(device, image.image, subresource);
-	VkDeviceSize rowOffset = sublayout.offset;
+	VkDeviceSize rowOffset = 0;
 	for (uint32_t i = 0; i < height; i++)
 	{
 		//填充每一行
-		rowOffset = i * sublayout.rowPitch;
+		rowOffset = sublayout.offset +  i * sublayout.rowPitch;
 		FillImage(image, rowOffset, width * numComponets, data + i * width * numComponets);
 
 

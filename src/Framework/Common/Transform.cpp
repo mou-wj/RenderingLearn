@@ -34,23 +34,39 @@ glm::mat4 Transform::GetEularRotateMatrix(float yaw, float pitch, float roll)
 {
 	//ÁÐÐò
 	glm::mat4 result(1.0);
+	glm::mat4 rotateY(1.0);//yaw
+	glm::mat4 rotateX(1.0);//pitch
+	glm::mat4 rotateZ(1.0);//row
 	float yawRadians = glm::radians(yaw);
 	float pitchRadians = glm::radians(pitch);
-	float rollRadians = glm::radians(pitch);
+	float rollRadians = glm::radians(roll);
+	rotateY[0][0] = glm::cos(yawRadians);
+	rotateY[0][2] = glm::sin(yawRadians);
+	rotateY[2][0] = -glm::sin(yawRadians);
+	rotateY[2][2] = glm::cos(yawRadians);
 
+	rotateX[1][1] = glm::cos(pitchRadians);
+	rotateX[1][2] = glm::sin(pitchRadians);
+	rotateX[2][1] = -glm::sin(pitchRadians);
+	rotateX[2][2] = glm::cos(pitchRadians);
 
-	result[0][1] = glm::cos(rollRadians) * glm::cos(yawRadians) - glm::sin(rollRadians) * glm::sin(pitchRadians)* glm::sin(yawRadians);
-	result[0][2] = glm::sin(rollRadians) * glm::cos(yawRadians) + glm::cos(rollRadians) * glm::sin(pitchRadians) * glm::sin(yawRadians);
-	result[0][3] = -glm::cos(pitchRadians) * glm::sin(yawRadians);
+	rotateZ[0][0] = glm::cos(rollRadians);
+	rotateZ[0][1] = glm::sin(rollRadians);
+	rotateZ[1][0] = -glm::sin(rollRadians);
+	rotateZ[1][1] = glm::cos(rollRadians);
 
-	result[1][1] = -glm::sin(rollRadians) * glm::cos(pitchRadians);
-	result[1][2] = glm::cos(rollRadians) * glm::cos(pitchRadians);
-	result[1][3] = glm::sin(pitchRadians);
-	
-	result[2][1] = glm::cos(rollRadians) * glm::cos(yawRadians) + glm::sin(rollRadians) * glm::sin(pitchRadians) * glm::cos(yawRadians);
-	result[2][2] = glm::sin(rollRadians) * glm::sin(yaw) - glm::cos(rollRadians) * glm::sin(pitchRadians) * glm::sin(yawRadians);
-	result[2][3] = glm::cos(pitchRadians) * glm::cos(yawRadians);
+	//result[0][1] = glm::cos(rollRadians) * glm::cos(yawRadians) - glm::sin(rollRadians) * glm::sin(pitchRadians)* glm::sin(yawRadians);
+	//result[0][2] = glm::sin(rollRadians) * glm::cos(yawRadians) + glm::cos(rollRadians) * glm::sin(pitchRadians) * glm::sin(yawRadians);
+	//result[0][3] = -glm::cos(pitchRadians) * glm::sin(yawRadians);
 
+	//result[1][1] = -glm::sin(rollRadians) * glm::cos(pitchRadians);
+	//result[1][2] = glm::cos(rollRadians) * glm::cos(pitchRadians);
+	//result[1][3] = glm::sin(pitchRadians);
+	//
+	//result[2][1] = glm::cos(rollRadians) * glm::cos(yawRadians) + glm::sin(rollRadians) * glm::sin(pitchRadians) * glm::cos(yawRadians);
+	//result[2][2] = glm::sin(rollRadians) * glm::sin(yaw) - glm::cos(rollRadians) * glm::sin(pitchRadians) * glm::sin(yawRadians);
+	//result[2][3] = glm::cos(pitchRadians) * glm::cos(yawRadians);
+	result = rotateZ * rotateX * rotateY;
 	return result;
 }
 

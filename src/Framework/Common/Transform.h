@@ -45,9 +45,9 @@ namespace Transform {
 
 	/**
 	 * @brief 获得欧拉旋转矩阵，初始看向-z，右手系
-	 * @param yaw 偏航角（角度制）类比左右看
-	 * @param pitch 俯仰角 （角度制）类比上下看
-	 * @param roll 翻滚角 （角度制）类比顺时针看
+	 * @param yaw 偏航角（角度制）类比左右看,绕y轴旋转，x-z
+	 * @param pitch 俯仰角 （角度制）类比上下看，绕x轴旋转,z-y
+	 * @param roll 翻滚角 （角度制）类比顺时针看，绕z轴旋转,x-y
 	 * @return 返回欧拉旋转矩阵
 	*/
 	glm::mat4 GetEularRotateMatrix(float yaw, float pitch, float roll);
