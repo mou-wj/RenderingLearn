@@ -4,7 +4,6 @@
 layout(set = 0,binding = 1) uniform samplerCube testTexture;
 
 layout(location = 0) in vec3 inSampleVec;
-layout(location = 1) in vec3 inColor;
 layout(location = 0) out vec4 outColor;
 
 void main(){
@@ -13,5 +12,4 @@ void main(){
 	vec3 sampleV = inSampleVec * vec3(1.0,1.0,1.0);
 	vec4 texColor = texture(testTexture,sampleV);
 	outColor = texColor;
-	outColor  =vec4(inColor,1.0);
 }

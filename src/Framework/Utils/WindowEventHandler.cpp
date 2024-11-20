@@ -42,19 +42,21 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_UP: {
-        activeCamera->Rotate(RotateAction::AROUND_X_POSITIVE);
-        break;
-    }
-    case GLFW_KEY_DOWN: {
+        //往上看相当于所有点往下旋转，即z->y,即AROUND_X_NEGATIVE
         activeCamera->Rotate(RotateAction::AROUND_X_NEGATIVE);
         break;
     }
+    case GLFW_KEY_DOWN: {
+        activeCamera->Rotate(RotateAction::AROUND_X_POSITIVE);
+        break;
+    }
     case GLFW_KEY_RIGHT: {
-        activeCamera->Rotate(RotateAction::AROUND_Y_NEGATIVE);
+        //往右看相当于所有点往左旋转，即x->z，即AROUND_Y_POSITIVE
+        activeCamera->Rotate(RotateAction::AROUND_Y_POSITIVE);
         break;
     }
     case GLFW_KEY_LEFT: {
-        activeCamera->Rotate(RotateAction::AROUND_Y_POSITIVE);
+        activeCamera->Rotate(RotateAction::AROUND_Y_NEGATIVE);
         break;
     }
     default:

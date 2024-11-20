@@ -11,7 +11,6 @@ layout(set = 0,binding = 0,std140) uniform Buffer{
 	mat4 view;
 	mat4 proj;
 };
-layout(location  =1) out vec3 color;
 void main(){
 	//天空盒的模型不需要位移，只需要旋转就行
 	mat4 viewRotate = mat4(mat3(view));
@@ -19,10 +18,4 @@ void main(){
 	gl_Position = proj * viewRotate *vec4(inPosition,1.0f);
 	gl_Position= gl_Position.xyww;//
 	sampleVec = normalize(inPosition);
-	if(inPosition.x >0)
-	{
-	color = vec3(1.0,0.0,0.0);
-	}else {
-	color = vec3(0.0,0.0,1.0);
-	}
 }
