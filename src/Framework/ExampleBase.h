@@ -5,6 +5,7 @@
 #include "Utils/WindowEventHandler.h"
 #include "Common/Transform.h"
 #include "Common/GlmShowTool.hpp"
+#include "Utils/Camera.h"
 #include <map>
 #include <string>
 #include <array>
@@ -420,6 +421,8 @@ protected:
 	//runtime
 	std::vector<Geometry> geoms;
 	CommandList graphicCommandList;
+	SubpassInfo subpassInfo;
+	std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;
 	//uint32_t numFences = 1;
 	uint32_t numSemaphores = 1;
 	void WaitIdle();
@@ -581,7 +584,7 @@ private:
 
 
 	VkRenderPass renderPass = VK_NULL_HANDLE;
-	SubpassInfo subpassInfo;
+
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 
 

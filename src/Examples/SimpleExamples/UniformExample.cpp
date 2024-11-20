@@ -16,6 +16,7 @@ void UniformExample::InitResourceInfos()
 	//LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geom);
 	geoms.resize(1);
 	auto& geom = geoms[0];
+	subpassDrawGeoInfos[0] = { 0 };
 	geom.vertexAttrib.vertices = {
 		-1,1,0,
 		1,1,0,
@@ -100,6 +101,7 @@ void UniformExample::Loop()
 
 		CmdListWaitFinish(graphicCommandList);
 		CmdListReset(graphicCommandList);
+		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
 		CmdOpsDrawGeom(graphicCommandList);
 		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -109,6 +111,7 @@ void UniformExample::Loop()
 		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
+		CaptureEndMacro
 		Present(nexIndex, { finishCopyTargetToSwapchain });
 
 

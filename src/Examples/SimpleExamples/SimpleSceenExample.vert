@@ -5,11 +5,12 @@ layout(location = 2) in vec3 in2;
 layout(location = 3) in vec3 in3;
 layout(location = 4) in vec3 in4;
 layout(location = 5) in vec3 in5;
-layout(location = 0) out vec3 outColor;
+layout(location = 0) out vec3 sampleVec;
+layout(set = 0,binding = 0,std140) uniform SimpleSceenExampleBuffer{
+	mat4 world;
+	mat4 view;
+	mat4 proj;
+};
 void main(){
-	gl_Position =vec4(inPosition,1.0f);
-	if(inPosition.y >0)
-	outColor = vec3(1.0,0.0,0.0);
-	else 
-	outColor = vec3(0.0,1.0,0.0);
+	gl_Position = proj * view * world *vec4(inPosition,1.0f);
 }

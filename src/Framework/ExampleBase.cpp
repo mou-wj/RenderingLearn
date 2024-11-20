@@ -567,6 +567,8 @@ void ExampleBase::CmdListRecordEnd(CommandList& cmdList)
 	EndRecord(cmdList.commandBuffer);
 }
 
+
+
 void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
 {
 	auto imageBarrier = barrier.ImageBarrier(image, srcAccess, dstAccess, dstImageLayout);
@@ -652,35 +654,41 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList)
 	//{
 	//	ASSERT(0);
 	//}
+	
 
-	for (uint32_t i = 0; i < geoms.size(); i++)
-	{
-		const auto& geom = geoms[i];
-		CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
-		CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-		for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
-		{
-			CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-
-		}
+	ASSERT(subpassDrawGeoInfos.size() != 0)
+	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
+	for (uint32_t curSubpassIndex = 0; curSubpassIndex < subpassDrawGeoInfos.size(); curSubpassIndex++)
+	{			
 		//bind pipelines
-		for (uint32_t i = 0; i < graphcisPipelineInfos.size(); i++)
+		CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[curSubpassIndex].pipeline);
+		//绑定描述符集
+		for (const auto& setInfo : graphcisPipelineInfos[curSubpassIndex].descriptorSetInfos)
 		{
-			CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipeline);
-			for (const auto& setInfo : graphcisPipelineInfos[i].descriptorSetInfos)
-			{
-				CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[i].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
-			}
-			//CmdBeginQuery(cmdList.commandBuffer, queryPool, 0, 0);
-			CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
-			//CmdEndQuery(cmdList.commandBuffer, queryPool, 0);
-			if (i != graphcisPipelineInfos.size() - 1)
-			{
-				CmdNextSubpass(cmdList.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-			}
+			CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[curSubpassIndex].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
 		}
-		CmdEndRenderPass(cmdList.commandBuffer);
+		
+		for (uint32_t i = 0; i < subpassDrawGeoInfos[curSubpassIndex].size(); i++)
+		{
+			const auto& geom = geoms[subpassDrawGeoInfos[curSubpassIndex][i]];
+
+			CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+			for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+			{
+				CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+				CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+			}
+
+		}
+
+		if (curSubpassIndex != subpassDrawGeoInfos.size() - 1)
+		{
+			CmdNextSubpass(cmdList.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+		}
 	}
+
+	CmdEndRenderPass(cmdList.commandBuffer);
+	
 
 
 }

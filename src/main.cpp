@@ -1,6 +1,7 @@
 #include "Examples/SimpleExamples/DrawSimpleTriangleSample.h"
 #include "Examples/SimpleExamples/UniformExample.h"
 #include "Examples/SimpleExamples/SkyBoxExample.h"
+#include "Examples/SimpleExamples/SimpleSceenExample.h"
 
 /*
 
@@ -48,7 +49,12 @@ int main()
 	CaptureNum(4);
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
+	glm::vec4 target=  glm::vec4(0, 0, 1, 1);
+	ShowMat(Transform::GetEularRotateMatrix(45, 0, 0));
+	ShowVec(Transform::GetEularRotateMatrix(45, 0, 0) * target);
+	ShowVec(Transform::GetEularRotateMatrix(45, 0, 0) * glm::vec4(1,0,1,1));
 	SkyBoxExample example;
+	//SimpleSceenExample example;
 	ExampleBase::Run(&example);
 
 

@@ -11,7 +11,7 @@ void ShowMat(const glm::mat <size, size,T, glm::qualifier::defaultp > & mat)
 		std::cout << std::endl;
 		for (uint32_t j = 0; j < size; j++)
 		{
-			std::cout << mat[i][j] << " ";
+			std::cout << mat[j][i] << " ";
 		}
 	}
 	std::cout << std::endl;
@@ -27,7 +27,7 @@ void ShowMat(const glm::mat <size_row, size_col, T, glm::qualifier::defaultp >& 
 		std::cout << std::endl;
 		for (uint32_t j = 0; j < size_col; j++)
 		{
-			std::cout << mat[i][j] << "      ";
+			std::cout << mat[j][i] << "      ";
 		}
 	}
 }

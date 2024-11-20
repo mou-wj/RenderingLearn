@@ -92,8 +92,9 @@ glm::mat4 Transform::GetViewMatrix(glm::vec3 pos, glm::vec3 target, glm::vec3 do
 {
 	glm::mat4 view(1.0);
 	glm::vec3 z = glm::normalize(target - pos);
-	glm::vec3 y = glm::normalize(down);
-	glm::vec3 x = glm::normalize(glm::cross(y, z));
+	glm::vec3 x = glm::normalize(glm::cross(down, z));
+	glm::vec3 y = glm::normalize(glm::cross(z, x));
+
 	//0ап
 	view[0][0] = x.x;
 	view[0][1] = y.x;

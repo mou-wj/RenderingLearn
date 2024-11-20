@@ -294,7 +294,6 @@ namespace VulkanAPI {
 	void CmdBindPipelineLayout(VkCommandBuffer  commandBuffer);
 	void CmdBindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout,
 						uint32_t firstSet, const std::vector<VkDescriptorSet> descriptorSets, const std::vector<uint32_t> dynamicOffsets);
-
 	//dynamic state
 	void CmdDynamicSetViewPorts(VkCommandBuffer commandBuffer, uint32_t firstViewport, const std::vector<VkViewport>& viewports);
 	void CmdClearAttachments(VkCommandBuffer commandBuffer, const std::vector<VkClearAttachment>& clearAttachments, const std::vector<VkClearRect>& clearRegions);
