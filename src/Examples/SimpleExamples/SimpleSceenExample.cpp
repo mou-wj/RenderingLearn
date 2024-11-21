@@ -66,30 +66,21 @@ void SimpleSceenExample::InitResourceInfos()
 	pipelinesShaderCodePaths = { shaderCodePath,drawSceenCodePath };
 	geoms.resize(2);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/SimpleSceen.obj", geoms[1]);
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/testcube.obj", geoms[1]);
 
 	subpassDrawGeoInfos[0] = { 0 };
 	subpassDrawGeoInfos[1] = { 1 };
 
-	//
-	TextureDataSource dataSource;
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg";//+x
-	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg";//-x
-	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	//dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg";//+y
-	//textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	//dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//-y
-	//textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	//因为采样使用的是glsl的texture函数，其计算纹理坐标的方式是根据opengl的NDC坐标进行的，即按照opengl的NDC，其+y方向应该是向上的，而vulkan的+y是向下的，为了适配glsl的texture函数，这里反转上下所对应的图片
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg";//+y
-	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg";//-y
-	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg";//+z
-	textureInfos["skybox"].textureDataSources.push_back(dataSource);
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg";//-z
-	textureInfos["skybox"].textureDataSources.push_back(dataSource);
+	std::vector<std::string> skyboxImages = {
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg",//-x
+	//因为采样使用的是glsl的texture函数，其计算纹理坐标的方式是根据opengl的NDC坐标进行的，即按照opengl的NDC，其+y方向应该是向上的，而vulkan的+y是向下的，为了适配glsl的texture函数，这里可以反转+-y所对应的图片，但是反转+-y图片其他方向任然存在上下颠倒问题，所以不采取反转+-y图片而进行所有面图片的反转读取
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg",//+y
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg",//-y
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg",//+z
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg"//-z
+	};
+	textureInfos["skybox"] = TextureInfo(skyboxImages);
 	textureInfos["skybox"].binding = 1;
 	textureInfos["skybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 
@@ -111,14 +102,32 @@ void SimpleSceenExample::Loop()
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 
 
-	Camera camera(glm::vec3(0,0,6),glm::vec3(0,0,7),glm::vec3(0,1,0));
+	Camera camera(glm::vec3(0,0,-12),glm::vec3(0,0,-11),glm::vec3(0,1,0));
+	//绑定camera响应按键的回调函数
+	WindowEventHandler::SetEventCallBack(KEY_W_PRESS, [&camera]() {camera.Move(MoveDirection::FORWARD); }, "点击w 相机前移");
+	WindowEventHandler::SetEventCallBack(KEY_S_PRESS, [&camera]() {camera.Move(MoveDirection::BACK); }, "点击s 相机后移");
+	WindowEventHandler::SetEventCallBack(KEY_A_PRESS, [&camera]() {camera.Move(MoveDirection::LEFT); }, "点击a 相机左移");
+	WindowEventHandler::SetEventCallBack(KEY_D_PRESS, [&camera]() {camera.Move(MoveDirection::RIGHT); }, "点击d 相机右移");
+	WindowEventHandler::SetEventCallBack(KEY_UP_PRESS, [&camera]() {
+		//往上看相当于所有点往下旋转，即z->y,即AROUND_X_NEGATIVE
+		camera.Rotate(RotateAction::AROUND_X_NEGATIVE); }, "点击up 相机往上看");
+	WindowEventHandler::SetEventCallBack(KEY_DOWN_PRESS, [&camera]() {camera.Rotate(RotateAction::AROUND_X_POSITIVE); }, "点击down 相机往下看");
+	WindowEventHandler::SetEventCallBack(KEY_RIGHT_PRESS, [&camera]() {
+		//往右看相当于所有点往左旋转，即x->z，即AROUND_Y_POSITIVE
+		camera.Rotate(RotateAction::AROUND_Y_POSITIVE);
+		}, "点击right 相机往右看");
+	WindowEventHandler::SetEventCallBack(KEY_LEFT_PRESS, [&camera]() {camera.Rotate(RotateAction::AROUND_Y_NEGATIVE); }, "点击left 相机往左看");
+
+
+
+
 	struct Buffer {
 		glm::mat4 world;
 		glm::mat4 view;
 		glm::mat4 proj;
 	} buffer;
 	buffer.world = glm::mat4(1.0);
-	buffer.view = Transform::GetViewMatrix(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0));;
+	buffer.view = camera.GetView();
 	buffer.proj = camera.GetProj();
 	//ShowMat(buffer.view);
 	//ShowMat(buffer.proj);
@@ -135,11 +144,15 @@ void SimpleSceenExample::Loop()
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
 
-	WindowEventHandler::SetActiveCamera(&camera);
+	//绑定纹理以及uniform buffer
+	BindTexture("skybox");
+	BindUniformBuffer("Buffer");
+	BindUniformBuffer("SimpleSceenExampleBuffer");
+
+
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
-		WindowEventHandler::ProcessEvent();
 
 		//确保presentFence在创建时已经触发
 		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
@@ -149,7 +162,8 @@ void SimpleSceenExample::Loop()
 		FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 		FillBuffer(uniformBuffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
-		CmdListWaitFinish(graphicCommandList);
+		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
+		WindowEventHandler::ProcessEvent();
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
@@ -169,7 +183,7 @@ void SimpleSceenExample::Loop()
 
 
 	}
-
+	WaitIdle();
 }
 
 

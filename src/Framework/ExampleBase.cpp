@@ -32,6 +32,22 @@ void ExampleBase::Run(ExampleBase* example)
 
 }
 
+void ExampleBase::BindTexture(const std::string& textureName)
+{
+	//绑定texture
+	ASSERT(textures.find(textureName) != textures.end());
+	auto& textureInfo = textureInfos[textureName];
+
+	BindTexture(textures[textureName], textureInfo.pipeId, textureInfo.setId, textureInfo.binding, textureInfo.elementId);
+}
+
+void ExampleBase::BindUniformBuffer(const std::string& uniformBufferName)
+{
+	ASSERT(uniformBuffers.find(uniformBufferName) != uniformBuffers.end());
+	auto& uniformBufferInfo = uniformBufferInfos[uniformBufferName];
+	BindUniformBuffer(uniformBuffers[uniformBufferName], uniformBufferInfo.pipeId, uniformBufferInfo.setId, uniformBufferInfo.binding, uniformBufferInfo.elementId);
+}
+
 void ExampleBase::Init()
 {
 	if (initFlag)
@@ -502,7 +518,7 @@ Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFi
 	std::array<std::vector<char>, 6> imageFaceDatas;
 	for (uint32_t i = 0; i < 6; i++)
 	{
-		LoadCharSRGBJpeg(faceTexFilePaths[i], { R,G,B,A }, imageFaceDatas[i], x, y);
+		LoadCharSRGBJpeg(faceTexFilePaths[i], { R,G,B,A }, imageFaceDatas[i], x, y,true);
 	}
 	//����texture
 	Texture texture;
@@ -1106,7 +1122,7 @@ void ExampleBase::InitTextureResources()
 			break;
 		}
 		//绑定texture
-		BindTexture(texture, textureInfo.second.pipeId, textureInfo.second.setId, textureInfo.second.binding, textureInfo.second.elementId);
+		//BindTexture(texture, textureInfo.second.pipeId, textureInfo.second.setId, textureInfo.second.binding, textureInfo.second.elementId);
 
 	}
 
@@ -1117,7 +1133,7 @@ void ExampleBase::InitUniformBufferResources()
 	for (const auto& unifomBufferInfo : uniformBufferInfos)
 	{
 		uniformBuffers[unifomBufferInfo.first] = CreateUniformBuffer(nullptr, unifomBufferInfo.second.size);
-		BindUniformBuffer(uniformBuffers[unifomBufferInfo.first], unifomBufferInfo.second.pipeId, unifomBufferInfo.second.setId, unifomBufferInfo.second.binding, unifomBufferInfo.second.elementId);
+		//BindUniformBuffer(uniformBuffers[unifomBufferInfo.first], unifomBufferInfo.second.pipeId, unifomBufferInfo.second.setId, unifomBufferInfo.second.binding, unifomBufferInfo.second.elementId);
 	}
 
 }

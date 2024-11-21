@@ -1,6 +1,6 @@
 # Blender 3.6.4
 # www.blender.org
-mtllib SimpleSceen.mtl
+mtllib testcube.mtl
 o Cube
 v 11.000000 1.000000 -11.000000
 v 11.000000 -1.000000 -11.000000

@@ -2,8 +2,9 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
-void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<char>& outImageData, uint32_t& outWidth, uint32_t& outHeight)
+void LoadCharSRGBJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<char>& outImageData, uint32_t& outWidth, uint32_t& outHeight,bool flip)
 {
+	stbi_set_flip_vertically_on_load(flip);
 	int x = 0, y = 0, numChannel = 0;
 	auto imageData = stbi_load(imageFile.c_str(), &x, &y, &numChannel,4);
 	outWidth = x;

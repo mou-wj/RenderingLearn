@@ -1,7 +1,22 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
-class Camera;
+#include <functional>
+#include <map>
+#include <string>
+
+enum EventType {
+	KEY_W_PRESS,
+	KEY_S_PRESS,
+	KEY_A_PRESS,
+	KEY_D_PRESS,
+	KEY_UP_PRESS,
+	KEY_DOWN_PRESS,
+	KEY_LEFT_PRESS,
+	KEY_RIGHT_PRESS,
+	KEY_I_PRESS
+
+};
 
 class WindowEventHandler {
 
@@ -9,7 +24,7 @@ public:
 	static void BindWindow(GLFWwindow *window);
 	static void ProcessEvent();
 	static bool WindowShouldClose();
-	static void SetActiveCamera(Camera* camera);
+	static void SetEventCallBack(EventType eventType, std::function<void()> callback,const std::string& actionDescription);
 	//static void ProcessKeyEvent();
 	//static void ProcessMouseEvent();
 private:
@@ -20,6 +35,5 @@ private:
 
 private:
 	static GLFWwindow* currentWidnow;
-	static Camera* activeCamera;
-
+	static std::map< EventType, std::function<void()>> s_eventCallBacks;
 };

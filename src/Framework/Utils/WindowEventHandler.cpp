@@ -1,7 +1,8 @@
 #include "WindowEventHandler.h"
 #include "Camera.h"
+#include <iostream>
 GLFWwindow* WindowEventHandler::currentWidnow = nullptr;
-Camera* WindowEventHandler::activeCamera = nullptr;
+std::map< EventType, std::function<void()>> WindowEventHandler::s_eventCallBacks;
 void WindowEventHandler::mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     //if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
         // 处理左键按下事件
@@ -15,10 +16,6 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
     {
         return;
     }
-    if (activeCamera == nullptr)
-    {
-        return;
-    }
     switch (key)
     {
     case GLFW_KEY_ESCAPE: {
@@ -26,37 +23,71 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_W: {
-        activeCamera->Move(MoveDirection::FORWARD);
+        if (s_eventCallBacks[KEY_W_PRESS])
+        {
+            s_eventCallBacks[KEY_W_PRESS]();
+        }
+
+
         break;
     }
     case GLFW_KEY_S: {
-        activeCamera->Move(MoveDirection::BACK);
+        if (s_eventCallBacks[KEY_S_PRESS])
+        {
+            s_eventCallBacks[KEY_S_PRESS]();
+        }
         break;
     }
     case GLFW_KEY_A: {
-        activeCamera->Move(MoveDirection::LEFT);
+        if (s_eventCallBacks[KEY_A_PRESS])
+        {
+            s_eventCallBacks[KEY_A_PRESS]();
+        }
         break;
     }
     case GLFW_KEY_D: {
-        activeCamera->Move(MoveDirection::RIGHT);
+        if (s_eventCallBacks[KEY_D_PRESS])
+        {
+            s_eventCallBacks[KEY_D_PRESS]();
+        }
         break;
     }
     case GLFW_KEY_UP: {
-        //往上看相当于所有点往下旋转，即z->y,即AROUND_X_NEGATIVE
-        activeCamera->Rotate(RotateAction::AROUND_X_NEGATIVE);
+        if (s_eventCallBacks[KEY_UP_PRESS])
+        {
+            s_eventCallBacks[KEY_UP_PRESS]();
+        }
         break;
     }
     case GLFW_KEY_DOWN: {
-        activeCamera->Rotate(RotateAction::AROUND_X_POSITIVE);
+        if (s_eventCallBacks[KEY_DOWN_PRESS])
+        {
+            s_eventCallBacks[KEY_DOWN_PRESS]();
+        }
         break;
     }
     case GLFW_KEY_RIGHT: {
-        //往右看相当于所有点往左旋转，即x->z，即AROUND_Y_POSITIVE
-        activeCamera->Rotate(RotateAction::AROUND_Y_POSITIVE);
+        if (s_eventCallBacks[KEY_RIGHT_PRESS])
+        {
+            s_eventCallBacks[KEY_RIGHT_PRESS]();
+        }
+
         break;
     }
     case GLFW_KEY_LEFT: {
-        activeCamera->Rotate(RotateAction::AROUND_Y_NEGATIVE);
+        if (s_eventCallBacks[KEY_LEFT_PRESS])
+        {
+            s_eventCallBacks[KEY_LEFT_PRESS]();
+        }
+
+        break;
+    }
+    case GLFW_KEY_I: {
+        if (s_eventCallBacks[KEY_I_PRESS])
+        {
+            s_eventCallBacks[KEY_I_PRESS]();
+        }
+
         break;
     }
     default:
@@ -86,7 +117,8 @@ bool WindowEventHandler::WindowShouldClose()
     return glfwWindowShouldClose(currentWidnow);
 }
 
-void WindowEventHandler::SetActiveCamera(Camera* camera)
+void WindowEventHandler::SetEventCallBack(EventType eventType, std::function<void()> callback,const std::string& actionDescription)
 {
-    activeCamera = camera;
+    s_eventCallBacks[eventType] = callback;
+    std::cout << actionDescription << std::endl;
 }

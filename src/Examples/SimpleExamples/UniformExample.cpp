@@ -91,7 +91,8 @@ void UniformExample::Loop()
 	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
-
+	BindUniformBuffer("Buffer");
+	BindTexture("OIP");
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

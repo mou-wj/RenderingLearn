@@ -18,4 +18,5 @@ void main(){
 	gl_Position = proj * viewRotate *vec4(inPosition,1.0f);
 	gl_Position= gl_Position.xyww;//
 	sampleVec = normalize(inPosition);
+
 }

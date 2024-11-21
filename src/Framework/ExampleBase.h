@@ -307,6 +307,14 @@ struct TextureInfo {
 	std::vector<TextureDataSource> textureDataSources;
 	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
 	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
+	TextureInfo() = default;
+	TextureInfo(const std::vector<std::string>& imagePaths) {
+		textureDataSources.resize(imagePaths.size());
+		for (uint32_t i = 0; i < imagePaths.size(); i++)
+		{
+			textureDataSources[i].picturePath = imagePaths[i];
+		}
+	}
 };
 struct Texture {
 	Image image;
@@ -445,6 +453,8 @@ protected:
 	uint32_t windowWidth = 512, windowHeight = 512;
 	std::map<std::string, Texture> textures;
 	std::map<std::string, Buffer> uniformBuffers;
+	void BindTexture(const std::string& textureName);
+	void BindUniformBuffer(const std::string& uniformBufferName);
 
 private:
 	void Init();

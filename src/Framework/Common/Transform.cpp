@@ -128,16 +128,12 @@ glm::mat4 Transform::GetPerspectiveProj(float near, float far, float viewAngle, 
 	press[2][2] = (near + far) / near;
 	press[3][2] = -far;
 	press[2][3] = 1 / near;
-	ShowMat(press);
-	ShowVec(press * glm::vec4(2, 1, 1, -1));
 	glm::mat4 scale(0.0);
 	scale[0][0] = 1 / nearPlaneW;
 	scale[1][1] = 1 / nearPlaneH;
 	scale[2][2] = 1 / (far - near);
 	scale[3][2] = near / (near - far);
 	scale[3][3] = 1.0;
-	ShowMat(scale * press);
-	ShowVec(scale * press * glm::vec4(2, 1, 1, -1));
 	return scale * press;
 }
 

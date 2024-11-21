@@ -39,7 +39,7 @@ vulkanµƒNDC£¨”“ ÷œµ
 +--------------------------------------------+
 
  */
-
+void TransformTest();
 
 int main()
 {
@@ -47,16 +47,23 @@ int main()
 	//GLSL2SPIRV();
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 	CaptureNum(4);
+	TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
-	glm::vec4 target=  glm::vec4(0, 0, 1, 1);
-	ShowMat(Transform::GetEularRotateMatrix(45, 0, 0));
-	ShowVec(Transform::GetEularRotateMatrix(45, 0, 0) * target);
-	ShowVec(Transform::GetEularRotateMatrix(45, 0, 0) * glm::vec4(1,0,1,1));
-	SkyBoxExample example;
-	//SimpleSceenExample example;
+	//SkyBoxExample example;
+	SimpleSceenExample example;
 	ExampleBase::Run(&example);
 
 
 	return 0;
+}
+void TransformTest() {
+	auto p = glm::vec4(1, 1, 1, 1);
+	auto view = Transform::GetViewMatrix(glm::vec3(0, 0, 3), glm::vec3(0, 0, 1), glm::vec3(0, -1, 0));
+	ShowMat(view);
+	ShowVec(view * p);
+	auto proj = Transform::GetPerspectiveProj(0.1, 100, 90, 1);
+	ShowMat(proj);
+	ShowVec(proj * view * p);
+
 }
