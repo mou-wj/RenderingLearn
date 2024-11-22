@@ -47,10 +47,10 @@ int main()
 	//GLSL2SPIRV();
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 	CaptureNum(4);
-	TransformTest();
+	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
-	//SkyBoxExample example;
+	SkyBoxExample example;
 	SimpleSceenExample example;
 	ExampleBase::Run(&example);
 

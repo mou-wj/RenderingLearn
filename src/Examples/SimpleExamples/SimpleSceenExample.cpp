@@ -66,7 +66,7 @@ void SimpleSceenExample::InitResourceInfos()
 	pipelinesShaderCodePaths = { shaderCodePath,drawSceenCodePath };
 	geoms.resize(2);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/testcube.obj", geoms[1]);
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/moved_cube.obj", geoms[1]);
 
 	subpassDrawGeoInfos[0] = { 0 };
 	subpassDrawGeoInfos[1] = { 1 };

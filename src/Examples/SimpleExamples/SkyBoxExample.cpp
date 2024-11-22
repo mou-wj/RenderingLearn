@@ -122,9 +122,6 @@ void SkyBoxExample::Loop()
 	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
-	buffer.view = Transform::GetEularRotateMatrix(0, 0, 0) * buffer.view;
-	FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
