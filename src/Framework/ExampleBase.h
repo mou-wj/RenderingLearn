@@ -354,13 +354,21 @@ struct RenderTargets {
 	Attachment depthAttachment;//render pass��1�Ÿ���
 	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 };
+struct ShaderCodePaths {
+	std::string vertexShaderPath = "";
+	std::string geometryShaderPath = "";
+	std::string fragmentShaderPath = "";
+};
 
+struct SubpassDesc {
+	VkSubpassDescription subpassDescription;
+	GraphicsPipelineStates subpassPipelineStates;
+	ShaderCodePaths pipelinesShaderCodePaths;
+
+};
 struct SubpassInfo {
-	std::vector<VkSubpassDescription> subpassDescs;
+	std::vector<SubpassDesc> subpassDescs;
 	std::vector<VkSubpassDependency> subpassDepends;
-
-		
-
 };
 
 struct UniformBufferInfo {
@@ -395,16 +403,12 @@ protected:
 
 	virtual void InitResourceInfos() = 0;//��ʼ����Ҫ����Դ
 	virtual void Loop() = 0;//��Ⱦѭ��
-	struct ShaderCodePaths {
-		std::string vertexShaderPath = "";
-		std::string geometryShaderPath = "";
-		std::string fragmentShaderPath = "";
-	};
+
 
 protected:
 	virtual void InitSubPassInfo() = 0;
 	virtual void InitSyncObjectNumInfo() = 0;
-	void InitDefaultGraphicSubpassInfo();
+	void InitDefaultGraphicSubpassInfo(ShaderCodePaths subpassShaderCodePaths);
 	//
 protected:
 	void LoadObj(const std::string& objFilePath, Geometry& geo);
@@ -444,7 +448,7 @@ protected:
 
 	std::map<std::string, TextureInfo> textureInfos;
 	std::map<std::string, UniformBufferInfo> uniformBufferInfos;
-	std::vector<ShaderCodePaths> pipelinesShaderCodePaths;
+
 protected:
 	//这里的数据不能被派生类创建和析构
 	//render pass ֻ
@@ -480,6 +484,7 @@ private:
 	virtual void ClearSyncObject();
 	virtual void ClearRecources();
 	virtual void ClearQueryPool();
+	
 
 
 
@@ -586,7 +591,6 @@ private:
 
 
 
-	VkSemaphore transferOperationFinish;
 	const uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
 
 	//先不考虑compute pipeline

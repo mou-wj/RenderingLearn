@@ -3,32 +3,53 @@
 
 void SimpleSceenExample::InitSubPassInfo()
 {
+	ShaderCodePaths shaderCodePath;
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.frag";
+	ShaderCodePaths drawSceenCodePath;
+	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.vert";
+	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.frag";
+
+
+
 	//InitDefaultGraphicSubpassInfo();
 	//两个subpass 一个绘制天空盒，一个绘制场景
 	subpassInfo.subpassDescs.resize(2);
+	//设置着色器路径
+	subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = shaderCodePath;
+	subpassInfo.subpassDescs[1].pipelinesShaderCodePaths = drawSceenCodePath;
+	//初始化管线状态
+	subpassInfo.subpassDescs[0].subpassPipelineStates.Init(windowWidth, windowWidth);
+	subpassInfo.subpassDescs[1].subpassPipelineStates.Init(windowWidth, windowHeight);
+
+	//开启剔除
+	subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+	subpassInfo.subpassDescs[1].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+
+
 	auto& subpassDesc1 = subpassInfo.subpassDescs[0];
-	subpassDesc1.flags = 0;
-	subpassDesc1.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpassDesc1.inputAttachmentCount = 0;
-	subpassDesc1.pInputAttachments = nullptr;
-	subpassDesc1.colorAttachmentCount = 1;
-	subpassDesc1.pColorAttachments = &renderTargets.colorRef;
-	subpassDesc1.pResolveAttachments = nullptr;
-	subpassDesc1.pDepthStencilAttachment = &renderTargets.depthRef;
-	subpassDesc1.preserveAttachmentCount = 0;
-	subpassDesc1.pPreserveAttachments = nullptr;
+	subpassDesc1.subpassDescription.flags = 0;
+	subpassDesc1.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpassDesc1.subpassDescription.inputAttachmentCount = 0;
+	subpassDesc1.subpassDescription.pInputAttachments = nullptr;
+	subpassDesc1.subpassDescription.colorAttachmentCount = 1;
+	subpassDesc1.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+	subpassDesc1.subpassDescription.pResolveAttachments = nullptr;
+	subpassDesc1.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
+	subpassDesc1.subpassDescription.preserveAttachmentCount = 0;
+	subpassDesc1.subpassDescription.pPreserveAttachments = nullptr;
 
 	auto& subpassDesc2 = subpassInfo.subpassDescs[1];
-	subpassDesc2.flags = 0;
-	subpassDesc2.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpassDesc2.inputAttachmentCount = 0;
-	subpassDesc2.pInputAttachments = nullptr;
-	subpassDesc2.colorAttachmentCount = 1;
-	subpassDesc2.pColorAttachments = &renderTargets.colorRef;
-	subpassDesc2.pResolveAttachments = nullptr;
-	subpassDesc2.pDepthStencilAttachment = &renderTargets.depthRef;
-	subpassDesc2.preserveAttachmentCount = 0;
-	subpassDesc2.pPreserveAttachments = nullptr;
+	subpassDesc2.subpassDescription.flags = 0;
+	subpassDesc2.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpassDesc2.subpassDescription.inputAttachmentCount = 0;
+	subpassDesc2.subpassDescription.pInputAttachments = nullptr;
+	subpassDesc2.subpassDescription.colorAttachmentCount = 1;
+	subpassDesc2.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+	subpassDesc2.subpassDescription.pResolveAttachments = nullptr;
+	subpassDesc2.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
+	subpassDesc2.subpassDescription.preserveAttachmentCount = 0;
+	subpassDesc2.subpassDescription.pPreserveAttachments = nullptr;
 
 
 	subpassInfo.subpassDepends.resize(2);
@@ -55,15 +76,7 @@ void SimpleSceenExample::InitSubPassInfo()
 
 void SimpleSceenExample::InitResourceInfos()
 {
-	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.frag";
-	ShaderCodePaths drawSceenCodePath;
-	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.vert";
-	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.frag";
-	
-	
-	pipelinesShaderCodePaths = { shaderCodePath,drawSceenCodePath };
+
 	geoms.resize(2);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/moved_cube.obj", geoms[1]);

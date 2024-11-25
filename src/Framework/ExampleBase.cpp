@@ -54,12 +54,12 @@ void ExampleBase::Init()
 	{
 		return;
 	}
+	InitSubPassInfo();
 	ParseShaderFiles();
 	initFlag = true;
 	Initialize();
 	InitContex();
 	InitAttanchmentDesc();
-	InitSubPassInfo();
 	InitRenderPass();
 	InitFrameBuffer();
 	InitGraphicPipelines();
@@ -70,15 +70,16 @@ void ExampleBase::Init()
 
 void ExampleBase::ParseShaderFiles()
 {
-	const auto & shaderPaths = pipelinesShaderCodePaths;
-	graphcisPipelineInfos.resize(shaderPaths.size());
+
+	graphcisPipelineInfos.resize(subpassInfo.subpassDescs.size());
 	std::vector<char> tmpCode;
-	for (uint32_t i = 0; i < shaderPaths.size(); i++)
+	for (uint32_t i = 0; i < subpassInfo.subpassDescs.size(); i++)
 	{
+		const auto& shaderPaths = subpassInfo.subpassDescs[i].pipelinesShaderCodePaths;
 		auto& pipelineShaderResourceInfo = graphcisPipelineInfos[i].pipelineShaderResourceInfo;
-		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].shaderFilePath = shaderPaths[i].vertexShaderPath;
+		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].shaderFilePath = shaderPaths.vertexShaderPath;
 		//vertex
-		TransferGLSLFileToSPIRVFileAndRead(shaderPaths[i].vertexShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode);
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.vertexShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode);
 		
 		ParseSPIRVShaderInputAttribute(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode, pipelineShaderResourceInfo.inputAttributesInfo);
 		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT]);
@@ -86,13 +87,13 @@ void ExampleBase::ParseShaderFiles()
 	
 		
 		//geom
-		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].shaderFilePath = shaderPaths[i].geometryShaderPath;
-		TransferGLSLFileToSPIRVFileAndRead(shaderPaths[i].geometryShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].spirvCode);
+		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].shaderFilePath = shaderPaths.geometryShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.geometryShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].spirvCode);
 		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT]);
 				
 		//frag
-		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].shaderFilePath = shaderPaths[i].fragmentShaderPath;
-		TransferGLSLFileToSPIRVFileAndRead(shaderPaths[i].fragmentShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].spirvCode);
+		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].shaderFilePath = shaderPaths.fragmentShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.fragmentShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].spirvCode);
 		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT]);
 
 	}
@@ -255,8 +256,12 @@ void ExampleBase::InitAttanchmentDesc()
 
 void ExampleBase::InitRenderPass()
 {
-	
-	renderPass = CreateRenderPass(device, 0, { renderTargets.colorAttachment.attachmentDesc,renderTargets.depthAttachment.attachmentDesc }, subpassInfo.subpassDescs,subpassInfo.subpassDepends);
+	std::vector<VkSubpassDescription> subpassDescriptions;
+	for (uint32_t i = 0; i < subpassInfo.subpassDescs.size(); i++)
+	{
+		subpassDescriptions.push_back(subpassInfo.subpassDescs[i].subpassDescription);
+	}
+	renderPass = CreateRenderPass(device, 0, { renderTargets.colorAttachment.attachmentDesc,renderTargets.depthAttachment.attachmentDesc }, subpassDescriptions,subpassInfo.subpassDepends);
 
 
 
@@ -274,20 +279,22 @@ void ExampleBase::InitSyncObject()
 	CreateSemaphores(numSemaphores);
 }
 
-void ExampleBase::InitDefaultGraphicSubpassInfo()
+void ExampleBase::InitDefaultGraphicSubpassInfo(ShaderCodePaths subpassShaderCodePaths)
 {
 	subpassInfo.subpassDescs.resize(1);
+	subpassInfo.subpassDescs[0].subpassPipelineStates.Init(windowWidth, windowHeight);
+	subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = subpassShaderCodePaths;
 	auto& subpassDesc1 = subpassInfo.subpassDescs[0];
-	subpassDesc1.flags = 0;
-	subpassDesc1.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpassDesc1.inputAttachmentCount = 0;
-	subpassDesc1.pInputAttachments = nullptr;
-	subpassDesc1.colorAttachmentCount = 1;
-	subpassDesc1.pColorAttachments = &renderTargets.colorRef;
-	subpassDesc1.pResolveAttachments = nullptr;
-	subpassDesc1.pDepthStencilAttachment = &renderTargets.depthRef;
-	subpassDesc1.preserveAttachmentCount = 0;
-	subpassDesc1.pPreserveAttachments = nullptr;
+	subpassDesc1.subpassDescription.flags = 0;
+	subpassDesc1.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpassDesc1.subpassDescription.inputAttachmentCount = 0;
+	subpassDesc1.subpassDescription.pInputAttachments = nullptr;
+	subpassDesc1.subpassDescription.colorAttachmentCount = 1;
+	subpassDesc1.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+	subpassDesc1.subpassDescription.pResolveAttachments = nullptr;
+	subpassDesc1.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
+	subpassDesc1.subpassDescription.preserveAttachmentCount = 0;
+	subpassDesc1.subpassDescription.pPreserveAttachments = nullptr;
 
 	subpassInfo.subpassDepends.resize(1);
 	auto& subpassDepend1 = subpassInfo.subpassDepends[0];
@@ -532,6 +539,7 @@ Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFi
 	return texture;
 }
 
+
 void ExampleBase::LoadObj(const std::string& objFilePath, Geometry& geo)
 {
 	//inner data
@@ -763,7 +771,7 @@ void ExampleBase::InitGraphicPipelines()
 	//��ʼ��shader stage
 	for (uint32_t pipeID = 0; pipeID < graphcisPipelineInfos.size(); pipeID++)
 	{
-		graphcisPipelineInfos[pipeID].pipelineStates.Init(windowWidth, windowHeight);
+		graphcisPipelineInfos[pipeID].pipelineStates = subpassInfo.subpassDescs[pipeID].subpassPipelineStates;
 		std::map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> descriptorSetBindings;
 		VkDescriptorSetLayoutBinding binding;
 		std::map<VkDescriptorType, uint32_t> needNumDescriptor;
@@ -970,7 +978,7 @@ void ExampleBase::ClearGraphicPipelines()
 		DestroyPipelineLayout(device, graphcisPipelineInfos[i].pipelineLayout);
 		for (uint32_t setId = 0; setId < graphcisPipelineInfos[i].descriptorSetInfos.size(); setId++)
 		{
-			ReleaseDescriptorSets(device, graphcisPipelineInfos[i].descriptorPool, { graphcisPipelineInfos[i].descriptorSetInfos[setId].descriptorSet });
+			//ReleaseDescriptorSets(device, graphcisPipelineInfos[i].descriptorPool, { graphcisPipelineInfos[i].descriptorSetInfos[setId].descriptorSet });
 			DestroyDesctriptorSetLayout(device, graphcisPipelineInfos[i].descriptorSetInfos[setId].setLayout);
 		}
 
@@ -990,7 +998,8 @@ void ExampleBase::ClearSyncObject()
 	//{
 	//	DestroyFence(device, fences[i]);
 	//}
-
+	DestroyFence(device, oneSubmitCommandList.commandFinishFence);
+	DestroyFence(device, graphicCommandList.commandFinishFence);
 }				  
 				  
 void ExampleBase::ClearRecources()
@@ -1025,6 +1034,7 @@ void ExampleBase::ClearQueryPool()
 {
 	DestroyQueryPool(device, queryPool);
 }
+
 
 
 

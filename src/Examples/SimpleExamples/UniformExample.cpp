@@ -2,17 +2,17 @@
 
 void UniformExample::InitSubPassInfo()
 {
-	InitDefaultGraphicSubpassInfo();
+	ShaderCodePaths shaderCodePath;
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.frag";
+	InitDefaultGraphicSubpassInfo(shaderCodePath);
 
 
 }
 
 void UniformExample::InitResourceInfos()
 {
-	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/UniformExample.frag";
-	pipelinesShaderCodePaths = { shaderCodePath };
+
 	//LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geom);
 	geoms.resize(1);
 	auto& geom = geoms[0];

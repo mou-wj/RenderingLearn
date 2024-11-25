@@ -278,12 +278,14 @@ VkDeviceMemory VulkanAPI::AllocateMemory(VkDevice device, VkDeviceSize allocatio
 	auto res = vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &deviceMemory);
 	ASSERT(deviceMemory);
 	ASSERT(res == VK_SUCCESS);
+	//std::cout << "currentAllocatedMemory : " << std::hex << deviceMemory << std::endl;
 	return deviceMemory;
 }
 
 void VulkanAPI::ReleaseMemory(VkDevice device, VkDeviceMemory deviceMemory)
 {
 	vkFreeMemory(device, deviceMemory, nullptr);
+	//std::cout << "releasedAllocatedMemory : " << std::hex << deviceMemory << std::endl;
 }
 
 void* VulkanAPI::MapMemory(VkDevice device, VkDeviceMemory deviceMemory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags mapFlags)

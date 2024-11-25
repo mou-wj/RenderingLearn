@@ -3,17 +3,17 @@
 
 void SkyBoxExample::InitSubPassInfo()
 {
-	InitDefaultGraphicSubpassInfo();
+	ShaderCodePaths shaderCodePath;
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.frag";
+	InitDefaultGraphicSubpassInfo(shaderCodePath);
 
 
 }
 
 void SkyBoxExample::InitResourceInfos()
 {
-	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.frag";
-	pipelinesShaderCodePaths = { shaderCodePath };
+
 	geoms.resize(1);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 	subpassDrawGeoInfos[0] = { 0 };

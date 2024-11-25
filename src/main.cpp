@@ -50,7 +50,7 @@ int main()
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
-	SkyBoxExample example;
+	//SkyBoxExample example;
 	SimpleSceenExample example;
 	ExampleBase::Run(&example);
 

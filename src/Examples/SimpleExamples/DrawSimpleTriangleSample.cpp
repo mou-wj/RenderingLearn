@@ -2,17 +2,17 @@
 
 void DrawSimpleTriangleSample::InitSubPassInfo()
 {
-	InitDefaultGraphicSubpassInfo();
+	ShaderCodePaths shaderCodePath;
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/DrawSimpleTriangle.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/DrawSimgleTriangle.frag";
+	InitDefaultGraphicSubpassInfo(shaderCodePath);
 
 
 }
 
 void DrawSimpleTriangleSample::InitResourceInfos()
 {
-	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/DrawSimpleTriangle.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/DrawSimgleTriangle.frag";
-	pipelinesShaderCodePaths = { shaderCodePath };
+
 	//LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geom);
 	geoms.resize(1);
 	auto& geom = geoms[0];
