@@ -182,9 +182,13 @@ namespace VulkanAPI {
 	const VkPipelineDynamicStateCreateInfo* dynamicState,
 	VkPipelineLayout                                 layout,
 	VkRenderPass                                     renderPass,
-	uint32_t                                         subpass,
-	VkPipeline                                       basePipelineHandle,
-	int32_t                                          basePipelineIndex);
+	uint32_t                                         subpass);
+	VkPipeline CreateComputePipeline(VkDevice device, 
+	VkPipelineCreateFlags              flags,
+	VkPipelineShaderStageCreateInfo    stage,
+	VkPipelineLayout                   layout);
+
+
 	void DestroyPipeline(VkDevice device, VkPipeline pipeline);
 
 	//descriptor pool
@@ -334,6 +338,10 @@ namespace VulkanAPI {
 						 const std::vector<VkMemoryBarrier>& memoryBarriers,
 						 const std::vector<VkBufferMemoryBarrier>& bufferMemoryBarriers,
 						 const std::vector<VkImageMemoryBarrier>& imageMemoryBarriers);
+
+
+	//compute cmd
+	void CmdDispatch(VkCommandBuffer  commandBuffer,uint32_t  groupCountX,uint32_t  groupCountY,uint32_t  groupCountZ);
 
 	
 	//-------------------------------------------------------------------------------------

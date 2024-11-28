@@ -580,7 +580,7 @@ void VulkanAPI::DestroyShaderModule(VkDevice device, VkShaderModule shaderModule
 	vkDestroyShaderModule(device, shaderModule, nullptr);
 }
 
-VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFlags flags, const std::vector<VkPipelineShaderStageCreateInfo>& shaderStages, const VkPipelineVertexInputStateCreateInfo* vertexInputState, const VkPipelineInputAssemblyStateCreateInfo* inputAssemblyState, const VkPipelineTessellationStateCreateInfo* tessellationState, const VkPipelineViewportStateCreateInfo* viewportState, const VkPipelineRasterizationStateCreateInfo* rasterizationState, const VkPipelineMultisampleStateCreateInfo* multisampleState, const VkPipelineDepthStencilStateCreateInfo* depthStencilState, const VkPipelineColorBlendStateCreateInfo* colorBlendState, const VkPipelineDynamicStateCreateInfo* dynamicState, VkPipelineLayout layout, VkRenderPass renderPass, uint32_t subpass, VkPipeline basePipelineHandle, int32_t basePipelineIndex)
+VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFlags flags, const std::vector<VkPipelineShaderStageCreateInfo>& shaderStages, const VkPipelineVertexInputStateCreateInfo* vertexInputState, const VkPipelineInputAssemblyStateCreateInfo* inputAssemblyState, const VkPipelineTessellationStateCreateInfo* tessellationState, const VkPipelineViewportStateCreateInfo* viewportState, const VkPipelineRasterizationStateCreateInfo* rasterizationState, const VkPipelineMultisampleStateCreateInfo* multisampleState, const VkPipelineDepthStencilStateCreateInfo* depthStencilState, const VkPipelineColorBlendStateCreateInfo* colorBlendState, const VkPipelineDynamicStateCreateInfo* dynamicState, VkPipelineLayout layout, VkRenderPass renderPass, uint32_t subpass)
 {
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
@@ -601,8 +601,8 @@ VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFl
 	graphicsPipelineCreateInfo.layout = layout;
 	graphicsPipelineCreateInfo.renderPass = renderPass;
 	graphicsPipelineCreateInfo.subpass = subpass;
-	graphicsPipelineCreateInfo.basePipelineHandle = basePipelineHandle;
-	graphicsPipelineCreateInfo.basePipelineIndex = basePipelineIndex;
+	graphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+	graphicsPipelineCreateInfo.basePipelineIndex = -1;
 	auto res = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipeline);
 	ASSERT(pipeline);
 	ASSERT(res == VK_SUCCESS);
@@ -610,6 +610,24 @@ VkPipeline VulkanAPI::CreateGraphicsPipeline(VkDevice device, VkPipelineCreateFl
 
 	return pipeline;
 }
+
+VkPipeline VulkanAPI::CreateComputePipeline(VkDevice device, VkPipelineCreateFlags flags, VkPipelineShaderStageCreateInfo stage, VkPipelineLayout layout)
+{
+	VkPipeline pipeline = VK_NULL_HANDLE;
+	VkComputePipelineCreateInfo computePipelineCreateInfo{};
+	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipelineCreateInfo.pNext = nullptr;
+	computePipelineCreateInfo.flags = 0;
+	computePipelineCreateInfo.stage = stage;
+	computePipelineCreateInfo.layout = layout;
+	computePipelineCreateInfo.basePipelineHandle = 0;
+	computePipelineCreateInfo.basePipelineIndex = -1;
+	auto res = vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &pipeline);
+	ASSERT(res == VK_SUCCESS);
+	return pipeline;
+
+}
+
 
 void VulkanAPI::DestroyPipeline(VkDevice device, VkPipeline pipeline)
 {
@@ -934,6 +952,12 @@ void VulkanAPI::CmdMemoryBarrier(VkCommandBuffer commandBuffer, VkPipelineStageF
 	ASSERT(memoryBarriers.size() || bufferMemoryBarriers.size() || imageMemoryBarriers.size());
 	vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarriers.size(), memoryBarriers.data(), bufferMemoryBarriers.size(), bufferMemoryBarriers.data(), imageMemoryBarriers.size(), imageMemoryBarriers.data());
 }
+
+void VulkanAPI::CmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+{
+	vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
+}
+
 
 
 

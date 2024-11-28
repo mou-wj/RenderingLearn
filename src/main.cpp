@@ -2,6 +2,7 @@
 #include "Examples/SimpleExamples/UniformExample.h"
 #include "Examples/SimpleExamples/SkyBoxExample.h"
 #include "Examples/SimpleExamples/SimpleSceenExample.h"
+#include "Examples/PBRT4/SamplePointsExample.h"
 
 /*
 
@@ -51,7 +52,8 @@ int main()
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
 	//SkyBoxExample example;
-	SimpleSceenExample example;
+	//SimpleSceenExample example;
+	SamplePointsExample example;
 	ExampleBase::Run(&example);
 
 

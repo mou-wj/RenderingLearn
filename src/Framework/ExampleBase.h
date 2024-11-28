@@ -12,7 +12,6 @@
 #include <spirv_glsl.hpp>
 #include <spirv_cross.hpp>
 
-
 struct DescriptorBinding {
 	std::string name = "";
 	uint32_t binding;
@@ -297,6 +296,30 @@ struct GraphicPipelineInfos {
 
 };
 
+struct ComputeDesc {
+	bool valid = false;//为true则会创建compute pipeline
+	std::string computeShaderPath = "";
+};
+
+struct ComputePipelineInfos {
+	ShaderResourceInfo computeShaderResourceInfo;
+	VkPipelineShaderStageCreateInfo computeShaderStage{};
+	VkDescriptorPool descriptorPool;
+	std::map<uint32_t, DescriptorSetInfo> descriptorSetInfos;
+	VkPipelineLayout pipelineLayout;
+	VkPipeline pipeline;
+	ComputePipelineInfos() {
+		computeShaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		computeShaderStage.pNext = nullptr;
+		computeShaderStage.flags = 0;
+		computeShaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+		computeShaderStage.module = VK_NULL_HANDLE;
+		computeShaderStage.pName = nullptr;
+		computeShaderStage.pSpecializationInfo = nullptr;//不指定特殊常数
+	}
+};
+
+
 struct TextureDataSource {
 	std::string picturePath = "";
 	std::vector<char> imagePixelDatas;//VK_FORMAT_B8G8R8A8_SRGB
@@ -406,6 +429,7 @@ protected:
 
 
 protected:
+	virtual void InitComputeInfo() {}
 	virtual void InitSubPassInfo() = 0;
 	virtual void InitSyncObjectNumInfo() = 0;
 	void InitDefaultGraphicSubpassInfo(ShaderCodePaths subpassShaderCodePaths);
@@ -421,9 +445,15 @@ protected:
 	void CmdListRecordBegin(CommandList& cmdList);
 	void CmdListRecordEnd(CommandList& cmdList);
 	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+	//compute
+	void CmdOpsDispatch(CommandList& cmdList,uint32_t groupX);
+	
+	//transfer
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
 	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
+	//graphic
 	void CmdOpsDrawGeom(CommandList& cmdList);
+	//execute
 	void CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info);
 	void CmdListWaitFinish(CommandList& cmdList);
 	VkResult Present(uint32_t imageIndex, const std::vector<VkSemaphore>& waitSemaphores);
@@ -434,6 +464,7 @@ protected:
 	std::vector<Geometry> geoms;
 	CommandList graphicCommandList;
 	SubpassInfo subpassInfo;
+	ComputeDesc computeDesc;
 	std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;
 	//uint32_t numFences = 1;
 	uint32_t numSemaphores = 1;
@@ -461,7 +492,10 @@ protected:
 	void BindUniformBuffer(const std::string& uniformBufferName);
 
 private:
+
 	void Init();
+	//graphic
+	
 	virtual void InitContex();
 	virtual void InitAttanchmentDesc();
 	virtual void InitRenderPass();
@@ -474,6 +508,10 @@ private:
 	void InitGeometryResources(Geometry& geo);
 	void InitTextureResources();
 	void InitUniformBufferResources();
+	//compute
+	void InitCompute();
+	void InitComputePipeline();
+
 private:
 	virtual void Clear();
 	virtual void ClearContex();
@@ -484,6 +522,7 @@ private:
 	virtual void ClearSyncObject();
 	virtual void ClearRecources();
 	virtual void ClearQueryPool();
+	virtual void ClearComputePipeline();
 	
 
 
@@ -595,7 +634,7 @@ private:
 
 	//先不考虑compute pipeline
 	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
-
+	ComputePipelineInfos computePipelineInfos;
 
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 

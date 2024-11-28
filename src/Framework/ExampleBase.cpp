@@ -66,6 +66,8 @@ void ExampleBase::Init()
 	InitQueryPool();
 	InitSyncObject();
 	InitRecources();
+	InitComputeInfo();
+	InitCompute();
 }
 
 void ExampleBase::ParseShaderFiles()
@@ -336,7 +338,7 @@ void ExampleBase::PickValidPhysicalDevice()
 
 	for (uint32_t i = 0; i < physicalDevices.size(); i++)
 	{
-		auto familyIndex = GetSuitableQueueFamilyIndex(physicalDevices[i], VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, true, 1);;
+		auto familyIndex = GetSuitableQueueFamilyIndex(physicalDevices[i], VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |VK_QUEUE_TRANSFER_BIT, true, 1);;
 		auto surfaceCapabilities = GetSurfaceCapabilities(physicalDevices[i], surface);
 		
 		auto queueFamilyProps = GetQueueFamilyProperties(physicalDevices[i]);
@@ -598,6 +600,10 @@ void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, Vk
 	auto imageBarrier = barrier.ImageBarrier(image, srcAccess, dstAccess, dstImageLayout);
 	CmdMemoryBarrier(cmdList.commandBuffer, srcStageMask, dstStageMask, 0, {}, {}, { imageBarrier });
 	image.currentLayout = dstImageLayout;
+}
+
+void ExampleBase::CmdOpsDispatch(CommandList& cmdList, uint32_t groupX)
+{
 }
 
 
@@ -880,7 +886,7 @@ void ExampleBase::InitGraphicPipelines()
 		auto& pipelineStates = graphcisPipelineInfos[pipeID].pipelineStates;
 		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, &pipelineStates.vertexInputState, &pipelineStates.inputAssemblyState, &pipelineStates.tessellationState, &pipelineStates.viewportState,
 			&pipelineStates.rasterizationState, &pipelineStates.multisampleState, &pipelineStates.depthStencilState, &pipelineStates.colorBlendState, &pipelineStates.dynamicState, pipelineLayout,
-			renderPass, pipeID, VK_NULL_HANDLE, -1);
+			renderPass, pipeID);
 		graphcisPipelineInfos[pipeID].pipeline = pipeline;
 		
 
@@ -931,13 +937,16 @@ void ExampleBase::Clear()
 	//清除所有vulkan资源
 	DeviceWaitIdle(device);
 	ClearGraphicPipelines();
+	ClearComputePipeline();
 	ClearRenderPass();
 	ClearFrameBuffer();
 	ClearAttanchment();
 	ClearRecources();
 	ClearSyncObject();
 	ClearQueryPool();
+
 	ClearContex();
+
 }
 
 void ExampleBase::ClearContex()
@@ -1033,6 +1042,22 @@ void ExampleBase::ClearRecources()
 void ExampleBase::ClearQueryPool()
 {
 	DestroyQueryPool(device, queryPool);
+}
+
+void ExampleBase::ClearComputePipeline()
+{
+	if (computeDesc.valid)
+	{
+		DestroyPipeline(device, computePipelineInfos.pipeline);
+		DestroyPipelineLayout(device, computePipelineInfos.pipelineLayout);
+		for (uint32_t setId = 0; setId < computePipelineInfos.descriptorSetInfos.size(); setId++)
+		{
+			//ReleaseDescriptorSets(device, graphcisPipelineInfos[i].descriptorPool, { graphcisPipelineInfos[i].descriptorSetInfos[setId].descriptorSet });
+			DestroyDesctriptorSetLayout(device, computePipelineInfos.descriptorSetInfos[setId].setLayout);
+		}
+		DestroyDescriptorPool(device, computePipelineInfos.descriptorPool);
+	}
+
 }
 
 
@@ -1145,6 +1170,83 @@ void ExampleBase::InitUniformBufferResources()
 		uniformBuffers[unifomBufferInfo.first] = CreateUniformBuffer(nullptr, unifomBufferInfo.second.size);
 		//BindUniformBuffer(uniformBuffers[unifomBufferInfo.first], unifomBufferInfo.second.pipeId, unifomBufferInfo.second.setId, unifomBufferInfo.second.binding, unifomBufferInfo.second.elementId);
 	}
+
+}
+
+void ExampleBase::InitCompute()
+{
+	if (computeDesc.valid)
+	{
+		//解析shader中的descriptor信息
+		TransferGLSLFileToSPIRVFileAndRead(computeDesc.computeShaderPath, computePipelineInfos.computeShaderResourceInfo.spirvCode);
+		ParseSPIRVShaderResourceInfo(computePipelineInfos.computeShaderResourceInfo.spirvCode, computePipelineInfos.computeShaderResourceInfo);
+
+	
+
+		InitComputePipeline();
+
+
+
+	}
+}
+
+void ExampleBase::InitComputePipeline()
+{
+	//创建描述符集
+	std::map<VkDescriptorType, uint32_t> needNumDescriptor;
+	std::map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> setBindins;
+	VkDescriptorSetLayoutBinding tmpBinding;
+	tmpBinding.pImmutableSamplers = nullptr;
+	tmpBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	for (const auto& setBinding : computePipelineInfos.computeShaderResourceInfo.descriptorSetBindings)
+	{
+		for (const auto& binding : setBinding.second)
+		{
+			needNumDescriptor[binding.descriptorType] += binding.numDescriptor;
+			tmpBinding.binding = binding.binding;
+			tmpBinding.descriptorCount = binding.numDescriptor;
+			tmpBinding.descriptorType = binding.descriptorType;
+			setBindins[binding.setId].push_back(tmpBinding);
+		}
+		
+	}
+
+
+
+	std::vector<VkDescriptorPoolSize> poolSizes;
+	for (const auto& needDescriptor : needNumDescriptor)
+	{
+		VkDescriptorPoolSize poolSize;
+		poolSize.type = needDescriptor.first;
+		poolSize.descriptorCount = needDescriptor.second;
+		poolSizes.push_back(poolSize);
+	}
+	auto descriptorPool = CreateDescriptorPool(device, 0, computePipelineInfos.computeShaderResourceInfo.descriptorSetBindings.size() + 1, poolSizes);
+	computePipelineInfos.descriptorPool = descriptorPool;
+
+
+	//����descriptor set
+	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+	for (const auto& setAndBindingInfos : setBindins)
+	{
+		//����descriptor set layout
+		auto descriptorSetLayout = CreateDescriptorSetLayout(device, 0, setAndBindingInfos.second);
+		computePipelineInfos.descriptorSetInfos[setAndBindingInfos.first].setLayout = descriptorSetLayout;
+		auto descriptorSet = AllocateDescriptorSet(device,computePipelineInfos.descriptorPool, { descriptorSetLayout });
+		computePipelineInfos.descriptorSetInfos[setAndBindingInfos.first].descriptorSet = descriptorSet;
+		descriptorSetLayouts.push_back(descriptorSetLayout);
+	}
+
+	//����pipeline layout
+	auto pipelineLayout = CreatePipelineLayout(device, 0, descriptorSetLayouts, {});
+	computePipelineInfos.pipelineLayout = pipelineLayout;
+
+
+	
+	auto shaderModule = CreateShaderModule(device, 0, computePipelineInfos.computeShaderResourceInfo.spirvCode);
+	computePipelineInfos.computeShaderStage.module = shaderModule;
+	computePipelineInfos.computeShaderStage.pName = computePipelineInfos.computeShaderResourceInfo.entryName.c_str();
+	computePipelineInfos.pipeline = CreateComputePipeline(device, 0, computePipelineInfos.computeShaderStage, computePipelineInfos.pipelineLayout);
 
 }
 
@@ -1387,6 +1489,27 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		}
 		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
 		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
+	}
+
+
+	//����store image��Ϣ
+	for (uint32_t i = 0; i < resources.storage_images.size(); i++)
+	{
+		auto& storeImage = resources.storage_images[i];
+		auto type = shaderCompiler.get_type(storeImage.base_type_id);
+		bindingInfo.setId = shaderCompiler.get_decoration(storeImage.id, spv::Decoration::DecorationDescriptorSet);
+		bindingInfo.binding = shaderCompiler.get_decoration(storeImage.id, spv::DecorationBinding);
+		bindingInfo.name = storeImage.name;
+		if (type.array.empty())
+		{
+			bindingInfo.numDescriptor = 1;
+		}
+		else {
+			bindingInfo.numDescriptor = type.array[0];
+		}
+		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
+		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
 	}
 
