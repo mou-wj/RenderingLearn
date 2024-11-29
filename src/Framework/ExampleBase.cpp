@@ -36,16 +36,33 @@ void ExampleBase::BindTexture(const std::string& textureName)
 {
 	//绑定texture
 	ASSERT(textures.find(textureName) != textures.end());
-	auto& textureInfo = textureInfos[textureName];
-
-	BindTexture(textures[textureName], textureInfo.pipeId, textureInfo.setId, textureInfo.binding, textureInfo.elementId);
+	auto& textureInfo = textureBindInfos[textureName];
+	if (!textureInfo.compute)
+	{
+		auto descriptorType = GetDescriptorType(graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId], textureInfo.binding);
+		BindTexture(textures[textureName], graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
+	}
+	else {
+		auto descriptorType = GetDescriptorType(computePipelineInfos.descriptorSetInfos[textureInfo.setId], textureInfo.binding);
+		BindTexture(textures[textureName], computePipelineInfos.descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
+	}
+	
 }
 
-void ExampleBase::BindUniformBuffer(const std::string& uniformBufferName)
+void ExampleBase::BindBuffer(const std::string& bufferName)
 {
-	ASSERT(uniformBuffers.find(uniformBufferName) != uniformBuffers.end());
-	auto& uniformBufferInfo = uniformBufferInfos[uniformBufferName];
-	BindUniformBuffer(uniformBuffers[uniformBufferName], uniformBufferInfo.pipeId, uniformBufferInfo.setId, uniformBufferInfo.binding, uniformBufferInfo.elementId);
+	ASSERT(buffers.find(bufferName) != buffers.end());
+	auto& bufferInfo = bufferBindInfos[bufferName];
+	if (!bufferInfo.compute)
+	{
+		auto descriptorType = GetDescriptorType(graphcisPipelineInfos[bufferInfo.pipeId].descriptorSetInfos[bufferInfo.setId], bufferInfo.binding);
+		BindBuffer(buffers[bufferName], graphcisPipelineInfos[bufferInfo.pipeId].descriptorSetInfos[bufferInfo.setId].descriptorSet, bufferInfo.binding, bufferInfo.elementId, descriptorType);
+	}
+	else {
+		auto descriptorType = GetDescriptorType(computePipelineInfos.descriptorSetInfos[bufferInfo.setId], bufferInfo.binding);
+		BindBuffer(buffers[bufferName], computePipelineInfos.descriptorSetInfos[bufferInfo.setId].descriptorSet, bufferInfo.binding, bufferInfo.elementId, descriptorType);
+	}
+	
 }
 
 void ExampleBase::Init()
@@ -323,7 +340,7 @@ int32_t ExampleBase::GetSuitableQueueFamilyIndex(VkPhysicalDevice physicalDevice
 	for (int32_t queueFamilyIndex = 0; queueFamilyIndex < static_cast<int32_t>(queueFamilyProperties.size()); queueFamilyIndex++)
 	{
 		bool prenset = GetQueueFamilySurfaceSupport(physicalDevice, queueFamilyIndex, surface);
-		if ((queueFamilyProperties[queueFamilyIndex].queueFlags & wantQueueFlags) && (queueFamilyProperties[queueFamilyIndex].queueCount >= wantNumQueue) && (needSupportPresent ? prenset : true) )
+		if (((queueFamilyProperties[queueFamilyIndex].queueFlags & wantQueueFlags) == wantQueueFlags) && (queueFamilyProperties[queueFamilyIndex].queueCount >= wantNumQueue) && (needSupportPresent ? prenset : true) )
 		{
 			return queueFamilyIndex;
 		}
@@ -355,7 +372,14 @@ void ExampleBase::PickValidPhysicalDevice()
 
 			//���format�Ƿ�֧��linear tiling
 			auto colorFormatProps = GetFormatPropetirs(physicalDevices[i], colorFormat);
-			if (!(colorFormatProps.linearTilingFeatures & (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT)))
+			uint64_t wantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT );
+			if (!((colorFormatProps.linearTilingFeatures & wantFormatFeature) == wantFormatFeature))
+			{
+				continue;//���color format��linear tiling ��֧�ֲ�������ɫ�����������������豸
+			}
+
+			wantFormatFeature = (VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+			if (!((colorFormatProps.linearTilingFeatures & wantFormatFeature) == wantFormatFeature))
 			{
 				continue;//���color format��linear tiling ��֧�ֲ�������ɫ�����������������豸
 			}
@@ -443,6 +467,13 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	{
 		imageCreatFlags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 	}
+	//检查格式支持
+	//auto formatProperties = GetImageFormatProperties(physicalDevice, image.format, imageType, image.tiling, usage, imageCreatFlags);
+	//if (formatProperties.maxArrayLayers == 0)
+	//{
+	//	ASSERT(0);
+	//}
+
 	image.image = VulkanAPI::CreateImage(device, imageCreatFlags, imageType, image.format, image.extent,
 		image.numMip, image.numLayer, image.sample, image.tiling, usage, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
 	auto imageMemRequiredments = GetImageMemoryRequirments(device, image.image);
@@ -453,8 +484,7 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	{
 		image.hostMapPointer = MapMemory(device, image.memory, 0, imageMemRequiredments.size, 0);
 	}
-	image.imageView = CreateImageView(device, 0, image.image, viewType, format, viewMapping, VkImageSubresourceRange{ .aspectMask = aspect,.baseMipLevel = 0,.levelCount = image.numMip ,.baseArrayLayer = 0,.layerCount = image.numLayer });
-
+	image.imageView = CreateImageView(device, 0, image.image,usage, viewType, format, viewMapping, VkImageSubresourceRange{ .aspectMask = aspect,.baseMipLevel = 0,.levelCount = image.numMip ,.baseArrayLayer = 0,.layerCount = image.numLayer });
 
 	return image;
 }
@@ -493,52 +523,41 @@ void ExampleBase::DestroyImage(const Image& image)
 
 
 
-Texture ExampleBase::Load2DTexture(const std::string& texFilePath)
-{
-	uint32_t x = 0, y = 0;
-	std::vector<char> imageData;
-	LoadCharSRGBJpeg(texFilePath, { R,G,B,A }, imageData, x, y);
-
-	//����texture
-	Texture texture;
-	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, x, y, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-	texture.sampler = CreateDefaultSampler(device, 1);
-	FillImage(texture.image, 0,0,VK_IMAGE_ASPECT_COLOR_BIT, x,  y, 4, imageData.data());
-	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	return texture;
-}
-
-Texture ExampleBase::Create2DTexture(uint32_t width, uint32_t height, const char* textureDatas)
+Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 {
 	Texture texture;
-	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, width, height, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-	texture.sampler = CreateDefaultSampler(device, 1);
-	FillImage(texture.image, 0, 0, VK_IMAGE_ASPECT_COLOR_BIT, width , height , 4, textureDatas);
-	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	return texture;
-
-
-	return Texture();
-}
-
-Texture ExampleBase::LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths)
-{
-	uint32_t x = 0, y = 0;
-	std::array<std::vector<char>, 6> imageFaceDatas;
-	for (uint32_t i = 0; i < 6; i++)
+	ASSERT(textureBindInfo.textureDataSources.size());
+	uint32_t x = textureBindInfo.textureDataSources[0].width, y = textureBindInfo.textureDataSources[0].height;
+	//加载数据
+	for (uint32_t i = 0; i < textureBindInfo.textureDataSources.size(); i++)
 	{
-		LoadCharSRGBJpeg(faceTexFilePaths[i], { R,G,B,A }, imageFaceDatas[i], x, y,true);
+		if (textureBindInfo.textureDataSources[i].picturePath != "")
+		{
+			LoadCharSRGBJpeg(textureBindInfo.textureDataSources[i].picturePath, { R,G,B,A }, textureBindInfo.textureDataSources[i].imagePixelDatas, x, y, true);
+			textureBindInfo.textureDataSources[i].width = x;
+			textureBindInfo.textureDataSources[i].height = y;
+			if (i !=0)
+			{
+				ASSERT((x == textureBindInfo.textureDataSources[i - 1].width) &&
+					(y == textureBindInfo.textureDataSources[i - 1].height));
+			}
+
+		}
+
 	}
 	//����texture
-	Texture texture;
-	texture.image = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE, colorFormat, x, y, 1, 1, 6, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	uint32_t numLayer = textureBindInfo.textureDataSources.size();
+	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, colorFormat, x, y, 1, 1, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{},VK_IMAGE_TILING_OPTIMAL);
 	texture.sampler = CreateDefaultSampler(device, 1);
-	for (uint32_t i = 0; i < 6; i++)
+	for (uint32_t i = 0; i < numLayer; i++)
 	{
-		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x , y , 4, imageFaceDatas[i].data());
+		x = textureBindInfo.textureDataSources[i].width;
+		y = textureBindInfo.textureDataSources[i].height;
+		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x, y, 4, textureBindInfo.textureDataSources[i].imagePixelDatas.data());
 	}
 	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	return texture;
+
 }
 
 
@@ -566,9 +585,9 @@ Buffer ExampleBase::CreateIndexBuffer(const char* buf, VkDeviceSize size)
 	return CreateBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, buf, size, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 }
 
-Buffer ExampleBase::CreateUniformBuffer(const char* buf, VkDeviceSize size)
+Buffer ExampleBase::CreateShaderAccessBuffer(const char* buf, VkDeviceSize size)
 {
-	return CreateBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, buf, size, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	return CreateBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, buf, size, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 }
 
 void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data)
@@ -602,8 +621,17 @@ void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, Vk
 	image.currentLayout = dstImageLayout;
 }
 
-void ExampleBase::CmdOpsDispatch(CommandList& cmdList, uint32_t groupX)
+void ExampleBase::CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> groupSize)
 {
+	CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineInfos.pipeline);
+	//绑定描述符集
+	for (const auto& setInfo : computePipelineInfos.descriptorSetInfos)
+	{
+		CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, computePipelineInfos.pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
+	}
+	CmdDispatch(cmdList.commandBuffer, groupSize[0], groupSize[1], groupSize[2]);
+
+
 }
 
 
@@ -873,6 +901,7 @@ void ExampleBase::InitGraphicPipelines()
 			auto descriptorSet = AllocateDescriptorSet(device, graphcisPipelineInfos[pipeID].descriptorPool, { descriptorSetLayout });
 			graphcisPipelineInfos[pipeID].descriptorSetInfos[setAndBindingInfos.first].descriptorSet = descriptorSet;
 			descriptorSetLayouts.push_back(descriptorSetLayout);
+			graphcisPipelineInfos[pipeID].descriptorSetInfos[setAndBindingInfos.first].bindings = descriptorSetBindings[setAndBindingInfos.first];
 		}
 		
 		//����pipeline layout
@@ -1031,9 +1060,9 @@ void ExampleBase::ClearRecources()
 	}
 
 	//清除Uniform buffer
-	for (auto& uniformBuffer : uniformBuffers)
+	for (auto& buffer : buffers)
 	{
-		DestroyBuffer(uniformBuffer.second);
+		DestroyBuffer(buffer.second);
 	}
 
 
@@ -1122,52 +1151,21 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 void ExampleBase::InitTextureResources()
 {
 	//根据texture infos创建texture并更新
-	for (const auto& textureInfo : textureInfos)
+	for (auto& textureInfo : textureBindInfos)
 	{
 		Texture texture;
-		ASSERT(textureInfo.second.textureDataSources.size());
-		switch (textureInfo.second.viewType)
-		{
-		case VK_IMAGE_VIEW_TYPE_2D: {
-
-			auto& textureDataSource = textureInfo.second.textureDataSources[0];
-			if (textureInfo.second.textureDataSources[0].picturePath != "")
-			{
-				texture = Load2DTexture(textureDataSource.picturePath);
-			}
-			else {
-				texture = Create2DTexture(textureDataSource.width, textureDataSource.height, textureDataSource.imagePixelDatas.data());
-			}
-			textures[textureInfo.first] = texture;
-
-			break;
-		}
-		case VK_IMAGE_VIEW_TYPE_CUBE: {
-			ASSERT(textureInfo.second.textureDataSources.size() == 6);
-			std::array<std::string, 6> cubeFaceFiles;
-			for (uint32_t i = 0; i < 6; i++)
-			{
-				ASSERT(textureInfo.second.textureDataSources[i].picturePath != "");
-				cubeFaceFiles[i] = textureInfo.second.textureDataSources[i].picturePath;
-			}
-			texture = LoadCubeTexture(cubeFaceFiles);
-			textures[textureInfo.first] = texture;
-		}
-		default:
-			break;
-		}
-		//绑定texture
-		//BindTexture(texture, textureInfo.second.pipeId, textureInfo.second.setId, textureInfo.second.binding, textureInfo.second.elementId);
-
+		texture = CreateTexture(textureInfo.second);
+		textures[textureInfo.first] = texture;
+		
 	}
 
 }
 
 void ExampleBase::InitUniformBufferResources()
 {
-	for (const auto& unifomBufferInfo : uniformBufferInfos)
+	for (const auto& bufferBindInfo : bufferBindInfos)
 	{
-		uniformBuffers[unifomBufferInfo.first] = CreateUniformBuffer(nullptr, unifomBufferInfo.second.size);
+		buffers[bufferBindInfo.first] = CreateShaderAccessBuffer(nullptr, bufferBindInfo.second.size);
 		//BindUniformBuffer(uniformBuffers[unifomBufferInfo.first], unifomBufferInfo.second.pipeId, unifomBufferInfo.second.setId, unifomBufferInfo.second.binding, unifomBufferInfo.second.elementId);
 	}
 
@@ -1235,6 +1233,7 @@ void ExampleBase::InitComputePipeline()
 		auto descriptorSet = AllocateDescriptorSet(device,computePipelineInfos.descriptorPool, { descriptorSetLayout });
 		computePipelineInfos.descriptorSetInfos[setAndBindingInfos.first].descriptorSet = descriptorSet;
 		descriptorSetLayouts.push_back(descriptorSetLayout);
+		computePipelineInfos.descriptorSetInfos[setAndBindingInfos.first].bindings = setBindins[setAndBindingInfos.first];
 	}
 
 	//����pipeline layout
@@ -1554,24 +1553,40 @@ uint32_t ExampleBase::GetNextPresentImageIndex(VkSemaphore sigValidSemaphore)
 	return nextImageIndex;
 }
 
-void ExampleBase::BindTexture(const Texture& texture, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId)
+VkDescriptorType ExampleBase::GetDescriptorType(DescriptorSetInfo& descriptorSetInfo, uint32_t binding)
+{
+
+	for (const auto& setbinding : descriptorSetInfo.bindings)
+	{
+		if (setbinding.binding == binding)
+		{
+			return setbinding.descriptorType;
+		}
+	}
+
+	ASSERT(0);
+	return VkDescriptorType();
+}
+
+void ExampleBase::BindTexture(const Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType)
 {
 	VkDescriptorImageInfo descriptorImageInfo{};
 	descriptorImageInfo.sampler = texture.sampler;
 	descriptorImageInfo.imageLayout = texture.image.currentLayout;
 	descriptorImageInfo.imageView = texture.image.imageView;
-	UpdateDescriptorSetBindingResources(device, graphcisPipelineInfos[pipeId].descriptorSetInfos[set].descriptorSet, binding, elemenId, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, { descriptorImageInfo }, {}, {});
+	
+	UpdateDescriptorSetBindingResources(device, set, binding, elemenId, 1, descriptorType, { descriptorImageInfo }, {}, {});
 
 
 }
 
-void ExampleBase::BindUniformBuffer(const Buffer& uniformBuffer, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId)
+void ExampleBase::BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType)
 {
 	VkDescriptorBufferInfo descriptorBufferInfo{};
 	descriptorBufferInfo.buffer = uniformBuffer.buffer;
 	descriptorBufferInfo.offset = 0;
 	descriptorBufferInfo.range = uniformBuffer.size;
-	UpdateDescriptorSetBindingResources(device, graphcisPipelineInfos[pipeId].descriptorSetInfos[set].descriptorSet, binding, elemenId, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, {  }, { descriptorBufferInfo }, {});
+	UpdateDescriptorSetBindingResources(device, set, binding, elemenId, 1, descriptorType, {  }, { descriptorBufferInfo }, {});
 
 }
 

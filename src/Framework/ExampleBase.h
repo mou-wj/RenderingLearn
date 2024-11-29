@@ -283,6 +283,7 @@ struct GraphicsPipelineStates {
 struct DescriptorSetInfo {
 	VkDescriptorSetLayout setLayout;
 	VkDescriptorSet descriptorSet;
+	std::vector<VkDescriptorSetLayoutBinding> bindings;
 };
 struct GraphicPipelineInfos {
 	GraphicsPiplineShaderInfo pipelineShaderResourceInfo;
@@ -322,16 +323,18 @@ struct ComputePipelineInfos {
 
 struct TextureDataSource {
 	std::string picturePath = "";
-	std::vector<char> imagePixelDatas;//VK_FORMAT_B8G8R8A8_SRGB
+	std::vector<char> imagePixelDatas;//VK_FORMAT_R8G8B8A8_SRGB
 	uint32_t width = 0, height = 0;
 
 };
-struct TextureInfo {
+struct TextureBindInfo {
 	std::vector<TextureDataSource> textureDataSources;
 	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
 	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
-	TextureInfo() = default;
-	TextureInfo(const std::vector<std::string>& imagePaths) {
+	bool compute = false;//是否用于compute pipeline的标志
+	VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+	TextureBindInfo() = default;
+	TextureBindInfo(const std::vector<std::string>& imagePaths) {
 		textureDataSources.resize(imagePaths.size());
 		for (uint32_t i = 0; i < imagePaths.size(); i++)
 		{
@@ -394,9 +397,10 @@ struct SubpassInfo {
 	std::vector<VkSubpassDependency> subpassDepends;
 };
 
-struct UniformBufferInfo {
+struct BufferBindInfo {
 	uint32_t size;
 	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
+	bool compute = false;//是否用于compute pipeline的标志
 };
 
 struct CommandList {
@@ -446,7 +450,7 @@ protected:
 	void CmdListRecordEnd(CommandList& cmdList);
 	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
 	//compute
-	void CmdOpsDispatch(CommandList& cmdList,uint32_t groupX);
+	void CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
 	//transfer
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
@@ -477,8 +481,8 @@ protected:
 	std::vector<VkSemaphore> semaphores;//根据不同的场景动态创建
 	//std::vector<VkFence> fences;//根据不同场景创建
 
-	std::map<std::string, TextureInfo> textureInfos;
-	std::map<std::string, UniformBufferInfo> uniformBufferInfos;
+	std::map<std::string, TextureBindInfo> textureBindInfos;
+	std::map<std::string, BufferBindInfo> bufferBindInfos;
 
 protected:
 	//这里的数据不能被派生类创建和析构
@@ -487,15 +491,15 @@ protected:
 	std::vector<Image> swapchainImages;
 	uint32_t windowWidth = 512, windowHeight = 512;
 	std::map<std::string, Texture> textures;
-	std::map<std::string, Buffer> uniformBuffers;
+	std::map<std::string, Buffer> buffers;
 	void BindTexture(const std::string& textureName);
-	void BindUniformBuffer(const std::string& uniformBufferName);
+	void BindBuffer(const std::string& bufferName);
 
 private:
 
 	void Init();
 	//graphic
-	
+
 	virtual void InitContex();
 	virtual void InitAttanchmentDesc();
 	virtual void InitRenderPass();
@@ -537,14 +541,12 @@ private:
 	void FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data);
 	void DestroyImage(const Image& image);
 
-	Texture Load2DTexture(const std::string& texFilePath);
-	Texture Create2DTexture(uint32_t width, uint32_t height, const char* textureDatas);
-	Texture LoadCubeTexture(const std::array<std::string, 6>& faceTexFilePaths/*+x,-x,+y,-y,+z,-z*/);
+	Texture CreateTexture(TextureBindInfo& textureBindInfo);
 
 	
 	Buffer CreateVertexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
-	Buffer CreateUniformBuffer(const char* buf, VkDeviceSize size);
+	Buffer CreateShaderAccessBuffer(const char* buf, VkDeviceSize size);
 	
 	void DestroyBuffer(Buffer& buffer);
 
@@ -553,8 +555,9 @@ private:
 
 
 	//descriptor
-	void BindTexture(const Texture& texture, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId = 0);
-	void BindUniformBuffer(const Buffer& uniformBuffer, uint32_t pipeId, uint32_t set, uint32_t binding, uint32_t elemenId = 0);
+	VkDescriptorType GetDescriptorType(DescriptorSetInfo& descriptorSetInfo,uint32_t binding);
+	void BindTexture(const Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId ,VkDescriptorType descriptorType);
+	void BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType);
 
 	void CreateSemaphores(uint32_t numSemaphores);
 	//void CreateFences(uint32_t numFences);
@@ -568,11 +571,7 @@ private:
 	void ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo);
 	void ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spirvCode, ShaderResourceInfo& dstCacheShaderResource);
 	void ParseShaderFiles();
-	//create descriptor set layout
 
-	//create pipeline layout
-
-	//create graphics pipeline
 
 
 	//utils

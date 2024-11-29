@@ -45,10 +45,10 @@ void UniformExample::InitResourceInfos()
 	//	
 	TextureDataSource dataSource;
 	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/OIP.jpg";
-	textureInfos["OIP"].textureDataSources.push_back(dataSource);
-	textureInfos["OIP"].binding = 1;
+	textureBindInfos["OIP"].textureDataSources.push_back(dataSource);
+	textureBindInfos["OIP"].binding = 1;
 
-	uniformBufferInfos["Buffer"].size = 12;
+	bufferBindInfos["Buffer"].size = 12;
 
 }
 
@@ -81,7 +81,7 @@ void UniformExample::Loop()
 	buffer.height = windowHeight;
 	buffer.enableTexture = true;
 	
-	FillBuffer(uniformBuffers["Buffer"], 0, 12, (const char*)& buffer);
+	FillBuffer(buffers["Buffer"], 0, 12, (const char*)& buffer);
 
 
 	auto swapchainValidSemaphore = semaphores[0];
@@ -91,7 +91,7 @@ void UniformExample::Loop()
 	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
-	BindUniformBuffer("Buffer");
+	BindBuffer("Buffer");
 	BindTexture("OIP");
 	while (!WindowEventHandler::WindowShouldClose())
 	{

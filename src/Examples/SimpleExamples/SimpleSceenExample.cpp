@@ -93,19 +93,19 @@ void SimpleSceenExample::InitResourceInfos()
 	std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg",//+z
 	std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg"//-z
 	};
-	textureInfos["skybox"] = TextureInfo(skyboxImages);
-	textureInfos["skybox"].binding = 1;
-	textureInfos["skybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+	textureBindInfos["skybox"] = TextureBindInfo(skyboxImages);
+	textureBindInfos["skybox"].binding = 1;
+	textureBindInfos["skybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 
 
 
 
-	uniformBufferInfos["Buffer"].size = sizeof(glm::mat4) * 3;
-	uniformBufferInfos["Buffer"].binding = 0;
+	bufferBindInfos["Buffer"].size = sizeof(glm::mat4) * 3;
+	bufferBindInfos["Buffer"].binding = 0;
 
-	uniformBufferInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
-	uniformBufferInfos["SimpleSceenExampleBuffer"].binding = 0;
-	uniformBufferInfos["SimpleSceenExampleBuffer"].pipeId = 1;
+	bufferBindInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
+	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
+	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 1;
 	
 }
 
@@ -146,7 +146,7 @@ void SimpleSceenExample::Loop()
 	//ShowMat(buffer.proj);
 	//ShowVec(buffer.proj* buffer.view* glm::vec4(1, 1, 1, 1));
 
-	FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
+	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 
 	auto swapchainValidSemaphore = semaphores[0];
@@ -159,8 +159,8 @@ void SimpleSceenExample::Loop()
 
 	//绑定纹理以及uniform buffer
 	BindTexture("skybox");
-	BindUniformBuffer("Buffer");
-	BindUniformBuffer("SimpleSceenExampleBuffer");
+	BindBuffer("Buffer");
+	BindBuffer("SimpleSceenExampleBuffer");
 
 
 	while (!WindowEventHandler::WindowShouldClose())
@@ -172,8 +172,8 @@ void SimpleSceenExample::Loop()
 
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
-		FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-		FillBuffer(uniformBuffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		WindowEventHandler::ProcessEvent();

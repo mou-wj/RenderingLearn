@@ -144,6 +144,14 @@ std::vector<VkLayerProperties> VulkanAPI::EnumerateDeviceLayerProperties(VkPhysi
 	return layerPropetries;
 }
 
+VkImageFormatProperties VulkanAPI::GetImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags)
+{
+	VkImageFormatProperties imageFormatProps;
+	vkGetPhysicalDeviceImageFormatProperties(physicalDevice, format, type, tiling, usage, flags, &imageFormatProps);
+	return imageFormatProps;
+}
+
+
 VkMemoryRequirements VulkanAPI::GetImageMemoryRequirments(VkDevice device, VkImage image)
 {
 	VkMemoryRequirements memoryRequiremens{};
@@ -346,7 +354,7 @@ void VulkanAPI::DestroyImage(VkDevice device, VkImage image)
 	vkDestroyImage(device, image, nullptr);
 }
 
-VkImageView VulkanAPI::CreateImageView(VkDevice device, VkImageViewCreateFlags flags, VkImage image, VkImageViewType viewType, VkFormat format, VkComponentMapping components, VkImageSubresourceRange subresourceRange)
+VkImageView VulkanAPI::CreateImageView(VkDevice device, VkImageViewCreateFlags flags, VkImage image, VkImageUsageFlags usage,VkImageViewType viewType, VkFormat format, VkComponentMapping components, VkImageSubresourceRange subresourceRange)
 {
 	VkImageView imageView{};
 	VkImageViewCreateInfo imageViewCreateInfo{};
@@ -358,6 +366,10 @@ VkImageView VulkanAPI::CreateImageView(VkDevice device, VkImageViewCreateFlags f
 	imageViewCreateInfo.format = format;
 	imageViewCreateInfo.components = components;
 	imageViewCreateInfo.subresourceRange = subresourceRange;
+	VkImageViewUsageCreateInfo usageInfo{};
+	usageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO;
+	usageInfo.pNext = nullptr;
+	usageInfo.usage = usage;
 	auto res = vkCreateImageView(device, &imageViewCreateInfo, nullptr, &imageView);
 	ASSERT(imageView);
 	ASSERT(res == VK_SUCCESS);

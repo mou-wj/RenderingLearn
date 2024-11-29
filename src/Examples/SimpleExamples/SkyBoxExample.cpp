@@ -27,9 +27,9 @@ void SkyBoxExample::InitResourceInfos()
 		std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg",//+z
 		std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg"//-z
 	};
-	textureInfos["skybox"] = TextureInfo(skyboxImages);
-	textureInfos["skybox"].binding = 1;
-	textureInfos["skybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+	textureBindInfos["skybox"] = TextureBindInfo(skyboxImages);
+	textureBindInfos["skybox"].binding = 1;
+	textureBindInfos["skybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 
 
 	//test
@@ -41,14 +41,14 @@ void SkyBoxExample::InitResourceInfos()
 		std::string(PROJECT_DIR) + "/resources/pic/testskybox/+z.jpg",//+z
 		std::string(PROJECT_DIR) + "/resources/pic/testskybox/-z.jpg"//-z
 	};
-	textureInfos["testskybox"] = TextureInfo(testskyboxImages);
-	textureInfos["testskybox"].binding = 1;
-	textureInfos["testskybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+	textureBindInfos["testskybox"] = TextureBindInfo(testskyboxImages);
+	textureBindInfos["testskybox"].binding = 1;
+	textureBindInfos["testskybox"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 	
 
 
-	uniformBufferInfos["Buffer"].size = sizeof(glm::mat4) * 3;
-	uniformBufferInfos["Buffer"].binding = 0;
+	bufferBindInfos["Buffer"].size = sizeof(glm::mat4) * 3;
+	bufferBindInfos["Buffer"].binding = 0;
 }
 
 void SkyBoxExample::Loop()
@@ -111,8 +111,8 @@ void SkyBoxExample::Loop()
 	//ShowMat(buffer.proj);
 	//ShowVec(buffer.proj* buffer.view* glm::vec4(1, 1, 1, 1));
 
-	FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-	BindUniformBuffer("Buffer");
+	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
+	BindBuffer("Buffer");
 	BindTexture("testskybox");
 
 	auto swapchainValidSemaphore = semaphores[0];
@@ -132,7 +132,7 @@ void SkyBoxExample::Loop()
 
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
-		FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		WindowEventHandler::ProcessEvent();

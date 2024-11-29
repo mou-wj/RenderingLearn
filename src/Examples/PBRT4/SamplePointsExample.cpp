@@ -58,10 +58,15 @@ void SamplePointsExample::InitResourceInfos()
 	dataSource.height = 512;
 	dataSource.imagePixelDatas.resize(512 * 512 * 4, 255);
 	
-	textureInfos["OIP"].textureDataSources.push_back(dataSource);
-	textureInfos["OIP"].binding = 1;
+	textureBindInfos["outputImage"].textureDataSources.push_back(dataSource);
+	textureBindInfos["outputImage"].binding = 0;
+	textureBindInfos["outputImage"].usage = VK_IMAGE_USAGE_STORAGE_BIT;
+	textureBindInfos["outputImage"].compute = true;
 
-	uniformBufferInfos["Buffer"].size = 12;
+	textureBindInfos["testTexture"].textureDataSources.push_back(dataSource);
+	textureBindInfos["testTexture"].binding = 1;
+	textureBindInfos["testTexture"].usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+	bufferBindInfos["Buffer"].size = 12;
 
 }
 
@@ -92,7 +97,7 @@ void SamplePointsExample::Loop()
 	buffer.width = windowWidth;
 	buffer.height = windowHeight;
 	
-	FillBuffer(uniformBuffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
+	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 
 	auto swapchainValidSemaphore = semaphores[0];
@@ -102,8 +107,11 @@ void SamplePointsExample::Loop()
 	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
-	BindUniformBuffer("Buffer");
-	BindTexture("OIP");
+	BindBuffer("Buffer");
+	//绑定到计算管线的描述符集中
+	BindTexture("outputImage");
+	//绑定到图形管线的描述符集中
+	BindTexture("testTexture");
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
@@ -115,6 +123,17 @@ void SamplePointsExample::Loop()
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
+		//利用计算管线生成一张采样点的结果图片
+		//转换布局
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["samplePointsShow"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+		CmdOpsDispatch(graphicCommandList);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["samplePointsShow"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+
+
+
+
+
 		CmdOpsDrawGeom(graphicCommandList);
 		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);

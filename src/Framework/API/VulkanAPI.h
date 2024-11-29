@@ -31,7 +31,7 @@ namespace VulkanAPI {
 	VkFormatProperties GetFormatPropetirs(VkPhysicalDevice physicalDevice, VkFormat format);
 	std::vector<VkExtensionProperties> EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* layerName);
 	std::vector<VkLayerProperties> EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice);
-
+	VkImageFormatProperties GetImageFormatProperties(VkPhysicalDevice  physicalDevice,VkFormat  format,VkImageType  type,VkImageTiling  tiling,VkImageUsageFlags  usage,VkImageCreateFlags  flags);
 
 
 	//device
@@ -79,6 +79,7 @@ namespace VulkanAPI {
 	//image view
 	VkImageView CreateImageView(VkDevice device, VkImageViewCreateFlags     flags,
 	VkImage                    image,
+	VkImageUsageFlags          usage,
 	VkImageViewType            viewType,
 	VkFormat                   format,
 	VkComponentMapping         components,
