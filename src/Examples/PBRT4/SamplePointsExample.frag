@@ -20,7 +20,7 @@ void main(){
 
 	vec4 texColor = texture(testTexture,uv);
 	outColor = texColor;
-
+	//outColor = vec4(1,0,0,1);
 
 
 }

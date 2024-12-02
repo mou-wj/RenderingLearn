@@ -2,15 +2,83 @@
 // 定义计算工作组的大小
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
-layout(rgba32f, binding = 0,set  = 0) uniform image2D outputImage; // 输出纹理
+layout(rgba8, binding = 0,set  = 0) uniform image2D outputImage; // 输出纹理
 
 
+
+// 生成 Halton 序列的一维采样点
+float HaltonSequence(uint index, uint base) {
+    float result = 0.0;
+    float f = 1.0;
+    uint i = index;
+    while (i > 0) {
+        f /= float(base);
+        result += f * float(i % base);
+        i /= base;
+    }
+    return result;
+}
+
+// 生成均匀分布的一维采样点
+float UniformSample1D(uint index) {
+    return HaltonSequence(index, 2); // 基数选择 2
+}
+// 生成均匀分布的二维采样点
+vec2 UniformSample2D(uint index) {
+    return vec2(HaltonSequence(index, 2),HaltonSequence(index, 3)); // 基数选择 2,3
+}
+// 生成均匀分布的三维采样点
+vec3 UniformSample3D(uint index) {
+    return vec3(HaltonSequence(index, 2),HaltonSequence(index, 3),HaltonSequence(index, 5)); // 基数选择 2,3,5
+}
+
+
+void DrawVirtualPoint(ivec2 pixelCoord,vec4 color)
+{
+     
+    for(int i = 0;i < 3;i++)
+    {
+        for(int j = -i;j <= i; j++)//row
+        {
+            for(int k = -i;k <=i;k++)//col
+            {
+                ivec2 curPixelCoord = ivec2(pixelCoord.x + k,pixelCoord.y + j);
+                imageStore(outputImage, curPixelCoord, color);
+            }
+        }
+    
+    }
+
+}
 
 
 void main() {
-    // 获取当前像素的坐标
-    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+    
+        // 获取纹理尺寸
+    ivec2 size = imageSize(outputImage);
 
-    // 写入到输出纹理
-    imageStore(outputImage, pixelCoords, vec4(1,0,0,1));
+    uint gridWidth = 20,gridHeight = 20;//定义一个20x20的网格
+    float gridCellWidth = 1.0 / gridWidth,gridCellHeight = 1.0 / gridHeight; 
+    uint sampleType = 1;//0 独立随机采样
+        // 使用循环处理每个像素
+    for (int y = 0; y < gridHeight; ++y) {
+        for (int x = 0; x < gridHeight; ++x) {
+            
+            vec2 samplePoint = UniformSample2D(gridWidth * y + x);
+
+            //independent sample
+            if(sampleType == 0)
+            {
+                
+
+            }else if(sampleType == 1)
+            {
+                samplePoint = vec2((float(x) + samplePoint.x) * gridCellWidth,(float(y) + samplePoint.y) *gridCellHeight);
+            }
+            ivec2 coord = ivec2(samplePoint.x * size.x, samplePoint.y * size.y);
+            //imageStore(outputImage, coord, vec4(0,0,0,1));
+            DrawVirtualPoint(coord,vec4(0,0,0,1));
+        }
+    }
+
 }

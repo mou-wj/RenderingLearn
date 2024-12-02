@@ -377,12 +377,26 @@ void ExampleBase::PickValidPhysicalDevice()
 			{
 				continue;//���color format��linear tiling ��֧�ֲ�������ɫ�����������������豸
 			}
-
-			wantFormatFeature = (VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
-			if (!((colorFormatProps.linearTilingFeatures & wantFormatFeature) == wantFormatFeature))
+			bool suitableTextxureFormatFound = false;
+			uint64_t textureWantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+			for (const auto& candidatedFormat : candidatedTextureFormats)
 			{
-				continue;//���color format��linear tiling ��֧�ֲ�������ɫ�����������������豸
+				auto textureFormatProps = GetFormatPropetirs(physicalDevices[i], candidatedFormat);
+				
+				if ((textureFormatProps.linearTilingFeatures & textureWantFormatFeature) == textureWantFormatFeature)
+				{
+					suitableTextxureFormatFound = true;
+					textureFormat = candidatedFormat;
+					break;
+				
+				}
 			}
+			if (!suitableTextxureFormatFound)
+			{
+				continue;
+			}
+
+
 
 			auto surfaceFormatsCapabilities = GetSurfaceFormats(physicalDevices[i], surface);
 			//���֧��color��format
@@ -533,7 +547,7 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 	{
 		if (textureBindInfo.textureDataSources[i].picturePath != "")
 		{
-			LoadCharSRGBJpeg(textureBindInfo.textureDataSources[i].picturePath, { R,G,B,A }, textureBindInfo.textureDataSources[i].imagePixelDatas, x, y, true);
+			LoadCharUnsignedCharJpeg(textureBindInfo.textureDataSources[i].picturePath, { R,G,B,A }, textureBindInfo.textureDataSources[i].imagePixelDatas, x, y, true);
 			textureBindInfo.textureDataSources[i].width = x;
 			textureBindInfo.textureDataSources[i].height = y;
 			if (i !=0)
@@ -547,7 +561,7 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 	}
 	//����texture
 	uint32_t numLayer = textureBindInfo.textureDataSources.size();
-	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, colorFormat, x, y, 1, 1, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{},VK_IMAGE_TILING_OPTIMAL);
+	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, textureFormat, x, y, 1, 1, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{},VK_IMAGE_TILING_OPTIMAL);
 	texture.sampler = CreateDefaultSampler(device, 1);
 	for (uint32_t i = 0; i < numLayer; i++)
 	{
@@ -627,7 +641,7 @@ void ExampleBase::CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> g
 	//绑定描述符集
 	for (const auto& setInfo : computePipelineInfos.descriptorSetInfos)
 	{
-		CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, computePipelineInfos.pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
+		CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineInfos.pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
 	}
 	CmdDispatch(cmdList.commandBuffer, groupSize[0], groupSize[1], groupSize[2]);
 

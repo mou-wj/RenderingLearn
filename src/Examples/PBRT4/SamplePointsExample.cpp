@@ -58,14 +58,20 @@ void SamplePointsExample::InitResourceInfos()
 	dataSource.height = 512;
 	dataSource.imagePixelDatas.resize(512 * 512 * 4, 255);
 	
-	textureBindInfos["outputImage"].textureDataSources.push_back(dataSource);
-	textureBindInfos["outputImage"].binding = 0;
-	textureBindInfos["outputImage"].usage = VK_IMAGE_USAGE_STORAGE_BIT;
-	textureBindInfos["outputImage"].compute = true;
+	//textureBindInfos["outputImage"].textureDataSources.push_back(dataSource);
+	//textureBindInfos["outputImage"].binding = 0;
+	//textureBindInfos["outputImage"].usage = VK_IMAGE_USAGE_STORAGE_BIT;
+	//textureBindInfos["outputImage"].compute = true;
 
-	textureBindInfos["testTexture"].textureDataSources.push_back(dataSource);
-	textureBindInfos["testTexture"].binding = 1;
-	textureBindInfos["testTexture"].usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+	textureBindInfos["image"].textureDataSources.push_back(dataSource);
+	textureBindInfos["image"].binding = 0;
+	textureBindInfos["image"].usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	textureBindInfos["image"].compute = true;
+
+
+	//textureBindInfos["testTexture"].textureDataSources.push_back(dataSource);
+	//textureBindInfos["testTexture"].binding = 1;
+	//textureBindInfos["testTexture"].usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 	bufferBindInfos["Buffer"].size = 12;
 
 }
@@ -109,9 +115,13 @@ void SamplePointsExample::Loop()
 
 	BindBuffer("Buffer");
 	//绑定到计算管线的描述符集中
-	BindTexture("outputImage");
+	textureBindInfos["image"].binding = 0;
+	textureBindInfos["image"].compute = true;
+	BindTexture("image");
 	//绑定到图形管线的描述符集中
-	BindTexture("testTexture");
+	textureBindInfos["image"].binding = 1;
+	textureBindInfos["image"].compute = false;
+	BindTexture("image");
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
@@ -125,9 +135,9 @@ void SamplePointsExample::Loop()
 		CmdListRecordBegin(graphicCommandList);
 		//利用计算管线生成一张采样点的结果图片
 		//转换布局
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["samplePointsShow"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["image"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 		CmdOpsDispatch(graphicCommandList);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["samplePointsShow"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["image"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 
 
