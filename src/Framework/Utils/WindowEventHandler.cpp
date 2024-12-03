@@ -90,6 +90,30 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
 
         break;
     }
+    case GLFW_KEY_J: {
+        if (s_eventCallBacks[KEY_J_PRESS])
+        {
+            s_eventCallBacks[KEY_J_PRESS]();
+        }
+
+        break;
+    }
+    case GLFW_KEY_K: {
+        if (s_eventCallBacks[KEY_K_PRESS])
+        {
+            s_eventCallBacks[KEY_K_PRESS]();
+        }
+
+        break;
+    }
+    case GLFW_KEY_C: {
+        if (s_eventCallBacks[KEY_C_PRESS])
+        {
+            s_eventCallBacks[KEY_C_PRESS]();
+        }
+
+        break;
+    }
     default:
         break;
     }

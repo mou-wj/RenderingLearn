@@ -72,8 +72,10 @@ void SamplePointsExample::InitResourceInfos()
 	//textureBindInfos["testTexture"].textureDataSources.push_back(dataSource);
 	//textureBindInfos["testTexture"].binding = 1;
 	//textureBindInfos["testTexture"].usage = VK_IMAGE_USAGE_SAMPLED_BIT;
-	bufferBindInfos["Buffer"].size = 12;
-
+	bufferBindInfos["Buffer"].size = 8;
+	bufferBindInfos["Option"].size = 36;
+	bufferBindInfos["Option"].binding = 1;
+	bufferBindInfos["Option"].compute = true;
 }
 
 void SamplePointsExample::Loop()
@@ -99,12 +101,13 @@ void SamplePointsExample::Loop()
 	//Texture testTexture = Create2DTexture(512, 512, testImageData.data());
 	struct Buffer {
 		float width, height;
+		uint32_t sampleType = 1, base1 = 2, base2 = 3, base3 = 5,sequenceType =0;
 	} buffer;
 	buffer.width = windowWidth;
 	buffer.height = windowHeight;
 	
-	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-
+	FillBuffer(buffers["Buffer"], 0, 8, (const char*)&buffer);
+	FillBuffer(buffers["Option"], 0, 36, ((const char*)&buffer)+8);
 
 	auto swapchainValidSemaphore = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
@@ -114,6 +117,7 @@ void SamplePointsExample::Loop()
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
 	BindBuffer("Buffer");
+	BindBuffer("Option");
 	//绑定到计算管线的描述符集中
 	textureBindInfos["image"].binding = 0;
 	textureBindInfos["image"].compute = true;
@@ -122,6 +126,45 @@ void SamplePointsExample::Loop()
 	textureBindInfos["image"].binding = 1;
 	textureBindInfos["image"].compute = false;
 	BindTexture("image");
+
+	WindowEventHandler::SetEventCallBack(EventType::KEY_I_PRESS, [&]() {
+		buffer.sampleType = (buffer.sampleType+1) % 2;
+		if (buffer.sampleType == 0)
+		{
+			std::cout << "当前为独立采样点:" << std::endl;
+		}
+		else {
+			std::cout << "当前为分层采样点:" << std::endl;
+		}
+		FillBuffer(buffers["Option"], 0, 36, ((const char*)&buffer) + 8);
+		}, "按I输入切换采样类型");
+	WindowEventHandler::SetEventCallBack(EventType::KEY_J_PRESS, [&]() {
+		uint32_t base1 = 2,base2 = 3,base3 = 5;
+		std::cout << "请输入三个素数奇数:" << std::endl;
+		std::cin >> base1 >> base2 >> base3;
+		buffer.base1 = base1;
+		buffer.base2 = base2;
+		buffer.base3 = base3;
+		FillBuffer(buffers["Option"], 0, 36, ((const char*)&buffer) + 8);
+
+		}, "按J输入三个Hammersley序列的素数基数，分别用于生成随机Holton采样点的第1维，2维，3维分量");
+
+	WindowEventHandler::SetEventCallBack(EventType::KEY_K_PRESS, [&]() {
+		buffer.sequenceType = (buffer.sequenceType + 1) % 2;
+		if (buffer.sequenceType == 0)
+		{
+			std::cout << "当前使用Hammersley 序列" << std::endl;
+		}
+		else {
+			std::cout << "当前使用Sobol 序列" << std::endl;
+		}
+		FillBuffer(buffers["Option"], 0, 36, ((const char*)&buffer) + 8);
+		}, "按K输入切换序列类型");
+
+	WindowEventHandler::SetEventCallBack(EventType::KEY_C_PRESS, [&]() {
+		CaptureNum(2)
+		}, "按C捕获一帧");
+
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

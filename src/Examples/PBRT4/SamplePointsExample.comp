@@ -4,10 +4,14 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 layout(rgba8, binding = 0,set  = 0) uniform image2D outputImage; // 输出纹理
 
+layout(set = 0,binding = 1,std140) uniform Option{
+	uint sampleType;//0 独立随机采样
+    uint base1,base2,base3;//Halton序列的基
+    uint sequenceType;//0使用Hammersley序列生成 ， 1使用sobol
+};
 
-
-// 生成 Halton 序列的一维采样点
-float HaltonSequence(uint index, uint base) {
+// 生成Hammersley 序列的一维采样点，各个维度的序列可以使用不同的基来生成
+float HammersleySequence(uint index, uint base) {
     float result = 0.0;
     float f = 1.0;
     uint i = index;
@@ -19,17 +23,17 @@ float HaltonSequence(uint index, uint base) {
     return result;
 }
 
-// 生成均匀分布的一维采样点
-float UniformSample1D(uint index) {
-    return HaltonSequence(index, 2); // 基数选择 2
+// 生成均匀分布的Halton一维采样点
+float HaltonSample1D(uint index) {
+    return HammersleySequence(index, base1); // 基数选择 2
 }
-// 生成均匀分布的二维采样点
-vec2 UniformSample2D(uint index) {
-    return vec2(HaltonSequence(index, 2),HaltonSequence(index, 3)); // 基数选择 2,3
+// 生成均匀分布的二维Halton采样点
+vec2 HaltonSample2D(uint index) {
+    return vec2(HammersleySequence(index, base1),HammersleySequence(index, base2)); // 基数选择 2,3
 }
-// 生成均匀分布的三维采样点
-vec3 UniformSample3D(uint index) {
-    return vec3(HaltonSequence(index, 2),HaltonSequence(index, 3),HaltonSequence(index, 5)); // 基数选择 2,3,5
+// 生成均匀分布的三维Halton采样点
+vec3 HaltonSample3D(uint index) {
+    return vec3(HammersleySequence(index, base1),HammersleySequence(index, base2),HammersleySequence(index, base3)); // 基数选择 2,3,5
 }
 
 
@@ -51,15 +55,161 @@ void DrawVirtualPoint(ivec2 pixelCoord,vec4 color)
 
 }
 
+#define MAX_DIM 10    // 最大维度
+
+// 原始多项式
+const int primitivePolynomials[MAX_DIM] = {1, 3, 7, 11, 13, 19, 25, 37, 59, 47};
+#define MAX_BITS 32   // 最大二进制位数
+uint SobolMatrix[MAX_DIM][MAX_BITS];
+// 构建Sobol生成矩阵
+void GenerateSobolMatrix( int dimensions, int maxBits) {
+    for (int dim = 0; dim < dimensions; dim++) {
+        uint poly = primitivePolynomials[dim];
+        int degree = int(log2(poly)) + 1; // 多项式阶数
+
+        // 初始化低阶方向向量
+        for (int i = 0; i < degree; i++) {
+            SobolMatrix[dim][i] = 1U << (31 - i); // 基向量
+        }
+
+        // 生成高阶方向向量
+        for (int i = degree; i < maxBits; i++) {
+            uint value = SobolMatrix[dim][i - degree];
+            value ^= (value >> degree); // 右移并异或
+
+            // 按多项式系数异或
+            for (int j = 1; j < degree; j++) {
+                if (bool((poly >> j) & 1)) {
+                    value ^= SobolMatrix[dim][i - j];
+                }
+            }
+
+            SobolMatrix[dim][i] = value;
+        }
+    }
+}
+
+//生成矩阵乘上索引a
+uint MultiplyGenerator(uint dim, uint a) {
+    uint v = 0;
+    for (int i = 0; a != 0; ++i, a >>= 1)
+    {
+       if (bool(a & 1))
+       {
+          v ^= SobolMatrix[dim-1][i];
+       }
+
+    }
+
+    return v;
+}
+
+//SobolSequence 和 HammersleySequence的区别是Sobol只使用2作为基，但是每个维度会使用一个生成矩阵来做区分
+float SobolSequence(uint index,uint dim){
+    float res = 0;
+    uint a = MultiplyGenerator(dim,index);
+    res = (1.0 * a / (pow(2,32)));
+    return res;
+}
+// 生成均匀分布的一维Sobol采样点
+float SobolSample1D(uint index) {
+    return SobolSequence(index, 1);
+}
+// 生成均匀分布的二维Sobol采样点
+vec2 SobolSample2D(uint index) {
+    return vec2(SobolSequence(index, 1),SobolSequence(index, 2)); // 基数选择 2,3
+}
+// 生成均匀分布的三维Sobol采样点
+vec3 SobolSample3D(uint index) {
+    return vec3(SobolSequence(index, 1),SobolSequence(index, 2),SobolSequence(index, 3)); // 基数选择 2,3,5
+}
+
+//生成均匀分布的一维采样点
+float UniformSample1D(uint index)
+{
+    float res;
+    if(sequenceType == 0)
+    {
+        return HaltonSample1D(index);
+    }else if(sequenceType == 1)
+    {
+        return SobolSample1D(index);
+    }
+    return res;
+}
+//生成均匀分布的二维采样点
+vec2 UniformSample2D(uint index)
+{
+    vec2 res;
+    if(sequenceType == 0)
+    {
+        return HaltonSample2D(index);
+    }else if(sequenceType == 1)
+    {
+        return SobolSample2D(index);
+    }
+
+    return res;
+}
+//生成均匀分布的三维采样点
+vec3 UniformSample3D(uint index)
+{
+    vec3 res;
+    if(sequenceType == 0)
+    {
+        return HaltonSample3D(index);
+    }else if(sequenceType == 1)
+    {
+        return SobolSample3D(index);
+    }
+
+    return res;
+}
 
 void main() {
-    
-        // 获取纹理尺寸
+    //生成sobol生成矩阵
+    GenerateSobolMatrix(MAX_DIM,MAX_BITS);
+
+
+    // 获取纹理尺寸
     ivec2 size = imageSize(outputImage);
+    //清空纹理数据
+            // 使用循环处理每个像素
+    for (int y = 0; y < size.y; ++y) {
+        for (int x = 0; x < size.x; ++x) {
+           
+            ivec2 coord = ivec2(x,y);
+            imageStore(outputImage, coord, vec4(1,1,1,1));//将图片重置为白色
+            
+        }
+    }
+    
+
+
 
     uint gridWidth = 20,gridHeight = 20;//定义一个20x20的网格
     float gridCellWidth = 1.0 / gridWidth,gridCellHeight = 1.0 / gridHeight; 
-    uint sampleType = 1;//0 独立随机采样
+    //绘制网格
+    for(uint i = 1;i < gridWidth;i++)
+    {
+        for(uint j = 0;j < size.y;j++)
+        {
+                ivec2 curPixelCoord = ivec2(gridCellWidth * i * size.x,j);
+                imageStore(outputImage, curPixelCoord, vec4(1,0,0,1));
+        }
+    
+    }
+    for(uint i = 1;i < gridHeight;i++)
+    {
+        for(uint j = 0;j < size.x;j++)
+        {
+                ivec2 curPixelCoord = ivec2(j ,i * gridCellHeight * size.y);
+                imageStore(outputImage, curPixelCoord, vec4(1,0,0,1));
+        }
+    
+    }
+
+
         // 使用循环处理每个像素
     for (int y = 0; y < gridHeight; ++y) {
         for (int x = 0; x < gridHeight; ++x) {
