@@ -20,15 +20,15 @@ enum RotateAction {
 
 class Camera {
 public:
-	Camera(glm::vec3 pos = glm::vec3(0,0,0), glm::vec3 target = glm::vec3(0, 0, 1), glm::vec3 down = glm::vec3(0, 1, 0));
+	Camera(glm::vec3 pos = glm::vec3(0, 0, 0), glm::vec3 target = glm::vec3(0, 0, 1), glm::vec3 down = glm::vec3(0, 1, 0));
 
 
 	void Move(MoveDirection direction);
-	void Rotate(RotateAction rotateAction,float angle = 1.0/*旋转角度*/);
+	void Rotate(RotateAction rotateAction, float angle = 1.0/*旋转角度*/);
 
 	const glm::mat4& GetView() const { return view; }
 	const glm::mat4& GetProj() const { return proj; }
-
+	const glm::vec3& GetPos() const { return pos; }
 private:
 	void Calculate();
 

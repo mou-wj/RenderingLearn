@@ -7,8 +7,8 @@ void ReflectionModelsExample::InitSubPassInfo()
 	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.vert";
 	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.frag";
 	ShaderCodePaths drawSceenCodePath;
-	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.vert";
-	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.frag";
+	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/ReflectionModelsExample.vert";
+	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/ReflectionModelsExample.frag";
 
 
 
@@ -79,7 +79,7 @@ void ReflectionModelsExample::InitResourceInfos()
 
 	geoms.resize(2);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/moved_cube.obj", geoms[1]);
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/sphere.obj", geoms[1]);
 
 	subpassDrawGeoInfos[0] = { 0 };
 	subpassDrawGeoInfos[1] = { 1 };
@@ -103,9 +103,9 @@ void ReflectionModelsExample::InitResourceInfos()
 	bufferBindInfos["Buffer"].size = sizeof(glm::mat4) * 3;
 	bufferBindInfos["Buffer"].binding = 0;
 
-	bufferBindInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
-	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
-	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 1;
+	bufferBindInfos["SceenInfo"].size = sizeof(glm::vec3);
+	bufferBindInfos["SceenInfo"].binding = 2;
+	bufferBindInfos["SceenInfo"].pipeId = 1;
 	
 }
 
@@ -147,7 +147,7 @@ void ReflectionModelsExample::Loop()
 	//ShowVec(buffer.proj* buffer.view* glm::vec4(1, 1, 1, 1));
 
 	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-
+	FillBuffer(buffers["SceenInfo"], 0, sizeof(glm::vec3), (const char*)&(camera.GetPos()));
 
 	auto swapchainValidSemaphore = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
@@ -159,8 +159,15 @@ void ReflectionModelsExample::Loop()
 
 	//绑定纹理以及uniform buffer
 	BindTexture("skybox");
+	textureBindInfos["skybox"].pipeId = 1;
+	BindTexture("skybox");
+
+
 	BindBuffer("Buffer");
-	BindBuffer("SimpleSceenExampleBuffer");
+	bufferBindInfos["Buffer"].pipeId = 1;
+	BindBuffer("Buffer");
+
+	BindBuffer("SceenInfo");
 
 
 	while (!WindowEventHandler::WindowShouldClose())
@@ -173,7 +180,8 @@ void ReflectionModelsExample::Loop()
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		FillBuffer(buffers["SceenInfo"], 0, sizeof(glm::vec3), (const char*)&(camera.GetPos()));
+
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		WindowEventHandler::ProcessEvent();

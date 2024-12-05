@@ -25,3 +25,10 @@ void LoadCharUnsignedCharJpeg(const std::string& imageFile, const std::vector<Pi
 
 	stbi_image_free(imageData);
 }
+
+void WriteJpeg(const std::string& outImagePath, const char* imageData, uint32_t width, uint32_t height, uint32_t numComponent)
+{
+	stbi_write_jpg(outImagePath.c_str(), width, height, numComponent,imageData,100);
+
+
+}

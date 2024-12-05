@@ -520,6 +520,7 @@ void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageA
 
 	}
 
+	//WriteJpeg("textttt.jpg", (const char*)image.hostMapPointer, sublayout.rowPitch / 4, sublayout.size / sublayout.rowPitch);
 }
 
 void ExampleBase::FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data)
@@ -542,12 +543,16 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 	Texture texture;
 	ASSERT(textureBindInfo.textureDataSources.size());
 	uint32_t x = textureBindInfo.textureDataSources[0].width, y = textureBindInfo.textureDataSources[0].height;
+	bool flip = false;
+	if (textureBindInfo.viewType == VK_IMAGE_VIEW_TYPE_CUBE) {
+		flip = true;
+	}
 	//加载数据
 	for (uint32_t i = 0; i < textureBindInfo.textureDataSources.size(); i++)
 	{
 		if (textureBindInfo.textureDataSources[i].picturePath != "")
 		{
-			LoadCharUnsignedCharJpeg(textureBindInfo.textureDataSources[i].picturePath, { R,G,B,A }, textureBindInfo.textureDataSources[i].imagePixelDatas, x, y, true);
+			LoadCharUnsignedCharJpeg(textureBindInfo.textureDataSources[i].picturePath, { R,G,B,A }, textureBindInfo.textureDataSources[i].imagePixelDatas, x, y, flip);
 			textureBindInfo.textureDataSources[i].width = x;
 			textureBindInfo.textureDataSources[i].height = y;
 			if (i !=0)
@@ -561,14 +566,16 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 	}
 	//����texture
 	uint32_t numLayer = textureBindInfo.textureDataSources.size();
-	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, textureFormat, x, y, 1, 1, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{},VK_IMAGE_TILING_OPTIMAL);
+	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, textureFormat, x, y, 1, 1, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{},VK_IMAGE_TILING_LINEAR);
 	texture.sampler = CreateDefaultSampler(device, 1);
 	for (uint32_t i = 0; i < numLayer; i++)
 	{
 		x = textureBindInfo.textureDataSources[i].width;
 		y = textureBindInfo.textureDataSources[i].height;
 		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x, y, 4, textureBindInfo.textureDataSources[i].imagePixelDatas.data());
+		
 	}
+
 	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	return texture;
 
@@ -1124,7 +1131,6 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 		//��䶥��λ������
 		FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
 
-		//�����������
 
 
 	}
@@ -1148,6 +1154,15 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 		for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
 		{
 			indicesData[i] = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+			const auto& normalIndex = geo.shapes[zoneId].mesh.indices[i].normal_index;
+			//�����������
+			//填充法线
+			if (!geo.vertexAttrib.normals.empty())
+			{
+				FillBuffer(geometry.vertexBuffer, indicesData[i] * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(geo.vertexAttrib.normals.data() + normalIndex * 3));
+			}
+			
+
 		}
 
 		geometry.indexBuffers[zoneId] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));

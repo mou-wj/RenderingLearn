@@ -3,10 +3,17 @@
 const float s_pi = 3.141592653;
 
 layout(location = 0) in vec3 inNormal;//输入世界空间中的法线
+layout(location = 1) in vec3 inWorldPosition;//输入世界空间中的位置
+
+
 layout(location = 0) out vec4 outColor;
 
 
 layout(set = 0,binding = 1) uniform samplerCube skyTexture;
+layout(set = 0,binding = 2) uniform SceenInfo{//场景信息
+	vec3 viewPosition;//相机在世界坐标系中的位置
+
+};
 
 
 //生成随机数
@@ -32,7 +39,7 @@ vec2 HaltonSample2D(uint index) {
 
 
 
-uint integrateType = 0;//0表示均匀采样积分，1表示重要性采样
+uint integrateType = 1;//0表示均匀采样积分，1表示重要性采样
 
 //BSDF 为BRDF和BTDF的统称
 
@@ -65,7 +72,7 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 	vec2 samplePoint;
 	vec3 wi;
 	vec3 light;
-	vec3 reflectLight;
+	vec3 reflectLight = vec3(0);
 	float dw = 2 * s_pi / numSample;
 	//根据世界空间的法线构建上半球坐标系
 	vec3 y = -normalize(n);
@@ -76,11 +83,9 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 	}else {
 		x = vec3(0,1,0);
 	}
-	z = cross(x,y);
-	x = cross(y,z);
-	z = normalize(z);
-	x = normalize(x);
-	mat3 nornalMatrix;
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 nornalMatrix = mat3(x,y,z);
 
 
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
@@ -88,11 +93,16 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 		//获取二维随机点，为（theta，phi）
 		samplePoint = HaltonSample2D(sampleIndex); 
 		//将随机点转化为半球中的方向
-		wi.x = cos(samplePoint.x * 2* s_pi)* sin(0.5 * s_pi * samplePoint.y);
-		wi.z = sin(samplePoint.x * 2* s_pi)* sin(0.5 * s_pi * samplePoint.y);
-		wi.y = -sin(0.5 * s_pi * samplePoint.y);
+		float theta = samplePoint.x * 2* s_pi;
+		float fine = 0.5 * s_pi * samplePoint.y;
+		wi.x = cos(theta)* sin(fine);
+		wi.z = sin(theta)* sin(fine);
+		wi.y = -cos(fine);
 		wi = nornalMatrix * wi;//变换到世界坐标
+		wi  = normalize(wi);
 		light = texture(skyTexture,wi).xyz;
+		//gama 解码，转线性空间
+		light = pow(light, vec3(2.4));
 		if(integrateType == 0)
 		{
 			reflectLight+= BSDFLambert(wo,wi) * light * dot(n,wi) * dw;
@@ -115,7 +125,18 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 
 void main(){
 
-//场景所有对象绘制为白色
-	outColor = vec4(1,1,1,1);
+	vec3 wo = normalize(viewPosition - inWorldPosition);
+	vec3 color = LambertBSDF(wo,inNormal);
+
+	//color = texture(skyTexture,inNormal).xyz;
+	//gama 解码
+	//color = pow(color, vec3(2.4));
+	outColor = vec4(color,1.0);
+
+
+
+	//场景所有对象绘制为白色
+	//outColor = vec4(1,1,1,1);
+
 
 }

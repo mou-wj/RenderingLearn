@@ -611,7 +611,7 @@ private:
 	//const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A ,在该格式情况下，片段着色器输出会对调R和B分量，即片段着色器输出（1，0，0，1），实际写入到附件中的是（0，0，1，1），对swapchain中的image，存储在其中的pixel的值为（1，0，0，1）则会显示蓝色,着色器中采样获取的格式为（R,G,B,A）,要想正常的在该格式下进行显示，在片段着色其中的颜色输出需要按照正常的R，G，B，A格式，采样得到的颜色也是按照R，G，B，A格式
 	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;
 	const std::vector<VkFormat> candidatedTextureFormats = {
-		VK_FORMAT_R8G8B8A8_UNORM,
+		VK_FORMAT_R8G8B8A8_UNORM,//当前使用stb读取的时srgb格式的数据，而该格式再着色器中不会进行gama解码，且颜色附件为srgb的，所以输出的时候会自动编码，所以为保证结果正确，在着色器中需要手动解码
 		VK_FORMAT_R8G8B8A8_SNORM,
 		VK_FORMAT_R8G8B8A8_USCALED,
 		VK_FORMAT_R8G8B8A8_SSCALED,

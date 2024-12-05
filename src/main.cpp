@@ -3,6 +3,7 @@
 #include "Examples/SimpleExamples/SkyBoxExample.h"
 #include "Examples/SimpleExamples/SimpleSceenExample.h"
 #include "Examples/PBRT4/SamplePointsExample.h"
+#include "Examples/PBRT4/ReflectionModelsExample.h"
 
 /*
 
@@ -53,7 +54,9 @@ int main()
 	//UniformExample example;
 	//SkyBoxExample example;
 	//SimpleSceenExample example;
-	SamplePointsExample example;
+	//SamplePointsExample example;
+	
+	ReflectionModelsExample example;
 	ExampleBase::Run(&example);
 
 
