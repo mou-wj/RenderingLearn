@@ -37,14 +37,10 @@ vec2 HaltonSample2D(uint index) {
 
 
 
-
-
-uint integrateType = 1;//0表示均匀采样积分，1表示重要性采样
-
 //BSDF 为BRDF和BTDF的统称
 
 
-//简单反射模型 Diffuse Reflection  Lambert model
+//简单反射模型 Diffuse Reflection  Lambert model 漫反射
 //Diffuse Reflection
 
 
@@ -103,15 +99,98 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 		light = texture(skyTexture,wi).xyz;
 		//gama 解码，转线性空间
 		light = pow(light, vec3(2.4));
-		if(integrateType == 0)
-		{
-			reflectLight+= BSDFLambert(wo,wi) * light * dot(n,wi) * dw;
-		}else {
-			reflectLight+= BSDFLambert(wo,wi) * light * dot(n,wi) / PDFLambert(wi,wo)/numSample;
-		}
+
+		reflectLight+= BSDFLambert(wo,wi) * light * dot(n,wi) / PDFLambert(wi,wo)/numSample;
 
 
 	}
+
+	return reflectLight;
+
+}
+
+
+//frenel 折射 Ni * sin(theta_i) = No * sin(theta_o)  其中Ni No表示各自的折射率，theta_i theta_o表示各自和法线之间的夹角
+//两种材质，其入射光Li，出射光Lo满足pow(Ni,2) * Lo = pow(No,2) * Li， 其 BTDF 满足 pow(Ni,2) * BTDF(p,wi,wo) = pow(No,2) * BTDF(p,wo,wi) 
+
+
+//简单镜面反射模型
+const float specularReflectionFactor = 0.8;
+
+vec3 BRDFSimpleSpecular(vec3 wo,vec3 wi)
+{
+	vec3 res;
+	res.x = specularReflectionFactor;
+	res.y = specularReflectionFactor;
+	res.z = specularReflectionFactor;
+	return res;
+	
+}
+
+const float speclarFactor = 30;//控制高光的情况
+
+float PDFSimpleSpecular(float NdotH/*法线和半角之间的cos值*/){
+	float res;
+	//简单blinn-phong镜面反射pdf
+	float fac = pow(NdotH,speclarFactor);
+	res = (speclarFactor + 2)  *  fac / (2 * s_pi);
+	return res;
+}
+
+vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
+	uint numSample = 16;
+	vec2 samplePoint;
+	vec3 wi;
+	vec3 light;
+	vec3 reflectLight = vec3(0);
+	vec3 halfVec;
+
+	float dw = 2 * s_pi / numSample;
+	//根据世界空间的反射向量构建上半球坐标系
+	vec3 y = -normalize(n);
+	vec3 x,z;
+	if((1 - abs(y.x)) > 0.00000001)
+	{
+		x = vec3(1,0,0);
+	}else {
+		x = vec3(0,1,0);
+	}
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 normalMatrix = mat3(x,y,z);
+
+	float nDotH = 0,pdf=0,nDotWi =0 ;
+
+	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
+	{
+		//获取二维随机点，为（theta，phi）
+		samplePoint = HaltonSample2D(sampleIndex); 
+		//将随机点转化为半球中的方向
+		float theta = samplePoint.x * 2* s_pi;
+		float fine = 0.5 * s_pi * samplePoint.y;
+		wi.x = cos(theta)* sin(fine);
+		wi.z = sin(theta)* sin(fine);
+		wi.y = -cos(fine);
+		wi = normalMatrix * wi;//变换到世界坐标
+		wi  = normalize(wi);
+		light = texture(skyTexture,wi).xyz;
+		//计算half半向量
+		halfVec = normalize(wi+wo);
+		nDotH = clamp(dot(halfVec,n),0,1);
+		pdf = PDFSimpleSpecular(nDotH);
+
+
+		//gama 解码，转线性空间
+		light = pow(light, vec3(2.4));
+		if(pdf != 0)
+		{
+			nDotWi = clamp(dot(n,wi),0,1);
+			vec3 curLight = BRDFSimpleSpecular(wo,wi) * light * nDotWi;
+			reflectLight+=  curLight / pdf;
+		
+		}
+	}
+	reflectLight /= numSample;
 
 	return reflectLight;
 
@@ -122,12 +201,12 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 
 
 
-
 void main(){
 
 	vec3 wo = normalize(viewPosition - inWorldPosition);
-	vec3 color = LambertBSDF(wo,inNormal);
-
+	vec3 color;
+	//color = LambertBSDF(wo,inNormal);
+	color = SimpleSpecularBRDF(wo,inNormal);
 	//color = texture(skyTexture,inNormal).xyz;
 	//gama 解码
 	//color = pow(color, vec3(2.4));
