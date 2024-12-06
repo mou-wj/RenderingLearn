@@ -44,7 +44,7 @@ vec2 HaltonSample2D(uint index) {
 //Diffuse Reflection
 
 
-float s_LamberRefectionFactor = 0.4;//lambert模型反射率
+float s_LamberRefectionFactor = 0.2;//lambert模型反射率
 float s_LambertxFactor  = s_LamberRefectionFactor / s_pi;
 
 
@@ -82,8 +82,8 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 	z = normalize(cross(x,y));
 	x = normalize(cross(y,z));
 	mat3 nornalMatrix = mat3(x,y,z);
-
-
+	float totalPDF = 0;
+	float pdf = 0;
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
 		//获取二维随机点，为（theta，phi）
@@ -99,12 +99,12 @@ vec3 LambertBSDF(vec3 wo,vec3 n){
 		light = texture(skyTexture,wi).xyz;
 		//gama 解码，转线性空间
 		light = pow(light, vec3(2.4));
-
-		reflectLight+= BSDFLambert(wo,wi) * light * dot(n,wi) / PDFLambert(wi,wo)/numSample;
-
+		pdf = PDFLambert(wi,wo);
+		reflectLight+= BSDFLambert(wo,wi) * light * dot(n,wi) * pdf;
+		totalPDF+=pdf;
 
 	}
-
+	reflectLight /= totalPDF;//归一化
 	return reflectLight;
 
 }
@@ -160,6 +160,7 @@ vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
 	mat3 normalMatrix = mat3(x,y,z);
 
 	float nDotH = 0,pdf=0,nDotWi =0 ;
+	float totalPDF = 0;
 
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
@@ -182,16 +183,17 @@ vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
 
 		//gama 解码，转线性空间
 		light = pow(light, vec3(2.4));
-		if(pdf != 0)
+		if(pdf > 0.0001)
 		{
 			nDotWi = clamp(dot(n,wi),0,1);
 			vec3 curLight = BRDFSimpleSpecular(wo,wi) * light * nDotWi;
-			reflectLight+=  curLight / pdf;
+			reflectLight+=  curLight * pdf;//这里不是求的所有光的积分总和，而是求的每个光应该在最终的结果中占据的比例，所以不能除以pdf
+			totalPDF +=pdf;
 		
 		}
 	}
-	reflectLight /= numSample;
-
+	//reflectLight /= numSample;
+	reflectLight /=  totalPDF;//归一化
 	return reflectLight;
 
 }
@@ -205,8 +207,8 @@ void main(){
 
 	vec3 wo = normalize(viewPosition - inWorldPosition);
 	vec3 color;
-	//color = LambertBSDF(wo,inNormal);
-	color = SimpleSpecularBRDF(wo,inNormal);
+	color = LambertBSDF(wo,inNormal);
+	color += SimpleSpecularBRDF(wo,inNormal);
 	//color = texture(skyTexture,inNormal).xyz;
 	//gama 解码
 	//color = pow(color, vec3(2.4));
