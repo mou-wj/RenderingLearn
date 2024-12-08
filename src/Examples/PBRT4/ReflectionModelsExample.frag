@@ -137,7 +137,8 @@ float PDFSimpleSpecular(float NdotH/*法线和半角之间的cos值*/){
 	return res;
 }
 
-vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
+//有一定粗糙度的镜面反射
+vec3 RoughnessSpecularBRDF(vec3 wo, vec3 n){
 	uint numSample = 16;
 	vec2 samplePoint;
 	vec3 wi;
@@ -146,7 +147,6 @@ vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
 	vec3 halfVec;
 
 	float dw = 2 * s_pi / numSample;
-	//根据世界空间的反射向量构建上半球坐标系
 	vec3 y = -normalize(n);
 	vec3 x,z;
 	if((1 - abs(y.x)) > 0.00000001)
@@ -199,6 +199,26 @@ vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
 }
 
 
+vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
+	vec3 wi = normalize(reflect(-wo,n));
+	vec3 light = texture(skyTexture,wi).xyz;
+	float nDotWi = clamp(dot(n,wi),0,1);
+	return light * nDotWi * specularReflectionFactor;
+}
+
+const float refractFactor = 0.8;
+vec3 SimpleBTDF(vec3 wo, vec3 n){
+	
+	vec3 wi = normalize(refract(-wo,n,1 / 1.5));
+	vec3 light = texture(skyTexture,wi).xyz;
+	float nDotWi = clamp(dot(-n,wi),0,1);
+	return light * nDotWi * specularReflectionFactor;
+
+}
+
+
+//微表面理论来表示粗糙度
+
 
 
 
@@ -207,9 +227,10 @@ void main(){
 
 	vec3 wo = normalize(viewPosition - inWorldPosition);
 	vec3 color;
-	color = LambertBSDF(wo,inNormal);
-	color += SimpleSpecularBRDF(wo,inNormal);
-	//color = texture(skyTexture,inNormal).xyz;
+	//color = LambertBSDF(wo,inNormal);
+	//color += RoughnessSpecularBRDF(wo,inNormal);
+	//color = SimpleSpecularBRDF(wo,inNormal);
+	color = SimpleBTDF(wo,inNormal);
 	//gama 解码
 	//color = pow(color, vec3(2.4));
 	outColor = vec4(color,1.0);
