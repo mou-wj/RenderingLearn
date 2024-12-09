@@ -62,7 +62,7 @@ vec3 BSDFLambert(vec3 wi,vec3 wo){
 	return res;
 }
 
-vec3 LambertBSDF(vec3 wo,vec3 n){
+vec3 ExampleLambertBSDF(vec3 wo,vec3 n){
 	
 	uint numSample = 16;
 	vec2 samplePoint;
@@ -138,7 +138,7 @@ float PDFSimpleSpecular(float NdotH/*法线和半角之间的cos值*/){
 }
 
 //有一定粗糙度的镜面反射
-vec3 RoughnessSpecularBRDF(vec3 wo, vec3 n){
+vec3 ExampleRoughnessSpecularBRDF(vec3 wo, vec3 n){
 	uint numSample = 16;
 	vec2 samplePoint;
 	vec3 wi;
@@ -199,7 +199,7 @@ vec3 RoughnessSpecularBRDF(vec3 wo, vec3 n){
 }
 
 
-vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
+vec3 ExampleSimpleSpecularBRDF(vec3 wo, vec3 n){
 	vec3 wi = normalize(reflect(-wo,n));
 	vec3 light = texture(skyTexture,wi).xyz;
 	float nDotWi = clamp(dot(n,wi),0,1);
@@ -207,7 +207,7 @@ vec3 SimpleSpecularBRDF(vec3 wo, vec3 n){
 }
 
 const float refractFactor = 0.8;
-vec3 SimpleBTDF(vec3 wo, vec3 n){
+vec3 ExampleSimpleBTDF(vec3 wo, vec3 n){
 	
 	vec3 wi = normalize(refract(-wo,n,1 / 1.5));
 	vec3 light = texture(skyTexture,wi).xyz;
@@ -315,29 +315,103 @@ vec2 ComplexMultiply(vec2 complex1,vec2 complex2)
 	return vec2(complex1.x * complex2.x - complex1.y * complex2.y , complex1.x * complex2.y + complex1.y * complex2.x );
 }
 
-float Frenel_Reflect_Complex(float theta/*入射光和法线的夹角*/,vec2 eta/*eta.x 表示相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 ，eta.y表示衰减系数k， 该复数表示n-ik */){
+//金属复数形式的frenel项
+float Frenel_Reflect_Complex(float theta/*入射光和法线的夹角*/,vec2 eta/*eta.x 表示相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 ，eta.y表示衰减系数k， 该复数表示n+ik */){
 	float cosTheta_i = clamp(cos(theta), 0, 1);
-    float sin2Theta_i = 1 - pow(cosTheta_i,2);
-    vec2 sin2Theta_t = sin2Theta_i / ComplexMultiply(eta,eta);
-    vec2 cosTheta_t = sqrt(1 - sin2Theta_t);
-
-    vec2 r_parl = (eta * cosTheta_i - cosTheta_t) / (eta * cosTheta_i + cosTheta_t);
-    vec2 r_perp = (cosTheta_i - eta * cosTheta_t) / (cosTheta_i + eta * cosTheta_t);
-    return (length(r_parl) + length(r_perp)) / 2;
+	float n2Ak2 = pow(length(eta),2);
+	float cosTheta_i2 = pow(cosTheta_i,2);
+	float r_parellel = (n2Ak2 - 2 *eta.x * cosTheta_i + cosTheta_i2) / (n2Ak2 + 2 *eta.x * cosTheta_i + cosTheta_i2);
+	float r_perpendicular = (n2Ak2 * cosTheta_i - 2 *eta.x * cosTheta_i + cosTheta_i2) / (n2Ak2 * cosTheta_i+ 2 *eta.x * cosTheta_i + cosTheta_i2);
+    return (pow(r_parellel,2) + pow(r_perpendicular,2)) / 2;
 
 }
 
 
+float BRDF_Sparrow(vec3 wo,vec3 wi,vec3 wm){
+	float res = 0;
+	float pdf = PDF_Sparrow(wm,wo);
+	float frenel = Frenel_Reflect(max(dot(wo,wm),0),1.5 / 1) ;
+	float unmaskAndUnShadow = UnMaskAndUnShadow2(wo,wi);
+	res = pdf * frenel * unmaskAndUnShadow ;
+	return res;
+}
+
+vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
+{
+	uint numSample = 16;
+	vec2 samplePoint;
+	vec3 wi;
+	vec3 light;
+	vec3 reflectLight = vec3(0);
+	vec3 halfVec;
+
+	float dw = 2 * s_pi / numSample;
+	vec3 y = -normalize(n);
+	vec3 x,z;
+	if((1 - abs(y.x)) > 0.00000001)
+	{
+		x = vec3(1,0,0);
+	}else {
+		x = vec3(0,1,0);
+	}
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 normalMatrix = mat3(x,y,z);
+
+	float nDotH = 0,pdf=0,nDotWi =0 ;
+	float totalPDF = 0;
+
+	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
+	{
+		//获取二维随机点，为（theta，phi）
+		samplePoint = HaltonSample2D(sampleIndex); 
+		//将随机点转化为半球中的方向
+		float theta = samplePoint.x * 2* s_pi;
+		float fine = 0.5 * s_pi * samplePoint.y;
+		wi.x = cos(theta)* sin(fine);
+		wi.z = sin(theta)* sin(fine);
+		wi.y = -cos(fine);
+		//获取brdf项
+
+
+
+		wi = normalMatrix * wi;//变换到世界坐标
+		wi  = normalize(wi);
+		light = texture(skyTexture,wi).xyz;
+		//计算half半向量
+		halfVec = normalize(wi+wo);
+		nDotH = clamp(dot(halfVec,n),0,1);
+		pdf = PDFSimpleSpecular(nDotH);
+
+
+		//gama 解码，转线性空间
+		light = pow(light, vec3(2.4));
+		if(pdf > 0.0001)
+		{
+			nDotWi = clamp(dot(n,wi),0,1);
+			vec3 curLight = BRDFSimpleSpecular(wo,wi) * light * nDotWi;
+			reflectLight+=  curLight * pdf;//这里不是求的所有光的积分总和，而是求的每个光应该在最终的结果中占据的比例，所以不能除以pdf
+			totalPDF +=pdf;
+		
+		}
+	}
+	//reflectLight /= numSample;
+	reflectLight /=  totalPDF;//归一化
+	return reflectLight;
+
+
+
+}
 
 
 void main(){
 
 	vec3 wo = normalize(viewPosition - inWorldPosition);
 	vec3 color;
-	//color = LambertBSDF(wo,inNormal);
-	//color += RoughnessSpecularBRDF(wo,inNormal);
-	//color = SimpleSpecularBRDF(wo,inNormal);
-	color = SimpleBTDF(wo,inNormal);
+	//color = ExampleLambertBSDF(wo,inNormal);
+	//color += ExampleRoughnessSpecularBRDF(wo,inNormal);
+	//color = ExampleSimpleSpecularBRDF(wo,inNormal);
+	color = ExampleSimpleBTDF(wo,inNormal);
 	//gama 解码
 	//color = pow(color, vec3(2.4));
 	outColor = vec4(color,1.0);
