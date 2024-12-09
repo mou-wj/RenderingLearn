@@ -219,6 +219,113 @@ vec3 SimpleBTDF(vec3 wo, vec3 n){
 
 //微表面理论来表示粗糙度
 
+float roughnessX = 0.3,roughnessY = 0.3;//GGX的theta，fine两个维度的粗糙度控制系数
+//GGX 微表面分布，返回半圆内朝向w的的微表面的比率，传入的w处于局部空间,该分布和wo无关
+float PDF_GGX(vec3 w)
+{
+
+	w = normalize(w);
+	float theta = 0,fine = 0;
+	fine = acos(-w.y); 
+	theta = atan(w.z,w.x);
+	float denominator = 1;
+	denominator *= s_pi * roughnessX * roughnessY * pow(cos(fine),4);
+	denominator *= pow(1 + pow(tan(fine),2) * (pow(cos(theta) / roughnessX,2) + pow(sin(theta)/ roughnessY,2)) ,2);
+	return 1/denominator;
+
+}
+
+//遮挡，返回从朝向w方向的微平面未被遮挡的比例
+float UnMask(vec3 w){
+	w = normalize(w);
+	float theta = 0,fine = 0;
+	fine = acos(-w.y); 
+	theta = atan(w.z,w.x);
+	float denominator = 1;
+	float roughness = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
+	float lambdaW = (sqrt(1 + pow(roughness * tan(fine) ,2)) - 1) / 2;
+
+	return 1 / (1+ lambdaW);
+}
+
+//返回从wo处看未被挡以及不在阴影中的比例
+float UnMaskAndUnShadow(vec3 wo, vec3 wi){
+
+	return UnMask(wo) * UnMask(wi);
+}
+
+//返回从wo处看未被挡以及不在阴影中的比例
+float UnMaskAndUnShadow2(vec3 wo, vec3 wi){
+	wo = normalize(wo);
+	wi = normalize(wi);
+	float theta = 0,fine = 0;
+	fine = acos(-wo.y); 
+	theta = atan(wo.z,wo.x);
+	float roughnessWo = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
+	float lambdaWo = (sqrt(1 + pow(roughnessWo * tan(fine) ,2)) - 1) / 2;//计算wo的lambda辅助函数值
+	fine = acos(-wi.y); 
+	theta = atan(wi.z,wi.x);
+	float roughnessWi = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
+	float lambdaWi = (sqrt(1 + pow(roughnessWi * tan(fine) ,2)) - 1) / 2;//计算wi的lambda辅助函数值
+	return 1 / (1 + lambdaWi + lambdaWo);
+}
+
+
+//基于GGX构建一个和wo有关的微表面分布,该分布表示在观看角度为wo的情况下，朝向w的微表面比例
+float PDF2_GGX(vec3 w,vec3 wo)
+{
+	float fine = acos(-w.y); 
+	return UnMask(wo) * PDF_GGX(w) * max(0,dot(w,wo)) / cos(fine);
+
+}
+
+//Torrance–Sparrow PDF 基于微表面分布，返回入射光wi的分布
+float PDF_Sparrow(vec3 w,vec3 wo)
+{
+	w = normalize(w);
+	wo = normalize(wo);
+	float len = length(w + wo);
+	if(len == 0){
+		return 0;
+	}
+	return PDF2_GGX(w,wo) / ( 4 * max(0,dot(w,wo)));
+
+}
+
+
+//菲涅尔项  计算反射光的比例
+float Frenel_Reflect(float theta/*入射光和法线的夹角*/,float eta/*相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 */){
+	float cosTheta_t = sqrt(1-pow(sin(theta) / eta ,2));
+	float cosTheta = cos(theta);
+	float r_parellel = (eta *  cosTheta- cosTheta_t)  / (eta * cosTheta + cosTheta_t);
+	float r_perpendicular = (cosTheta - eta * cosTheta_t)  / (cosTheta + eta * cosTheta_t);
+
+
+
+	return (pow(r_parellel,2) + pow(r_perpendicular,2) ) / 2;
+}
+
+//菲涅尔项  计算折射光的比例
+float Frenel_Refract(float theta/*入射光和法线的夹角*/,float eta/*相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 */){
+	return 1 - Frenel_Reflect(theta,eta);
+}
+
+vec2 ComplexMultiply(vec2 complex1,vec2 complex2)
+{
+	return vec2(complex1.x * complex2.x - complex1.y * complex2.y , complex1.x * complex2.y + complex1.y * complex2.x );
+}
+
+float Frenel_Reflect_Complex(float theta/*入射光和法线的夹角*/,vec2 eta/*eta.x 表示相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 ，eta.y表示衰减系数k， 该复数表示n-ik */){
+	float cosTheta_i = clamp(cos(theta), 0, 1);
+    float sin2Theta_i = 1 - pow(cosTheta_i,2);
+    vec2 sin2Theta_t = sin2Theta_i / ComplexMultiply(eta,eta);
+    vec2 cosTheta_t = sqrt(1 - sin2Theta_t);
+
+    vec2 r_parl = (eta * cosTheta_i - cosTheta_t) / (eta * cosTheta_i + cosTheta_t);
+    vec2 r_perp = (cosTheta_i - eta * cosTheta_t) / (cosTheta_i + eta * cosTheta_t);
+    return (length(r_parl) + length(r_perp)) / 2;
+
+}
 
 
 
