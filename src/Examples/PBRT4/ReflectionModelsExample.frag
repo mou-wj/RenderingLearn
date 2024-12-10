@@ -352,7 +352,7 @@ float BRDF_Sparrow(vec3 wo,vec3 wi,vec3 wm){
 	float res = 0;
 	float pdf = PDF_Sparrow(wm,wo);
 	float cosTheta_i = -wi.y;
-	float frenel = Frenel_Reflect(max(cosTheta_i,0),1.5 / 1) ;
+	float frenel = Frenel_Reflect(max(cosTheta_i,0),3.5 / 1) ;
 	float unmaskAndUnShadow = UnMaskAndUnShadow2(wo,wi);
 	res = pdf * frenel * unmaskAndUnShadow ;
 	return res;
@@ -403,18 +403,14 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 		//获取brdf项
 		float curBrdf = BRDF_Sparrow(localWo,wi,halfVec);
 		//pdf = PDF_Sparrow(halfVec,wo);
-		pdf = PDF_GGX(halfVec);
-		float curC = pdf;
-		float unmask= UnMask(localWo);
-		curC = unmask;
-		curC = UnMaskAndUnShadow2(localWo,wi);
-		curC = PDF2_GGX(halfVec,localWo);
-		curC = PDF_Sparrow(halfVec,localWo);
-		//curC = Frenel_Reflect(max(dot(wi,vec3(0,-1,0)),0),1.5 / 1) ;
-		reflectLight+=  vec3(curC,0,0);//这里不是求的所有光的积分总和，而是求的每个光应该在最终的结果中占据的比例，所以不能除以pdf
-		totalPDF +=1;
+		pdf = PDF_Sparrow(halfVec,localWo);
+		float frenel = Frenel_Reflect(max(dot(wi,vec3(0,-1,0)),0),1.5 / 1) ;
+		float unmask = UnMaskAndUnShadow2(localWo,wi);
+		float curbrdf = pdf* frenel * unmask;
+		//reflectLight+=  vec3(curBrdf,0,0);//这里不是求的所有光的积分总和，而是求的每个光应该在最终的结果中占据的比例，所以不能除以pdf
+		//totalPDF +=1;
 
-		continue;
+		//continue;
 		wi = normalMatrix * wi;//变换到世界坐标
 		wi  = normalize(wi);
 		light = texture(skyTexture,wi).xyz;
