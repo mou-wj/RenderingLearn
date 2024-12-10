@@ -226,6 +226,10 @@ float PDF_GGX(vec3 w)
 
 	w = normalize(w);
 	float theta = 0,fine = 0;
+	if(-w.y == 0)
+	{
+		return 0;
+	}
 	fine = acos(-w.y); 
 	theta = atan(w.z,w.x);
 	float denominator = 1;
@@ -235,12 +239,16 @@ float PDF_GGX(vec3 w)
 
 }
 
-//ÕÚµ²£¬·µ»Ø´Ó³¯Ïòw·½ÏòµÄÎ¢Æ½ÃæÎ´±»ÕÚµ²µÄ±ÈÀı
-float UnMask(vec3 w){
-	w = normalize(w);
+//ÕÚµ²£¬·µ»Ø´Ówo·½Ïò¿´µÄÎ¢Æ½ÃæÎ´±»ÕÚµ²µÄ±ÈÀı
+float UnMask(vec3 wo){
+	wo = normalize(wo);
 	float theta = 0,fine = 0;
-	fine = acos(-w.y); 
-	theta = atan(w.z,w.x);
+	fine = acos(-wo.y); 
+	if(-wo.y == 0)
+	{
+		return 0;
+	}
+	theta = atan(wo.z,wo.x);
 	float denominator = 1;
 	float roughness = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
 	float lambdaW = (sqrt(1 + pow(roughness * tan(fine) ,2)) - 1) / 2;
@@ -259,14 +267,24 @@ float UnMaskAndUnShadow2(vec3 wo, vec3 wi){
 	wo = normalize(wo);
 	wi = normalize(wi);
 	float theta = 0,fine = 0;
+	float lambdaWo = 0;
+	float lambdaWi = 0;
 	fine = acos(-wo.y); 
-	theta = atan(wo.z,wo.x);
-	float roughnessWo = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
-	float lambdaWo = (sqrt(1 + pow(roughnessWo * tan(fine) ,2)) - 1) / 2;//¼ÆËãwoµÄlambda¸¨Öúº¯ÊıÖµ
+	if(-wo.y != 0)
+	{
+		theta = atan(wo.z,wo.x);
+		float roughnessWo = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
+		lambdaWo = (sqrt(1 + pow(roughnessWo * tan(fine) ,2)) - 1) / 2;//¼ÆËãwoµÄlambda¸¨Öúº¯ÊıÖµ
+	}
+
 	fine = acos(-wi.y); 
-	theta = atan(wi.z,wi.x);
-	float roughnessWi = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
-	float lambdaWi = (sqrt(1 + pow(roughnessWi * tan(fine) ,2)) - 1) / 2;//¼ÆËãwiµÄlambda¸¨Öúº¯ÊıÖµ
+	if(-wi.y != 0)
+	{
+		theta = atan(wi.z,wi.x);
+		float roughnessWi = sqrt(pow(roughnessX * cos(theta),2) + pow(roughnessY * sin(theta),2) );
+		lambdaWi = (sqrt(1 + pow(roughnessWi * tan(fine) ,2)) - 1) / 2;//¼ÆËãwiµÄlambda¸¨Öúº¯ÊıÖµ
+	}
+
 	return 1 / (1 + lambdaWi + lambdaWo);
 }
 
@@ -274,7 +292,13 @@ float UnMaskAndUnShadow2(vec3 wo, vec3 wi){
 //»ùÓÚGGX¹¹½¨Ò»¸öºÍwoÓĞ¹ØµÄÎ¢±íÃæ·Ö²¼,¸Ã·Ö²¼±íÊ¾ÔÚ¹Û¿´½Ç¶ÈÎªwoµÄÇé¿öÏÂ£¬³¯ÏòwµÄÎ¢±íÃæ±ÈÀı
 float PDF2_GGX(vec3 w,vec3 wo)
 {
-	float fine = acos(-w.y); 
+	float fine = acos(-wo.y);
+	if(-wo.y == 0)
+	{
+		return 0;
+	}
+	float cosFine = cos(fine);
+
 	return UnMask(wo) * PDF_GGX(w) * max(0,dot(w,wo)) / cos(fine);
 
 }
@@ -282,23 +306,21 @@ float PDF2_GGX(vec3 w,vec3 wo)
 //Torrance¨CSparrow PDF »ùÓÚÎ¢±íÃæ·Ö²¼£¬·µ»ØÈëÉä¹âwiµÄ·Ö²¼
 float PDF_Sparrow(vec3 w,vec3 wo)
 {
-	w = normalize(w);
-	wo = normalize(wo);
-	float len = length(w + wo);
-	if(len == 0){
+	float dotWoW = dot(w,wo);
+	if(dotWoW == 0){
 		return 0;
 	}
-	return PDF2_GGX(w,wo) / ( 4 * max(0,dot(w,wo)));
+	return PDF2_GGX(w,wo) / ( 4 * max(0,dotWoW));
 
 }
 
 
 //·ÆÄù¶ûÏî  ¼ÆËã·´Éä¹âµÄ±ÈÀı
-float Frenel_Reflect(float theta/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½Ç*/,float eta/*Ïà¶ÔÕÛÉäÂÊ: ½çÃæµÄ²ÄÖÊ½éÖÊµÄÕÛÉäÂÊ / ÈëÉä¹âËùÔÚµÄ½éÖÊµÄÕÛÉäÂÊ */){
-	float cosTheta_t = sqrt(1-pow(sin(theta) / eta ,2));
-	float cosTheta = cos(theta);
-	float r_parellel = (eta *  cosTheta- cosTheta_t)  / (eta * cosTheta + cosTheta_t);
-	float r_perpendicular = (cosTheta - eta * cosTheta_t)  / (cosTheta + eta * cosTheta_t);
+float Frenel_Reflect(float cosTheta_i/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½ÇcosÖµ*/,float eta/*Ïà¶ÔÕÛÉäÂÊ: ½çÃæµÄ²ÄÖÊ½éÖÊµÄÕÛÉäÂÊ / ÈëÉä¹âËùÔÚµÄ½éÖÊµÄÕÛÉäÂÊ */){
+	float sinTheta_i = sqrt(1 - pow(cosTheta_i,2));
+	float cosTheta_t = sqrt(1-pow(sinTheta_i / eta ,2));
+	float r_parellel = (eta *  cosTheta_i- cosTheta_t)  / (eta * cosTheta_i + cosTheta_t);
+	float r_perpendicular = (cosTheta_i - eta * cosTheta_t)  / (cosTheta_i + eta * cosTheta_t);
 
 
 
@@ -306,8 +328,8 @@ float Frenel_Reflect(float theta/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½Ç*/,float eta/*Ïà¶ÔÕÛÉäÂÊ: ½ç
 }
 
 //·ÆÄù¶ûÏî  ¼ÆËãÕÛÉä¹âµÄ±ÈÀı
-float Frenel_Refract(float theta/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½Ç*/,float eta/*Ïà¶ÔÕÛÉäÂÊ: ½çÃæµÄ²ÄÖÊ½éÖÊµÄÕÛÉäÂÊ / ÈëÉä¹âËùÔÚµÄ½éÖÊµÄÕÛÉäÂÊ */){
-	return 1 - Frenel_Reflect(theta,eta);
+float Frenel_Refract(float cosTheta_i/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½ÇcosÖµ*/,float eta/*Ïà¶ÔÕÛÉäÂÊ: ½çÃæµÄ²ÄÖÊ½éÖÊµÄÕÛÉäÂÊ / ÈëÉä¹âËùÔÚµÄ½éÖÊµÄÕÛÉäÂÊ */){
+	return 1 - Frenel_Reflect(cosTheta_i,eta);
 }
 
 vec2 ComplexMultiply(vec2 complex1,vec2 complex2)
@@ -316,8 +338,7 @@ vec2 ComplexMultiply(vec2 complex1,vec2 complex2)
 }
 
 //½ğÊô¸´ÊıĞÎÊ½µÄfrenelÏî
-float Frenel_Reflect_Complex(float theta/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½Ç*/,vec2 eta/*eta.x ±íÊ¾Ïà¶ÔÕÛÉäÂÊ: ½çÃæµÄ²ÄÖÊ½éÖÊµÄÕÛÉäÂÊ / ÈëÉä¹âËùÔÚµÄ½éÖÊµÄÕÛÉäÂÊ £¬eta.y±íÊ¾Ë¥¼õÏµÊık£¬ ¸Ã¸´Êı±íÊ¾n+ik */){
-	float cosTheta_i = clamp(cos(theta), 0, 1);
+float Frenel_Reflect_Complex(float cosTheta_i/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½Ç*/,vec2 eta/*eta.x ±íÊ¾Ïà¶ÔÕÛÉäÂÊ: ½çÃæµÄ²ÄÖÊ½éÖÊµÄÕÛÉäÂÊ / ÈëÉä¹âËùÔÚµÄ½éÖÊµÄÕÛÉäÂÊ £¬eta.y±íÊ¾Ë¥¼õÏµÊık£¬ ¸Ã¸´Êı±íÊ¾n+ik */){
 	float n2Ak2 = pow(length(eta),2);
 	float cosTheta_i2 = pow(cosTheta_i,2);
 	float r_parellel = (n2Ak2 - 2 *eta.x * cosTheta_i + cosTheta_i2) / (n2Ak2 + 2 *eta.x * cosTheta_i + cosTheta_i2);
@@ -326,11 +347,12 @@ float Frenel_Reflect_Complex(float theta/*ÈëÉä¹âºÍ·¨ÏßµÄ¼Ğ½Ç*/,vec2 eta/*eta.x ±
 
 }
 
-
+//Sparrow Ä£ĞÍµÄBRDFÏî£¬²ÎÊıÏòÁ¿¶¼ÔÚ¾Ö²¿°ëÇò¿Õ¼äÖĞ
 float BRDF_Sparrow(vec3 wo,vec3 wi,vec3 wm){
 	float res = 0;
 	float pdf = PDF_Sparrow(wm,wo);
-	float frenel = Frenel_Reflect(max(dot(wo,wm),0),1.5 / 1) ;
+	float cosTheta_i = -wi.y;
+	float frenel = Frenel_Reflect(max(cosTheta_i,0),1.5 / 1) ;
 	float unmaskAndUnShadow = UnMaskAndUnShadow2(wo,wi);
 	res = pdf * frenel * unmaskAndUnShadow ;
 	return res;
@@ -357,6 +379,7 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 	z = normalize(cross(x,y));
 	x = normalize(cross(y,z));
 	mat3 normalMatrix = mat3(x,y,z);
+	mat3 normalMatrixInverse  = inverse(normalMatrix);
 
 	float nDotH = 0,pdf=0,nDotWi =0 ;
 	float totalPDF = 0;
@@ -371,29 +394,37 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 		wi.x = cos(theta)* sin(fine);
 		wi.z = sin(theta)* sin(fine);
 		wi.y = -cos(fine);
+		wi = normalize(wi);
+		//½«wo×ªµ½¾Ö²¿¿Õ¼ä
+		vec3 localWo = normalMatrixInverse * normalize(wo); 
+		//»ñµÃ°ëÏòÁ¿
+		halfVec = normalize(wi+localWo);
+
 		//»ñÈ¡brdfÏî
+		float curBrdf = BRDF_Sparrow(localWo,wi,halfVec);
+		//pdf = PDF_Sparrow(halfVec,wo);
+		pdf = PDF_GGX(halfVec);
+		float curC = pdf;
+		float unmask= UnMask(localWo);
+		curC = unmask;
+		curC = UnMaskAndUnShadow2(localWo,wi);
+		curC = PDF2_GGX(halfVec,localWo);
+		curC = PDF_Sparrow(halfVec,localWo);
+		//curC = Frenel_Reflect(max(dot(wi,vec3(0,-1,0)),0),1.5 / 1) ;
+		reflectLight+=  vec3(curC,0,0);//ÕâÀï²»ÊÇÇóµÄËùÓĞ¹âµÄ»ı·Ö×ÜºÍ£¬¶øÊÇÇóµÄÃ¿¸ö¹âÓ¦¸ÃÔÚ×îÖÕµÄ½á¹ûÖĞÕ¼¾İµÄ±ÈÀı£¬ËùÒÔ²»ÄÜ³ıÒÔpdf
+		totalPDF +=1;
 
-
-
+		continue;
 		wi = normalMatrix * wi;//±ä»»µ½ÊÀ½ç×ø±ê
 		wi  = normalize(wi);
 		light = texture(skyTexture,wi).xyz;
-		//¼ÆËãhalf°ëÏòÁ¿
-		halfVec = normalize(wi+wo);
-		nDotH = clamp(dot(halfVec,n),0,1);
-		pdf = PDFSimpleSpecular(nDotH);
-
 
 		//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
 		light = pow(light, vec3(2.4));
-		if(pdf > 0.0001)
-		{
-			nDotWi = clamp(dot(n,wi),0,1);
-			vec3 curLight = BRDFSimpleSpecular(wo,wi) * light * nDotWi;
-			reflectLight+=  curLight * pdf;//ÕâÀï²»ÊÇÇóµÄËùÓĞ¹âµÄ»ı·Ö×ÜºÍ£¬¶øÊÇÇóµÄÃ¿¸ö¹âÓ¦¸ÃÔÚ×îÖÕµÄ½á¹ûÖĞÕ¼¾İµÄ±ÈÀı£¬ËùÒÔ²»ÄÜ³ıÒÔpdf
-			totalPDF +=pdf;
-		
-		}
+		nDotWi = clamp(dot(n,wi),0,1);
+		vec3 curLight = curBrdf * light * nDotWi;
+		reflectLight+=  curLight * pdf;//ÕâÀï²»ÊÇÇóµÄËùÓĞ¹âµÄ»ı·Ö×ÜºÍ£¬¶øÊÇÇóµÄÃ¿¸ö¹âÓ¦¸ÃÔÚ×îÖÕµÄ½á¹ûÖĞÕ¼¾İµÄ±ÈÀı£¬ËùÒÔ²»ÄÜ³ıÒÔpdf
+		totalPDF +=pdf;
 	}
 	//reflectLight /= numSample;
 	reflectLight /=  totalPDF;//¹éÒ»»¯
@@ -411,7 +442,8 @@ void main(){
 	//color = ExampleLambertBSDF(wo,inNormal);
 	//color += ExampleRoughnessSpecularBRDF(wo,inNormal);
 	//color = ExampleSimpleSpecularBRDF(wo,inNormal);
-	color = ExampleSimpleBTDF(wo,inNormal);
+	//color = ExampleSimpleBTDF(wo,inNormal);
+	color = ExampleSparrowBRDT(wo,inNormal);
 	//gama ½âÂë
 	//color = pow(color, vec3(2.4));
 	outColor = vec4(color,1.0);
