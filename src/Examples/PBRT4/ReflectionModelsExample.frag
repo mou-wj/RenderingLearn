@@ -327,7 +327,7 @@ float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 界面的材质介质的折射率ni
 	{
 		return 0 ; 
 	}
-	return pdf_wo * pow(eta,2) * cosTheta_i / cosTheta_o;
+	return pdf_wo * pow(eta,2) *cosTheta_i  / cosTheta_o;
 }
 
 
@@ -377,7 +377,7 @@ float Frenel_Reflect_Complex(float cosTheta_i/*入射光和法线的夹角*/,vec2 eta/*et
 //Sparrow 模型的BRDF示例
 vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 {
-	uint numSample = 16;
+	uint numSample = 100;
 	vec2 samplePoint;
 	vec3 wi;
 	vec3 light;
@@ -401,7 +401,7 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 	float pdf=0,nDotWi =0 ;
 	float totalPDF = 0,totalRefractPDF = 0;
 	vec3 refractTotalLight = vec3(0);
-	float eta = 2.5/1;
+	float eta = 1.5/1;
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
 		//获取二维随机点，为（theta，phi）
@@ -454,6 +454,7 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 		wi_refract = normalMatrix * wi_refract;//变换到世界坐标
 		wi_refract  = normalize(wi_refract);
 		light = texture(skyTexture,wi_refract).xyz;
+		light = pow(light, vec3(2.4));
 		refractTotalLight += pdf_refract * btdf_p_wi_wo * light;
 		totalRefractPDF+= pdf_refract;
 	}
@@ -462,6 +463,12 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 	reflectLight *= (totalPDF) /(totalPDF + totalRefractPDF);
 	refractTotalLight /= totalRefractPDF;//归一化
 	refractTotalLight *= (totalRefractPDF) /(totalPDF + totalRefractPDF);
+
+	//直接采样折射光
+	//vec3 cur_ss = refract(-wo,n,1.2/1);
+	//cur_ss  = normalize(cur_ss);
+	//light = texture(skyTexture,cur_ss).xyz;
+	//light = pow(light, vec3(2.4));
 
 	vec3 resLight = reflectLight + refractTotalLight;
 	return resLight;
