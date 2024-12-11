@@ -115,7 +115,7 @@ void ReflectionModelsExample::Loop()
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 
 
-	Camera camera(glm::vec3(0,0,-12),glm::vec3(0,0,-11),glm::vec3(0,1,0));
+	Camera camera(glm::vec3(0,0,-4),glm::vec3(0,0,0),glm::vec3(0,1,0));
 	//绑定camera响应按键的回调函数
 	WindowEventHandler::SetEventCallBack(KEY_W_PRESS, [&camera]() {camera.Move(MoveDirection::FORWARD); }, "点击w 相机前移");
 	WindowEventHandler::SetEventCallBack(KEY_S_PRESS, [&camera]() {camera.Move(MoveDirection::BACK); }, "点击s 相机后移");

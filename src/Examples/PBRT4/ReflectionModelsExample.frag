@@ -111,7 +111,7 @@ vec3 ExampleLambertBSDF(vec3 wo,vec3 n){
 
 
 //frenel 折射 Ni * sin(theta_i) = No * sin(theta_o)  其中Ni No表示各自的折射率，theta_i theta_o表示各自和法线之间的夹角
-//两种材质，其入射光Li，出射光Lo满足pow(Ni,2) * Lo = pow(No,2) * Li， 其 BTDF 满足 pow(Ni,2) * BTDF(p,wi,wo) = pow(No,2) * BTDF(p,wo,wi) 
+//两种材质，其入射光Li，出射光Lo满足pow(Ni,2) * Lo = pow(No,2) * Li， 其 BTDF 满足 pow(No,2) * BTDF(p,wi,wo) = pow(Ni,2) * BTDF(p,wo,wi) 
 
 
 //简单镜面反射模型
@@ -314,6 +314,22 @@ float PDF_Sparrow(vec3 w,vec3 wo)
 
 }
 
+//基于微表面分布，返回从wo处看，折射入射光wi的分布
+float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 界面的材质介质的折射率ni  / 出射光所在的介质的折射率no*/){
+	//由于
+	vec3 wi = reflect(-wo,w);
+	wi = normalize(wi);
+	float pdf_wo = PDF_Sparrow(w,wi);
+	float cosTheta_o = max(dot(wo,w),0);
+	wi = refract(-wo,w,eta);
+	float cosTheta_i = max(dot(wi,-w),0);
+	if(cosTheta_o == 0)
+	{
+		return 0 ; 
+	}
+	return pdf_wo * pow(eta,2) * cosTheta_i / cosTheta_o;
+}
+
 
 //菲涅尔项  计算反射光的比例
 float Frenel_Reflect(float cosTheta_i/*入射光和法线的夹角cos值*/,float eta/*相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 */){
@@ -327,9 +343,20 @@ float Frenel_Reflect(float cosTheta_i/*入射光和法线的夹角cos值*/,float eta/*相对
 	return (pow(r_parellel,2) + pow(r_perpendicular,2) ) / 2;
 }
 
-//菲涅尔项  计算折射光的比例
-float Frenel_Refract(float cosTheta_i/*入射光和法线的夹角cos值*/,float eta/*相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 */){
+//菲涅尔项  简单计算折射光的比例 ，直接使用1减去菲涅尔计算的反射比例
+float Refract_Simple_Frenel(float cosTheta_i/*入射光和法线的夹角cos值*/,float eta/*相对折射率: 界面的材质介质的折射率 / 入射光所在的介质的折射率 */){
 	return 1 - Frenel_Reflect(cosTheta_i,eta);
+}
+
+float Ft_P_Wo_Wi(float fr_P_Wo_Wi){
+	return 1-fr_P_Wo_Wi;
+}
+
+//根据入射光到折射光的btdf系数计算从折射光到入射光的btdf系数
+//pow(No,2) * BTDF(p,wi,wo) = pow(Ni,2) * BTDF(p,wo,wi) 
+float Ft_P_Wi_Wo(float ft_P_Wo_Wi/*入射光到材质*/,float eta/*相对折射率: 界面的材质介质的折射率no / 入射光所在的介质的折射率 ni*/)
+{
+	return pow(1/eta,2) * ft_P_Wo_Wi;
 }
 
 vec2 ComplexMultiply(vec2 complex1,vec2 complex2)
@@ -347,17 +374,7 @@ float Frenel_Reflect_Complex(float cosTheta_i/*入射光和法线的夹角*/,vec2 eta/*et
 
 }
 
-//Sparrow 模型的BRDF项，参数向量都在局部半球空间中
-float BRDF_Sparrow(vec3 wo,vec3 wi,vec3 wm){
-	float res = 0;
-	float pdf = PDF_Sparrow(wm,wo);
-	float cosTheta_i = -wi.y;
-	float frenel = Frenel_Reflect(max(cosTheta_i,0),3.5 / 1) ;
-	float unmaskAndUnShadow = UnMaskAndUnShadow2(wo,wi);
-	res = pdf * frenel * unmaskAndUnShadow ;
-	return res;
-}
-
+//Sparrow 模型的BRDF示例
 vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 {
 	uint numSample = 16;
@@ -381,9 +398,10 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 	mat3 normalMatrix = mat3(x,y,z);
 	mat3 normalMatrixInverse  = inverse(normalMatrix);
 
-	float nDotH = 0,pdf=0,nDotWi =0 ;
-	float totalPDF = 0;
-
+	float pdf=0,nDotWi =0 ;
+	float totalPDF = 0,totalRefractPDF = 0;
+	vec3 refractTotalLight = vec3(0);
+	float eta = 2.5/1;
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
 		//获取二维随机点，为（theta，phi）
@@ -400,17 +418,14 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 		//获得半向量
 		halfVec = normalize(wi+localWo);
 
-		//获取brdf项
-		float curBrdf = BRDF_Sparrow(localWo,wi,halfVec);
-		//pdf = PDF_Sparrow(halfVec,wo);
-		pdf = PDF_Sparrow(halfVec,localWo);
-		float frenel = Frenel_Reflect(max(dot(wi,vec3(0,-1,0)),0),1.5 / 1) ;
-		float unmask = UnMaskAndUnShadow2(localWo,wi);
+		//计算sparrow模型的 brdf项反射项
+		
+		pdf = PDF_Sparrow(halfVec,localWo);//wi的pdf
+		float frenel = Frenel_Reflect(max(dot(wi,vec3(0,-1,0)),0),eta) ;//菲涅尔项
+		float unmask = UnMaskAndUnShadow2(localWo,wi);//非几何遮蔽和阴影项
 		float curbrdf = pdf* frenel * unmask;
-		//reflectLight+=  vec3(curBrdf,0,0);//这里不是求的所有光的积分总和，而是求的每个光应该在最终的结果中占据的比例，所以不能除以pdf
-		//totalPDF +=1;
 
-		//continue;
+		//采样
 		wi = normalMatrix * wi;//变换到世界坐标
 		wi  = normalize(wi);
 		light = texture(skyTexture,wi).xyz;
@@ -418,13 +433,38 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 		//gama 解码，转线性空间
 		light = pow(light, vec3(2.4));
 		nDotWi = clamp(dot(n,wi),0,1);
-		vec3 curLight = curBrdf * light * nDotWi;
+		vec3 curLight = curbrdf * light * nDotWi;
 		reflectLight+=  curLight * pdf;//这里不是求的所有光的积分总和，而是求的每个光应该在最终的结果中占据的比例，所以不能除以pdf
 		totalPDF +=pdf;
+
+
+		//计算折射的BTDF
+		float btdf_p_wo_wi = 1-curbrdf;
+		//计算从材质内部折射出来的光的btdf
+		float btdf_p_wi_wo = Ft_P_Wi_Wo(btdf_p_wo_wi,eta);
+		//计算折射光作为入射光的概率密度
+		float pdf_refract = PDF_Refract(halfVec,localWo,eta);
+		vec3 wi_refract = refract(-localWo,halfVec,eta);
+		wi_refract = normalize(wi);
+		if(length(wi_refract) == 0)
+		{
+			continue;
+		}
+		//将折射入射光变换到世界空间
+		wi_refract = normalMatrix * wi_refract;//变换到世界坐标
+		wi_refract  = normalize(wi_refract);
+		light = texture(skyTexture,wi_refract).xyz;
+		refractTotalLight += pdf_refract * btdf_p_wi_wo * light;
+		totalRefractPDF+= pdf_refract;
 	}
 	//reflectLight /= numSample;
 	reflectLight /=  totalPDF;//归一化
-	return reflectLight;
+	reflectLight *= (totalPDF) /(totalPDF + totalRefractPDF);
+	refractTotalLight /= totalRefractPDF;//归一化
+	refractTotalLight *= (totalRefractPDF) /(totalPDF + totalRefractPDF);
+
+	vec3 resLight = reflectLight + refractTotalLight;
+	return resLight;
 
 
 
