@@ -110,7 +110,8 @@ void main(){
 	//wo = normalize(w_out);
 	outColor = vec3(0,0,0);
 	//wm的概率密度作为红色分量  反射光的概率密度作为绿色分量 折射光的概率密度作为蓝色分量
-
+	if(finalPos.y <=0)
+	{
 		vec3 normal = normalize(finalPos);
 		vec3 curVec = normalize(finalPos);
 		float wmPdf = PDF2_GGX(curVec,wo);
@@ -141,7 +142,7 @@ void main(){
 		vec3 refrav = refract(-wo,normal,1/1.5);
 		refrav= normalize(refrav);
 
-
+	}
 	
 
 	gl_Position = proj * view * world *vec4(finalPos,1.0f);
