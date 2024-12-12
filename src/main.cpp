@@ -4,6 +4,7 @@
 #include "Examples/SimpleExamples/SimpleSceenExample.h"
 #include "Examples/PBRT4/SamplePointsExample.h"
 #include "Examples/PBRT4/ReflectionModelsExample.h"
+#include "Examples/PBRT4/DisturbutionLobeExample.h"
 
 /*
 
@@ -56,7 +57,8 @@ int main()
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
 	
-	ReflectionModelsExample example;
+	//ReflectionModelsExample example;
+	DisturbutionLobeExample example;
 	ExampleBase::Run(&example);
 
 

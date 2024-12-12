@@ -319,15 +319,19 @@ float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 界面的材质介质的折射率ni
 	//由于
 	vec3 wi = reflect(-wo,w);
 	wi = normalize(wi);
-	float pdf_wo = PDF_Sparrow(w,wi);
-	float cosTheta_o = max(dot(wo,w),0);
-	wi = refract(-wo,w,eta);
-	float cosTheta_i = max(dot(wi,-w),0);
-	if(cosTheta_o == 0)
+	//获取从wo处看反射光的pdf
+	float pdf = PDF_Sparrow(w,wo);
+	//基于反射光的分布计算折射入射光的分布   dwi/dwt = dwo/dwt
+	float cosTheta_i = max(dot(wi,w),0);
+	vec3 wt = refract(-wo,w,eta);
+	float cosTheta_t = max(dot(wt,-w),0);
+	if(cosTheta_i == 0)
 	{
 		return 0 ; 
 	}
-	return pdf_wo * pow(eta,2) *cosTheta_i  / cosTheta_o;
+	float cosTheta_o = cosTheta_i;//出射光的cos值等于反射光的cos值
+	cosTheta_i = cosTheta_t;//折射光作为入射光的cos值
+	return pdf * pow(eta,2) * cosTheta_i / cosTheta_o;
 }
 
 
@@ -421,6 +425,7 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 		//计算sparrow模型的 brdf项反射项
 		
 		pdf = PDF_Sparrow(halfVec,localWo);//wi的pdf
+		float cosXXX = max(dot(halfVec,localWo),0);
 		float frenel = Frenel_Reflect(max(dot(wi,vec3(0,-1,0)),0),eta) ;//菲涅尔项
 		float unmask = UnMaskAndUnShadow2(localWo,wi);//非几何遮蔽和阴影项
 		float curbrdf = pdf* frenel * unmask;
