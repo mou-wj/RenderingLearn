@@ -108,40 +108,40 @@ void main(){
 	vec3 wo = vec3(1,-1,0);
 	wo = normalize(wo);
 	//wo = normalize(w_out);
-	outColor = vec3(1,1,1);
-	if(finalPos.y <=0)
-	{
+	outColor = vec3(0,0,0);
+	//wm的概率密度作为红色分量  反射光的概率密度作为绿色分量 折射光的概率密度作为蓝色分量
+
 		vec3 normal = normalize(finalPos);
-		float pdf = PDF_GGX(normal);
-		pdf = PDF2_GGX(normal,wo);
-		pdf = PDF_Sparrow(normal,wo);
-		pdf = PDF_Refract(normal,wo,1.5/1);
+		vec3 curVec = normalize(finalPos);
+		float wmPdf = PDF2_GGX(curVec,wo);
+		if(wmPdf>0)
+		{
+			outColor.x += min(wmPdf,1);
+		}
+
+		//float pdf = PDF_GGX(normal);
+
+		vec3 halfVec = normalize((curVec + wo)/2);
+		//pdf = PDF2_GGX(normal,wo);
+		float wiPdf = PDF_Sparrow(halfVec,wo);
+		if(wiPdf >0)
+		{
+			outColor.y += min(wiPdf,1);
+		}
+
+		
+		//normal需要计算
+		float wtPdf = PDF_Refract(normal,wo,1.5/1);
+
+		//pdf = PDF_Sparrow(normal,wo);
+		
 		vec3 reflv = reflect(-wo,normal);
 		reflv= normalize(reflv);
-		finalPos = reflv;
+		
 		vec3 refrav = refract(-wo,normal,1/1.5);
 		refrav= normalize(refrav);
-		finalPos = refrav;
-		//缩放
-		if(pdf <2)
-		{
-			finalPos *= pdf;
-			outColor = vec3(abs(finalPos.y),0,0);
-		}else {
-			outColor = vec3(0,1,0);
-			finalPos *= 4;
-		}
 
 
-		//outColor = vec3(abs(finalPos.y),0,0);
-		if(abs(finalPos.y) >1)
-		{
-			//outColor = vec3(0,1,0);
-		}
-	}else {
-		finalPos.y = 0;
-	
-	}
 	
 
 	gl_Position = proj * view * world *vec4(finalPos,1.0f);
