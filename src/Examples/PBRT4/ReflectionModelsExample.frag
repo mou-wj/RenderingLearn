@@ -482,6 +482,291 @@ vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
 
 }
 
+//lambert漫反射模型，入射光被均匀反射到半圆的各个方向，其每个入射光的反射项f_p_wo_wi = R / PI,R为反射系数，表示入射的光有多少会被反射出去
+float R_lambert = 0.8;//定义lambert的反射系数
+//获取在出射光wo处，平面法线为n的情况下，lambert模型返回的出射光的大小
+vec3 ReflectModelLambertDiffuseReflect(vec3 wo/*世界空间中的出射向量*/,vec3 n/*世界空间中的法向量*/){
+	
+	uint numSample = 100;
+	vec2 samplePoint;
+	vec3 wi;
+	vec3 light;
+	vec3 reflectLight = vec3(0);
+	//根据世界空间的法线构建上半球坐标系
+	vec3 y = -normalize(n);
+	vec3 x,z;
+	float f_p_wo_wi = R_lambert / s_pi;
+	if((1 - abs(y.x)) > 0.00000001)
+	{
+		x = vec3(1,0,0);
+	}else {
+		x = vec3(0,1,0);
+	}
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 nornalMatrix = mat3(x,y,z);
+	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
+	{
+		//获取二维随机点，为（theta，phi）
+		samplePoint = HaltonSample2D(sampleIndex); 
+		//将随机点转化为半球中的方向
+		float theta = samplePoint.x * 2* s_pi;
+		float fine = 0.5 * s_pi * samplePoint.y;
+		wi.x = cos(theta)* sin(fine);
+		wi.z = sin(theta)* sin(fine);
+		wi.y = -cos(fine);
+		wi = nornalMatrix * wi;//变换到世界坐标
+		wi  = normalize(wi);
+		light = texture(skyTexture,wi).xyz;
+		//gama 解码，转线性空间
+		light = pow(light, vec3(2.4));
+		reflectLight+= vec3(f_p_wo_wi) * light * dot(n,wi);
+
+
+	}
+	reflectLight /= numSample;//归一化
+	return reflectLight;
+
+}
+
+
+//菲涅尔项，对折射率用一个值表示的介质，给定入射光和法线的夹角以及入射光所在介质和物体介质的相对折射率之比， 计算入射光和法线夹角下反射光反射的比例
+float FrenelReflectRatio(float cosTheta_i/*入射光和法线的夹角cos值*/,float eta/*相对折射率:入射光所在的介质的折射率ni  / 折射光所在材质介质的折射率nt */){
+	float sinTheta_i = sqrt(1 - pow(cosTheta_i,2));
+	float cosTheta_t = sqrt(1- pow(sinTheta_i * eta ,2));
+	float r_parellel = (cosTheta_i- eta *  cosTheta_t)  / (cosTheta_i + eta * cosTheta_t);
+	float r_perpendicular = ( eta * cosTheta_i -cosTheta_t)  / (eta * cosTheta_i + cosTheta_t);
+
+
+
+	return (pow(r_parellel,2) + pow(r_perpendicular,2) ) / 2;
+}
+
+
+
+//完美镜面反射模型，平面是一个完全光滑，入射光会根据法向量以及反射规律完全对称反射出去，反射光的多少遵循frenel定律
+vec3 ReflectModelSpecularReflectAndRefract(vec3 wo/*世界空间中的出射向量*/,vec3 n/*世界空间中的法向量*/){
+	vec3 totalLight = vec3(0);
+	vec3 wi = reflect(-wo,n);
+	vec3 reflectLight = texture(skyTexture,wi).xyz;
+	//gama 解码，转线性空间
+	reflectLight = pow(reflectLight, vec3(2.4));
+	//计算反射光的比例
+	float reflectRatio = FrenelReflectRatio(max(dot(wi,n),0),1 / 1.5);
+	//折射光的比例
+	float refractRatio = 1 - reflectRatio;
+
+
+	
+	//计算反射光的brdf，此时的brdf就为内涅尔项除以反射角和法向量夹角的cos值，此时计算如下:
+
+	float woDotN = max(dot(wi,n),0.000000001);//这项引入作用只是用来表述brdf的形式，所以直接限制最小值防止出现除0错误
+	float fr_p_wo_wi = reflectRatio / woDotN;//该模式的brdf
+	float wiDotN = woDotN;
+	vec3 reflectTotalLight = fr_p_wo_wi * reflectLight * wiDotN;
+	totalLight += reflectTotalLight; 
+	
+	//计算折射光方向
+	vec3 wt = refract(-wo,n,1/1.5);
+	if(length(wt)!=0)//折射光存在
+	{
+		float wtDotNegN = max(dot(-n,wt),0.000000001);//这项引入作用只是用来表述brdf的形式，所以直接限制最小值防止出现除0错误
+		//计算折射光的btdf
+		float ft_p_wt_wi = refractRatio / wtDotNegN;
+		//计算从介质折射到wo介质中的btdf
+		float ft_p_wi_wt = ft_p_wt_wi * pow(1 / 1.5,2);
+		vec3 refractLight = texture(skyTexture,wt).xyz;
+		//gama 解码，转线性空间
+		refractLight = pow(refractLight, vec3(2.4));
+		vec3 refractTotalLight = ft_p_wi_wt * refractLight * wtDotNegN;
+		totalLight += refractTotalLight;	
+	}
+
+	return totalLight;
+}
+
+
+
+//这里定义复数的计算法则
+//返回一个复数
+vec2 Complex(float real)
+{
+	return vec2(real,0);
+}
+
+//复数模长
+float ComplexLen(vec2 c)
+{
+	return sqrt(pow(c.x,2) + pow(c.y,2));
+}
+vec2 ComplexSqrt(vec2 c)
+{
+	float sqrtLen = sqrt(ComplexLen(c));
+	float halfTheta = atan(c.y,c.x) / 2;
+	return vec2(sqrtLen * cos(halfTheta),sqrtLen * sin(halfTheta));
+}
+
+// c1 * c2
+vec2 ComplexMul(vec2 c1,vec2 c2)
+{
+	vec2 res;
+	res.x = c1.x * c2.x - c1.y*c2.y;
+	res.y = c1.x * c2.y + c1.y + c2.x;
+	return res;
+}
+
+// c1/c2
+vec2 ComplexDiv(vec2 c1,vec2 c2)
+{
+	vec2 res;
+	float len2C2 = pow(ComplexLen(c2),2);
+	vec2 c1Mulnc2 = ComplexMul(c1,c2 * vec2(1,-1));
+	res = c1Mulnc2/len2C2;
+	return res;
+}
+
+vec2 ComplexAdd(vec2 c1,vec2 c2)
+{
+	vec2 res;
+	res.x = c1.x + c2.x;
+	res.y = c1.y + c2.y;
+	return res;
+}
+
+vec2 ComplexSub(vec2 c1,vec2 c2)
+{
+	vec2 res;
+	res.x = c1.x - c2.x;
+	res.y = c1.y - c2.y;
+	return res;
+}
+
+
+//菲涅尔项，对折射率用一个复数值表示的介质，一般为金属，给定入射光和法线的夹角以及入射光所在介质和物体介质的相对折射率之比， 计算入射光和法线夹角下反射光反射的比例
+float FrenelReflectRatioComplex(float cosTheta_i/*入射光和法线的夹角*/,vec2 etai/*etai.x 表示入射光所在介质的折射率 ，etai.y表示衰减系数k， 该复数表示n+ik */, vec2 etat/*etat.x 表示折射介质的折射率 ，etat.y表示衰减系数k， 该复数表示n+ik */){
+	float sinTheta_i = sqrt(1 - pow(cosTheta_i,2));
+	vec2 etaI_T = ComplexDiv(etai,etat);
+
+	vec2 sinIMulEta = ComplexMul(Complex(sinTheta_i),etaI_T);
+	vec2 cosTheta_t_c = ComplexSqrt(Complex(1)- ComplexMul(sinIMulEta,sinIMulEta));
+	vec2 cosTheta_i_c = Complex(cosTheta_i);
+	vec2 etaMulCosThetat_c = ComplexMul(etaI_T,cosTheta_t_c);
+	vec2 r_parellel_c_top =  ComplexSub(cosTheta_i_c,etaMulCosThetat_c);
+	vec2 r_parellel_c_bottom =  ComplexAdd(cosTheta_i_c,etaMulCosThetat_c);
+
+	vec2 r_parellel_c = ComplexDiv(r_parellel_c_top,r_parellel_c_bottom);
+
+	vec2 etaMulCosThetai_c = ComplexMul(etaI_T,cosTheta_i_c);
+	vec2 r_perpendicular_top =  ComplexSub(etaMulCosThetai_c,cosTheta_t_c);
+	vec2 r_perpendicular_bottom =  ComplexAdd(etaMulCosThetai_c,cosTheta_t_c);
+
+	vec2 r_perpendicular_c = ComplexDiv(r_perpendicular_top,r_perpendicular_bottom);
+
+
+	return (pow(ComplexLen(r_parellel_c),2) + pow(ComplexLen(r_perpendicular_c),2) ) / 2;
+
+}
+
+//金属反射模型，入射光会根据法向量以及反射规律完全对称反射出去，反射光的多少遵循frenel定律
+vec3 ReflectModelMetalReflect(vec3 wo/*世界空间中的出射向量*/,vec3 n/*世界空间中的法向量*/){
+	vec3 reflectLight = vec3(0);
+	vec3 wi = reflect(-wo,n);
+	vec3 light = texture(skyTexture,wi).xyz;
+	//gama 解码，转线性空间
+	light = pow(light, vec3(2.4));
+	//计算反射光的比例
+	float reflectRatio = FrenelReflectRatioComplex(max(dot(wi,n),0), vec2(1,0),vec2(0.15,3.9));
+	reflectLight = reflectRatio * light;
+	return reflectLight;
+}
+
+//有粗糙度的使用微表面理论的反射模型
+vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*世界空间中的出射向量*/,vec3 n/*世界空间中的法向量*/){
+	uint numSample = 100;
+
+	vec3 y = -normalize(n);
+	vec3 x,z;
+	if((1 - abs(y.x)) > 0.00000001)
+	{
+		x = vec3(1,0,0);
+	}else {
+		x = vec3(0,1,0);
+	}
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 normalMatrix = mat3(x,y,z);
+	mat3 normalMatrixInverse  = inverse(normalMatrix);
+	
+	vec3 reflectLight = vec3(0);
+	float totalPDF = 0;
+	float eta = 1/1.5;
+	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
+	{
+		//获取二维随机点，为（theta，phi）
+		vec2 samplePoint = HaltonSample2D(sampleIndex); 
+		//将随机点转化为半球中的方向
+		float theta = samplePoint.x * 2* s_pi;
+		float fine = 0.5 * s_pi * samplePoint.y;
+		vec3 wi;
+		wi.x = cos(theta)* sin(fine);
+		wi.z = sin(theta)* sin(fine);
+		wi.y = -cos(fine);
+		wi = normalize(wi);
+
+		//将wo转到局部空间
+		vec3 localWo = normalMatrixInverse * normalize(wo); 
+
+		//获得半向量作为微平面的法向量
+		vec3 halfVec = normalize(wi+localWo);
+		float nDotWi = clamp(dot(halfVec,wi),0,1);
+		
+		//计算sparrow模型的 brdf项反射项
+		
+		float pdf = PDF_Sparrow(halfVec,localWo);//wi的pdf
+		float frenel = FrenelReflectRatio(nDotWi,eta) ;//菲涅尔项
+		float unmask = UnMaskAndUnShadow2(localWo,wi);//非几何遮蔽和阴影项
+		float curbrdf = pdf* frenel * unmask;
+
+		//采样
+		wi = normalMatrix * wi;//变换到世界坐标
+		wi  = normalize(wi);
+		vec3 light = texture(skyTexture,wi).xyz;
+
+		//gama 解码，转线性空间
+		light = pow(light, vec3(2.4));
+
+		vec3 curLight = curbrdf * light * nDotWi;
+		reflectLight+=  curLight * pdf;//这里不是求的所有光的积分总和，而是求的每个光应该在最终的结果中占据的比例，所以不能除以pdf
+		totalPDF +=pdf;
+
+
+//		//计算折射的BTDF
+//		float btdf_p_wo_wi = 1-curbrdf;
+//		//计算从材质内部折射出来的光的btdf
+//		float btdf_p_wi_wo = Ft_P_Wi_Wo(btdf_p_wo_wi,eta);
+//		//计算折射光作为入射光的概率密度
+//		float pdf_refract = PDF_Refract(halfVec,localWo,eta);
+//		vec3 wi_refract = refract(-localWo,halfVec,eta);
+//		wi_refract = normalize(wi);
+//		if(length(wi_refract) == 0)
+//		{
+//			continue;
+//		}
+//		//将折射入射光变换到世界空间
+//		wi_refract = normalMatrix * wi_refract;//变换到世界坐标
+//		wi_refract  = normalize(wi_refract);
+//		light = texture(skyTexture,wi_refract).xyz;
+//		light = pow(light, vec3(2.4));
+//		refractTotalLight += pdf_refract * btdf_p_wi_wo * light;
+//		totalRefractPDF+= pdf_refract;
+	}
+	reflectLight /=  totalPDF;//归一化
+
+	return reflectLight;
+
+
+}
+
 
 void main(){
 
@@ -491,7 +776,11 @@ void main(){
 	//color += ExampleRoughnessSpecularBRDF(wo,inNormal);
 	//color = ExampleSimpleSpecularBRDF(wo,inNormal);
 	//color = ExampleSimpleBTDF(wo,inNormal);
-	color = ExampleSparrowBRDT(wo,inNormal);
+	//color = ExampleSparrowBRDT(wo,inNormal);
+	//color = ReflectModelLambertDiffuseReflect(wo,inNormal);
+	//color = ReflectModelSpecularReflectAndRefract(wo,inNormal);
+	//color = ReflectModelMetalReflect(wo,inNormal);
+	color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
 	//gama 解码
 	//color = pow(color, vec3(2.4));
 	outColor = vec4(color,1.0);

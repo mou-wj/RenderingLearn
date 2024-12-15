@@ -87,7 +87,10 @@ float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 入射光所在的材质介质的折
 	vec3 wi = refract(-wo,w,1/eta);
 	float cosTheta_i = max(dot(wi,-w),0);
 	float cosTheta_o = max(dot(wo,w),0);
-
+	float sinTheta_i = sqrt(1 - pow(cosTheta_i,2));
+	float sinTheta_o = sqrt(1 - pow(cosTheta_o,2));
+	float ratio = sinTheta_i / sinTheta_o;
+	 
 	if(cosTheta_o == 0)
 	{
 		return 0 ; 
@@ -147,56 +150,43 @@ void main(){
 	
 		
 		float ni = 1.5,no = 1;
-		float thetac = asin(no/ni);
-		//定义入射光和出射光之间的夹角范围，只有在这个范围内才能进行折射
-		float rangeLow = s_pi;
-		float rangeHight = s_pi * 1.5 - thetac;
+
 		//出射光和xz平面的夹角作为theta1,法向量和xz平面的夹角作为theta2，折射入射光和xz平面的夹角作为theta3
 		float theta1 = asin(-wo.y);
 		float theta3 = -asin(-curVec.y) + s_pi;
 		float thetaSub = theta3 - theta1;
-		if(thetaSub >= rangeLow && thetaSub <=rangeHight)
+
+
+		float theta2 = atan((no * sin(theta1) + ni * sin(theta3))/(no* cos(theta1) + ni* cos(theta3)));
+		//thetak + theta1  = theta2,由折射关系，thetak范围为[0,pi/2]
+		if(theta2 <0 && theta2 < theta1 - s_pi/2)
 		{
-			outColor.z = 1;
-			float theta2 = atan((no * sin(theta1) + ni * sin(theta3))/(no* cos(theta1) + ni* cos(theta3)));
-			//thetak + theta1  = theta2,由折射关系，thetak范围为[0,pi/2]
-			if(theta2 <0)
+			theta2+=s_pi;
+		}
+		float thetai = theta2 - theta1;
+
+		if(abs(theta2 - theta1) < s_pi/2)
+		{
+		
+			//计算theta2的fine角
+			float fine = atan(wo.z,wo.x);
+			vec3 wm;
+			wm.x = cos(theta2) * cos(fine);
+			wm.z = cos(theta2) * sin(fine);
+			wm.y = -sin(theta2);
+			//normal需要计算
+			float dotWmWo = dot(wm,wo);
+			float wtPdf = PDF_Refract(wm,wo,1.5/1);
+
+			if(wtPdf < 0.8)
 			{
-				theta2+=s_pi;
+				outColor.z = wtPdf;
+			}else {
+				outColor.z = 1;
+				//outColor.x = 1;
 			}
-			float thetai = theta2 - theta1;
-
-			if(abs(theta2 - theta1) < s_pi/2)
-			{
-			
-				//计算theta2的fine角
-				float fine = atan(wo.z,wo.x);
-				vec3 wm;
-				wm.x = cos(theta2) * cos(fine);
-				wm.z = cos(theta2) * sin(fine);
-				wm.y = -sin(theta2);
-				//normal需要计算
-				float dotWmWo = dot(wm,wo);
-				float wtPdf = PDF_Refract(wm,wo,1.5/1);
-
-				float wiPdf = PDF_Sparrow(wm,wo);
-				if(wtPdf < 0.8)
-				{
-					outColor.z = wtPdf;
-				}else {
-					outColor.z = 1;
-				}
-				//outColor.z = wiPdf;
-			
-			
-			
-			
-			
-			}
-
-		
-		
-		
+			outColor.z = wtPdf * 0.1;
+			//outColor.z = wiPdf;
 		
 		
 		
@@ -204,10 +194,6 @@ void main(){
 		
 		}
 
-		
-
-
-	
 	
 	}
 	

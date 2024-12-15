@@ -57,8 +57,8 @@ int main()
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
 	
-	//ReflectionModelsExample example;
-	DisturbutionLobeExample example;
+	ReflectionModelsExample example;
+	//DisturbutionLobeExample example;
 	ExampleBase::Run(&example);
 
 
