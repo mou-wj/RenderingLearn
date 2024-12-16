@@ -10,7 +10,6 @@ layout(set = 0,binding = 0,std140) uniform SimpleSceenExampleBuffer{
 	mat4 world;
 	mat4 view;
 	mat4 proj;
-	vec3 w_out;
 };
 
 void main(){

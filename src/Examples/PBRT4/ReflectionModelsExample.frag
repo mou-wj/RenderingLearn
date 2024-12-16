@@ -219,7 +219,7 @@ vec3 ExampleSimpleBTDF(vec3 wo, vec3 n){
 
 //Î¢±íÃæÀíÂÛÀ´±íÊ¾´Ö²Ú¶È
 
-float roughnessX = 0.3,roughnessY = 0.3;//GGXµÄtheta£¬fineÁ½¸öÎ¬¶ÈµÄ´Ö²Ú¶È¿ØÖÆÏµÊı
+float roughnessX = 0.03,roughnessY = 0.03;//GGXµÄtheta£¬fineÁ½¸öÎ¬¶ÈµÄ´Ö²Ú¶È¿ØÖÆÏµÊı
 //GGX Î¢±íÃæ·Ö²¼£¬·µ»Ø°ëÔ²ÄÚ³¯ÏòwµÄµÄÎ¢±íÃæµÄ±ÈÂÊ£¬´«ÈëµÄw´¦ÓÚ¾Ö²¿¿Õ¼ä,¸Ã·Ö²¼ºÍwoÎŞ¹Ø
 float PDF_GGX(vec3 w)
 {
@@ -682,7 +682,7 @@ vec3 ReflectModelMetalReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞ
 
 //ÓĞ´Ö²Ú¶ÈµÄÊ¹ÓÃÎ¢±íÃæÀíÂÛµÄ·´ÉäÄ£ĞÍ
 vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
-	uint numSample = 100;
+	uint numSample = 20;
 
 	vec3 y = -normalize(n);
 	vec3 x,z;
@@ -698,7 +698,7 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 	mat3 normalMatrixInverse  = inverse(normalMatrix);
 	
 	vec3 reflectLight = vec3(0);
-	float totalPDF = 0;
+	float totalWeight = 0;
 	float eta = 1/1.5;
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
@@ -714,8 +714,8 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 		wi = normalize(wi);
 
 		//½«wo×ªµ½¾Ö²¿¿Õ¼ä
-		vec3 localWo = normalMatrixInverse * normalize(wo); 
-
+		vec3 localWo = normalize( normalMatrixInverse * normalize(wo)); 
+		
 		//»ñµÃ°ëÏòÁ¿×÷ÎªÎ¢Æ½ÃæµÄ·¨ÏòÁ¿
 		vec3 halfVec = normalize(wi+localWo);
 		float nDotWi = clamp(dot(halfVec,wi),0,1);
@@ -732,12 +732,21 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 		wi  = normalize(wi);
 		vec3 light = texture(skyTexture,wi).xyz;
 
+		if(pdf == 0)
+		{
+			continue;
+		}
 		//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
 		light = pow(light, vec3(2.4));
-
-		vec3 curLight = curbrdf * light * nDotWi;
-		reflectLight+=  curLight * pdf;//ÕâÀï²»ÊÇÇóµÄËùÓĞ¹âµÄ»ı·Ö×ÜºÍ£¬¶øÊÇÇóµÄÃ¿¸ö¹âÓ¦¸ÃÔÚ×îÖÕµÄ½á¹ûÖĞÕ¼¾İµÄ±ÈÀı£¬ËùÒÔ²»ÄÜ³ıÒÔpdf
-		totalPDF +=pdf;
+		float curWeight = curbrdf * nDotWi / (pdf * numSample);//´øÖØÒªĞÔ²ÉÑùµÄÈ¨ÖØ
+		vec3 curLight = curWeight * light;
+		reflectLight+=  curLight;
+		totalWeight += curWeight;
+		if(pdf>1)
+		{
+			vec3 kkk = vec3(0,0,0);
+			
+		}
 
 
 //		//¼ÆËãÕÛÉäµÄBTDF
@@ -760,13 +769,18 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 //		refractTotalLight += pdf_refract * btdf_p_wi_wo * light;
 //		totalRefractPDF+= pdf_refract;
 	}
-	reflectLight /=  totalPDF;//¹éÒ»»¯
+	reflectLight /=  totalWeight;//¹éÒ»»¯
 
 	return reflectLight;
 
 
 }
 
+//ÓĞ´Ö²Ú¶ÈµÄÊ¹ÓÃÎ¢±íÃæÀíÂÛµÄÕÛÉäÄ£ĞÍ
+vec3 ReflectModelRoughnessWithMrcrofacetTheoryRefract(){
+
+	return vec3(0);
+}
 
 void main(){
 
