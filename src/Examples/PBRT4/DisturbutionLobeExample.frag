@@ -74,8 +74,8 @@ float PDF_Sparrow(vec3 w,vec3 wo)
 }
 
 
-//基于微表面分布，返回从wo处看，折射入射光wi的分布
-float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 入射光所在的材质介质的折射率ni  / 出射光所在的介质的折射率no*/){
+//基于微表面分布，返回从wo处看，折射入射光wi的分布，这个分布目前看推导是不正确的
+float PDF_Refract2(vec3 w,vec3 wo,float eta/*相对折射率: 入射光所在的材质介质的折射率ni  / 出射光所在的介质的折射率no*/){
 	//由于
 
 	//获取从wo处看反射光的pdf
@@ -98,6 +98,28 @@ float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 入射光所在的材质介质的折
 	//已经知道出射光的分布求折射入射光的分布
 	return pdf * pow(eta,2) * cosTheta_i / cosTheta_o;
 }
+
+
+//基于微表面分布，返回从wo处看，折射入射光wi的分布,推导来源来自Microfacet Models for Refraction through Rough Surfaces这篇论文
+float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 入射光所在的材质介质的折射率ni  / 出射光所在的介质的折射率no*/){
+	//由于
+
+	//获取从wo处看wm的pdf
+	float pdf = PDF2_GGX(w,wo);
+	float wmDotWo = max(dot(w,wo),0);
+	vec3 wi = refract(-wo,w,1/eta);
+	float wiDotWm = dot(wi,-w);
+
+	float denom = pow(wiDotWm + wmDotWo / eta,2 );
+	if(denom == 0)
+	{
+		return 0;
+	}
+	float res = abs(wiDotWm) / denom;
+	return res;
+}
+
+
 
 void ViewDisturbution(){
 
@@ -262,16 +284,29 @@ vec2 HaltonSample2D(uint index) {
     return vec2(HammersleySequence(index, 2),HammersleySequence(index, 3)); // 基数选择 2,3
 }
 
-//根据样本和基准向量的一个theta和fine的差值，返回基于基准向量的一个采样向量
-vec2 FittingInverseCDFSparrowReflect(){
+//根据一个符合均匀分布的各项范围在-1到1之间的样本，拟合变换得到一个近似微平面反射光的方向和完美反射光之间的theta和fine差值的分布结果，返回值第一项为theta的差值，范围-pi到pi，第二项为fine的差值，范围-pi/2 到pi/2
+vec2 FittingInverseCDFSparrowReflect(vec2 daltaXY/*两个分别为-1到1之间的二维参数*/){
+	vec2 res;
+	//第一项表示和目标向量在theta角的差值，范围-pi到pi
+	res.x = asin(pow(daltaXY.x,3)) * 2;
+	res.y = asin(pow(daltaXY.y,3));
 
-	return vec2(0);
+
+	return res;
 }
 
 void ViewBRDFAndSample(){
 
 	vec3 finalPos = inPosition;
 	vec3 wo = normalize(vec3(0,-1,-4));
+	vec3 wr = reflect(-wo,vec3(0,-1,0));
+	float theta_r = atan(wr.z,wr.x);
+	if(theta_r <0)
+	{
+		theta_r+=2* s_pi;
+	}
+	float fine_r = acos(-wr.y) ; 
+
 	vec3 outColor = vec3(0,0,0);
 	//wm的概率密度作为红色分量  反射光的概率密度作为绿色分量 折射光的概率密度作为蓝色分量
 	if(finalPos.y <=0)
@@ -285,13 +320,24 @@ void ViewBRDFAndSample(){
 		float unmask = UnMaskAndUnShadow2(wo,curVec);
 
 		float wiPdf = PDF_Sparrow(halfVec,wo);
-		finalColor = vec4(wiPdf * frenel * unmask,0,0,1);
+		finalColor = vec4(wiPdf * frenel * unmask * wiDotN,0,0,1);
 		
 
 
 	//绘制采样点
 	for(uint sampleIndex = 0;sampleIndex < 100;sampleIndex++)
 	{
+
+		curVec = normalize(curVec);
+		//计算当前方向的theta和fine值
+		float theta_curV =  atan(curVec.z,curVec.x);
+		if(theta_curV <0)
+		{
+			theta_curV+=2*s_pi;
+		}
+		float fines_curV = acos(-curVec.y) ; 
+
+
 		//获取二维随机点，为（theta，phi）
 		vec2 samplePoint = HaltonSample2D(sampleIndex); 
 		float thetas = 0,fines = 0;
@@ -301,11 +347,12 @@ void ViewBRDFAndSample(){
 
 		//重要性采样分布，计算采样向量的theta和fine值,使用inverse CDF比较麻烦，不好计算，这里简单使用采样向量和反射向量的余弦值反向获取采样向量
 		samplePoint -=0.5;
-		samplePoint *=2;//变道-1到1之间
+		samplePoint *=2;//变到-1到1之间
+		vec2 deltaThetaFine = FittingInverseCDFSparrowReflect(samplePoint);
 				
 		
-		thetas =  samplePoint.x * 2* s_pi;
-		fines = atan((roughnessX + roughnessY) * sqrt(samplePoint.y) / sqrt(1 - samplePoint.y));
+		thetas =  deltaThetaFine.x + theta_r;
+		fines = deltaThetaFine.y + fine_r;
 
 		vec3 ws;
 		ws.x = cos(thetas)* sin(fines);
@@ -313,16 +360,12 @@ void ViewBRDFAndSample(){
 		ws.y = -cos(fines);
 		ws = normalize(ws);
 
+
+
+
+
+
 		//计算是否和某个采样点很接近
-		curVec = normalize(curVec);
-		//计算当前方向的theta和fine值
-		float theta_curV =  atan(curVec.z,curVec.x)  / (2* s_pi) + 0.5;
-		float fines_curV = acos(-curVec.y) / (0.5 * s_pi) ; 
-
-
-
-
-
 		if(abs(thetas-theta_curV) < 0.01 && abs(fines-fines_curV) < 0.01)
 		{
 			finalColor+=vec4(0,0,1,0);
@@ -348,8 +391,8 @@ void ViewBRDFAndSample(){
 }
 
 void main(){
-	
-	ViewBRDFAndSample();
+	ViewDisturbution();
+	//ViewBRDFAndSample();
 
 
 }

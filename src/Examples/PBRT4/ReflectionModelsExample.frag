@@ -680,6 +680,18 @@ vec3 ReflectModelMetalReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞ
 	return reflectLight;
 }
 
+//¸ù¾İÒ»¸ö·ûºÏ¾ùÔÈ·Ö²¼µÄ¸÷Ïî·¶Î§ÔÚ-1µ½1Ö®¼äµÄÑù±¾£¬ÄâºÏ±ä»»µÃµ½Ò»¸ö½üËÆÎ¢Æ½Ãæ·´Éä¹âµÄ·½ÏòºÍÍêÃÀ·´Éä¹âÖ®¼äµÄthetaºÍfine²îÖµµÄ·Ö²¼½á¹û£¬·µ»ØÖµµÚÒ»ÏîÎªthetaµÄ²îÖµ£¬·¶Î§-piµ½pi£¬µÚ¶şÏîÎªfineµÄ²îÖµ£¬·¶Î§-pi/2 µ½pi/2
+vec2 FittingInverseCDFSparrowReflect(vec2 daltaXY/*Á½¸ö·Ö±ğÎª-1µ½1Ö®¼äµÄ¶şÎ¬²ÎÊı*/){
+	vec2 res;
+	//µÚÒ»Ïî±íÊ¾ºÍÄ¿±êÏòÁ¿ÔÚtheta½ÇµÄ²îÖµ£¬·¶Î§-piµ½pi
+	res.x = asin(pow(daltaXY.x,3)) * 2;
+	res.y = asin(pow(daltaXY.y,3));
+
+
+	return res;
+}
+
+
 //ÓĞ´Ö²Ú¶ÈµÄÊ¹ÓÃÎ¢±íÃæÀíÂÛµÄ·´ÉäÄ£ĞÍ
 vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
 	uint numSample = 20;
@@ -696,17 +708,39 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 	x = normalize(cross(y,z));
 	mat3 normalMatrix = mat3(x,y,z);
 	mat3 normalMatrixInverse  = inverse(normalMatrix);
+
+	//½«·´ÉäÏòÁ¿±ä»»µ½·¨ÏòÁ¿µÄ±¾µØ×ø±êÏµÖĞ
+	vec3 wr = reflect(-wo,n);
+	wr = normalize(normalMatrixInverse * wr);
+	//¼ÆËãwrÔÚ±¾µØ×ø±êÏµÖĞµÄthetaÖµºÍfineÖµ
+	float theta_r = atan(wr.z,wr.x);
+	if(theta_r <0)
+	{
+		theta_r+=2* s_pi;
+	}
+	float fine_r = acos(-wr.y) ; 
+
+
 	
 	vec3 reflectLight = vec3(0);
 	float totalWeight = 0;
 	float eta = 1/1.5;
+	uint validNumSample = 0;
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
 		//»ñÈ¡¶şÎ¬Ëæ»úµã£¬Îª£¨theta£¬phi£©
 		vec2 samplePoint = HaltonSample2D(sampleIndex); 
-		//½«Ëæ»úµã×ª»¯Îª°ëÇòÖĞµÄ·½Ïò
-		float theta = samplePoint.x * 2* s_pi;
-		float fine = 0.5 * s_pi * samplePoint.y;
+
+
+		//ÖØÒªĞÔ²ÉÑù·Ö²¼£¬¼ÆËã²ÉÑùÏòÁ¿µÄthetaºÍfineÖµ,Ê¹ÓÃinverse CDF±È½ÏÂé·³£¬²»ºÃ¼ÆËã£¬ÕâÀï¼òµ¥Ê¹ÓÃ²ÉÑùÏòÁ¿ºÍ·´ÉäÏòÁ¿µÄÓàÏÒÖµ·´Ïò»ñÈ¡²ÉÑùÏòÁ¿
+		samplePoint -=0.5;
+		samplePoint *=2;//±äµ½-1µ½1Ö®¼ä
+		vec2 deltaThetaFine = FittingInverseCDFSparrowReflect(samplePoint);
+			
+		//¸ù¾İ·´ÉäÏòÁ¿µÄthetaºÍfineÖµÒÔ¼°±ä»»ºóµÄÑù±¾µãºÍ·´ÉäÏòÁ¿thetaºÍfineµÄ²îÖµ»ñµÃÑù±¾ÏòÁ¿µÄthetaºÍfineÖµ
+		float theta = deltaThetaFine.x + theta_r;
+		float fine = deltaThetaFine.y + fine_r;
+
 		vec3 wi;
 		wi.x = cos(theta)* sin(fine);
 		wi.z = sin(theta)* sin(fine);
@@ -719,10 +753,23 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 		//»ñµÃ°ëÏòÁ¿×÷ÎªÎ¢Æ½ÃæµÄ·¨ÏòÁ¿
 		vec3 halfVec = normalize(wi+localWo);
 		float nDotWi = clamp(dot(halfVec,wi),0,1);
+		if(nDotWi ==0)//µ±Ç°ÎªÎŞĞ§Ñù±¾
+		{
+			continue;
+		}
+
+
 		
 		//¼ÆËãsparrowÄ£ĞÍµÄ brdfÏî·´ÉäÏî
 		
 		float pdf = PDF_Sparrow(halfVec,localWo);//wiµÄpdf
+		if(pdf == 0)
+		{
+			continue;
+		}
+		validNumSample++;
+
+
 		float frenel = FrenelReflectRatio(nDotWi,eta) ;//·ÆÄù¶ûÏî
 		float unmask = UnMaskAndUnShadow2(localWo,wi);//·Ç¼¸ºÎÕÚ±ÎºÍÒõÓ°Ïî
 		float curbrdf = pdf* frenel * unmask;
@@ -732,23 +779,13 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 		wi  = normalize(wi);
 		vec3 light = texture(skyTexture,wi).xyz;
 
-		if(pdf == 0)
-		{
-			continue;
-		}
+
 		//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
 		light = pow(light, vec3(2.4));
-		float curWeight = curbrdf * nDotWi / (pdf * numSample);//´øÖØÒªĞÔ²ÉÑùµÄÈ¨ÖØ
+		float curWeight = curbrdf * nDotWi;//È¨ÖØ,ÓÉÓÚsparrowÄ£ĞÍµÄbrdfÖĞº¬ÓĞpdfÏî£¬ËùÒÔ²»ÄÜÔÙ³ıÒÔpdf£¬Í¨¹ıÖØÒªĞÔ²ÉÑùµÄµÄ·½Ê½¼ÆËã³öÉä¹â£¬ÔÙ³ıÒÔpdf¾ÍÖØ¸´´¦ÀíÁËpdf£¬Ò²¾ÍÊ§È¥pdfµÄÒâÒå
 		vec3 curLight = curWeight * light;
 		reflectLight+=  curLight;
 		totalWeight += curWeight;
-		if(pdf>1)
-		{
-			vec3 kkk = vec3(0,0,0);
-			
-		}
-
-
 //		//¼ÆËãÕÛÉäµÄBTDF
 //		float btdf_p_wo_wi = 1-curbrdf;
 //		//¼ÆËã´Ó²ÄÖÊÄÚ²¿ÕÛÉä³öÀ´µÄ¹âµÄbtdf
