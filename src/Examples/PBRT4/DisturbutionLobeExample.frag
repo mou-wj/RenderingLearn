@@ -4,6 +4,9 @@
 layout(location = 0) in vec3 inPosition;
 layout(location = 0) out vec4 finalColor;
 
+layout(set = 0,binding = 1,std140) uniform ViewExampleType{
+	uint type;//type为0，看分布 ，为1，看sparrow模型的brdf和采样点，为2看分层采样点
+};
 
 
 const float s_pi = 3.141592653;
@@ -108,7 +111,7 @@ float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 入射光所在的材质介质的折
 	float pdf = PDF2_GGX(w,wo);
 	float wmDotWo = max(dot(w,wo),0);
 	vec3 wi = refract(-wo,w,1/eta);
-	float wiDotWm = dot(wi,-w);
+	float wiDotWm = dot(wi,w);
 
 	float denom = pow(wiDotWm + wmDotWo / eta,2 );
 	if(denom == 0)
@@ -119,111 +122,6 @@ float PDF_Refract(vec3 w,vec3 wo,float eta/*相对折射率: 入射光所在的材质介质的折
 	return res;
 }
 
-
-
-void ViewDisturbution(){
-
-	vec3 finalPos = inPosition;
-	vec3 wo = vec3(1,-0.5,0);
-	wo = normalize(wo);
-	//wo = normalize(w_out);
-	vec3 outColor = vec3(0,0,0);
-	//wm的概率密度作为红色分量  反射光的概率密度作为绿色分量 折射光的概率密度作为蓝色分量
-	if(finalPos.y <=0)
-	{
-		vec3 normal = normalize(finalPos);
-		vec3 curVec = normalize(finalPos);
-		float wmPdf = PDF2_GGX(curVec,wo);
-		if(wmPdf>0 && dot(curVec,vec3(0,-1,0)) > 0)
-		{
-			outColor.x += min(wmPdf,1);
-		}
-
-		//float pdf = PDF_GGX(normal);
-
-		vec3 halfVec = normalize((curVec + wo)/2);
-		//pdf = PDF2_GGX(normal,wo);
-		float wiPdf = PDF_Sparrow(halfVec,wo);
-		if(wiPdf >0 && dot(halfVec,vec3(0,-1,0)) > 0)
-		{
-			outColor.y += min(wiPdf,1);
-		}
-
-		
-
-
-
-		
-
-
-
-		//pdf = PDF_Sparrow(normal,wo);
-		
-		vec3 reflv = reflect(-wo,normal);
-		reflv= normalize(reflv);
-		
-		vec3 refrav = refract(-wo,normal,1/1.5);
-		refrav= normalize(refrav);
-
-	}else {
-		vec3 curVec = normalize(finalPos);
-	
-		
-		float ni = 1.5,no = 1;
-
-		//出射光和xz平面的夹角作为theta1,法向量和xz平面的夹角作为theta2，折射入射光和xz平面的夹角作为theta3
-		float theta1 = asin(-wo.y);
-		float theta3 = -asin(-curVec.y) + s_pi;
-		float thetaSub = theta3 - theta1;
-
-
-		float theta2 = atan((no * sin(theta1) + ni * sin(theta3))/(no* cos(theta1) + ni* cos(theta3)));
-		//thetak + theta1  = theta2,由折射关系，thetak范围为[0,pi/2]
-		if(theta2 <0 && theta2 < theta1 - s_pi/2)
-		{
-			theta2+=s_pi;
-		}
-		float thetai = theta2 - theta1;
-
-		if(abs(theta2 - theta1) < s_pi/2)
-		{
-		
-			//计算theta2的fine角
-			float fine = atan(wo.z,wo.x);
-			vec3 wm;
-			wm.x = cos(theta2) * cos(fine);
-			wm.z = cos(theta2) * sin(fine);
-			wm.y = -sin(theta2);
-			//normal需要计算
-			float dotWmWo = dot(wm,wo);
-			float wtPdf = PDF_Refract(wm,wo,1.5/1);
-
-			if(wtPdf < 0.8)
-			{
-				outColor.z = wtPdf;
-			}else {
-				outColor.z = 1;
-				//outColor.x = 1;
-			}
-			outColor.z = wtPdf * 0.1;
-			//outColor.z = wiPdf;
-		
-		
-		
-		
-		
-		}
-
-	
-	}
-	
-	
-
-	//场景所有对象绘制为白色
-	finalColor = vec4(outColor,1);
-
-
-}
 
 
 //菲涅尔项，对折射率用一个值表示的介质，给定入射光和法线的夹角以及入射光所在介质和物体介质的相对折射率之比， 计算入射光和法线夹角下反射光反射的比例
@@ -295,10 +193,134 @@ vec2 FittingInverseCDFSparrowReflect(vec2 daltaXY/*两个分别为-1到1之间的二维参数
 	return res;
 }
 
+
+
+
+
+void ViewDisturbution(){
+
+	vec3 finalPos = inPosition;
+	vec3 wo = vec3(1,-1,0);
+	wo = normalize(wo);
+
+
+	//wo = normalize(w_out);
+	vec3 outColor = vec3(0,0,0);
+	//wm的概率密度作为红色分量  反射光的概率密度作为绿色分量 折射光的概率密度作为蓝色分量
+	if(finalPos.y <=0)
+	{
+		vec3 normal = normalize(finalPos);
+		vec3 curVec = normalize(finalPos);
+		float wmPdf = PDF2_GGX(curVec,wo);
+		if(wmPdf>0 && dot(curVec,vec3(0,-1,0)) > 0)
+		{
+			outColor.x += min(wmPdf,1);
+		}
+
+		//float pdf = PDF_GGX(normal);
+
+		vec3 halfVec = normalize((curVec + wo)/2);
+		//pdf = PDF2_GGX(normal,wo);
+		float wiPdf = PDF_Sparrow(halfVec,wo);
+		if(wiPdf >0 && dot(halfVec,vec3(0,-1,0)) > 0)
+		{
+			outColor.y += min(wiPdf,1);
+		}
+
+	}else {
+		vec3 curVec = normalize(finalPos);
+		float ni = 1.5,no = 1;
+		//计算半向量
+		vec3 wm = -(ni * curVec + no * wo);
+		wm = normalize(wm);
+		if(length(wm) != 0)
+		{
+			float wtPdf = PDF_Refract(wm,wo,1.5/1);
+			float wmDotN = dot(wm,vec3(0,-1,0));
+			outColor.z = wtPdf * 0.2;
+		}
+
+
+	
+	}
+	
+		//场景所有对象绘制为白色
+	finalColor = vec4(outColor,1);
+
+	//计算理想反射光和折射光的信息
+	vec3 wc = normalize(finalPos);
+	vec3 wr = reflect(-wo,vec3(0,-1,0));
+	vec3 wt = refract(-wo,vec3(0,-1,0),1/1.5);
+	float theta_r = atan(wr.z,wr.x);
+	if(theta_r <0)
+	{
+		theta_r+=2* s_pi;
+	}
+	float fine_r = acos(-wr.y) ; 
+
+	float theta_t = atan(wt.z,wt.x);
+	if(theta_t <0)
+	{
+		theta_t+=2* s_pi;
+	}
+	float fine_t = acos(-wt.y); 
+	
+	float theta_cur = atan(wc.z,wc.x);
+	if(theta_cur <0)
+	{
+		theta_cur+=2* s_pi;
+	}
+	float fine_cur = acos(-wc.y); 
+
+	float theta_o = atan(wo.z,wo.x);
+	if(theta_o <0)
+	{
+		theta_o+=2* s_pi;
+	}
+	float fine_o = acos(-wo.y); 
+
+
+
+	//画出理想反射光和折射光,入射光以及理想法向量
+
+
+	//计算是否和反射光很接近
+	if(abs(theta_r-theta_cur) < 0.1 && abs(fine_r-fine_cur) < 0.1)
+	{
+		finalColor= vec4(1,1,1,1);
+	}
+
+	//计算是否和折射光很接近
+	if(abs(theta_t-theta_cur) < 0.1 && abs(fine_t-fine_cur) < 0.1)
+	{
+		finalColor= vec4(1,1,1,1);
+	}
+
+	//计算是否和出射光很接近
+	if(abs(theta_o-theta_cur) < 0.1 && abs(fine_o-fine_cur) < 0.1)
+	{
+		finalColor= vec4(1,1,1,1);
+	}
+
+	//计算是否和理想法向量很接近
+	if(abs(fine_cur) < 0.1)
+	{
+		finalColor= vec4(1,1,1,1);
+	}
+
+
+
+
+
+}
+
+
+
 void ViewBRDFAndSample(){
 
 	vec3 finalPos = inPosition;
-	vec3 wo = normalize(vec3(0,-1,-4));
+	vec3 wo = vec3(1,-1,0);
+	wo = normalize(wo);
 	vec3 wr = reflect(-wo,vec3(0,-1,0));
 	float theta_r = atan(wr.z,wr.x);
 	if(theta_r <0)
@@ -320,7 +342,12 @@ void ViewBRDFAndSample(){
 		float unmask = UnMaskAndUnShadow2(wo,curVec);
 
 		float wiPdf = PDF_Sparrow(halfVec,wo);
-		finalColor = vec4(wiPdf * frenel * unmask * wiDotN,0,0,1);
+		if(wiDotN!=0)
+		{
+			float fr_p_wo_wi = wiPdf * frenel * unmask / wiDotN;
+			finalColor = vec4(fr_p_wo_wi * wiDotN,0,0,1);
+		}
+
 		
 
 
@@ -377,7 +404,45 @@ void ViewBRDFAndSample(){
 
 
 	}else {
-		finalColor = vec4(0,0,0,1);
+
+		//计算折射
+		vec3 curVec = normalize(finalPos);
+		float ni = 1.5,no = 1;
+		vec3 wm = -(ni * curVec + no * wo);
+		wm = normalize(wm);
+
+		float woDotWm = dot(wo,wm);
+		float wiDotWm = dot(curVec,-wm);
+		float sinWiWm = sqrt(1-pow(wiDotWm,2));
+		float sinWoWm = sqrt(1-pow(woDotWm,2));
+		float niMulSinWi = ni * sinWiWm;
+		float noMulSinWo = no * sinWoWm;
+		//计算从平面下方折射出来的比例
+		float frenel = FrenelReflectRatio(woDotWm,1/1.5);
+		float refractRatio = 1-frenel;
+		float wtPdf = 0;
+
+		//finalColor = vec4(0,0,refractRatio,1);
+		//return ;
+		
+
+
+		if(length(wm) != 0)
+		{
+			wtPdf  = PDF_Refract(wm,wo,1.5/1);
+			float wmDotN = dot(wm,vec3(0,-1,0));
+			outColor.z = wtPdf * 0.2;
+		}
+
+		float unmask = UnMaskAndUnShadow2(wo,curVec);
+
+
+		float ft_p_wo_wi = wtPdf * unmask * refractRatio;
+		finalColor = vec4(0,ft_p_wo_wi * 0.1,0,1);
+		
+
+
+		//finalColor = vec4(0,0,0,1);
 	
 	}
 
@@ -390,9 +455,55 @@ void ViewBRDFAndSample(){
 
 }
 
-void main(){
-	ViewDisturbution();
-	//ViewBRDFAndSample();
+void ViewLayeredSample(){
+	vec3 finalPos = inPosition; 
+	vec3 wc = normalize(finalPos);
+	float theta_cur = atan(wc.z,wc.x);
+	if(theta_cur <0)
+	{
+		theta_cur+=2* s_pi;
+	}
+	float fine_cur = acos(-wc.y); 
 
+	//绘制分层采样的采样点
+	uint numStepTheta = 20,numStepFine = 10;
+	float deltaTheta = 2 * s_pi / numStepTheta,deltaFine = 0.5 * s_pi / numStepFine;
+	finalColor= vec4(0,0,0,1);
+	for(uint i = 0;i < numStepTheta;i++)
+	{
+		for(uint j = 0;j < numStepFine;j++)
+		{
+			vec2 samplePoint = HaltonSample2D(j* numStepTheta + i);
+			float sampleTheta = i * deltaTheta + samplePoint.x * deltaTheta;
+			float sampleFine = j * deltaFine + samplePoint.y * deltaFine;
+
+			if(abs(sampleTheta-theta_cur) < 0.01 && abs(sampleFine-fine_cur) < 0.01)
+			{
+				finalColor= vec4(1,0,1,1);
+			}
+		
+		}
+	
+	
+	}
+
+
+
+
+}
+
+void main(){
+
+	if(type == 0)
+	{
+		ViewDisturbution();
+	
+	}else if(type == 1)
+	{
+		ViewBRDFAndSample();
+	}else if(type == 2){
+		ViewLayeredSample();
+	}
+	
 
 }

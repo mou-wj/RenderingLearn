@@ -103,6 +103,9 @@ void DisturbutionLobeExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 1;
 	
+	bufferBindInfos["type"].size = sizeof(uint32_t);
+	bufferBindInfos["type"].binding = 1;
+	bufferBindInfos["type"].pipeId = 1;
 }
 
 void DisturbutionLobeExample::Loop()
@@ -112,6 +115,7 @@ void DisturbutionLobeExample::Loop()
 
 
 	Camera camera(glm::vec3(0,0,-3),glm::vec3(0,0,0),glm::vec3(0,1,0));
+	uint32_t viewType = 1;
 	//绑定camera响应按键的回调函数
 	WindowEventHandler::SetEventCallBack(KEY_W_PRESS, [&camera]() {camera.Move(MoveDirection::FORWARD); }, "点击w 相机前移");
 	WindowEventHandler::SetEventCallBack(KEY_S_PRESS, [&camera]() {camera.Move(MoveDirection::BACK); }, "点击s 相机后移");
@@ -126,6 +130,16 @@ void DisturbutionLobeExample::Loop()
 		camera.Rotate(RotateAction::AROUND_Y_POSITIVE);
 		}, "点击right 相机往右看");
 	WindowEventHandler::SetEventCallBack(KEY_LEFT_PRESS, [&camera]() {camera.Rotate(RotateAction::AROUND_Y_NEGATIVE); }, "点击left 相机往左看");
+	WindowEventHandler::SetEventCallBack(KEY_I_PRESS, [&viewType]() {
+		std::cout << "输入一个整数，范围为0，1，2" << std::endl;
+		uint32_t tmp = 0;
+		std::cin >> tmp;
+		if (tmp >= 0 && tmp <= 2)
+		{
+			viewType = tmp;
+		}
+		
+		}, "点击I 输入一个整数来切换显示示例的类型，0表示看微表面理论的反射折射分布情况，1表示为看微表面的brdf情况，2看分层采样的样本点");
 
 
 
@@ -142,6 +156,10 @@ void DisturbutionLobeExample::Loop()
 	//ShowMat(buffer.proj);
 	//ShowVec(buffer.proj* buffer.view* glm::vec4(1, 1, 1, 1));
 
+
+
+	FillBuffer(buffers["type"], 0, sizeof(uint32_t), (const char*)&viewType);
+
 	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 
@@ -157,7 +175,7 @@ void DisturbutionLobeExample::Loop()
 	BindTexture("skybox");
 	BindBuffer("Buffer");
 	BindBuffer("SimpleSceenExampleBuffer");
-
+	BindBuffer("type");
 
 	while (!WindowEventHandler::WindowShouldClose())
 	{
@@ -173,6 +191,7 @@ void DisturbutionLobeExample::Loop()
 		WindowEventHandler::ProcessEvent();
 		FillBuffer(buffers["Buffer"], 0, sizeof(glm::mat4) * 3, (const char*)&buffer);
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		FillBuffer(buffers["type"], 0, sizeof(uint32_t), (const char*)&viewType);
 
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
