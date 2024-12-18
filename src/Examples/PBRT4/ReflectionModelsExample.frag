@@ -44,177 +44,10 @@ vec2 HaltonSample2D(uint index) {
 //Diffuse Reflection
 
 
-float s_LamberRefectionFactor = 0.2;//lambertƒ£–Õ∑¥…‰¬ 
-float s_LambertxFactor  = s_LamberRefectionFactor / s_pi;
-
-
-//∑µªÿ≥ˆ…‰π‚Œ™wo«Èøˆœ¬£¨»Î…‰π‚µƒ∏≈¬ √‹∂»
-float PDFLambert(vec3 wi,vec3 wo)
-{
-	return 0.5/s_pi;
-}
-
-vec3 BSDFLambert(vec3 wi,vec3 wo){
-	vec3 res;
-	res.x = s_LambertxFactor;
-	res.y = s_LambertxFactor;
-	res.z = s_LambertxFactor;
-	return res;
-}
-
-vec3 ExampleLambertBSDF(vec3 wo,vec3 n){
-	
-	uint numSample = 16;
-	vec2 samplePoint;
-	vec3 wi;
-	vec3 light;
-	vec3 reflectLight = vec3(0);
-	float dw = 2 * s_pi / numSample;
-	//∏˘æ› ¿ΩÁø’º‰µƒ∑®œﬂππΩ®…œ∞Î«Ú◊¯±Íœµ
-	vec3 y = -normalize(n);
-	vec3 x,z;
-	if((1 - abs(y.x)) > 0.00000001)
-	{
-		x = vec3(1,0,0);
-	}else {
-		x = vec3(0,1,0);
-	}
-	z = normalize(cross(x,y));
-	x = normalize(cross(y,z));
-	mat3 nornalMatrix = mat3(x,y,z);
-	float totalPDF = 0;
-	float pdf = 0;
-	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
-	{
-		//ªÒ»°∂˛Œ¨ÀÊª˙µ„£¨Œ™£®theta£¨phi£©
-		samplePoint = HaltonSample2D(sampleIndex); 
-		//Ω´ÀÊª˙µ„◊™ªØŒ™∞Î«Ú÷–µƒ∑ΩœÚ
-		float theta = samplePoint.x * 2* s_pi;
-		float fine = 0.5 * s_pi * samplePoint.y;
-		wi.x = cos(theta)* sin(fine);
-		wi.z = sin(theta)* sin(fine);
-		wi.y = -cos(fine);
-		wi = nornalMatrix * wi;//±‰ªªµΩ ¿ΩÁ◊¯±Í
-		wi  = normalize(wi);
-		light = texture(skyTexture,wi).xyz;
-		//gama Ω‚¬Î£¨◊™œﬂ–‘ø’º‰
-		light = pow(light, vec3(2.4));
-		pdf = PDFLambert(wi,wo);
-		reflectLight+= BSDFLambert(wo,wi) * light * dot(n,wi) * pdf;
-		totalPDF+=pdf;
-
-	}
-	reflectLight /= totalPDF;//πÈ“ªªØ
-	return reflectLight;
-
-}
-
 
 //frenel ’€…‰ Ni * sin(theta_i) = No * sin(theta_o)  ∆‰÷–Ni No±Ì æ∏˜◊‘µƒ’€…‰¬ £¨theta_i theta_o±Ì æ∏˜◊‘∫Õ∑®œﬂ÷Æº‰µƒº–Ω«
 //¡Ω÷÷≤ƒ÷ £¨∆‰»Î…‰π‚Li£¨≥ˆ…‰π‚Lo¬˙◊„pow(Ni,2) * Lo = pow(No,2) * Li£¨ ∆‰ BTDF ¬˙◊„ pow(No,2) * BTDF(p,wi,wo) = pow(Ni,2) * BTDF(p,wo,wi) 
 
-
-//ºÚµ•æµ√Ê∑¥…‰ƒ£–Õ
-const float specularReflectionFactor = 0.8;
-
-vec3 BRDFSimpleSpecular(vec3 wo,vec3 wi)
-{
-	vec3 res;
-	res.x = specularReflectionFactor;
-	res.y = specularReflectionFactor;
-	res.z = specularReflectionFactor;
-	return res;
-	
-}
-
-const float speclarFactor = 30;//øÿ÷∆∏ﬂπ‚µƒ«Èøˆ
-
-float PDFSimpleSpecular(float NdotH/*∑®œﬂ∫Õ∞ÎΩ«÷Æº‰µƒcos÷µ*/){
-	float res;
-	//ºÚµ•blinn-phongæµ√Ê∑¥…‰pdf
-	float fac = pow(NdotH,speclarFactor);
-	res = (speclarFactor + 2)  *  fac / (2 * s_pi);
-	return res;
-}
-
-//”–“ª∂®¥÷≤⁄∂»µƒæµ√Ê∑¥…‰
-vec3 ExampleRoughnessSpecularBRDF(vec3 wo, vec3 n){
-	uint numSample = 16;
-	vec2 samplePoint;
-	vec3 wi;
-	vec3 light;
-	vec3 reflectLight = vec3(0);
-	vec3 halfVec;
-
-	float dw = 2 * s_pi / numSample;
-	vec3 y = -normalize(n);
-	vec3 x,z;
-	if((1 - abs(y.x)) > 0.00000001)
-	{
-		x = vec3(1,0,0);
-	}else {
-		x = vec3(0,1,0);
-	}
-	z = normalize(cross(x,y));
-	x = normalize(cross(y,z));
-	mat3 normalMatrix = mat3(x,y,z);
-
-	float nDotH = 0,pdf=0,nDotWi =0 ;
-	float totalPDF = 0;
-
-	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
-	{
-		//ªÒ»°∂˛Œ¨ÀÊª˙µ„£¨Œ™£®theta£¨phi£©
-		samplePoint = HaltonSample2D(sampleIndex); 
-		//Ω´ÀÊª˙µ„◊™ªØŒ™∞Î«Ú÷–µƒ∑ΩœÚ
-		float theta = samplePoint.x * 2* s_pi;
-		float fine = 0.5 * s_pi * samplePoint.y;
-		wi.x = cos(theta)* sin(fine);
-		wi.z = sin(theta)* sin(fine);
-		wi.y = -cos(fine);
-		wi = normalMatrix * wi;//±‰ªªµΩ ¿ΩÁ◊¯±Í
-		wi  = normalize(wi);
-		light = texture(skyTexture,wi).xyz;
-		//º∆À„half∞ÎœÚ¡ø
-		halfVec = normalize(wi+wo);
-		nDotH = clamp(dot(halfVec,n),0,1);
-		pdf = PDFSimpleSpecular(nDotH);
-
-
-		//gama Ω‚¬Î£¨◊™œﬂ–‘ø’º‰
-		light = pow(light, vec3(2.4));
-		if(pdf > 0.0001)
-		{
-			nDotWi = clamp(dot(n,wi),0,1);
-			vec3 curLight = BRDFSimpleSpecular(wo,wi) * light * nDotWi;
-			reflectLight+=  curLight * pdf;//’‚¿Ô≤ª ««ÛµƒÀ˘”–π‚µƒª˝∑÷◊‹∫Õ£¨∂¯ ««Ûµƒ√ø∏ˆπ‚”¶∏√‘⁄◊Ó÷’µƒΩ·π˚÷–’ºæ›µƒ±»¿˝£¨À˘“‘≤ªƒ‹≥˝“‘pdf
-			totalPDF +=pdf;
-		
-		}
-	}
-	//reflectLight /= numSample;
-	reflectLight /=  totalPDF;//πÈ“ªªØ
-	return reflectLight;
-
-}
-
-
-vec3 ExampleSimpleSpecularBRDF(vec3 wo, vec3 n){
-	vec3 wi = normalize(reflect(-wo,n));
-	vec3 light = texture(skyTexture,wi).xyz;
-	float nDotWi = clamp(dot(n,wi),0,1);
-	return light * nDotWi * specularReflectionFactor;
-}
-
-const float refractFactor = 0.8;
-vec3 ExampleSimpleBTDF(vec3 wo, vec3 n){
-	
-	vec3 wi = normalize(refract(-wo,n,1 / 1.5));
-	vec3 light = texture(skyTexture,wi).xyz;
-	float nDotWi = clamp(dot(-n,wi),0,1);
-	return light * nDotWi * specularReflectionFactor;
-
-}
 
 
 //Œ¢±Ì√Ê¿Ì¬€¿¥±Ì æ¥÷≤⁄∂»
@@ -314,24 +147,27 @@ float PDF_Sparrow(vec3 w,vec3 wo)
 
 }
 
-//ª˘”⁄Œ¢±Ì√Ê∑÷≤º£¨∑µªÿ¥”wo¥¶ø¥£¨’€…‰»Î…‰π‚wiµƒ∑÷≤º
-float PDF_Refract(vec3 w,vec3 wo,float eta/*œ‡∂‘’€…‰¬ : ΩÁ√Êµƒ≤ƒ÷ ΩÈ÷ µƒ’€…‰¬ ni  / ≥ˆ…‰π‚À˘‘⁄µƒΩÈ÷ µƒ’€…‰¬ no*/){
+//ª˘”⁄Œ¢±Ì√Ê∑÷≤º£¨∑µªÿ¥”wo¥¶ø¥£¨’€…‰»Î…‰π‚wiµƒ∑÷≤º,Õ∆µº¿¥‘¥¿¥◊‘Microfacet Models for Refraction through Rough Surfaces’‚∆™¬€Œƒ
+float PDF_Refract(vec3 w,vec3 wo,float eta/*œ‡∂‘’€…‰¬ : »Î…‰π‚À˘‘⁄µƒ≤ƒ÷ ΩÈ÷ µƒ’€…‰¬ ni  / ≥ˆ…‰π‚À˘‘⁄µƒΩÈ÷ µƒ’€…‰¬ no*/){
 	//”…”⁄
-	vec3 wi = reflect(-wo,w);
-	wi = normalize(wi);
-	//ªÒ»°¥”wo¥¶ø¥∑¥…‰π‚µƒpdf
-	float pdf = PDF_Sparrow(w,wo);
-	//ª˘”⁄∑¥…‰π‚µƒ∑÷≤ºº∆À„’€…‰»Î…‰π‚µƒ∑÷≤º   dwi/dwt = dwo/dwt
-	float cosTheta_i = max(dot(wi,w),0);
-	vec3 wt = refract(-wo,w,eta);
-	float cosTheta_t = max(dot(wt,-w),0);
-	if(cosTheta_i == 0)
+
+	//ªÒ»°¥”wo¥¶ø¥wmµƒpdf
+	float pdf = 0;
+	// π”√∫Õwoœ‡πÿµƒ∑®œﬂ∑÷≤º
+	pdf = PDF2_GGX(w,wo);
+	//
+	//pdf=PDF_GGX(w);
+	float wmDotWo = max(dot(w,wo),0);
+	vec3 wi = refract(-wo,w,1/eta);
+	float wiDotWm = dot(wi,w);
+
+	float denom = pow(wiDotWm + wmDotWo / eta,2 );
+	if(denom == 0)
 	{
-		return 0 ; 
+		return 0;
 	}
-	float cosTheta_o = cosTheta_i;//≥ˆ…‰π‚µƒcos÷µµ»”⁄∑¥…‰π‚µƒcos÷µ
-	cosTheta_i = cosTheta_t;//’€…‰π‚◊˜Œ™»Î…‰π‚µƒcos÷µ
-	return pdf * pow(eta,2) * cosTheta_i / cosTheta_o;
+	float res = pdf * abs(wiDotWm) / denom;
+	return res;
 }
 
 
@@ -378,109 +214,6 @@ float Frenel_Reflect_Complex(float cosTheta_i/*»Î…‰π‚∫Õ∑®œﬂµƒº–Ω«*/,vec2 eta/*et
 
 }
 
-//Sparrow ƒ£–ÕµƒBRDF æ¿˝
-vec3 ExampleSparrowBRDT(vec3 wo,vec3 n)
-{
-	uint numSample = 100;
-	vec2 samplePoint;
-	vec3 wi;
-	vec3 light;
-	vec3 reflectLight = vec3(0);
-	vec3 halfVec;
-
-	float dw = 2 * s_pi / numSample;
-	vec3 y = -normalize(n);
-	vec3 x,z;
-	if((1 - abs(y.x)) > 0.00000001)
-	{
-		x = vec3(1,0,0);
-	}else {
-		x = vec3(0,1,0);
-	}
-	z = normalize(cross(x,y));
-	x = normalize(cross(y,z));
-	mat3 normalMatrix = mat3(x,y,z);
-	mat3 normalMatrixInverse  = inverse(normalMatrix);
-
-	float pdf=0,nDotWi =0 ;
-	float totalPDF = 0,totalRefractPDF = 0;
-	vec3 refractTotalLight = vec3(0);
-	float eta = 1.5/1;
-	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
-	{
-		//ªÒ»°∂˛Œ¨ÀÊª˙µ„£¨Œ™£®theta£¨phi£©
-		samplePoint = HaltonSample2D(sampleIndex); 
-		//Ω´ÀÊª˙µ„◊™ªØŒ™∞Î«Ú÷–µƒ∑ΩœÚ
-		float theta = samplePoint.x * 2* s_pi;
-		float fine = 0.5 * s_pi * samplePoint.y;
-		wi.x = cos(theta)* sin(fine);
-		wi.z = sin(theta)* sin(fine);
-		wi.y = -cos(fine);
-		wi = normalize(wi);
-		//Ω´wo◊™µΩæ÷≤øø’º‰
-		vec3 localWo = normalMatrixInverse * normalize(wo); 
-		//ªÒµ√∞ÎœÚ¡ø
-		halfVec = normalize(wi+localWo);
-
-		//º∆À„sparrowƒ£–Õµƒ brdfœÓ∑¥…‰œÓ
-		
-		pdf = PDF_Sparrow(halfVec,localWo);//wiµƒpdf
-		float cosXXX = max(dot(halfVec,localWo),0);
-		float frenel = Frenel_Reflect(max(dot(wi,vec3(0,-1,0)),0),eta) ;//∑∆ƒ˘∂˚œÓ
-		float unmask = UnMaskAndUnShadow2(localWo,wi);//∑«º∏∫Œ’⁄±Œ∫Õ“ı”∞œÓ
-		float curbrdf = pdf* frenel * unmask;
-
-		//≤…—˘
-		wi = normalMatrix * wi;//±‰ªªµΩ ¿ΩÁ◊¯±Í
-		wi  = normalize(wi);
-		light = texture(skyTexture,wi).xyz;
-
-		//gama Ω‚¬Î£¨◊™œﬂ–‘ø’º‰
-		light = pow(light, vec3(2.4));
-		nDotWi = clamp(dot(n,wi),0,1);
-		vec3 curLight = curbrdf * light * nDotWi;
-		reflectLight+=  curLight * pdf;//’‚¿Ô≤ª ««ÛµƒÀ˘”–π‚µƒª˝∑÷◊‹∫Õ£¨∂¯ ««Ûµƒ√ø∏ˆπ‚”¶∏√‘⁄◊Ó÷’µƒΩ·π˚÷–’ºæ›µƒ±»¿˝£¨À˘“‘≤ªƒ‹≥˝“‘pdf
-		totalPDF +=pdf;
-
-
-		//º∆À„’€…‰µƒBTDF
-		float btdf_p_wo_wi = 1-curbrdf;
-		//º∆À„¥”≤ƒ÷ ƒ⁄≤ø’€…‰≥ˆ¿¥µƒπ‚µƒbtdf
-		float btdf_p_wi_wo = Ft_P_Wi_Wo(btdf_p_wo_wi,eta);
-		//º∆À„’€…‰π‚◊˜Œ™»Î…‰π‚µƒ∏≈¬ √‹∂»
-		float pdf_refract = PDF_Refract(halfVec,localWo,eta);
-		vec3 wi_refract = refract(-localWo,halfVec,eta);
-		wi_refract = normalize(wi);
-		if(length(wi_refract) == 0)
-		{
-			continue;
-		}
-		//Ω´’€…‰»Î…‰π‚±‰ªªµΩ ¿ΩÁø’º‰
-		wi_refract = normalMatrix * wi_refract;//±‰ªªµΩ ¿ΩÁ◊¯±Í
-		wi_refract  = normalize(wi_refract);
-		light = texture(skyTexture,wi_refract).xyz;
-		light = pow(light, vec3(2.4));
-		refractTotalLight += pdf_refract * btdf_p_wi_wo * light;
-		totalRefractPDF+= pdf_refract;
-	}
-	//reflectLight /= numSample;
-	reflectLight /=  totalPDF;//πÈ“ªªØ
-	reflectLight *= (totalPDF) /(totalPDF + totalRefractPDF);
-	refractTotalLight /= totalRefractPDF;//πÈ“ªªØ
-	refractTotalLight *= (totalRefractPDF) /(totalPDF + totalRefractPDF);
-
-	//÷±Ω”≤…—˘’€…‰π‚
-	//vec3 cur_ss = refract(-wo,n,1.2/1);
-	//cur_ss  = normalize(cur_ss);
-	//light = texture(skyTexture,cur_ss).xyz;
-	//light = pow(light, vec3(2.4));
-
-	vec3 resLight = reflectLight + refractTotalLight;
-	return resLight;
-
-
-
-}
 
 //lambert¬˛∑¥…‰ƒ£–Õ£¨»Î…‰π‚±ªæ˘‘»∑¥…‰µΩ∞Î‘≤µƒ∏˜∏ˆ∑ΩœÚ£¨∆‰√ø∏ˆ»Î…‰π‚µƒ∑¥…‰œÓf_p_wo_wi = R / PI,RŒ™∑¥…‰œµ ˝£¨±Ì æ»Î…‰µƒπ‚”–∂‡…Ÿª·±ª∑¥…‰≥ˆ»•
 float R_lambert = 0.8;//∂®“Âlambertµƒ∑¥…‰œµ ˝
@@ -786,25 +519,6 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/* ¿ΩÁø’º‰÷–µƒ≥ˆ…‰œ
 		vec3 curLight = curWeight * light;
 		reflectLight+=  curLight;
 		totalWeight += curWeight;
-//		//º∆À„’€…‰µƒBTDF
-//		float btdf_p_wo_wi = 1-curbrdf;
-//		//º∆À„¥”≤ƒ÷ ƒ⁄≤ø’€…‰≥ˆ¿¥µƒπ‚µƒbtdf
-//		float btdf_p_wi_wo = Ft_P_Wi_Wo(btdf_p_wo_wi,eta);
-//		//º∆À„’€…‰π‚◊˜Œ™»Î…‰π‚µƒ∏≈¬ √‹∂»
-//		float pdf_refract = PDF_Refract(halfVec,localWo,eta);
-//		vec3 wi_refract = refract(-localWo,halfVec,eta);
-//		wi_refract = normalize(wi);
-//		if(length(wi_refract) == 0)
-//		{
-//			continue;
-//		}
-//		//Ω´’€…‰»Î…‰π‚±‰ªªµΩ ¿ΩÁø’º‰
-//		wi_refract = normalMatrix * wi_refract;//±‰ªªµΩ ¿ΩÁ◊¯±Í
-//		wi_refract  = normalize(wi_refract);
-//		light = texture(skyTexture,wi_refract).xyz;
-//		light = pow(light, vec3(2.4));
-//		refractTotalLight += pdf_refract * btdf_p_wi_wo * light;
-//		totalRefractPDF+= pdf_refract;
 	}
 	reflectLight /=  totalWeight;//πÈ“ªªØ
 
@@ -814,24 +528,255 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/* ¿ΩÁø’º‰÷–µƒ≥ˆ…‰œ
 }
 
 //”–¥÷≤⁄∂»µƒ π”√Œ¢±Ì√Ê¿Ì¬€µƒ’€…‰ƒ£–Õ
-vec3 ReflectModelRoughnessWithMrcrofacetTheoryRefract(){
+vec3 ReflectModelRoughnessWithMrcrofacetTheoryRefract(vec3 wo/* ¿ΩÁø’º‰÷–µƒ≥ˆ…‰œÚ¡ø*/,vec3 n/* ¿ΩÁø’º‰÷–µƒ∑®œÚ¡ø*/){
+	wo = normalize(wo);
+	vec3 y = -normalize(n);
+	vec3 x,z;
+	if((1 - abs(y.x)) > 0.00000001)
+	{
+		x = vec3(1,0,0);
+	}else {
+		x = vec3(0,1,0);
+	}
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 normalMatrix = mat3(x,y,z);
+	mat3 normalMatrixInverse  = inverse(normalMatrix);
 
-	return vec3(0);
+
+	vec3 refractLight = vec3(0);
+	float totalWeight = 0;
+
+	uint numStepTheta = 30,numStepFine = 10;
+	float deltaTheta = 2*s_pi / numStepTheta,deltaFine = 0.5*s_pi / numStepFine;
+	float ni = 1.5,no = 1;
+
+
+	//º∆À„¿ÌœÎ’€…‰π‚µƒtheta∫Õfine
+	vec3 wt = refract(-wo,n,no/ni);
+	wt = normalize(normalMatrixInverse * wt);
+
+	//≥ˆ…‰œÚ¡ø◊™µΩæ÷≤øø’º‰
+	wo = normalize(normalMatrixInverse * wo);
+
+	
+
+	//º∆À„wr‘⁄±æµÿ◊¯±Íœµ÷–µƒtheta÷µ∫Õfine÷µ
+	float theta_t = atan(wt.z,wt.x);
+	if(theta_t <0)
+	{
+		theta_t+=2* s_pi;
+	}
+	float fine_t = acos(-wt.y) ; 
+
+	uint numSample = 20;
+	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
+	{
+		//ªÒ»°∂˛Œ¨ÀÊª˙µ„£¨Œ™£®theta£¨phi£©
+		vec2 samplePoint = HaltonSample2D(sampleIndex); 
+
+
+		//÷ÿ“™–‘≤…—˘∑÷≤º£¨º∆À„≤…—˘œÚ¡øµƒtheta∫Õfine÷µ, π”√inverse CDF±»Ωœ¬È∑≥£¨≤ª∫√º∆À„£¨’‚¿ÔºÚµ• π”√≤…—˘œÚ¡ø∫Õ∑¥…‰œÚ¡øµƒ”‡œ“÷µ∑¥œÚªÒ»°≤…—˘œÚ¡ø
+		samplePoint -=0.5;
+		samplePoint *=2;//±‰µΩ-1µΩ1÷Æº‰
+		vec2 deltaThetaFine = FittingInverseCDFSparrowReflect(samplePoint);
+			
+		//∏˘æ›’€…‰œÚ¡øµƒtheta∫Õfine÷µ“‘º∞±‰ªª∫Ûµƒ—˘±æµ„∫Õ∑¥…‰œÚ¡øtheta∫Õfineµƒ≤Ó÷µªÒµ√—˘±æœÚ¡øµƒtheta∫Õfine÷µ
+		float theta = deltaThetaFine.x + theta_t;
+		float fine = deltaThetaFine.y + fine_t;
+
+		vec3 wi;
+		wi.x = cos(theta)* sin(fine);
+		wi.z = sin(theta)* sin(fine);
+		wi.y = -cos(fine);
+		wi = normalize(wi);
+
+		//º∆À„wm
+		vec3 wm = -(ni * wi + no * wo);
+		wm = normalize(wm);
+		float wtPdf = 0;
+
+		if(length(wm) != 0)
+		{
+			wtPdf  = PDF_Refract(wm,wo,ni/no);
+
+			float wiDotWm = dot(wi,-wm);
+
+			if(wiDotWm != 0 && wtPdf>0)
+			{
+				float unmask = UnMaskAndUnShadow2(wo,wi);
+				float woDotWm = dot(wo,wm);
+				//º∆À„’€…‰±»¿˝
+				float frenel = FrenelReflectRatio(woDotWm,no/ni);
+				float refractRatio = 1-frenel;
+				float ft_p_wo_wi = wtPdf * unmask * refractRatio / wiDotWm;
+				//≤…—˘
+				wi = normalMatrix * wi;//±‰ªªµΩ ¿ΩÁ◊¯±Í
+				wi  = normalize(wi);
+				vec3 light = texture(skyTexture,wi).xyz;
+				//gama Ω‚¬Î£¨◊™œﬂ–‘ø’º‰
+				light = pow(light, vec3(2.4));
+				float curWeight = ft_p_wo_wi * wiDotWm;
+				//vec3 cl = curWeight * light ;
+				refractLight += light * curWeight;
+				totalWeight += curWeight;
+				
+			}
+	
+
+		}
+
+	}
+
+
+
+	
+	refractLight /=  totalWeight;//πÈ“ªªØ
+
+	return refractLight;
+
+
 }
+
+//”–¥÷≤⁄∂»µƒ π”√Œ¢±Ì√Ê¿Ì¬€µƒ∑¥…‰º”’€…‰ƒ£–Õ
+vec3 ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(vec3 wo/* ¿ΩÁø’º‰÷–µƒ≥ˆ…‰œÚ¡ø*/,vec3 n/* ¿ΩÁø’º‰÷–µƒ∑®œÚ¡ø*/){
+	wo = normalize(wo);
+	vec3 y = -normalize(n);
+	vec3 x,z;
+	if((1 - abs(y.x)) > 0.00000001)
+	{
+		x = vec3(1,0,0);
+	}else {
+		x = vec3(0,1,0);
+	}
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 normalMatrix = mat3(x,y,z);
+	mat3 normalMatrixInverse  = inverse(normalMatrix);
+
+	
+	vec3 refractLight = vec3(0);
+	vec3 reflectLight = vec3(0);
+	float reflectTotalWeight = 0,refractTotalWeight = 0;
+
+	uint numStepTheta = 30,numStepFine = 10;
+	float deltaTheta = 2*s_pi / numStepTheta,deltaFine = 0.5*s_pi / numStepFine;
+	float ni = 1.5,no = 1;
+	for(uint i = 0;i < numStepTheta;i++)
+	{
+		for(uint j = 0;j < numStepFine;j++)
+		{
+			vec2 samplePoint = HaltonSample2D(j* numStepTheta + i);
+			float sampleTheta = i * deltaTheta + samplePoint.x * deltaTheta;
+			float sampleFine = j * deltaFine + samplePoint.y * deltaFine;
+			
+			//º∆À„∑¥…‰
+			{
+				vec3 wi;
+				wi.x = cos(sampleTheta)* sin(sampleFine);
+				wi.z = sin(sampleTheta)* sin(sampleFine);
+				wi.y = -cos(sampleFine);
+				wi = normalize(wi);
+
+				//Ω´wo◊™µΩæ÷≤øø’º‰
+				vec3 localWo = normalize( normalMatrixInverse * normalize(wo)); 
+		
+				//ªÒµ√∞ÎœÚ¡ø◊˜Œ™Œ¢∆Ω√Êµƒ∑®œÚ¡ø
+				vec3 halfVec = normalize(wi+localWo);
+				float nDotWir = clamp(dot(halfVec,wi),0,1);
+		
+				//º∆À„sparrowƒ£–Õµƒ brdfœÓ∑¥…‰œÓ
+		
+				float pdf = PDF_Sparrow(halfVec,localWo);//wiµƒpdf
+				if(pdf != 0 && nDotWir!=0)
+				{
+					float frenel = FrenelReflectRatio(nDotWir,no / ni) ;//∑∆ƒ˘∂˚œÓ
+					float unmask = UnMaskAndUnShadow2(localWo,wi);//∑«º∏∫Œ’⁄±Œ∫Õ“ı”∞œÓ
+					float curbrdf = pdf* frenel * unmask / nDotWir;
+
+					//≤…—˘
+					wi = normalMatrix * wi;//±‰ªªµΩ ¿ΩÁ◊¯±Í
+					wi  = normalize(wi);
+					vec3 light = texture(skyTexture,wi).xyz;
+
+
+					//gama Ω‚¬Î£¨◊™œﬂ–‘ø’º‰
+					light = pow(light, vec3(2.4));
+					float curWeight = curbrdf * nDotWir;//»®÷ÿ,”…”⁄sparrowƒ£–Õµƒbrdf÷–∫¨”–pdfœÓ£¨À˘“‘≤ªƒ‹‘Ÿ≥˝“‘pdf£¨Õ®π˝÷ÿ“™–‘≤…—˘µƒµƒ∑Ω Ωº∆À„≥ˆ…‰π‚£¨‘Ÿ≥˝“‘pdfæÕ÷ÿ∏¥¥¶¿Ì¡Àpdf£¨“≤æÕ ß»•pdfµƒ“‚“Â
+					vec3 curLight = light * curWeight;
+					reflectTotalWeight += curWeight;
+					reflectLight+= curLight;
+				}		
+			
+			}
+			
+			
+			//º∆À„’€…‰
+			{
+				vec3 ws;
+				ws.x = cos(sampleTheta)* sin(sampleFine);
+				ws.z = sin(sampleTheta)* sin(sampleFine);
+				ws.y = -cos(sampleFine);
+				ws = normalize(ws);
+				ws.y = -ws.y;
+
+
+				//º∆À„wm
+				vec3 wm = -(ni * ws + no * wo);
+				wm = normalize(wm);
+
+				
+				float woDotWm = dot(wo,wm);
+				float wiDotWm = dot(ws,-wm);
+				//º∆À„’€…‰±»¿˝
+				float frenel = FrenelReflectRatio(woDotWm,no/ni);
+				float refractRatio = 1-frenel;
+				float wtPdf = 0;
+
+
+				if(length(wm) != 0)
+				{
+					wtPdf  = PDF_Refract(wm,wo,1.5/1);
+				}
+
+				float unmask = UnMaskAndUnShadow2(wo,ws);
+
+				if(wiDotWm != 0)
+				{
+					float ft_p_wo_wi = wtPdf * unmask * refractRatio / wiDotWm;
+					//≤…—˘
+					ws = normalMatrix * ws;//±‰ªªµΩ ¿ΩÁ◊¯±Í
+					ws  = normalize(ws);
+					vec3 light = texture(skyTexture,ws).xyz;
+					//gama Ω‚¬Î£¨◊™œﬂ–‘ø’º‰
+					light = pow(light, vec3(2.4));
+					refractLight+= ft_p_wo_wi * light * wiDotWm;
+					refractTotalWeight += ft_p_wo_wi * wiDotWm;
+				}
+
+			}	
+		}	
+	}
+	reflectLight/=reflectTotalWeight;
+	refractLight/=refractTotalWeight;
+
+	//vec3 res = (reflectLight + refractLight)/(reflectTotalWeight + refractTotalWeight);
+	return reflectLight;
+
+
+}
+
 
 void main(){
 
 	vec3 wo = normalize(viewPosition - inWorldPosition);
 	vec3 color;
-	//color = ExampleLambertBSDF(wo,inNormal);
-	//color += ExampleRoughnessSpecularBRDF(wo,inNormal);
-	//color = ExampleSimpleSpecularBRDF(wo,inNormal);
-	//color = ExampleSimpleBTDF(wo,inNormal);
-	//color = ExampleSparrowBRDT(wo,inNormal);
 	//color = ReflectModelLambertDiffuseReflect(wo,inNormal);
 	//color = ReflectModelSpecularReflectAndRefract(wo,inNormal);
 	//color = ReflectModelMetalReflect(wo,inNormal);
-	color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
+	//color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
+	color = ReflectModelRoughnessWithMrcrofacetTheoryRefract(wo,inNormal);
+	//color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
 	//gama Ω‚¬Î
 	//color = pow(color, vec3(2.4));
 	outColor = vec4(color,1.0);
