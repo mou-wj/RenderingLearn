@@ -85,13 +85,20 @@ void ReflectionModelsExample::InitResourceInfos()
 	subpassDrawGeoInfos[1] = { 1 };
 
 	std::vector<std::string> skyboxImages = {
-	std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
-	std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg",//-x
+	//std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
+	//std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg",//-x
+	////因为采样使用的是glsl的texture函数，其计算纹理坐标的方式是根据opengl的NDC坐标进行的，即按照opengl的NDC，其+y方向应该是向上的，而vulkan的+y是向下的，为了适配glsl的texture函数，这里可以反转+-y所对应的图片，但是反转+-y图片其他方向任然存在上下颠倒问题，所以不采取反转+-y图片而进行所有面图片的反转读取
+	//std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg",//+y
+	//std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg",//-y
+	//std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg",//+z
+	//std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg"//-z
+	std::string(PROJECT_DIR) + "/resources/pic/skybox1/right.png",//+x
+	std::string(PROJECT_DIR) + "/resources/pic/skybox1/left.png",//-x
 	//因为采样使用的是glsl的texture函数，其计算纹理坐标的方式是根据opengl的NDC坐标进行的，即按照opengl的NDC，其+y方向应该是向上的，而vulkan的+y是向下的，为了适配glsl的texture函数，这里可以反转+-y所对应的图片，但是反转+-y图片其他方向任然存在上下颠倒问题，所以不采取反转+-y图片而进行所有面图片的反转读取
-	std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg",//+y
-	std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg",//-y
-	std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg",//+z
-	std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg"//-z
+	std::string(PROJECT_DIR) + "/resources/pic/skybox1/bottom.png",//+y
+	std::string(PROJECT_DIR) + "/resources/pic/skybox1/top.png",//-y
+	std::string(PROJECT_DIR) + "/resources/pic/skybox1/front.png",//+z
+	std::string(PROJECT_DIR) + "/resources/pic/skybox1/back.png"//-z
 	};
 	textureBindInfos["skybox"] = TextureBindInfo(skyboxImages);
 	textureBindInfos["skybox"].binding = 1;

@@ -290,31 +290,20 @@ vec3 ReflectModelSpecularReflectAndRefract(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 
 	float refractRatio = 1 - reflectRatio;
 
 
-	
-	//¼ÆËã·´Éä¹âµÄbrdf£¬´ËÊ±µÄbrdf¾ÍÎªÄÚÄù¶ûÏî³ıÒÔ·´Éä½ÇºÍ·¨ÏòÁ¿¼Ğ½ÇµÄcosÖµ£¬´ËÊ±¼ÆËãÈçÏÂ:
+	//¼ÆËã·´Éä¹âµÄ¹±Ï×
+	totalLight+= reflectRatio* reflectLight;
 
-	float woDotN = max(dot(wi,n),0.000000001);//ÕâÏîÒıÈë×÷ÓÃÖ»ÊÇÓÃÀ´±íÊöbrdfµÄĞÎÊ½£¬ËùÒÔÖ±½ÓÏŞÖÆ×îĞ¡Öµ·ÀÖ¹³öÏÖ³ı0´íÎó
-	float fr_p_wo_wi = reflectRatio / woDotN;//¸ÃÄ£Ê½µÄbrdf
-	float wiDotN = woDotN;
-	vec3 reflectTotalLight = fr_p_wo_wi * reflectLight * wiDotN;
-	totalLight += reflectTotalLight; 
 	
 	//¼ÆËãÕÛÉä¹â·½Ïò
 	vec3 wt = refract(-wo,n,1/1.5);
 	if(length(wt)!=0)//ÕÛÉä¹â´æÔÚ
 	{
-		float wtDotNegN = max(dot(-n,wt),0.000000001);//ÕâÏîÒıÈë×÷ÓÃÖ»ÊÇÓÃÀ´±íÊöbrdfµÄĞÎÊ½£¬ËùÒÔÖ±½ÓÏŞÖÆ×îĞ¡Öµ·ÀÖ¹³öÏÖ³ı0´íÎó
-		//¼ÆËãÕÛÉä¹âµÄbtdf
-		float ft_p_wt_wi = refractRatio / wtDotNegN;
-		//¼ÆËã´Ó½éÖÊÕÛÉäµ½wo½éÖÊÖĞµÄbtdf
-		float ft_p_wi_wt = ft_p_wt_wi * pow(1 / 1.5,2);
-		vec3 refractLight = texture(skyTexture,wt).xyz;
+		vec3 refractSampleLight = texture(skyTexture,wt).xyz;
 		//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
-		refractLight = pow(refractLight, vec3(2.4));
-		vec3 refractTotalLight = ft_p_wi_wt * refractLight * wtDotNegN;
-		totalLight += refractTotalLight;	
+		refractSampleLight = pow(refractSampleLight, vec3(2.4));
+		totalLight += refractSampleLight * refractRatio;
+		
 	}
-
 	return totalLight;
 }
 
@@ -458,7 +447,6 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 	vec3 reflectLight = vec3(0);
 	float totalWeight = 0;
 	float eta = 1/1.5;
-	uint validNumSample = 0;
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
 		//»ñÈ¡¶şÎ¬Ëæ»úµã£¬Îª£¨theta£¬phi£©
@@ -500,12 +488,11 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 		{
 			continue;
 		}
-		validNumSample++;
 
 
 		float frenel = FrenelReflectRatio(nDotWi,eta) ;//·ÆÄù¶ûÏî
 		float unmask = UnMaskAndUnShadow2(localWo,wi);//·Ç¼¸ºÎÕÚ±ÎºÍÒõÓ°Ïî
-		float curbrdf = pdf* frenel * unmask;
+		float curbrdf = pdf* frenel * unmask / nDotWi;
 
 		//²ÉÑù
 		wi = normalMatrix * wi;//±ä»»µ½ÊÀ½ç×ø±ê
@@ -521,7 +508,7 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 		totalWeight += curWeight;
 	}
 	reflectLight /=  totalWeight;//¹éÒ»»¯
-
+	reflectLight = vec3(totalWeight/numSample,0,0);
 	return reflectLight;
 
 
@@ -561,7 +548,7 @@ vec3 ReflectModelRoughnessWithMrcrofacetTheoryRefract(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏ
 
 	
 
-	//¼ÆËãwrÔÚ±¾µØ×ø±êÏµÖĞµÄthetaÖµºÍfineÖµ
+	//¼ÆËãwtÔÚ±¾µØ×ø±êÏµÖĞµÄthetaÖµºÍfineÖµ
 	float theta_t = atan(wt.z,wt.x);
 	if(theta_t <0)
 	{
@@ -654,114 +641,150 @@ vec3 ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(vec3 wo/*ÊÀ½ç¿Õ¼
 	mat3 normalMatrix = mat3(x,y,z);
 	mat3 normalMatrixInverse  = inverse(normalMatrix);
 
-	
-	vec3 refractLight = vec3(0);
-	vec3 reflectLight = vec3(0);
-	float reflectTotalWeight = 0,refractTotalWeight = 0;
-
-	uint numStepTheta = 30,numStepFine = 10;
-	float deltaTheta = 2*s_pi / numStepTheta,deltaFine = 0.5*s_pi / numStepFine;
+	vec3 totalLight = vec3(0);
+	float totalWeight = 0;
 	float ni = 1.5,no = 1;
-	for(uint i = 0;i < numStepTheta;i++)
+
+	uint numSample = 20;
+
+	//¼ÆËãÀíÏë·´ÉäºÍÕÛÉäÏòÁ¿
+
+	//½«·´ÉäÏòÁ¿±ä»»µ½·¨ÏòÁ¿µÄ±¾µØ×ø±êÏµÖĞ
+	vec3 wr = reflect(-wo,n);
+	wr = normalize(normalMatrixInverse * wr);
+	//¼ÆËãwrÔÚ±¾µØ×ø±êÏµÖĞµÄthetaÖµºÍfineÖµ
+	float theta_r = atan(wr.z,wr.x);
+	if(theta_r <0)
 	{
-		for(uint j = 0;j < numStepFine;j++)
-		{
-			vec2 samplePoint = HaltonSample2D(j* numStepTheta + i);
-			float sampleTheta = i * deltaTheta + samplePoint.x * deltaTheta;
-			float sampleFine = j * deltaFine + samplePoint.y * deltaFine;
+		theta_r+=2* s_pi;
+	}
+	float fine_r = acos(-wr.y) ; 
+
+
+	//¼ÆËãÀíÏëÕÛÉä¹âµÄthetaºÍfine
+	vec3 wt = refract(-wo,n,no/ni);
+	wt = normalize(normalMatrixInverse * wt);
+
+	//¼ÆËãwtÔÚ±¾µØ×ø±êÏµÖĞµÄthetaÖµºÍfineÖµ
+	float theta_t = atan(wt.z,wt.x);
+	if(theta_t <0)
+	{
+		theta_t+=2* s_pi;
+	}
+	float fine_t = acos(-wt.y) ; 
+
+	//³öÉäÏòÁ¿×ªµ½¾Ö²¿¿Õ¼ä
+	wo = normalize(normalMatrixInverse * wo);
+	float refractTotalWeight = 0,reflectTotalWeight = 0;
+
+	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
+	{
+		//»ñÈ¡¶şÎ¬Ëæ»úµã£¬Îª£¨theta£¬phi£©
+		vec2 samplePoint = HaltonSample2D(sampleIndex); 
+
+
+		//ÖØÒªĞÔ²ÉÑù·Ö²¼£¬¼ÆËã²ÉÑùÏòÁ¿µÄthetaºÍfineÖµ,Ê¹ÓÃinverse CDF±È½ÏÂé·³£¬²»ºÃ¼ÆËã£¬ÕâÀï¼òµ¥Ê¹ÓÃ²ÉÑùÏòÁ¿ºÍ·´ÉäÏòÁ¿µÄÓàÏÒÖµ·´Ïò»ñÈ¡²ÉÑùÏòÁ¿
+		samplePoint -=0.5;
+		samplePoint *=2;//±äµ½-1µ½1Ö®¼ä
+		vec2 deltaThetaFine = FittingInverseCDFSparrowReflect(samplePoint);
 			
-			//¼ÆËã·´Éä
+		//¼ÆËã·´Éä
+		if(true){
+			float sampleTheta = theta_r+deltaThetaFine.x;
+			float sampleFine = fine_r+deltaThetaFine.y;
+			vec3 wi;
+			wi.x = cos(sampleTheta)* sin(sampleFine);
+			wi.z = sin(sampleTheta)* sin(sampleFine);
+			wi.y = -cos(sampleFine);
+			wi = normalize(wi);
+
+		
+			//»ñµÃ°ëÏòÁ¿×÷ÎªÎ¢Æ½ÃæµÄ·¨ÏòÁ¿
+			vec3 halfVec = normalize(wi+wo);
+			float nDotWir = clamp(dot(halfVec,wi),0,1);
+		
+			//¼ÆËãsparrowÄ£ĞÍµÄ brdfÏî·´ÉäÏî
+		
+			float pdf = PDF_Sparrow(halfVec,wo);//wiµÄpdf
+			if(pdf != 0 && nDotWir!=0)
 			{
-				vec3 wi;
-				wi.x = cos(sampleTheta)* sin(sampleFine);
-				wi.z = sin(sampleTheta)* sin(sampleFine);
-				wi.y = -cos(sampleFine);
-				wi = normalize(wi);
+				float frenel = FrenelReflectRatio(nDotWir,no / ni) ;//·ÆÄù¶ûÏî
+				float unmask = UnMaskAndUnShadow2(wo,wi);//·Ç¼¸ºÎÕÚ±ÎºÍÒõÓ°Ïî
+				float curbrdf = pdf* frenel * unmask / nDotWir;
 
-				//½«wo×ªµ½¾Ö²¿¿Õ¼ä
-				vec3 localWo = normalize( normalMatrixInverse * normalize(wo)); 
+				//²ÉÑù
+				wi = normalMatrix * wi;//±ä»»µ½ÊÀ½ç×ø±ê
+				wi  = normalize(wi);
+				vec3 light = texture(skyTexture,wi).xyz;
+
+
+				//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
+				light = pow(light, vec3(2.4));
+				float curWeight = curbrdf * nDotWir;//È¨ÖØ,ÓÉÓÚsparrowÄ£ĞÍµÄbrdfÖĞº¬ÓĞpdfÏî£¬ËùÒÔ²»ÄÜÔÙ³ıÒÔpdf£¬Í¨¹ıÖØÒªĞÔ²ÉÑùµÄµÄ·½Ê½¼ÆËã³öÉä¹â£¬ÔÙ³ıÒÔpdf¾ÍÖØ¸´´¦ÀíÁËpdf£¬Ò²¾ÍÊ§È¥pdfµÄÒâÒå
+				vec3 curLight = light * curWeight;
+				totalWeight += curWeight;
+				totalLight+= curLight;
+				reflectTotalWeight+=curWeight;
+			}		
 		
-				//»ñµÃ°ëÏòÁ¿×÷ÎªÎ¢Æ½ÃæµÄ·¨ÏòÁ¿
-				vec3 halfVec = normalize(wi+localWo);
-				float nDotWir = clamp(dot(halfVec,wi),0,1);
-		
-				//¼ÆËãsparrowÄ£ĞÍµÄ brdfÏî·´ÉäÏî
-		
-				float pdf = PDF_Sparrow(halfVec,localWo);//wiµÄpdf
-				if(pdf != 0 && nDotWir!=0)
+		}
+
+		//¼ÆËãÕÛÉä
+		if(false){
+
+			float sampleTheta = theta_t+deltaThetaFine.x;
+			float sampleFine = fine_t+deltaThetaFine.y;
+
+			vec3 wi;
+			wi.x = cos(sampleTheta)* sin(sampleFine);
+			wi.z = sin(sampleTheta)* sin(sampleFine);
+			wi.y = -cos(sampleFine);
+			wi = normalize(wi);
+
+			//¼ÆËãwm
+			vec3 wm = -(ni * wi + no * wo);
+			wm = normalize(wm);
+			float wtPdf = 0;
+
+			if(length(wm) != 0)
+			{
+				wtPdf  = PDF_Refract(wm,wo,ni/no);
+
+				float wiDotWm = dot(wi,-wm);
+
+				if(wiDotWm != 0 && wtPdf>0)
 				{
-					float frenel = FrenelReflectRatio(nDotWir,no / ni) ;//·ÆÄù¶ûÏî
-					float unmask = UnMaskAndUnShadow2(localWo,wi);//·Ç¼¸ºÎÕÚ±ÎºÍÒõÓ°Ïî
-					float curbrdf = pdf* frenel * unmask / nDotWir;
-
+					float unmask = UnMaskAndUnShadow2(wo,wi);
+					float woDotWm = dot(wo,wm);
+					//¼ÆËãÕÛÉä±ÈÀı
+					float frenel = FrenelReflectRatio(woDotWm,no/ni);
+					float refractRatio = 1-frenel;
+					float ft_p_wo_wi = wtPdf * unmask * refractRatio / wiDotWm;
 					//²ÉÑù
 					wi = normalMatrix * wi;//±ä»»µ½ÊÀ½ç×ø±ê
 					wi  = normalize(wi);
 					vec3 light = texture(skyTexture,wi).xyz;
-
-
 					//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
 					light = pow(light, vec3(2.4));
-					float curWeight = curbrdf * nDotWir;//È¨ÖØ,ÓÉÓÚsparrowÄ£ĞÍµÄbrdfÖĞº¬ÓĞpdfÏî£¬ËùÒÔ²»ÄÜÔÙ³ıÒÔpdf£¬Í¨¹ıÖØÒªĞÔ²ÉÑùµÄµÄ·½Ê½¼ÆËã³öÉä¹â£¬ÔÙ³ıÒÔpdf¾ÍÖØ¸´´¦ÀíÁËpdf£¬Ò²¾ÍÊ§È¥pdfµÄÒâÒå
-					vec3 curLight = light * curWeight;
-					reflectTotalWeight += curWeight;
-					reflectLight+= curLight;
-				}		
-			
+					float curWeight = ft_p_wo_wi * wiDotWm;
+					//vec3 cl = curWeight * light ;
+					totalLight += light * curWeight;
+					totalWeight += curWeight;
+					refractTotalWeight +=curWeight;
+				}
+	
+
 			}
-			
-			
-			//¼ÆËãÕÛÉä
-			{
-				vec3 ws;
-				ws.x = cos(sampleTheta)* sin(sampleFine);
-				ws.z = sin(sampleTheta)* sin(sampleFine);
-				ws.y = -cos(sampleFine);
-				ws = normalize(ws);
-				ws.y = -ws.y;
 
-
-				//¼ÆËãwm
-				vec3 wm = -(ni * ws + no * wo);
-				wm = normalize(wm);
-
-				
-				float woDotWm = dot(wo,wm);
-				float wiDotWm = dot(ws,-wm);
-				//¼ÆËãÕÛÉä±ÈÀı
-				float frenel = FrenelReflectRatio(woDotWm,no/ni);
-				float refractRatio = 1-frenel;
-				float wtPdf = 0;
-
-
-				if(length(wm) != 0)
-				{
-					wtPdf  = PDF_Refract(wm,wo,1.5/1);
-				}
-
-				float unmask = UnMaskAndUnShadow2(wo,ws);
-
-				if(wiDotWm != 0)
-				{
-					float ft_p_wo_wi = wtPdf * unmask * refractRatio / wiDotWm;
-					//²ÉÑù
-					ws = normalMatrix * ws;//±ä»»µ½ÊÀ½ç×ø±ê
-					ws  = normalize(ws);
-					vec3 light = texture(skyTexture,ws).xyz;
-					//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
-					light = pow(light, vec3(2.4));
-					refractLight+= ft_p_wo_wi * light * wiDotWm;
-					refractTotalWeight += ft_p_wo_wi * wiDotWm;
-				}
-
-			}	
 		}	
+
 	}
-	reflectLight/=reflectTotalWeight;
-	refractLight/=refractTotalWeight;
+
+
+	totalLight/=totalWeight;//¹éÒ»»¯
 
 	//vec3 res = (reflectLight + refractLight)/(reflectTotalWeight + refractTotalWeight);
-	return reflectLight;
+	return totalLight; 
 
 
 }
@@ -774,8 +797,9 @@ void main(){
 	//color = ReflectModelLambertDiffuseReflect(wo,inNormal);
 	//color = ReflectModelSpecularReflectAndRefract(wo,inNormal);
 	//color = ReflectModelMetalReflect(wo,inNormal);
-	//color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
-	color = ReflectModelRoughnessWithMrcrofacetTheoryRefract(wo,inNormal);
+	color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
+	//color = ReflectModelRoughnessWithMrcrofacetTheoryRefract(wo,inNormal);
+	
 	//color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
 	//gama ½âÂë
 	//color = pow(color, vec3(2.4));
