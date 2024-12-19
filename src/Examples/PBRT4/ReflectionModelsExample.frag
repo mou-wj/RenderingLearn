@@ -65,9 +65,15 @@ float PDF_GGX(vec3 w)
 	}
 	fine = acos(-w.y); 
 	theta = atan(w.z,w.x);
-	float denominator = 1;
-	denominator *= s_pi * roughnessX * roughnessY * pow(cos(fine),4);
-	denominator *= pow(1 + pow(tan(fine),2) * (pow(cos(theta) / roughnessX,2) + pow(sin(theta)/ roughnessY,2)) ,2);
+	//float denominator = 1;
+	float constFactor = s_pi * roughnessX * roughnessY;
+	float cosFineWm4 = pow(cos(fine),4);
+	float tanFineWm2 = pow(tan(fine),2);
+	float cosThetaDivRoughX2 = pow(cos(theta) / roughnessX,2);
+	float sinThetaDivRoughY2 = pow(sin(theta)/ roughnessY,2);
+	float denominator = constFactor * cosFineWm4  * pow(1 + tanFineWm2 * (cosThetaDivRoughX2 + sinThetaDivRoughY2),2);
+	//denominator *= constFactor * cosFineWm4;
+	//denominator *= pow(1 + pow(tan(fine),2) * (pow(cos(theta) / roughnessX,2) + pow(sin(theta)/ roughnessY,2)) ,2);
 	return 1/denominator;
 
 }
@@ -131,8 +137,10 @@ float PDF2_GGX(vec3 w,vec3 wo)
 		return 0;
 	}
 	float cosFine = cos(fine);
+	float pdfWm = PDF_GGX(w);
+	float unmask = UnMask(wo);
 
-	return UnMask(wo) * PDF_GGX(w) * max(0,dot(w,wo)) / cos(fine);
+	return unmask * pdfWm * max(0,dot(w,wo)) / cos(fine);
 
 }
 
@@ -416,7 +424,7 @@ vec2 FittingInverseCDFSparrowReflect(vec2 daltaXY/*¡Ω∏ˆ∑÷±Œ™-1µΩ1÷Æº‰µƒ∂˛Œ¨≤Œ ˝
 
 //”–¥÷≤⁄∂»µƒ π”√Œ¢±Ì√Ê¿Ì¬€µƒ∑¥…‰ƒ£–Õ
 vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/* ¿ΩÁø’º‰÷–µƒ≥ˆ…‰œÚ¡ø*/,vec3 n/* ¿ΩÁø’º‰÷–µƒ∑®œÚ¡ø*/){
-	uint numSample = 20;
+	uint numSample = 30;
 
 	vec3 y = -normalize(n);
 	vec3 x,z;
@@ -508,7 +516,6 @@ vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/* ¿ΩÁø’º‰÷–µƒ≥ˆ…‰œ
 		totalWeight += curWeight;
 	}
 	reflectLight /=  totalWeight;//πÈ“ªªØ
-	reflectLight = vec3(totalWeight/numSample,0,0);
 	return reflectLight;
 
 
@@ -645,7 +652,7 @@ vec3 ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(vec3 wo/* ¿ΩÁø’º
 	float totalWeight = 0;
 	float ni = 1.5,no = 1;
 
-	uint numSample = 20;
+	uint numSample = 30;
 
 	//º∆À„¿ÌœÎ∑¥…‰∫Õ’€…‰œÚ¡ø
 
@@ -730,7 +737,7 @@ vec3 ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(vec3 wo/* ¿ΩÁø’º
 		}
 
 		//º∆À„’€…‰
-		if(false){
+		if(true){
 
 			float sampleTheta = theta_t+deltaThetaFine.x;
 			float sampleFine = fine_t+deltaThetaFine.y;
@@ -797,10 +804,10 @@ void main(){
 	//color = ReflectModelLambertDiffuseReflect(wo,inNormal);
 	//color = ReflectModelSpecularReflectAndRefract(wo,inNormal);
 	//color = ReflectModelMetalReflect(wo,inNormal);
-	color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
+	//color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
 	//color = ReflectModelRoughnessWithMrcrofacetTheoryRefract(wo,inNormal);
 	
-	//color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
+	color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
 	//gama Ω‚¬Î
 	//color = pow(color, vec3(2.4));
 	outColor = vec4(color,1.0);
