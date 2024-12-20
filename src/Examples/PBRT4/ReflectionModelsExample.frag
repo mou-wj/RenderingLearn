@@ -796,6 +796,24 @@ vec3 ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(vec3 wo/*ÊÀ½ç¿Õ¼
 
 }
 
+//²ÄÖÊµÄbrdfÍ¨¹ı²âÁ¿µÃµ½µÄ·´ÉäÄ£ĞÍ  
+vec3 ReflectModelMesuredBRDF(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
+
+	vec3 res;
+	//to do  Ä¿Ç°Èç¹ûÒªÍê³Émesured bsdfµÄÊ¾Àı£¬ĞèÒªÁË½â.bsdfÕâÖÖÎÄ¼ş¸ñÊ½ÒÔ¼°ÆäÖĞÊı¾İ±í´ïµÄÒâË¼£¬ĞèÒªÒ»¶¨Ê±¼ä£¬ËùÒÔÕâÒ»½ÚÏÈÔİÊ±Ìø¹ı
+	return res;
+
+}
+
+//Í··¢µÄ·´ÉäÄ£ĞÍ  
+vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
+
+	vec3 res;
+	
+	return res;
+
+}
+
 
 void main(){
 

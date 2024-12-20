@@ -6,6 +6,7 @@
 #include "Examples/PBRT4/ReflectionModelsExample.h"
 #include "Examples/PBRT4/DisturbutionLobeExample.h"
 
+#include "Framework/Utils/powitacq_rgb.h"
 /*
 
 
@@ -56,7 +57,8 @@ int main()
 	//SkyBoxExample example;
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
-	
+	//powitacq_rgb::BRDF brdf(std::string(PROJECT_DIR) + "/resources/mesured_bsdf/aniso_brushed_aluminium_1_rgb.bsdf");
+
 	ReflectionModelsExample example;
 	//DisturbutionLobeExample example;
 	ExampleBase::Run(&example);
