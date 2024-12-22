@@ -77,9 +77,10 @@ void ReflectionModelsExample::InitSubPassInfo()
 void ReflectionModelsExample::InitResourceInfos()
 {
 
-	geoms.resize(2);
+	geoms.resize(3);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj", geoms[1]);
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cylinder.obj", geoms[2]);
 
 	subpassDrawGeoInfos[0] = { 0 };
 	subpassDrawGeoInfos[1] = { 1 };

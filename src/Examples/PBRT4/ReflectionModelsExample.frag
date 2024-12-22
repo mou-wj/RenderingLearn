@@ -805,8 +805,63 @@ vec3 ReflectModelMesuredBRDF(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµ
 
 }
 
+
+
 //Í··¢µÄ·´ÉäÄ£ĞÍ  
+
+float I0(float x) {
+    float val = 0;
+    float x2i = 1;
+    int ifact = 1;
+    int i4 = 1;
+    // I0(x) \approx Sum_i x^(2i) / (4^i (i!)^2)
+    for (int i = 0; i < 10; ++i) {
+        if (i > 1)
+            ifact *= i;
+        val += x2i / (i4 * pow(ifact,2));
+        x2i *= x * x;
+        i4 *= 4;
+    }
+    return val;
+}
+float v[4];
+void CaculateVRoughness(){
+	
+
+}
+
+//Mp(wo,wi)
+float HairLongitudinalScatteringFunction(vec3 wo,vec3 wi,vec3 alongD){
+	float v = 0.02;//´Ö²Ú¶È,ÕâÀïÖ±½Ó¶¨Òå£¬Êµ¼ÊÉÏ¸ÃÖµÓ¦¸ÃÍ¨¹ıbeta_m¼ÆËãµÃµ½
+	vec3 curNormal = normalize(inNormal);
+	float cosTheta_o = abs(dot(wo,alongD));
+	float sinTheta_o = sqrt(1 - pow(cosTheta_o,2));
+	float cosTheta_i = abs(dot(wi,alongD));
+	float sinTheta_i = sqrt(1 - pow(cosTheta_i,2));
+	float denomination = 2 * v * sinh(1 / v);
+	float fac1 = exp(- (sinTheta_i * sinTheta_o) / v);
+	float fac2 = I0(cosTheta_i * cosTheta_o / v);
+
+	float res = fac1 * fac2 / denomination;
+
+
+	return res;
+} 
+
+
+
+//ÓÉÓÚÏÖÔÚÌõ¼şÏŞÖÆ£¬ÕÒ²»µ½Í··¢Ë¿ÓÃÔ²Öù½¨Ä£µÄÄ£ĞÍ£¬ÄÜÕÒµ½µÄ»ù±¾¶¼ÊÇÓÃÌõ´ø±íÊ¾£¬È»ºó¼ÓÉÏÌåäÖÈ¾À´½øĞĞÍ··¢µÄÏÔÊ¾£¬ËùÒÔÔÚÕâÀï¼òµ¥Æğ¼û£¬Ö±½ÓÓÃÒ»¸öÏ¸Ô²Öù±íÊ¾Ò»¸ùÍ··¢È»ºóÀ´ÑéÖ¤
+//Õâ¸öÔ²ÖùµÄÖĞĞÄÏßµÄ·½ÏòÏòÁ¿Îª(0,-1,0),¹Ê·¨Æ½Ãæ¾ÍÎªxzÆ½Ãæ Ô²ÖùÖ±¾¶Îª0.1
 vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
+	//Í··¢Ä£ĞÍµÄ6¸ö²ÎÊı
+	float h=0;//³öÉäÏòÁ¿woÔÚÔ²ÖùµÄ´¹Ö±Ö±¾¶ÉÏµÄÍ¶Ó°µãºÍ°ë¾¶µÄ±ÈÀı£¬·¶Î§Îª-1£¬1
+	float eta = 0;//Í··¢µÄÕÛÉäÂÊ
+	float sigma_a = 0;//Í··¢µÄÎüÊÕÏµÊı
+	float beta_m = 0;//ºÍÔ²Öù½çÃæ¼Ğ½ÇÏà¹ØµÄ´Ö²Ú¶È£¬·¶Î§0£¬1
+	float beta_n = 0;//ºÍÔ²ÖùÖĞĞÄÏß¼Ğ½ÇÏà¹ØµÄ´Ö²Ú¶È£¬·¶Î§0£¬1
+	float alpha = 0;//Í··¢×îÍâ²ãÇÊºÍÔ²Öù±ßÔµÄ¸ÏßµÄ¼Ğ½Ç£¬Ò»°ãÎª2¶È
+
+
 
 	vec3 res;
 	
