@@ -812,7 +812,7 @@ vec3 ReflectModelMesuredBRDF(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµ
 float I0(float x) {
     float val = 0;
     float x2i = 1;
-    int ifact = 1;
+    float ifact = 1;
     int i4 = 1;
     // I0(x) \approx Sum_i x^(2i) / (4^i (i!)^2)
     for (int i = 0; i < 10; ++i) {
@@ -830,14 +830,14 @@ void CaculateVRoughness(){
 
 }
 
-//Mp(wo,wi)
-float HairLongitudinalScatteringFunction(vec3 wo,vec3 wi,vec3 alongD){
-	float v = 0.02;//´Ö²Ú¶È,ÕâÀïÖ±½Ó¶¨Òå£¬Êµ¼ÊÉÏ¸ÃÖµÓ¦¸ÃÍ¨¹ıbeta_m¼ÆËãµÃµ½
+//Mp(wo,wi)  ,±¾µØ×ø±êÏµ£¬
+float HairLongitudinalScatteringFunction(vec3 wo,vec3 wi,float v/*´Ö²Ú¶È*/){
+	vec3 alongD = vec3(0,0,1);
 	vec3 curNormal = normalize(inNormal);
-	float cosTheta_o = abs(dot(wo,alongD));
-	float sinTheta_o = sqrt(1 - pow(cosTheta_o,2));
-	float cosTheta_i = abs(dot(wi,alongD));
-	float sinTheta_i = sqrt(1 - pow(cosTheta_i,2));
+	float sinTheta_o = dot(wo,alongD);
+	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
+	float sinTheta_i = dot(wi,alongD);
+	float cosTheta_i = sqrt(1 - pow(sinTheta_i,2));
 	float denomination = 2 * v * sinh(1 / v);
 	float fac1 = exp(- (sinTheta_i * sinTheta_o) / v);
 	float fac2 = I0(cosTheta_i * cosTheta_o / v);
@@ -861,9 +861,46 @@ vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨Ï
 	float beta_n = 0;//ºÍÔ²ÖùÖĞĞÄÏß¼Ğ½ÇÏà¹ØµÄ´Ö²Ú¶È£¬·¶Î§0£¬1
 	float alpha = 0;//Í··¢×îÍâ²ãÇÊºÍÔ²Öù±ßÔµÄ¸ÏßµÄ¼Ğ½Ç£¬Ò»°ãÎª2¶È
 
+	float v = 0.02;//´Ö²Ú¶È,ÕâÀïÖ±½Ó¶¨Òå£¬Êµ¼ÊÉÏ¸ÃÖµÓ¦¸ÃÍ¨¹ıbeta_m¼ÆËãµÃµ½
+	vec3 alongD = vec3(0,0,1);//ÊÀ½ç¿Õ¼äÖĞµÄÍ··¢·½ÏòÏòÁ¿
 
-
+	//²é¿´ÊÇ·ñnºÍalongD´¹Ö±
+	float nDotAlongD = dot(alongD,n);
 	vec3 res;
+	n = normalize(n);
+	wo = normalize(wo);
+
+
+	//¸ù¾İalongDºÍn¹¹½¨±¾µØ×ø±êÏµ£¬ÆäÖĞalongD×÷Îªz£¬n×÷Îª-y
+	vec3 y = -normalize(n);
+	vec3 z = normalize(alongD);
+	vec3 x = normalize(cross(y,z));
+	mat3 localMatrix  = mat3(x,y,z);
+	mat3 inverseMatrix = inverse(localMatrix);
+	//»ñÈ¡·´Éä¹âÏòÁ¿
+	vec3 wri = reflect(-wo,n);
+	//½«wriºÍwo×ª»»µ½±¾µØ×ø±êÏµ
+	wri = normalize(inverseMatrix * wri);
+	wo = normalize(inverseMatrix * wo);
+
+	float longtitudeScaterFactor  = HairLongitudinalScatteringFunction(wo,wri,v);
+
+
+
+
+
+	res.x = longtitudeScaterFactor;
+
+
+
+
+
+	
+
+
+
+
+
 	
 	return res;
 
@@ -880,7 +917,9 @@ void main(){
 	//color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
 	//color = ReflectModelRoughnessWithMrcrofacetTheoryRefract(wo,inNormal);
 	
-	color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
+	//color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
+	color = ReflectModelForHair(wo,inNormal);
+	
 	//gama ½âÂë
 	//color = pow(color, vec3(2.4));
 	outColor = vec4(color,1.0);

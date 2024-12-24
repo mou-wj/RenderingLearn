@@ -58,6 +58,7 @@ int main()
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
 	//powitacq_rgb::BRDF brdf(std::string(PROJECT_DIR) + "/resources/mesured_bsdf/aniso_brushed_aluminium_1_rgb.bsdf");
+	
 	ReflectionModelsExample example;
 	//DisturbutionLobeExample example;
 	ExampleBase::Run(&example);
