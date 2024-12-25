@@ -848,6 +848,58 @@ float HairLongitudinalScatteringFunction(vec3 wo,vec3 wi,float v/*粗糙度*/){
 	return res;
 } 
 
+//Ap 头发的吸收项 
+float HairAbsorptionFunction(vec3 wo){
+	//最多4次内部弹射吸收
+	float Ap[5];
+	float ni,nt/*头发的折射率*/;
+	//计算Ap0，一次反射
+	//计算和头发法平面的折射角
+	vec3 alongD = vec3(0,0,1);
+	float sinTheta_i = dot(wo,alongD);
+	float cosTheta_i = sqrt(1 - pow(sinTheta_i,2));
+	float sinTheta_t = sinTheta_i * ni / nt;
+	float cosTheta_t = sqrt(1 - pow(sinTheta_t,2));
+	//计算和头发法平面上的法向量的折射角,gamma_t，此时有h = sin(gamma_t)
+	float np = sqrt(pow(nt/ni,2) - pow(sinTheta_i,2))/ cosTheta_i;
+	float h = 0;
+	float sinGamma_t = h / np;
+	float cosGamma_t = sqrt(1- pow(sinGamma_t,2));
+	//计算光线在头发中穿过的路径长度以及衰减程度
+	float len =  2 * cosGamma_t / cosTheta_t;
+	float sigma_a = 0;//头发的吸收系数
+	float attenation = exp(-  sigma_a * len);
+
+
+
+	//计算frenel反射
+	float f = Frenel_Reflect(cosTheta_i,nt/ni);
+	//计算Ap0
+	Ap[0] = f;//只有一次反射
+	//计算Ap1
+	Ap[1] = pow(1-f,2) * attenation;//两次折射一次衰减
+	//计算Ap2 ,Ap3，Ap4 
+	for(uint i = 2;i < 5;i++)
+	{
+		Ap[i] = Ap[i-1] * attenation * f;//后续每一次都会衰减一次，并经过一次反射折射，这里把两者的影响约为f来表示，为什么需要弄清楚
+	
+	}
+
+
+	//计算总的衰减
+	float totalAp = 0;
+	for(uint i = 0;i < 5;i++){
+		totalAp+= Ap[i];
+	
+	}
+
+	return totalAp;
+}
+
+float HairAzimuthalScatteringFunction(){
+
+	return 0;
+}
 
 
 //由于现在条件限制，找不到头发丝用圆柱建模的模型，能找到的基本都是用条带表示，然后加上体渲染来进行头发的显示，所以在这里简单起见，直接用一个细圆柱表示一根头发然后来验证
