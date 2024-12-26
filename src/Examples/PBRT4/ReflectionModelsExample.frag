@@ -832,7 +832,7 @@ void CaculateVRoughness(){
 
 //Mp(wo,wi)  ,±¾µØ×ø±êÏµ£¬
 float HairLongitudinalScatteringFunction(vec3 wo,vec3 wi,float v/*´Ö²Ú¶È*/){
-	vec3 alongD = vec3(0,0,1);
+	vec3 alongD = vec3(0,0,1);//´ËÊ±wo,wiÒÑ¾­Î»ÓÚ±¾µØ×ø±ê£¬ÔòÕâÀïÖ±½ÓÎª(0,0,1)
 	vec3 curNormal = normalize(inNormal);
 	float sinTheta_o = dot(wo,alongD);
 	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
@@ -852,18 +852,19 @@ float HairLongitudinalScatteringFunction(vec3 wo,vec3 wi,float v/*´Ö²Ú¶È*/){
 float HairAbsorptionFunction(vec3 wo){
 	//×î¶à4´ÎÄÚ²¿µ¯ÉäÎüÊÕ
 	float Ap[5];
-	float ni,nt/*Í··¢µÄÕÛÉäÂÊ*/;
+	float no,nt/*Í··¢µÄÕÛÉäÂÊ*/;
 	//¼ÆËãAp0£¬Ò»´Î·´Éä
 	//¼ÆËãºÍÍ··¢·¨Æ½ÃæµÄÕÛÉä½Ç
 	vec3 alongD = vec3(0,0,1);
-	float sinTheta_i = dot(wo,alongD);
-	float cosTheta_i = sqrt(1 - pow(sinTheta_i,2));
-	float sinTheta_t = sinTheta_i * ni / nt;
+	float sinTheta_o = dot(wo,alongD);
+	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
+	float eta = nt / no;
+	float sinTheta_t = sinTheta_o /eta;
 	float cosTheta_t = sqrt(1 - pow(sinTheta_t,2));
 	//¼ÆËãºÍÍ··¢·¨Æ½ÃæÉÏµÄ·¨ÏòÁ¿µÄÕÛÉä½Ç,gamma_t£¬´ËÊ±ÓÐh = sin(gamma_t)
-	float np = sqrt(pow(nt/ni,2) - pow(sinTheta_i,2))/ cosTheta_i;
-	float h = 0;
-	float sinGamma_t = h / np;
+	float etap = sqrt(pow(eta,2) - pow(sinTheta_o,2))/ cosTheta_o;
+	float h = wo.y / cosTheta_o;//ÎªÈëÉä¹âÍ¶Ó°µ½·¨Æ½ÃæºóºÍ·¨ÏòÁ¿(0,-1,0)µÄ¼Ð½ÇµÄÕýÏÒÖµ
+	float sinGamma_t = h / etap;
 	float cosGamma_t = sqrt(1- pow(sinGamma_t,2));
 	//¼ÆËã¹âÏßÔÚÍ··¢ÖÐ´©¹ýµÄÂ·¾¶³¤¶ÈÒÔ¼°Ë¥¼õ³Ì¶È
 	float len =  2 * cosGamma_t / cosTheta_t;
@@ -873,7 +874,7 @@ float HairAbsorptionFunction(vec3 wo){
 
 
 	//¼ÆËãfrenel·´Éä
-	float f = Frenel_Reflect(cosTheta_i,nt/ni);
+	float f = Frenel_Reflect(cosTheta_o,eta);
 	//¼ÆËãAp0
 	Ap[0] = f;//Ö»ÓÐÒ»´Î·´Éä
 	//¼ÆËãAp1
@@ -896,9 +897,44 @@ float HairAbsorptionFunction(vec3 wo){
 	return totalAp;
 }
 
-float HairAzimuthalScatteringFunction(){
+float NormalDistribution(float x,float ex,float sigma){
+	return exp(- pow((x-ex)/ sigma,2) / 2) / (2 * s_pi * sigma);
+	
+}
 
-	return 0;
+//Np ÈëÉä¹âÕÛÉä¹âµÄ²åÖµÔÚÔÚ·¨Æ½ÃæÔ²ÖÜÉÏµÄ·Ö²¼
+float HairAzimuthalScatteringFunction(vec3 wo,float roughness){
+	float fine_o = atan(wo.y,wo.x);
+	//¼ÆËãÔÚÍ··¢ÖÐ·´Éäp´ÎºóµÄfine
+	float no,nt/*Í··¢µÄÕÛÉäÂÊ*/;
+	//¼ÆËãAp0£¬Ò»´Î·´Éä
+	//¼ÆËãºÍÍ··¢·¨Æ½ÃæµÄÕÛÉä½Ç
+	vec3 alongD = vec3(0,0,1);
+	float sinTheta_o = dot(wo,alongD);
+	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
+	float eta = nt / no;
+	float sinTheta_t = sinTheta_o /eta;
+	float cosTheta_t = sqrt(1 - pow(sinTheta_t,2));
+	//¼ÆËãºÍÍ··¢·¨Æ½ÃæÉÏµÄ·¨ÏòÁ¿µÄÕÛÉä½Ç,gamma_t£¬´ËÊ±ÓÐh = sin(gamma_t)
+	float etap = sqrt(pow(eta,2) - pow(sinTheta_o,2))/ cosTheta_o;
+	float h = wo.y / cosTheta_o;//ÎªÈëÉä¹âÍ¶Ó°µ½·¨Æ½ÃæºóºÍ·¨ÏòÁ¿(0,-1,0)µÄ¼Ð½ÇµÄÕýÏÒÖµ
+	float sinGamma_t = h / etap;
+	float cosGamma_t = sqrt(1- pow(sinGamma_t,2));
+
+	float gamma_t = asin(sinGamma_t);
+	float p = 0;
+	float fine_final = 2 * p * gamma_t - 2 * fine_o + p * s_pi;
+	float delta_fine = fine_o - fine_final;
+	while(delta_fine > s_pi){
+		delta_fine -=2 * s_pi;
+	}
+	while(delta_fine < s_pi){
+		delta_fine +=2 * s_pi;
+	}
+
+	//¼òµ¥ÓÃÒ»¸öÕýÌ«·Ö²¼À´¿ØÖÆ·Ö²¼£¬¿É±äµÄ²ÎÊýÎª·½²î,ÓÃ´Ö²Á¶È±íÊ¾,ÕâÀïÊµ¼ÊµÄÈ¡ÖµÖ»»áÔÚ-pi µ½ piÖ®¼ä£¬¹éÒ»»¯ÐèÒª³ýÒÔ-piµ½piµÄ¸ÅÂÊÃÜ¶ÈºÍ£¬µ«ÊÇÕâÀïÎªÁË·½±ã±ã²»×ö¹éÒ»»¯
+	float res = NormalDistribution(delta_fine,0,roughness);	
+	return res;
 }
 
 
@@ -923,10 +959,10 @@ vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖÐµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖÐµÄ·¨Ï
 	wo = normalize(wo);
 
 
-	//¸ù¾ÝalongDºÍn¹¹½¨±¾µØ×ø±êÏµ£¬ÆäÖÐalongD×÷Îªz£¬n×÷Îª-y
-	vec3 y = -normalize(n);
+	//¸ù¾ÝalongDºÍn¹¹½¨±¾µØ×ø±êÏµ£¬ÆäÖÐalongD×÷Îªz£¬n×÷Îªx
+	vec3 x = normalize(n);
 	vec3 z = normalize(alongD);
-	vec3 x = normalize(cross(y,z));
+	vec3 y = normalize(cross(z,x));
 	mat3 localMatrix  = mat3(x,y,z);
 	mat3 inverseMatrix = inverse(localMatrix);
 	//»ñÈ¡·´Éä¹âÏòÁ¿
@@ -935,8 +971,16 @@ vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖÐµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖÐµÄ·¨Ï
 	wri = normalize(inverseMatrix * wri);
 	wo = normalize(inverseMatrix * wo);
 
-	float longtitudeScaterFactor  = HairLongitudinalScatteringFunction(wo,wri,v);
 
+	//¼ÆËãÒ»Ð©Í¨ÓÃ²ÎÊý
+
+
+
+
+
+
+	float longtitudeScaterFactor  = HairLongitudinalScatteringFunction(wo,wri,v);
+	
 
 
 
