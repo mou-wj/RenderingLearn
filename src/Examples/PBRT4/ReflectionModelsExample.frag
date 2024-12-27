@@ -421,6 +421,11 @@ vec2 FittingInverseCDFSparrowReflect(vec2 daltaXY/*Á½¸ö·Ö±ğÎª-1µ½1Ö®¼äµÄ¶şÎ¬²ÎÊı
 	return res;
 }
 
+//·µ»Ø-pi / 2  -- pi / 2
+float FittingInverse(float x){
+	return asin(pow(x,3));
+}
+
 
 //ÓĞ´Ö²Ú¶ÈµÄÊ¹ÓÃÎ¢±íÃæÀíÂÛµÄ·´ÉäÄ£ĞÍ
 vec3 ReflectModelRoughnessWithMicrofacetTheoryReflect(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
@@ -830,131 +835,93 @@ void CaculateVRoughness(){
 
 }
 
-//Mp(wo,wi)  ,±¾µØ×ø±êÏµ£¬
-float HairLongitudinalScatteringFunction(vec3 wo,vec3 wi,float v/*´Ö²Ú¶È*/){
-	vec3 alongD = vec3(0,0,1);//´ËÊ±wo,wiÒÑ¾­Î»ÓÚ±¾µØ×ø±ê£¬ÔòÕâÀïÖ±½ÓÎª(0,0,1)
-	vec3 curNormal = normalize(inNormal);
-	float sinTheta_o = dot(wo,alongD);
-	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
-	float sinTheta_i = dot(wi,alongD);
-	float cosTheta_i = sqrt(1 - pow(sinTheta_i,2));
-	float denomination = 2 * v * sinh(1 / v);
-	float fac1 = exp(- (sinTheta_i * sinTheta_o) / v);
-	float fac2 = I0(cosTheta_i * cosTheta_o / v);
-
-	float res = fac1 * fac2 / denomination;
-
-
-	return res;
-} 
-
-//Ap Í··¢µÄÎüÊÕÏî 
-float HairAbsorptionFunction(vec3 wo){
-	//×î¶à4´ÎÄÚ²¿µ¯ÉäÎüÊÕ
-	float Ap[5];
-	float no,nt/*Í··¢µÄÕÛÉäÂÊ*/;
-	//¼ÆËãAp0£¬Ò»´Î·´Éä
-	//¼ÆËãºÍÍ··¢·¨Æ½ÃæµÄÕÛÉä½Ç
-	vec3 alongD = vec3(0,0,1);
-	float sinTheta_o = dot(wo,alongD);
-	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
-	float eta = nt / no;
-	float sinTheta_t = sinTheta_o /eta;
-	float cosTheta_t = sqrt(1 - pow(sinTheta_t,2));
-	//¼ÆËãºÍÍ··¢·¨Æ½ÃæÉÏµÄ·¨ÏòÁ¿µÄÕÛÉä½Ç,gamma_t£¬´ËÊ±ÓĞh = sin(gamma_t)
-	float etap = sqrt(pow(eta,2) - pow(sinTheta_o,2))/ cosTheta_o;
-	float h = wo.y / cosTheta_o;//ÎªÈëÉä¹âÍ¶Ó°µ½·¨Æ½ÃæºóºÍ·¨ÏòÁ¿(0,-1,0)µÄ¼Ğ½ÇµÄÕıÏÒÖµ
-	float sinGamma_t = h / etap;
-	float cosGamma_t = sqrt(1- pow(sinGamma_t,2));
-	//¼ÆËã¹âÏßÔÚÍ··¢ÖĞ´©¹ıµÄÂ·¾¶³¤¶ÈÒÔ¼°Ë¥¼õ³Ì¶È
-	float len =  2 * cosGamma_t / cosTheta_t;
-	float sigma_a = 0;//Í··¢µÄÎüÊÕÏµÊı
-	float attenation = exp(-  sigma_a * len);
-
-
-
-	//¼ÆËãfrenel·´Éä
-	float f = Frenel_Reflect(cosTheta_o,eta);
-	//¼ÆËãAp0
-	Ap[0] = f;//Ö»ÓĞÒ»´Î·´Éä
-	//¼ÆËãAp1
-	Ap[1] = pow(1-f,2) * attenation;//Á½´ÎÕÛÉäÒ»´ÎË¥¼õ
-	//¼ÆËãAp2 ,Ap3£¬Ap4 
-	for(uint i = 2;i < 5;i++)
-	{
-		Ap[i] = Ap[i-1] * attenation * f;//ºóĞøÃ¿Ò»´Î¶¼»áË¥¼õÒ»´Î£¬²¢¾­¹ıÒ»´Î·´ÉäÕÛÉä£¬ÕâÀï°ÑÁ½ÕßµÄÓ°ÏìÔ¼ÎªfÀ´±íÊ¾£¬ÎªÊ²Ã´ĞèÒªÅªÇå³ş
-	
-	}
-
-
-	//¼ÆËã×ÜµÄË¥¼õ
-	float totalAp = 0;
-	for(uint i = 0;i < 5;i++){
-		totalAp+= Ap[i];
-	
-	}
-
-	return totalAp;
-}
 
 float NormalDistribution(float x,float ex,float sigma){
 	return exp(- pow((x-ex)/ sigma,2) / 2) / (2 * s_pi * sigma);
 	
 }
 
-//Np ÈëÉä¹âÕÛÉä¹âµÄ²åÖµÔÚÔÚ·¨Æ½ÃæÔ²ÖÜÉÏµÄ·Ö²¼
-float HairAzimuthalScatteringFunction(vec3 wo,float roughness){
-	float fine_o = atan(wo.y,wo.x);
-	//¼ÆËãÔÚÍ··¢ÖĞ·´Éäp´ÎºóµÄfine
-	float no,nt/*Í··¢µÄÕÛÉäÂÊ*/;
-	//¼ÆËãAp0£¬Ò»´Î·´Éä
-	//¼ÆËãºÍÍ··¢·¨Æ½ÃæµÄÕÛÉä½Ç
-	vec3 alongD = vec3(0,0,1);
-	float sinTheta_o = dot(wo,alongD);
-	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
-	float eta = nt / no;
-	float sinTheta_t = sinTheta_o /eta;
-	float cosTheta_t = sqrt(1 - pow(sinTheta_t,2));
-	//¼ÆËãºÍÍ··¢·¨Æ½ÃæÉÏµÄ·¨ÏòÁ¿µÄÕÛÉä½Ç,gamma_t£¬´ËÊ±ÓĞh = sin(gamma_t)
-	float etap = sqrt(pow(eta,2) - pow(sinTheta_o,2))/ cosTheta_o;
-	float h = wo.y / cosTheta_o;//ÎªÈëÉä¹âÍ¶Ó°µ½·¨Æ½ÃæºóºÍ·¨ÏòÁ¿(0,-1,0)µÄ¼Ğ½ÇµÄÕıÏÒÖµ
-	float sinGamma_t = h / etap;
-	float cosGamma_t = sqrt(1- pow(sinGamma_t,2));
 
-	float gamma_t = asin(sinGamma_t);
-	float p = 0;
-	float fine_final = 2 * p * gamma_t - 2 * fine_o + p * s_pi;
-	float delta_fine = fine_o - fine_final;
-	while(delta_fine > s_pi){
-		delta_fine -=2 * s_pi;
-	}
-	while(delta_fine < s_pi){
-		delta_fine +=2 * s_pi;
-	}
 
-	//¼òµ¥ÓÃÒ»¸öÕıÌ«·Ö²¼À´¿ØÖÆ·Ö²¼£¬¿É±äµÄ²ÎÊıÎª·½²î,ÓÃ´Ö²Á¶È±íÊ¾,ÕâÀïÊµ¼ÊµÄÈ¡ÖµÖ»»áÔÚ-pi µ½ piÖ®¼ä£¬¹éÒ»»¯ĞèÒª³ıÒÔ-piµ½piµÄ¸ÅÂÊÃÜ¶ÈºÍ£¬µ«ÊÇÕâÀïÎªÁË·½±ã±ã²»×ö¹éÒ»»¯
-	float res = NormalDistribution(delta_fine,0,roughness);	
+//Hair Longitudinal Scattering Function 
+float Mp(float sinTheta_i,float cosTheta_i,float sinTheta_o,float cosTheta_o,float v){
+
+	float denomination = 2 * v * sinh(1 / v);
+	float fac1 = exp(- (sinTheta_i * sinTheta_o) / v);
+	float fac2 = I0(cosTheta_i * cosTheta_o / v);
+
+	float res = fac1 * fac2 / denomination;
 	return res;
 }
+
+//Hair Absorption FunctionÍ··¢µÄÎüÊÕÏî
+float[4] Ap(float cosTheta_o, float eta, float h, float attenation){
+	float Ap[4];//Ö»¼ÆËã4´Î
+	float cosGamma_o = sqrt(1 - pow(h,2));
+	//¼ÆËãÍ¶Ó°µ½·¨Æ½ÃæµÄÏòÁ¿ºÍ·¨ÏòÁ¿µÄ¼Ğ½ÇµÄcosÖµ
+	float cosTheta = cosTheta_o * cosGamma_o;
+
+
+	//¼ÆËãfrenel·´Éä
+	float f = Frenel_Reflect(cosTheta,eta);
+	//¼ÆËãAp0
+	Ap[0] = f;//Ö»ÓĞÒ»´Î·´Éä
+	//¼ÆËãAp1
+	Ap[1] = pow(1-f,2) * attenation;//Á½´ÎÕÛÉäÒ»´ÎË¥¼õ
+	//¼ÆËãAp2 
+	for(uint i = 2;i < 3;i++)
+	{
+		Ap[i] = Ap[i-1] * attenation * f;//ºóĞøÃ¿Ò»´Î¶¼»áË¥¼õÒ»´Î£¬²¢¾­¹ıÒ»´Î·´ÉäÕÛÉä£¬ÕâÀï°ÑÁ½ÕßµÄÓ°ÏìÔ¼ÎªfÀ´±íÊ¾£¬ÎªÊ²Ã´ĞèÒªÅªÇå³ş
+	
+	}
+
+	//¼ÆËãp´óÓÚ2ºóµÄËùÓĞ·´ÉäÕÛÉäµÄÓ°Ïì×ÜºÍ
+	if(attenation * f < 1)
+	{
+		Ap[3] = Ap[2] * attenation * f / ( 1 - attenation * f);
+	
+	}
+
+	return Ap;
+}
+
+//¼ÆËãÔÚ¾­¹ıp´ÎÄÚ²¿ÕÛÉä¶ø³öµÄ¹âÏßµÄgammaÖµÎªgamma_oµÄÈëÉä¹âµÄphiÖµ
+float Phi(float p,float phi_o, float phi_t){
+	return  2 * p * phi_t - 2 * phi_o + p * s_pi;
+}
+
+//Np  Hair Azimuthal Scattering Function   ÈëÉä¹âÕÛÉä¹âµÄ²åÖµÔÚÔÚ·¨Æ½ÃæÔ²ÖÜÉÏµÄ·Ö²¼,·Ö²¼ÀàËÆÓë¾ùÖµÎª0µÄÕıÌ¬·Ö²¼ 
+float Np(float phi/*-pi µ½ pi*/,float roughness){
+	while(phi > s_pi){
+		phi -=2 * s_pi;
+	}
+	while(phi < -s_pi){
+		phi +=2 * s_pi;
+	}
+	//¼òµ¥ÓÃÒ»¸öÕıÌ«·Ö²¼À´¿ØÖÆ·Ö²¼£¬¿É±äµÄ²ÎÊıÎª·½²î,ÓÃ´Ö²Á¶È±íÊ¾,ÕâÀïÊµ¼ÊµÄÈ¡ÖµÖ»»áÔÚ-pi µ½ piÖ®¼ä£¬¹éÒ»»¯ĞèÒª³ıÒÔ-piµ½piµÄ¸ÅÂÊÃÜ¶ÈºÍ£¬µ«ÊÇÕâÀïÎªÁË·½±ã±ã²»×ö¹éÒ»»¯
+	float res = NormalDistribution(phi,0,roughness);	
+	return res;
+}
+
 
 
 //ÓÉÓÚÏÖÔÚÌõ¼şÏŞÖÆ£¬ÕÒ²»µ½Í··¢Ë¿ÓÃÔ²Öù½¨Ä£µÄÄ£ĞÍ£¬ÄÜÕÒµ½µÄ»ù±¾¶¼ÊÇÓÃÌõ´ø±íÊ¾£¬È»ºó¼ÓÉÏÌåäÖÈ¾À´½øĞĞÍ··¢µÄÏÔÊ¾£¬ËùÒÔÔÚÕâÀï¼òµ¥Æğ¼û£¬Ö±½ÓÓÃÒ»¸öÏ¸Ô²Öù±íÊ¾Ò»¸ùÍ··¢È»ºóÀ´ÑéÖ¤
 //Õâ¸öÔ²ÖùµÄÖĞĞÄÏßµÄ·½ÏòÏòÁ¿Îª(0,-1,0),¹Ê·¨Æ½Ãæ¾ÍÎªxzÆ½Ãæ Ô²ÖùÖ±¾¶Îª0.1
 vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
 	//Í··¢Ä£ĞÍµÄ6¸ö²ÎÊı
-	float h=0;//³öÉäÏòÁ¿woÔÚÔ²ÖùµÄ´¹Ö±Ö±¾¶ÉÏµÄÍ¶Ó°µãºÍ°ë¾¶µÄ±ÈÀı£¬·¶Î§Îª-1£¬1
-	float eta = 0;//Í··¢µÄÕÛÉäÂÊ
-	float sigma_a = 0;//Í··¢µÄÎüÊÕÏµÊı
-	float beta_m = 0;//ºÍÔ²Öù½çÃæ¼Ğ½ÇÏà¹ØµÄ´Ö²Ú¶È£¬·¶Î§0£¬1
-	float beta_n = 0;//ºÍÔ²ÖùÖĞĞÄÏß¼Ğ½ÇÏà¹ØµÄ´Ö²Ú¶È£¬·¶Î§0£¬1
-	float alpha = 0;//Í··¢×îÍâ²ãÇÊºÍÔ²Öù±ßÔµÄ¸ÏßµÄ¼Ğ½Ç£¬Ò»°ãÎª2¶È
+	float h=0;//³öÉäÏòÁ¿woÔÚÔ²ÖùµÄ´¹Ö±Ö±¾¶ÉÏµÄÍ¶Ó°µãºÍ°ë¾¶µÄ±ÈÀı£¬·¶Î§Îª-1£¬1,ÆäÊµ¾ÍµÈÓÚsinGamma_wo
+	float eta = 1.5 / 1.0;//Í··¢µÄÕÛÉäÂÊ/¿ÕÆøµÄÕÛÉäÂÊ
+	float sigma_a = 0.1;//Í··¢µÄÎüÊÕÏµÊı
+	float beta_m = 0.1;//ºÍÔ²Öù½çÃæ¼Ğ½ÇÏà¹ØµÄ´Ö²Ú¶È£¬·¶Î§0£¬1
+	float beta_n = 0.1;//ºÍÔ²ÖùÖĞĞÄÏß¼Ğ½ÇÏà¹ØµÄ´Ö²Ú¶È£¬·¶Î§0£¬1
+	float alpha = 2 / 180;//Í··¢×îÍâ²ãÇÊºÍÔ²Öù±ßÔµÄ¸ÏßµÄ¼Ğ½Ç£¬Ò»°ãÎª2¶È,ÕâÀïÓÃ»¡¶È±íÊ¾
 
 	float v = 0.02;//´Ö²Ú¶È,ÕâÀïÖ±½Ó¶¨Òå£¬Êµ¼ÊÉÏ¸ÃÖµÓ¦¸ÃÍ¨¹ıbeta_m¼ÆËãµÃµ½
 	vec3 alongD = vec3(0,0,1);//ÊÀ½ç¿Õ¼äÖĞµÄÍ··¢·½ÏòÏòÁ¿
 
 	//²é¿´ÊÇ·ñnºÍalongD´¹Ö±
 	float nDotAlongD = dot(alongD,n);
-	vec3 res;
+
 	n = normalize(n);
 	wo = normalize(wo);
 
@@ -965,40 +932,164 @@ vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨Ï
 	vec3 y = normalize(cross(z,x));
 	mat3 localMatrix  = mat3(x,y,z);
 	mat3 inverseMatrix = inverse(localMatrix);
-	//»ñÈ¡·´Éä¹âÏòÁ¿
-	vec3 wri = reflect(-wo,n);
-	//½«wriºÍwo×ª»»µ½±¾µØ×ø±êÏµ
-	wri = normalize(inverseMatrix * wri);
+	//½«wo×ª»»µ½±¾µØ×ø±êÏµ
 	wo = normalize(inverseMatrix * wo);
 
 
 	//¼ÆËãÒ»Ğ©Í¨ÓÃ²ÎÊı
-
-
-
-
-
-
-	float longtitudeScaterFactor  = HairLongitudinalScatteringFunction(wo,wri,v);
+	//¼ÆËãwoºÍ·¨Æ½Ãæ¼Ğ½ÇµÄÏà¹ØÖµ£¬ÒÔ¼°woÔÚ·¨Æ½ÃæÍ¶Ó°ºÍ·¨ÏòÁ¿¼Ğ½ÇµÄÏà¹ØÖµ
+	float sinTheta_o = dot(wo,alongD);
+	float cosTheta_o = sqrt(1 - pow(sinTheta_o,2));
+	float sinPhi_o = wo.y / cosTheta_o;
+	float cosPhi_o = wo.x / cosTheta_o;
+	float phi_o = acos(cosPhi_o);
 	
+	
+	//¼ÆËãĞŞÕıeta
+	float etap = sqrt(pow(eta,2) - pow(sinTheta_o,2))/ cosTheta_o;
+	//¼ÆËãÕÛÉäphi_tµÄÏà¹Ø²ÎÊı
+	float sinPhi_t = sinPhi_o  / etap;
+	float cosPhi_t = sqrt(1- pow(sinPhi_t,2));
+	float phi_t = acos(cosPhi_t);
 
 
 
 
-	res.x = longtitudeScaterFactor;
+	//¼ÆËã¹âÏßÔÚÍ··¢ÖĞ´©¹ıµÄÂ·¾¶³¤¶ÈÒÔ¼°Ë¥¼õ³Ì¶È
+	float len =  2 * cosPhi_t / cosTheta_o;
+	float attenation = exp(-  sigma_a * len);
+
+	//»ñµÃApÊı×é
+	float Ap[4] = Ap(cosTheta_o,eta,sinPhi_o,attenation);
+
+	//¼ÆËãApµÄpdf
+	float ApPDF[4],ApCDF[4];
+	float sumAp = 0;
+	for(uint p = 0;p < 4;p++)
+	{
+		sumAp+=Ap[p];
+	}
+	for(uint p = 0;p < 4;p++)
+	{
+		ApPDF[p] = Ap[p] / sumAp;
+		//¼ÆËãApµÄCDF
+		if(p == 0)
+		{
+			ApCDF[p] = ApPDF[p];
+		}else {
+			ApCDF[p] += ApPDF[p-1];
+		}
+		
+	}
 
 
 
 
 
 	
+	uint numSample = 30;
+	vec3 totalLight = vec3(0);
+	float totalWeight = 0;
+	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
+	{
+		vec2 samplePoint = HaltonSample2D(sampleIndex); 
+		//²ÉÑùÒ»¸öp
+		uint p = 0;
+		while(p<=3){
+			if(ApCDF[p] >=samplePoint.x)
+			{
+				break;
+			}
+			p++;
+		}
 
 
+		//¸ù¾İpµÄÖµÆ«×ªtheta_o
+		float theta_o = asin(sinTheta_o);
+		if(p == 0)
+		{
+			sinTheta_o = sin(theta_o - 2 * alpha);
+			cosTheta_o = cos(theta_o - 2 * alpha);	
+		}else if(p == 1){
+			sinTheta_o = sin(theta_o + 1 * alpha);
+			cosTheta_o = cos(theta_o + 1 * alpha);	
+		
+		}else if(p == 2){
+			sinTheta_o = sin(theta_o - 4 * alpha);
+			cosTheta_o = cos(theta_o - 4 * alpha);	
+		
+		}else {
+		
+		}
+		cosTheta_o = abs(cosTheta_o);
 
+
+		//¼ÆËãÈëÉä¹âµÄphiÖµ
+		float phi_i = 0;
+		if(p != 3)
+		{
+			phi_i = Phi(p,phi_o,phi_t)/*ÈëÉä¹âµÄÀíÂÛphiÖµ*/ + FittingInverse(samplePoint.x) * 2/*Âú×ã·Ö²¼µÄ²ÉÑùÖµ£¬ÕâÀïÓ¦¸ÃÍ¨¹ıNpµÄinverse CDFÀ´»ñµÃ£¬µ«±È½ÏÂé·³ÕâÀïÖ±½ÓÊ¹ÓÃÒ»¸öÄâºÏµÄ*/;//
+		}else 
+		{
+			phi_i = samplePoint.x * 2 * s_pi - s_pi;
+		}
+		
+
+		//¼ÆËãÈëÉä¹âµÄthetaÖµ
+		float theta_i = 0;
+		if(p != 3)
+		{
+			theta_i = -theta_o/*ÈëÉä¹âµÄÀíÂÛthetaÖµ*/ + FittingInverse(samplePoint.y)/*Âú×ã·Ö²¼µÄ²ÉÑùÖµ£¬ÕâÀïÓ¦¸ÃÍ¨¹ıMpµÄinverse CDFÀ´»ñµÃ£¬µ«±È½ÏÂé·³ÕâÀïÖ±½ÓÊ¹ÓÃÒ»¸öÄâºÏµÄ*/;//
+		}else 
+		{
+			theta_i = samplePoint.y  * s_pi - 0.5 * s_pi;
+		}
+		float sinTheta_i = sin(theta_i);
+		float cosTheta_i = cos(theta_i);
+
+		float curAp = Ap[p];
+		float curMp = Mp(sinTheta_i,cosTheta_i,sinTheta_o,cosTheta_o,0.2/*ÕâÀïÓ¦¸ÃºÍbeta_mÏà¹Ø£¬µ«ÕâÀïÏÈÖ±½Ó¶¨ÒåÎª0.2*/);
+		
+		float deltaPhi = phi_i - phi_o;
+		float curNp = Np(deltaPhi,beta_n);	
+
+		if(false)
+		{
+			//µ±Ç°µÄbsdfÏî£¬ÕâÀïÒª³ıÒÔcosTheta_i,ÓÉÓÚ¿ÉÄÜÎª0£¬ËùÒÔÕâÀïÖ»ÊÇ¸ø³ö¸ÃÄ£ĞÍµÄbsdfµÄÏîÓÉÄÄĞ©¹¹³É£¬²»²ÎÓë×îÖÕ¼ÆËã
+			float curBsdf = curAp * curMp * curNp / cosTheta_i;
+		
+		}
+
+		vec3 wi;
+		//¼ÆËãwiµÄ±¾µØ·½Ïò
+		wi.z = sin(theta_i);
+		wi.x = cos(theta_i)* cos(phi_i);
+		wi.x = cos(theta_i)* sin(phi_i);
+		//wi±ä»»µ½ÊÀ½ç¿Õ¼ä
+		wi = normalize(localMatrix * wi);
+
+
+		vec3 light = texture(skyTexture,wi).xyz;
+		//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
+		light = pow(light, vec3(2.4));
+		float curWeight = curAp * curMp * curNp;
+		//totalLight += light * curWeight;
+		//totalWeight+=curWeight;
+		//totalLight += vec3(curMp,0,0) ;
+		//totalWeight+=1;
+		//totalLight += vec3(ApPDF[0],ApPDF[1],ApPDF[2]) ;
+		//totalWeight+=1;
+		totalLight += vec3(curNp,0,0) ;
+		totalWeight+=1;
 
 
 	
-	return res;
+	
+	}	
+	totalLight/=totalWeight;
+	totalLight/=10;
+
+	return totalLight;
 
 }
 
