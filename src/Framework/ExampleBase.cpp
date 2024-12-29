@@ -1140,6 +1140,10 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 	geometry.indexBuffers.resize(geo.shapes.size());
 	std::vector<uint32_t> indicesData;
 	geometry.numIndexPerZone.resize(geometry.indexBuffers.size());
+	//手动计算法线
+	std::vector<glm::vec3> vertexNormals(numVertex,glm::vec3(0));
+	std::map<uint32_t, std::set<uint32_t>> vertexNormalIds;
+
 	for (uint32_t zoneId = 0; zoneId < geometry.indexBuffers.size(); zoneId++)
 	{
 
@@ -1159,7 +1163,16 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 			//填充法线
 			if (!geo.vertexAttrib.normals.empty())
 			{
-				FillBuffer(geometry.vertexBuffer, indicesData[i] * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(geo.vertexAttrib.normals.data() + normalIndex * 3));
+				glm::vec3 curNormal = glm::vec3(geo.vertexAttrib.normals[normalIndex * 3], geo.vertexAttrib.normals[normalIndex * 3 + 1], geo.vertexAttrib.normals[normalIndex * 3 +2]);
+				curNormal = glm::normalize(curNormal);
+				if (!vertexNormalIds[indicesData[i]].contains(normalIndex))//如果这是一个新的法线则加入计算
+				{
+					vertexNormalIds[indicesData[i]].insert(normalIndex);
+					vertexNormals[indicesData[i]] += curNormal;
+				}
+
+
+				//FillBuffer(geometry.vertexBuffer, indicesData[i] * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(geo.vertexAttrib.normals.data() + normalIndex * 3));
 			}
 			
 
@@ -1171,7 +1184,15 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 	}
 
 
+	for (uint32_t v = 0; v < numVertex; v++)
+	{
+		glm::vec3 curV = vertexNormals[v];
+		//归一化
+		curV = glm::normalize(curV);
+		//填充法向量
+		FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
 
+	}
 
 
 

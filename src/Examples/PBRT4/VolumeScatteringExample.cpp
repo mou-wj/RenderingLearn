@@ -1,14 +1,14 @@
-#include "ReflectionModelsExample.h"
+#include "VolumeScatteringExample.h"
 #include "glm/mat4x4.hpp"
 
-void ReflectionModelsExample::InitSubPassInfo()
+void VolumeScatteringExample::InitSubPassInfo()
 {
 	ShaderCodePaths shaderCodePath;
 	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.vert";
 	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SkyBoxExample.frag";
 	ShaderCodePaths drawSceenCodePath;
-	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/ReflectionModelsExample.vert";
-	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/ReflectionModelsExample.frag";
+	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.vert";
+	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.frag";
 
 
 
@@ -74,32 +74,24 @@ void ReflectionModelsExample::InitSubPassInfo()
 
 }
 
-void ReflectionModelsExample::InitResourceInfos()
+void VolumeScatteringExample::InitResourceInfos()
 {
 
-	geoms.resize(3);
+	geoms.resize(2);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj", geoms[1]);
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cylinder.obj", geoms[2]);
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/moved_cube.obj", geoms[1]);
 
 	subpassDrawGeoInfos[0] = { 0 };
 	subpassDrawGeoInfos[1] = { 1 };
 
 	std::vector<std::string> skyboxImages = {
-	//std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
-	//std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg",//-x
-	////因为采样使用的是glsl的texture函数，其计算纹理坐标的方式是根据opengl的NDC坐标进行的，即按照opengl的NDC，其+y方向应该是向上的，而vulkan的+y是向下的，为了适配glsl的texture函数，这里可以反转+-y所对应的图片，但是反转+-y图片其他方向任然存在上下颠倒问题，所以不采取反转+-y图片而进行所有面图片的反转读取
-	//std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg",//+y
-	//std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg",//-y
-	//std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg",//+z
-	//std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg"//-z
-	std::string(PROJECT_DIR) + "/resources/pic/skybox1/right.png",//+x
-	std::string(PROJECT_DIR) + "/resources/pic/skybox1/left.png",//-x
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/left.jpg",//-x
 	//因为采样使用的是glsl的texture函数，其计算纹理坐标的方式是根据opengl的NDC坐标进行的，即按照opengl的NDC，其+y方向应该是向上的，而vulkan的+y是向下的，为了适配glsl的texture函数，这里可以反转+-y所对应的图片，但是反转+-y图片其他方向任然存在上下颠倒问题，所以不采取反转+-y图片而进行所有面图片的反转读取
-	std::string(PROJECT_DIR) + "/resources/pic/skybox1/bottom.png",//+y
-	std::string(PROJECT_DIR) + "/resources/pic/skybox1/top.png",//-y
-	std::string(PROJECT_DIR) + "/resources/pic/skybox1/front.png",//+z
-	std::string(PROJECT_DIR) + "/resources/pic/skybox1/back.png"//-z
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/bottom.jpg",//+y
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/top.jpg",//-y
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/front.jpg",//+z
+	std::string(PROJECT_DIR) + "/resources/pic/skybox/back.jpg"//-z
 	};
 	textureBindInfos["skybox"] = TextureBindInfo(skyboxImages);
 	textureBindInfos["skybox"].binding = 1;
@@ -111,19 +103,19 @@ void ReflectionModelsExample::InitResourceInfos()
 	bufferBindInfos["Buffer"].size = sizeof(glm::mat4) * 3;
 	bufferBindInfos["Buffer"].binding = 0;
 
-	bufferBindInfos["SceenInfo"].size = sizeof(glm::vec3) + sizeof(uint32_t);
-	bufferBindInfos["SceenInfo"].binding = 2;
-	bufferBindInfos["SceenInfo"].pipeId = 1;
+	bufferBindInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
+	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
+	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 1;
 	
 }
 
-void ReflectionModelsExample::Loop()
+void VolumeScatteringExample::Loop()
 {
 	uint32_t i = 0;;
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	uint32_t reflectModeType = 5;
 
-	Camera camera(glm::vec3(0,-1,-4),glm::vec3(0,0,0),glm::vec3(0,1,0));
+
+	Camera camera(glm::vec3(0,0,-12),glm::vec3(0,0,-11),glm::vec3(0,1,0));
 	//绑定camera响应按键的回调函数
 	WindowEventHandler::SetEventCallBack(KEY_W_PRESS, [&camera]() {camera.Move(MoveDirection::FORWARD); }, "点击w 相机前移");
 	WindowEventHandler::SetEventCallBack(KEY_S_PRESS, [&camera]() {camera.Move(MoveDirection::BACK); }, "点击s 相机后移");
@@ -138,23 +130,6 @@ void ReflectionModelsExample::Loop()
 		camera.Rotate(RotateAction::AROUND_Y_POSITIVE);
 		}, "点击right 相机往右看");
 	WindowEventHandler::SetEventCallBack(KEY_LEFT_PRESS, [&camera]() {camera.Rotate(RotateAction::AROUND_Y_NEGATIVE); }, "点击left 相机往左看");
-	WindowEventHandler::SetEventCallBack(KEY_I_PRESS, [&]() {
-		std::cout << "输入一个整数，范围[0-5]" << std::endl;
-		uint32_t cur = 0;
-		std::cin >> cur;
-		if (cur > 5)
-		{
-			std::cout << "输入非法" << std::endl;
-		}
-		else {
-			reflectModeType = cur;
-			FillBuffer(buffers["SceenInfo"], sizeof(glm::vec3), sizeof(uint32_t), (const char*)&reflectModeType);
-		}
-
-
-		
-		
-		}, "点击I 输入一个整数，控制当前显示的反射模型实例，0表示lambert漫反射模型，1表示光滑镜面反射折射模型，2表示金属反射模型，3表示微表面反射模型，4表示微表面折射模型，5表示微表面反射折射模型");
 
 
 
@@ -172,9 +147,7 @@ void ReflectionModelsExample::Loop()
 	//ShowVec(buffer.proj* buffer.view* glm::vec4(1, 1, 1, 1));
 
 	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-	FillBuffer(buffers["SceenInfo"], 0, sizeof(glm::vec3), (const char*)&(camera.GetPos()));
 
-	FillBuffer(buffers["SceenInfo"], sizeof(glm::vec3), sizeof(uint32_t), (const char*)&reflectModeType);
 
 	auto swapchainValidSemaphore = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
@@ -186,15 +159,8 @@ void ReflectionModelsExample::Loop()
 
 	//绑定纹理以及uniform buffer
 	BindTexture("skybox");
-	textureBindInfos["skybox"].pipeId = 1;
-	BindTexture("skybox");
-
-
 	BindBuffer("Buffer");
-	bufferBindInfos["Buffer"].pipeId = 1;
-	BindBuffer("Buffer");
-
-	BindBuffer("SceenInfo");
+	BindBuffer("SimpleSceenExampleBuffer");
 
 
 	while (!WindowEventHandler::WindowShouldClose())
@@ -207,8 +173,7 @@ void ReflectionModelsExample::Loop()
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
-		FillBuffer(buffers["SceenInfo"], 0, sizeof(glm::vec3), (const char*)&(camera.GetPos()));
-
+		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		WindowEventHandler::ProcessEvent();
@@ -235,7 +200,7 @@ void ReflectionModelsExample::Loop()
 }
 
 
-void ReflectionModelsExample::InitSyncObjectNumInfo()
+void VolumeScatteringExample::InitSyncObjectNumInfo()
 {
 	numSemaphores = 2;
 }

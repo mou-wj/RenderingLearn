@@ -7,6 +7,7 @@
 #include "Common/GlmShowTool.hpp"
 #include "Utils/Camera.h"
 #include <map>
+#include <set>
 #include <string>
 #include <array>
 #include <spirv_glsl.hpp>

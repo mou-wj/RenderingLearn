@@ -12,6 +12,7 @@ layout(location = 0) out vec4 outColor;
 layout(set = 0,binding = 1) uniform samplerCube skyTexture;
 layout(set = 0,binding = 2) uniform SceenInfo{//³¡¾°ĞÅÏ¢
 	vec3 viewPosition;//Ïà»úÔÚÊÀ½ç×ø±êÏµÖĞµÄÎ»ÖÃ
+	uint reflectMode;
 
 };
 
@@ -908,6 +909,8 @@ float Np(float phi/*-pi µ½ pi*/,float roughness){
 //ÓÉÓÚÏÖÔÚÌõ¼şÏŞÖÆ£¬ÕÒ²»µ½Í··¢Ë¿ÓÃÔ²Öù½¨Ä£µÄÄ£ĞÍ£¬ÄÜÕÒµ½µÄ»ù±¾¶¼ÊÇÓÃÌõ´ø±íÊ¾£¬È»ºó¼ÓÉÏÌåäÖÈ¾À´½øĞĞÍ··¢µÄÏÔÊ¾£¬ËùÒÔÔÚÕâÀï¼òµ¥Æğ¼û£¬Ö±½ÓÓÃÒ»¸öÏ¸Ô²Öù±íÊ¾Ò»¸ùÍ··¢È»ºóÀ´ÑéÖ¤
 //Õâ¸öÔ²ÖùµÄÖĞĞÄÏßµÄ·½ÏòÏòÁ¿Îª(0,-1,0),¹Ê·¨Æ½Ãæ¾ÍÎªxzÆ½Ãæ Ô²ÖùÖ±¾¶Îª0.1
 vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨ÏòÁ¿*/){
+	//to do ¸ÃÄ£ĞÍ½ÏÎª·±Ëö£¬ÏÈ¾Í´Ë¸æÒ»¶ÎÂä£¬´ıºóĞøÔÙ¼ÌĞøÉîÈë
+	
 	//Í··¢Ä£ĞÍµÄ6¸ö²ÎÊı
 	float h=0;//³öÉäÏòÁ¿woÔÚÔ²ÖùµÄ´¹Ö±Ö±¾¶ÉÏµÄÍ¶Ó°µãºÍ°ë¾¶µÄ±ÈÀı£¬·¶Î§Îª-1£¬1,ÆäÊµ¾ÍµÈÓÚsinGamma_wo
 	float eta = 1.5 / 1.0;//Í··¢µÄÕÛÉäÂÊ/¿ÕÆøµÄÕÛÉäÂÊ
@@ -1073,21 +1076,23 @@ vec3 ReflectModelForHair(vec3 wo/*ÊÀ½ç¿Õ¼äÖĞµÄ³öÉäÏòÁ¿*/,vec3 n/*ÊÀ½ç¿Õ¼äÖĞµÄ·¨Ï
 		//gama ½âÂë£¬×ªÏßĞÔ¿Õ¼ä
 		light = pow(light, vec3(2.4));
 		float curWeight = curAp * curMp * curNp;
-		//totalLight += light * curWeight;
-		//totalWeight+=curWeight;
+		totalLight += light * curWeight;
+		totalWeight+=curWeight;
 		//totalLight += vec3(curMp,0,0) ;
 		//totalWeight+=1;
 		//totalLight += vec3(ApPDF[0],ApPDF[1],ApPDF[2]) ;
 		//totalWeight+=1;
-		totalLight += vec3(curNp,0,0) ;
-		totalWeight+=1;
+		//totalLight += vec3(curAp,0,0) ;
+		//totalWeight+=1;
+		//totalLight += vec3(curNp,0,0) ;
+		//totalWeight+=1;
 
 
 	
 	
 	}	
 	totalLight/=totalWeight;
-	totalLight/=10;
+	//totalLight/=10;
 
 	return totalLight;
 
@@ -1098,6 +1103,29 @@ void main(){
 
 	vec3 wo = normalize(viewPosition - inWorldPosition);
 	vec3 color;
+	if(reflectMode == 0)
+	{
+		color = ReflectModelLambertDiffuseReflect(wo,inNormal);
+	}else if(reflectMode == 1)
+	{
+		color = ReflectModelSpecularReflectAndRefract(wo,inNormal);
+	}
+	else if(reflectMode == 2)
+	{
+		color = ReflectModelMetalReflect(wo,inNormal);
+	}
+	else if(reflectMode == 3)
+	{
+		color = ReflectModelRoughnessWithMicrofacetTheoryReflect(wo,inNormal);
+	}
+	else if(reflectMode == 4)
+	{
+		color = ReflectModelRoughnessWithMrcrofacetTheoryRefract(wo,inNormal);
+	}
+	else if(reflectMode == 5)
+	{
+		color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
+	}
 	//color = ReflectModelLambertDiffuseReflect(wo,inNormal);
 	//color = ReflectModelSpecularReflectAndRefract(wo,inNormal);
 	//color = ReflectModelMetalReflect(wo,inNormal);
@@ -1105,7 +1133,7 @@ void main(){
 	//color = ReflectModelRoughnessWithMrcrofacetTheoryRefract(wo,inNormal);
 	
 	//color = ReflectModelRoughnessWithMrcrofacetTheoryReflectAndRefract(wo,inNormal);
-	color = ReflectModelForHair(wo,inNormal);
+	//color = ReflectModelForHair(wo,inNormal);
 	
 	//gama ½âÂë
 	//color = pow(color, vec3(2.4));

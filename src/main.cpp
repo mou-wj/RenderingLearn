@@ -5,6 +5,8 @@
 #include "Examples/PBRT4/SamplePointsExample.h"
 #include "Examples/PBRT4/ReflectionModelsExample.h"
 #include "Examples/PBRT4/DisturbutionLobeExample.h"
+#include "Examples/SimpleExamples/GeometryShaderExample.h"
+#include "Examples/PBRT4/VolumeScatteringExample.h"
 
 #include "Framework/Utils/powitacq_rgb.h"
 /*
@@ -54,7 +56,7 @@ int main()
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
-	SkyBoxExample example;
+	//SkyBoxExample example;
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
 	//powitacq_rgb::BRDF brdf(std::string(PROJECT_DIR) + "/resources/mesured_bsdf/aniso_brushed_aluminium_1_rgb.bsdf");
@@ -62,6 +64,8 @@ int main()
 
 	//ReflectionModelsExample example;
 	//DisturbutionLobeExample example;
+	//GeometryShaderExample example;
+	VolumeScatteringExample example;
 	ExampleBase::Run(&example);
 
 

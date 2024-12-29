@@ -4,12 +4,12 @@
 layout(triangles) in;  // 输入类型为三角形
 
 // 输出：传递给片段着色器的顶点数据
-layout(line_strip,max_vertices  = 3) out;  // 输出类型为三角形带（triangle strip），最多6个顶点
+layout(triangle_strip,max_vertices  = 3) out;  // 输出类型为三角形带（triangle strip），最多6个顶点
 
 
 
 void main() {
-    // 生成两个额外的三角形，使其变成一个六边形
+    
     for (int i = 0; i < 3; ++i) {
         gl_Position = gl_in[i].gl_Position;  // 传递原始顶点位置
         EmitVertex();  // 发射一个顶点
