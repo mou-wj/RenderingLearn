@@ -7,6 +7,7 @@
 #include "Examples/PBRT4/DisturbutionLobeExample.h"
 #include "Examples/SimpleExamples/GeometryShaderExample.h"
 #include "Examples/PBRT4/VolumeScatteringExample.h"
+#include "Examples/RealTimeRendering4/C5ShadingBasicsExample.h"
 
 #include "Framework/Utils/powitacq_rgb.h"
 /*
@@ -65,7 +66,8 @@ int main()
 	//ReflectionModelsExample example;
 	//DisturbutionLobeExample example;
 	//GeometryShaderExample example;
-	VolumeScatteringExample example;
+	//VolumeScatteringExample example;
+	C5ShadingBasicsExample example;
 	ExampleBase::Run(&example);
 
 

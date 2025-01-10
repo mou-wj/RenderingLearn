@@ -1682,3 +1682,27 @@ void ExampleBase::CreateSemaphores(uint32_t numSemaphores)
 
 }
 
+void ExampleBase::SetSupassDescription(VkSubpassDescription& subpassDesc, VkSubpassDescriptionFlags flags, VkPipelineBindPoint pipelineBindPoint, const std::vector<VkAttachmentReference>& inputAttachmentRefs, const std::vector<VkAttachmentReference>& colorAttachmentRefs, const VkAttachmentReference* resolveAttachments, const VkAttachmentReference* depthStencilAttachment, const std::vector<uint32_t>& preserveAttachments)
+{
+	subpassDesc.flags = flags;
+	subpassDesc.pipelineBindPoint = pipelineBindPoint;
+	subpassDesc.inputAttachmentCount = inputAttachmentRefs.size();
+	if (subpassDesc.inputAttachmentCount != 0)
+	{
+		subpassDesc.pInputAttachments = inputAttachmentRefs.data();
+	}
+	subpassDesc.colorAttachmentCount = colorAttachmentRefs.size();
+	if (subpassDesc.colorAttachmentCount != 0)
+	{
+		subpassDesc.pColorAttachments = colorAttachmentRefs.data();
+	}
+	subpassDesc.pDepthStencilAttachment = depthStencilAttachment;
+	subpassDesc.pResolveAttachments = resolveAttachments;
+
+	subpassDesc.preserveAttachmentCount = preserveAttachments.size();
+	if (subpassDesc.preserveAttachmentCount != 0)
+	{
+		subpassDesc.pPreserveAttachments = preserveAttachments.data();
+	}
+}
+

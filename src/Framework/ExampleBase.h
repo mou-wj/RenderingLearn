@@ -563,6 +563,20 @@ private:
 	void CreateSemaphores(uint32_t numSemaphores);
 	//void CreateFences(uint32_t numFences);
 
+	//info set tools
+	void SetSupassDescription(VkSubpassDescription &subpassDesc,
+		VkSubpassDescriptionFlags       flags,
+		VkPipelineBindPoint             pipelineBindPoint,
+		const std::vector<VkAttachmentReference>& inputAttachmentRefs,//在创建subpass的时候不能被销毁
+		const std::vector<VkAttachmentReference>& colorAttachmentRefs,//在创建subpass的时候不能被销毁
+		const VkAttachmentReference* resolveAttachments,//在创建subpass的时候不能被销毁
+		const VkAttachmentReference* depthStencilAttachment,//在创建subpass的时候不能被销毁
+		const std::vector<uint32_t>& preserveAttachments//在创建subpass的时候不能被销毁
+	);
+
+
+
+
 private:
 	
 	//shader parse
