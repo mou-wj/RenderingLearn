@@ -51,7 +51,8 @@ void C6TexturingExample::InitResourceInfos()
 {
 
 	geoms.resize(1);
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/simple_sceen.obj",geoms[0]);
+	geoms[0].useIndexBuffers = false;
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj",geoms[0]);
 
 	subpassDrawGeoInfos[0] = { 0 };
 
@@ -61,9 +62,17 @@ void C6TexturingExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
 
-	bufferBindInfos["SceenInfoBuffer"].size = sizeof(glm::vec4) * 3;
-	bufferBindInfos["SceenInfoBuffer"].binding = 1;
-	bufferBindInfos["SceenInfoBuffer"].pipeId = 0;
+
+	
+	//黑白棋盘纹理
+
+	TextureDataSource dataSource;
+	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/black-white.jpg";
+	textureBindInfos["bw"].textureDataSources.push_back(dataSource);
+	textureBindInfos["bw"].binding = 1;
+
+
+
 	
 }
 
@@ -73,7 +82,7 @@ void C6TexturingExample::Loop()
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 
 
-	Camera camera(glm::vec3(0,0,-12),glm::vec3(0,0,-11),glm::vec3(0,1,0));
+	Camera camera(glm::vec3(0,-1,-12),glm::vec3(0,0,0),glm::vec3(0,1,0));
 	//绑定camera响应按键的回调函数
 	WindowEventHandler::SetEventCallBack(KEY_W_PRESS, [&camera]() {camera.Move(MoveDirection::FORWARD); }, "点击w 相机前移");
 	WindowEventHandler::SetEventCallBack(KEY_S_PRESS, [&camera]() {camera.Move(MoveDirection::BACK); }, "点击s 相机后移");
@@ -101,20 +110,6 @@ void C6TexturingExample::Loop()
 	buffer.view = camera.GetView();
 	buffer.proj = camera.GetProj();
 
-	struct alignas(16) SceenInfoBuffer {
-		glm::vec3 cameraPos;
-		float tmpA;//填充偏移
-		glm::vec3 pointLightPos;
-		float tmpB;//填充偏移
-		glm::vec3 pointLightColor;
-		float tmpC;//填充偏移
-	} sceenInfo;
-	sceenInfo.cameraPos = camera.GetPos();
-	sceenInfo.pointLightColor = glm::vec3(1, 1, 1);
-	sceenInfo.pointLightPos = glm::vec3(-1, -6, 0);
-	FillBuffer(buffers["SceenInfoBuffer"], 0, sizeof(SceenInfoBuffer), (const char*)&sceenInfo);
-
-
 
 
 
@@ -128,7 +123,7 @@ void C6TexturingExample::Loop()
 
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
-	BindBuffer("SceenInfoBuffer");
+	BindTexture("bw");
 
 
 	while (!WindowEventHandler::WindowShouldClose())

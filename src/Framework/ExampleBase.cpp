@@ -750,13 +750,32 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList)
 		for (uint32_t i = 0; i < subpassDrawGeoInfos[curSubpassIndex].size(); i++)
 		{
 			const auto& geom = geoms[subpassDrawGeoInfos[curSubpassIndex][i]];
-
-			CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-			for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+			if (geom.useIndexBuffers)
 			{
-				CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-				CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+
+				CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+				for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+				{
+					CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+					CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+				}
+
+
 			}
+			else {
+				for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
+				{
+					CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
+					CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
+				}
+
+
+
+			
+			
+			}
+
+
 
 		}
 
@@ -1121,78 +1140,147 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 	{
 		LogFunc(0);
 	}
-	uint32_t numVertex = geo.vertexAttrib.vertices.size() / 3;
-	Geometry& geometry = geo;
-	geometry.numVertex = numVertex;
-	//����vertex buffer
-	geometry.vertexBuffer = CreateVertexBuffer(nullptr, vertexAttributeInputStride * numVertex);
-	for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
-	{
-		//��䶥��λ������
-		FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
-
-
-
-	}
-
-
-
-	geometry.indexBuffers.resize(geo.shapes.size());
-	std::vector<uint32_t> indicesData;
-	geometry.numIndexPerZone.resize(geometry.indexBuffers.size());
-	//手动计算法线
-	std::vector<glm::vec3> vertexNormals(numVertex,glm::vec3(0));
-	std::map<uint32_t, std::set<uint32_t>> vertexNormalIds;
-
-	for (uint32_t zoneId = 0; zoneId < geometry.indexBuffers.size(); zoneId++)
+	if (geo.useIndexBuffers)
 	{
 
-		for (uint32_t cellId = 0; cellId < geo.shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
+		uint32_t numVertex = geo.vertexAttrib.vertices.size() / 3;
+		Geometry& geometry = geo;
+		geometry.numVertex = numVertex;
+		//����vertex buffer
+		geometry.vertexBuffer = CreateVertexBuffer(nullptr, vertexAttributeInputStride * numVertex);
+		for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
 		{
-			if (geo.shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
-			{
-				LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
-			}
+			//��䶥��λ������
+			FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
+
+
+
 		}
-		indicesData.resize(geo.shapes[zoneId].mesh.num_face_vertices.size() * 3);
-		for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
+
+		geometry.indexBuffers.resize(geo.shapes.size());
+		std::vector<uint32_t> indicesData;
+		geometry.numIndexPerZone.resize(geometry.indexBuffers.size());
+		//手动计算法线
+		std::vector<glm::vec3> vertexNormals(numVertex, glm::vec3(0));
+		std::map<uint32_t, std::set<uint32_t>> vertexNormalIds;
+
+		//纹理坐标数据待定
+
+		for (uint32_t zoneId = 0; zoneId < geometry.indexBuffers.size(); zoneId++)
 		{
-			indicesData[i] = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
-			const auto& normalIndex = geo.shapes[zoneId].mesh.indices[i].normal_index;
-			//�����������
-			//填充法线
-			if (!geo.vertexAttrib.normals.empty())
+
+			for (uint32_t cellId = 0; cellId < geo.shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
 			{
-				glm::vec3 curNormal = glm::vec3(geo.vertexAttrib.normals[normalIndex * 3], geo.vertexAttrib.normals[normalIndex * 3 + 1], geo.vertexAttrib.normals[normalIndex * 3 +2]);
-				curNormal = glm::normalize(curNormal);
-				if (!vertexNormalIds[indicesData[i]].contains(normalIndex))//如果这是一个新的法线则加入计算
+				if (geo.shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
 				{
-					vertexNormalIds[indicesData[i]].insert(normalIndex);
-					vertexNormals[indicesData[i]] += curNormal;
+					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
 				}
-
-
-				//FillBuffer(geometry.vertexBuffer, indicesData[i] * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(geo.vertexAttrib.normals.data() + normalIndex * 3));
 			}
-			
+			indicesData.resize(geo.shapes[zoneId].mesh.num_face_vertices.size() * 3);
+			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
+			{
+				indicesData[i] = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+				const auto& normalIndex = geo.shapes[zoneId].mesh.indices[i].normal_index;
+				//�����������
+				//填充法线
+				if (!geo.vertexAttrib.normals.empty())
+				{
+					glm::vec3 curNormal = glm::vec3(geo.vertexAttrib.normals[normalIndex * 3], geo.vertexAttrib.normals[normalIndex * 3 + 1], geo.vertexAttrib.normals[normalIndex * 3 + 2]);
+					curNormal = glm::normalize(curNormal);
+					if (!vertexNormalIds[indicesData[i]].contains(normalIndex))//如果这是一个新的法线则加入计算
+					{
+						vertexNormalIds[indicesData[i]].insert(normalIndex);
+						vertexNormals[indicesData[i]] += curNormal;
+					}
+
+
+					//FillBuffer(geometry.vertexBuffer, indicesData[i] * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(geo.vertexAttrib.normals.data() + normalIndex * 3));
+				}
+			}
+
+			geometry.indexBuffers[zoneId] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
+			geometry.numIndexPerZone[zoneId] = indicesData.size();
 
 		}
 
-		geometry.indexBuffers[zoneId] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
-		geometry.numIndexPerZone[zoneId] = indicesData.size();
+
+		for (uint32_t v = 0; v < numVertex; v++)
+		{
+			glm::vec3 curV = vertexNormals[v];
+			//归一化
+			curV = glm::normalize(curV);
+			//填充法向量
+			FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
+
+		}
+
+
+
+
+
+	}
+	else {
+
+		geo.shapeVertexBuffers.resize(geo.shapes.size());
+		geo.numIndexPerZone.resize(geo.shapeVertexBuffers.size());
+		std::vector<float> curVertexData;
+		for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
+		{
+
+			for (uint32_t cellId = 0; cellId < geo.shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
+			{
+				if (geo.shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
+				{
+					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
+				}
+			}
+			//当前shape的所有片元的点数据
+			uint32_t vertexAttributeInputFloatStride = vertexAttributeInputStride / sizeof(float);
+			curVertexData.resize(geo.shapes[zoneId].mesh.indices.size() * vertexAttributeInputFloatStride);
+			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
+			{
+				const auto & vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+				const auto& normalIndex = geo.shapes[zoneId].mesh.indices[i].normal_index;
+				const auto& texCoordIndex = geo.shapes[zoneId].mesh.indices[i].texcoord_index;
+				//�����������
+				//填充顶点位置
+				if (!geo.vertexAttrib.vertices.empty())
+				{
+					glm::vec3 curVertex = glm::vec3(geo.vertexAttrib.vertices[vertexIndex * 3], geo.vertexAttrib.vertices[vertexIndex * 3 + 1], geo.vertexAttrib.vertices[vertexIndex * 3 + 2]);
+					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride;
+					std::memcpy(curVertexOffset, &curVertex, sizeof(float) * 3);
+				}
+				
+				//填充法线
+				if (!geo.vertexAttrib.normals.empty())
+				{
+					glm::vec3 curNormal = glm::vec3(geo.vertexAttrib.normals[normalIndex * 3], geo.vertexAttrib.normals[normalIndex * 3 + 1], geo.vertexAttrib.normals[normalIndex * 3 + 2]);
+					curNormal = glm::normalize(curNormal);
+					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 3;
+					std::memcpy(curVertexOffset, &curNormal, sizeof(float) * 3);
+				}
+				//填充纹理坐标
+				if (!geo.vertexAttrib.texcoords.empty())
+				{
+					glm::vec2 curTexCoord = glm::vec2(geo.vertexAttrib.texcoords[texCoordIndex*2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1]);
+					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 9;
+					std::memcpy(curVertexOffset, &curTexCoord, sizeof(float) * 2);
+
+				}
+			}
+
+			geo.shapeVertexBuffers[zoneId] = CreateIndexBuffer((const char*)curVertexData.data(), curVertexData.size() * sizeof(float));
+			geo.numIndexPerZone[zoneId] = geo.shapes[zoneId].mesh.indices.size();
+
+		}
+
+
+
+
 
 	}
 
 
-	for (uint32_t v = 0; v < numVertex; v++)
-	{
-		glm::vec3 curV = vertexNormals[v];
-		//归一化
-		curV = glm::normalize(curV);
-		//填充法向量
-		FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
-
-	}
 
 
 

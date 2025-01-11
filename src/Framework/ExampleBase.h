@@ -354,10 +354,18 @@ struct Geometry
 	tinyobj::attrib_t vertexAttrib;
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
+	
+	bool useIndexBuffers = true;
+
+	//顶点缓冲索引缓冲
 	Buffer vertexBuffer;
 	std::vector<Buffer> indexBuffers;//һ��indexbuffer ����ģ���е�һ������
 	uint32_t numVertex = 0;
 	std::vector<uint32_t> numIndexPerZone;
+
+
+	//只使用顶点缓冲
+	std::vector<Buffer> shapeVertexBuffers;
 
 
 };
