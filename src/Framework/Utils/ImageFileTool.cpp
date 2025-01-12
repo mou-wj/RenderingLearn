@@ -32,3 +32,16 @@ void WriteJpeg(const std::string& outImagePath, const char* imageData, uint32_t 
 
 
 }
+
+void WriteJpeg(const std::string& outImagePath, const float* imageData, uint32_t width, uint32_t height, uint32_t numComponent)
+{
+	std::vector<char> tmp(width * height * numComponent);
+	size_t totalV = width * height * numComponent;
+	for (size_t i = 0; i < totalV; i++)
+	{
+		tmp[i] = char(*(imageData + i) * 255);
+	}
+	WriteJpeg(outImagePath, tmp.data(), width, height, numComponent);
+
+
+}

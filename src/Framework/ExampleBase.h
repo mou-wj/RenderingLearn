@@ -5,6 +5,7 @@
 #include "Utils/WindowEventHandler.h"
 #include "Common/Transform.h"
 #include "Common/GlmShowTool.hpp"
+#include "Utils/ImageFileTool.h"
 #include "Utils/Camera.h"
 #include <map>
 #include <set>
@@ -56,13 +57,15 @@ struct Image {
 	VkImage image;
 	VkImageView imageView;
 	VkFormat format;
+	uint64_t totalMemorySize = 0;
 	VkDeviceMemory memory;
 	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	uint32_t numLayer = 0, numMip = 1;
+	uint32_t numLayer = 1, numMip = 1;
 	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
 	VkExtent3D extent;
 	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
 	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+	std::map<uint32_t, std::map<uint32_t, VkSubresourceLayout>> layerMipLayouts;
 	void* hostMapPointer = nullptr;
 	uint32_t GetFormatNumBits(VkFormat format) {
 		switch (format)
@@ -103,6 +106,22 @@ struct Image {
 		size.depth = extent.depth / pow(2, mipLevel) >= 1 ? extent.depth / pow(2, mipLevel) : 1;
 		return size;
 	}
+	void WriteToJpg(const std::string& outJpgFile,uint32_t layer,uint32_t mip) {
+		uint32_t curW = totalMemorySize / (extent.height * 4);
+		auto layout = layerMipLayouts[layer][mip];
+		uint32_t w = layout.rowPitch / 4;
+		uint32_t h = layout.size / layout.rowPitch;
+
+		WriteJpeg(outJpgFile, (const char*)(hostMapPointer )+layout.offset, w, h);
+	}
+	void WriteToJpgFloat(const std::string& outJpgFile, uint32_t layer, uint32_t mip) {
+		uint32_t curW = totalMemorySize / (extent.height * 4);
+		auto layout = layerMipLayouts[layer][mip];
+		uint32_t w = layout.rowPitch / 4;
+		uint32_t h = layout.size / layout.rowPitch;
+
+		WriteJpeg(outJpgFile, (const float*)(hostMapPointer)+layout.offset, w, h);
+	}
 };
 
 struct Barrier {
@@ -136,7 +155,7 @@ struct Barrier {
 		bufferMemoryBarrier.size = 0;
 
 	}
-	const VkImageMemoryBarrier& ImageBarrier(Image& image,VkAccessFlags srcAccess, VkAccessFlags dstAccess,VkImageLayout dstImageLayout)
+	const VkImageMemoryBarrier& ImageBarrier(Image& image,VkAccessFlags srcAccess, VkAccessFlags dstAccess,VkImageLayout dstImageLayout,int layer = -1/*-1表示所有，否则表示指定的所有layer*/,int mip = -1/*-1表示所有，否则表示指定的所有miplevel*/)
 	{
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		imageMemoryBarrier.pNext = nullptr;
@@ -148,10 +167,24 @@ struct Barrier {
 		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		imageMemoryBarrier.image = image.image;
 		imageMemoryBarrier.subresourceRange.aspectMask = image.aspect;
-		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-		imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-		imageMemoryBarrier.subresourceRange.layerCount = image.numLayer;
-		imageMemoryBarrier.subresourceRange.levelCount = image.numMip;
+		if (layer == -1)
+		{
+			imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemoryBarrier.subresourceRange.layerCount = image.numLayer;
+		}
+		else {
+			imageMemoryBarrier.subresourceRange.baseArrayLayer = layer;
+			imageMemoryBarrier.subresourceRange.layerCount = 1;
+		}
+		if (mip == -1)
+		{
+			imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemoryBarrier.subresourceRange.levelCount = image.numMip;
+		}
+		else {
+			imageMemoryBarrier.subresourceRange.baseMipLevel = mip;
+			imageMemoryBarrier.subresourceRange.levelCount = 1;
+		}
 		return imageMemoryBarrier;
 	}
 
@@ -327,13 +360,17 @@ struct TextureDataSource {
 	std::vector<char> imagePixelDatas;//VK_FORMAT_R8G8B8A8_SRGB
 	uint32_t width = 0, height = 0;
 
+
 };
 struct TextureBindInfo {
 	std::vector<TextureDataSource> textureDataSources;
+	VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;//指定要创建的纹理的format
+	uint32_t formatComponentByteSize = 1;//指定format每个颜色分量的字节大小，如果指定出错会导致填充image数据出问题
 	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
 	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
 	bool compute = false;//是否用于compute pipeline的标志
 	VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+	bool buildMipmap = false;
 	TextureBindInfo() = default;
 	TextureBindInfo(const std::vector<std::string>& imagePaths) {
 		textureDataSources.resize(imagePaths.size());
@@ -343,6 +380,8 @@ struct TextureBindInfo {
 		}
 	}
 };
+
+
 struct Texture {
 	Image image;
 	VkSampler sampler;
@@ -450,14 +489,14 @@ protected:
 protected:
 	void LoadObj(const std::string& objFilePath, Geometry& geo);
 	//resource
-	void FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data);
+	void FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data,uint32_t componentByteSize = 1);
 	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
 protected:
 	//runtime
 	void CmdListReset(CommandList& cmdList);
 	void CmdListRecordBegin(CommandList& cmdList);
 	void CmdListRecordEnd(CommandList& cmdList);
-	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,int layer = -1,int mip = -1);
 	//compute
 	void CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
@@ -544,6 +583,7 @@ private:
 	//utils
 	int32_t GetSuitableQueueFamilyIndex(VkPhysicalDevice physicalDevice,VkQueueFlags wantQueueFlags,bool needSupportPresent,uint32_t wantNumQueue);
 	void PickValidPhysicalDevice();
+	void CheckCandidateTextureFormatSupport();
 	int32_t GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits,VkMemoryPropertyFlags wantMemoryFlags);
 	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping = VkComponentMapping{}, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
 	
@@ -560,7 +600,7 @@ private:
 	void DestroyBuffer(Buffer& buffer);
 
 	void TransferWholeImageLayout(Image& image, VkImageLayout dstImageLayout);
-	
+	void GenerateMipmap(Image& image);
 
 
 	//descriptor
@@ -633,15 +673,19 @@ private:
 	VkColorSpaceKHR colorSpace;
 	//const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A ,在该格式情况下，片段着色器输出会对调R和B分量，即片段着色器输出（1，0，0，1），实际写入到附件中的是（0，0，1，1），对swapchain中的image，存储在其中的pixel的值为（1，0，0，1）则会显示蓝色,着色器中采样获取的格式为（R,G,B,A）,要想正常的在该格式下进行显示，在片段着色其中的颜色输出需要按照正常的R，G，B，A格式，采样得到的颜色也是按照R，G，B，A格式
 	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;
-	const std::vector<VkFormat> candidatedTextureFormats = {
-		VK_FORMAT_R8G8B8A8_UNORM,//当前使用stb读取的时srgb格式的数据，而该格式再着色器中不会进行gama解码，且颜色附件为srgb的，所以输出的时候会自动编码，所以为保证结果正确，在着色器中需要手动解码
-		VK_FORMAT_R8G8B8A8_SNORM,
-		VK_FORMAT_R8G8B8A8_USCALED,
-		VK_FORMAT_R8G8B8A8_SSCALED,
-		VK_FORMAT_R8G8B8A8_UINT,
-		VK_FORMAT_R8G8B8A8_SINT
+
+
+	const std::map<VkFormat, std::string> candidatedTextureFormatsMap = {
+		{VK_FORMAT_R8G8B8A8_UNORM,"VK_FORMAT_R8G8B8A8_UNORM"},//当前使用stb读取的时srgb格式的数据，而该格式再着色器中不会进行gama解码，且颜色附件为srgb的，所以输出的时候会自动编码，所以为保证结果正确，在着色器中需要手动解码
+		{VK_FORMAT_R8G8B8A8_SNORM,"VK_FORMAT_R8G8B8A8_SNORM"},
+		{VK_FORMAT_R8G8B8A8_USCALED,"VK_FORMAT_R8G8B8A8_USCALED"},
+		{VK_FORMAT_R8G8B8A8_SSCALED,"VK_FORMAT_R8G8B8A8_SSCALED"},
+		{VK_FORMAT_R8G8B8A8_UINT,"VK_FORMAT_R8G8B8A8_UINT"},
+		{VK_FORMAT_R8G8B8A8_SINT,"VK_FORMAT_R8G8B8A8_SINT"},
+		{VK_FORMAT_R32G32B32A32_SFLOAT,"VK_FORMAT_R32G32B32A32_SFLOAT"}
 	};
-	VkFormat textureFormat;
+
+	//VkFormat textureFormat;
 	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ�����ֵ�ĸ�ʽ
 	VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 

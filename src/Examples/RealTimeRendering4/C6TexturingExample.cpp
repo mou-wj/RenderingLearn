@@ -65,13 +65,109 @@ void C6TexturingExample::InitResourceInfos()
 
 	
 	//黑白棋盘纹理
+	std::vector<char> bwDatas(512 * 512 * 4);
+	uint32_t pattern[2][2] = { 0,1,1,0 };
+	uint32_t blockWidth = 256;
+	for (uint32_t i = 0; i < 512; i++)
+	{
+		for (uint32_t j = 0; j < 512; j++)
+		{
+			uint32_t i_pat = i / blockWidth % 2;
+			uint32_t j_pat = j / blockWidth % 2;
+			uint32_t curP = pattern[i_pat][j_pat];
+			uint8_t r = 0, g = 0, b = 0;
+			if (curP == 0)
+			{
+				r = g = b = 255;
+			}
+			bwDatas[(512 * i + j) * 4] = r;
+			bwDatas[(512 * i + j) * 4 + 1] = g;
+			bwDatas[(512 * i + j) * 4 + 2] = b;
+			bwDatas[(512 * i + j) * 4 + 3] = 255;
+
+		}
+
+
+	}
+
+
+	//构建SAT，由于SAT每个像素的值存放的是和，随着累加会导致和越来越大然后发生数值溢出，所以SAT中采取存放和除以像素点个数的方式
+	//SAT目前似乎由于存储格式的精度问题存存在问题
+	std::vector<float> bwSATDatas(512 * 512 * 4);
+	for (uint32_t i = 0; i < 512; i++)
+	{
+		for (uint32_t j = 0; j < 512; j++)
+		{
+			uint32_t curNumPixel = (i + 1) * (j + 1);
+			float areaSumR = 0;
+			float areaSumG = 0;
+			float areaSumB = 0;
+			int preI = i - 1;
+			int preJ = j - 1;
+			if (preI >= 0)
+			{
+				areaSumR += bwSATDatas[(preI * 512 + j) * 4];
+				areaSumG += bwSATDatas[(preI * 512 + j) * 4 + 1];
+				areaSumB += bwSATDatas[(preI * 512 + j) * 4 + 2];
+
+			}
+			if (preJ >= 0)
+			{
+				areaSumR += bwSATDatas[(i * 512 + preJ) * 4];
+				areaSumG += bwSATDatas[(i * 512 + preJ) * 4 + 1];
+				areaSumB += bwSATDatas[(i * 512 + preJ) * 4 + 2];
+
+			}
+			if (preI >= 0 && preJ >= 0)
+			{
+				areaSumR -= bwSATDatas[(preI * 512 + preJ) * 4];
+				areaSumG -= bwSATDatas[(preI * 512 + preJ) * 4 + 1];
+				areaSumB -= bwSATDatas[(preI * 512 + preJ) * 4 + 2];
+			}
+
+			float cR = (uint8_t)bwDatas[(i * 512 + j) * 4] / 255.0;
+			float cG = (uint8_t)bwDatas[(i * 512 + j) * 4 + 1] / 255.0;
+			float cB = (uint8_t)bwDatas[(i * 512 + j) * 4 + 2] / 255.0;
+
+			areaSumR += cR;
+			areaSumG += cG;
+			areaSumB += cB;
+
+
+			//bwSATDatas[(512 * i + j) * 4] = areaSumR / curNumPixel;
+			//bwSATDatas[(512 * i + j) * 4 + 1] = areaSumG / curNumPixel;
+			//bwSATDatas[(512 * i + j) * 4 + 2] = areaSumB / curNumPixel;
+			bwSATDatas[(512 * i + j) * 4] = areaSumR;
+			bwSATDatas[(512 * i + j) * 4 + 1] = areaSumG;
+			bwSATDatas[(512 * i + j) * 4 + 2] = areaSumB;
+			bwSATDatas[(512 * i + j) * 4 + 3] = 1;
+
+		}
+
+
+	}
+
 
 	TextureDataSource dataSource;
-	dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/black-white.jpg";
+	dataSource.height = 512;
+	dataSource.width = 512;
+	dataSource.imagePixelDatas = bwDatas;
+	//dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/black-white.jpg";
 	textureBindInfos["bw"].textureDataSources.push_back(dataSource);
 	textureBindInfos["bw"].binding = 1;
+	textureBindInfos["bw"].buildMipmap = true;
 
-
+	TextureDataSource satDataSource;
+	satDataSource.height = 512;
+	satDataSource.width = 512;
+	satDataSource.imagePixelDatas.resize(bwSATDatas.size() * sizeof(float));
+	std::memcpy(satDataSource.imagePixelDatas.data(), bwSATDatas.data(), satDataSource.imagePixelDatas.size());
+	//dataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/black-white.jpg";
+	textureBindInfos["satbw"].textureDataSources.push_back(satDataSource);
+	textureBindInfos["satbw"].binding = 2;
+	textureBindInfos["satbw"].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	textureBindInfos["satbw"].formatComponentByteSize = sizeof(float);
+	
 
 	
 }
@@ -124,7 +220,8 @@ void C6TexturingExample::Loop()
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
 	BindTexture("bw");
-
+	BindTexture("satbw");
+	textures["satbw"].image.WriteToJpg("satbw.jpg",0,0);
 
 	while (!WindowEventHandler::WindowShouldClose())
 	{

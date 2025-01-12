@@ -176,6 +176,7 @@ void ExampleBase::InitContex()
 	surface = CreateWin32Surface(instance, window);
 	debugUtilMessager = CreateDebugInfoMessager(instance);
 	PickValidPhysicalDevice();
+	CheckCandidateTextureFormatSupport();
 	physicalDeviceFeatures.geometryShader = VK_TRUE;//����geometry shader
 
 	physicalDeviceFeatures.depthClamp ;
@@ -379,18 +380,18 @@ void ExampleBase::PickValidPhysicalDevice()
 			}
 			bool suitableTextxureFormatFound = false;
 			uint64_t textureWantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
-			for (const auto& candidatedFormat : candidatedTextureFormats)
+			//纹理的默认格式是VK_FORMAT_R8G8B8A8_UNORM,所以这里检查一下是否支持
+
+			auto textureFormatProps = GetFormatPropetirs(physicalDevices[i], VK_FORMAT_R8G8B8A8_UNORM);
+			
+			if ((textureFormatProps.linearTilingFeatures & textureWantFormatFeature) == textureWantFormatFeature)
 			{
-				auto textureFormatProps = GetFormatPropetirs(physicalDevices[i], candidatedFormat);
+				suitableTextxureFormatFound = true;
+				//textureFormat = VK_FORMAT_R8G8B8A8_UNORM;
 				
-				if ((textureFormatProps.linearTilingFeatures & textureWantFormatFeature) == textureWantFormatFeature)
-				{
-					suitableTextxureFormatFound = true;
-					textureFormat = candidatedFormat;
-					break;
-				
-				}
+			
 			}
+
 			if (!suitableTextxureFormatFound)
 			{
 				continue;
@@ -447,6 +448,27 @@ void ExampleBase::PickValidPhysicalDevice()
 
 }
 
+void ExampleBase::CheckCandidateTextureFormatSupport()
+{
+
+	uint64_t textureWantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+	for (const auto& candidatedFormat : candidatedTextureFormatsMap)
+	{
+		auto textureFormatProps = GetFormatPropetirs(physicalDevice, candidatedFormat.first);
+
+		if ((textureFormatProps.linearTilingFeatures & textureWantFormatFeature) == textureWantFormatFeature)
+		{
+			std::cout << "The texture format is supported: " << candidatedFormat.second << std::endl;
+		}
+		else {
+			std::cout << "The texture format is not supported: " << candidatedFormat.second << std::endl;
+		}
+	}
+
+
+
+}
+
 int32_t ExampleBase::GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits, VkMemoryPropertyFlags wantMemoryFlags)
 {
 	auto memoryProperties = GetMemoryProperties(physicalDevice);
@@ -493,6 +515,7 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	auto imageMemRequiredments = GetImageMemoryRequirments(device, image.image);
 	auto memtypeIndex = GetMemoryTypeIndex(imageMemRequiredments.memoryTypeBits, memoryProperies);
 	image.memory = AllocateMemory(device, imageMemRequiredments.size, memtypeIndex);
+	image.totalMemorySize = imageMemRequiredments.size;
 	BindMemoryToImage(device, image.memory, image.image, 0);
 	if (memoryProperies & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
 	{
@@ -503,7 +526,7 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	return image;
 }
 
-void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data)
+void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data, uint32_t componentByteSize)
 {
 	VkImageSubresource subresource;
 	subresource.aspectMask = aspect;
@@ -515,7 +538,7 @@ void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageA
 	{
 		//填充每一行
 		rowOffset = sublayout.offset +  i * sublayout.rowPitch;
-		FillImage(image, rowOffset, width * numComponets, data + i * width * numComponets);
+		FillImage(image, rowOffset, width * numComponets * componentByteSize, data + i * width * numComponets * componentByteSize);
 
 
 	}
@@ -555,7 +578,7 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 			LoadCharUnsignedCharJpeg(textureBindInfo.textureDataSources[i].picturePath, { R,G,B,A }, textureBindInfo.textureDataSources[i].imagePixelDatas, x, y, flip);
 			textureBindInfo.textureDataSources[i].width = x;
 			textureBindInfo.textureDataSources[i].height = y;
-			if (i !=0)
+			if (i != 0)
 			{
 				ASSERT((x == textureBindInfo.textureDataSources[i - 1].width) &&
 					(y == textureBindInfo.textureDataSources[i - 1].height));
@@ -566,17 +589,57 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 	}
 	//����texture
 	uint32_t numLayer = textureBindInfo.textureDataSources.size();
-	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, textureFormat, x, y, 1, 1, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{},VK_IMAGE_TILING_LINEAR);
+	uint32_t numMip = uint32_t(log2(std::max(x, y))) + 1;
+	if (textureBindInfo.buildMipmap)
+	{
+
+		texture.image.numMip = numMip;
+
+
+	}
+	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, textureBindInfo.format, x, y, 1, texture.image.numMip, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{}, VK_IMAGE_TILING_LINEAR);
 	texture.sampler = CreateDefaultSampler(device, 1);
 	for (uint32_t i = 0; i < numLayer; i++)
 	{
 		x = textureBindInfo.textureDataSources[i].width;
 		y = textureBindInfo.textureDataSources[i].height;
 		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x, y, 4, textureBindInfo.textureDataSources[i].imagePixelDatas.data());
-		
+
 	}
 
 	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	//获取每个layer以及mipmap的内存布局
+	for (uint32_t layer = 0; layer < texture.image.numLayer; layer++) {
+		for (uint32_t mip = 0; mip < texture.image.numMip; mip++)
+		{
+
+			VkImageSubresource subresource;
+			subresource.aspectMask = texture.image.aspect;
+			subresource.mipLevel = mip;
+			subresource.arrayLayer = layer;
+			auto sublayout = GetImageSubresourceLayout(device, texture.image.image, subresource);
+			texture.image.layerMipLayouts[layer][mip] = sublayout;
+		}
+
+	}
+
+	
+	
+	
+	//生成mipmap
+	if (textureBindInfo.buildMipmap)
+	{
+		GenerateMipmap(texture.image);
+		//texture.image.WriteToJpg("ttt0.jpg",0,0);
+		//texture.image.WriteToJpg("ttt1.jpg", 0, 1);
+		//texture.image.WriteToJpg("ttt2.jpg", 0, 2);
+		//texture.image.WriteToJpg("ttt3.jpg", 0, 3);
+
+		//texture.image.WriteToJpg("ttt4.jpg", 0, 4);
+	}
+
+
+
 	return texture;
 
 }
@@ -635,9 +698,9 @@ void ExampleBase::CmdListRecordEnd(CommandList& cmdList)
 
 
 
-void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
+void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, int layer, int mip)
 {
-	auto imageBarrier = barrier.ImageBarrier(image, srcAccess, dstAccess, dstImageLayout);
+	auto imageBarrier = barrier.ImageBarrier(image, srcAccess, dstAccess, dstImageLayout,layer,mip);
 	CmdMemoryBarrier(cmdList.commandBuffer, srcStageMask, dstStageMask, 0, {}, {}, { imageBarrier });
 	image.currentLayout = dstImageLayout;
 }
@@ -833,6 +896,67 @@ void ExampleBase::TransferWholeImageLayout(Image& image, VkImageLayout dstImageL
 	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, VK_ACCESS_NONE, dstImageLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	CmdListRecordEnd(oneSubmitCommandList);
 	
+	SubmitSynchronizationInfo info;
+	CmdListSubmit(oneSubmitCommandList, info);
+
+
+}
+
+void ExampleBase::GenerateMipmap(Image& image)
+{
+	auto oldlayout = image.currentLayout;
+	if (oldlayout == VK_IMAGE_LAYOUT_UNDEFINED) {
+		ASSERT(0);//如果旧的layout未知这里就先直接报错
+	}
+	CmdListWaitFinish(oneSubmitCommandList);
+	CmdListRecordBegin(oneSubmitCommandList);
+	
+	VkImageBlit blitRegion;
+	uint32_t w = image.extent.width, h = image.extent.height;//layer 0的宽高
+	for (uint32_t i = 1; i < image.numMip; i++)
+	{
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,-1, i-1);
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,-1,i);
+		
+		auto srcMipExtent = image.GetMipLevelExtent(i - 1);
+		auto dstMipExtent = image.GetMipLevelExtent(i);
+
+		blitRegion.srcOffsets[0] = VkOffset3D{0,0,0};
+		blitRegion.srcOffsets[1].x = srcMipExtent.width;
+		blitRegion.srcOffsets[1].y = srcMipExtent.height;
+		blitRegion.srcOffsets[1].z = srcMipExtent.depth;
+
+		blitRegion.dstOffsets[0] = VkOffset3D{ 0,0,0 };
+		blitRegion.dstOffsets[1].x = dstMipExtent.width;
+		blitRegion.dstOffsets[1].y = dstMipExtent.height;
+		blitRegion.dstOffsets[1].z = dstMipExtent.depth;
+
+		blitRegion.srcSubresource = VkImageSubresourceLayers{
+				.aspectMask = image.aspect,
+				.mipLevel = i-1,
+				.baseArrayLayer =0,
+				.layerCount = image.numLayer
+			
+		};
+
+		blitRegion.dstSubresource = VkImageSubresourceLayers{
+		.aspectMask = image.aspect,
+		.mipLevel = i,
+		.baseArrayLayer = 0,
+		.layerCount = image.numLayer
+
+		};
+		CmdBlitImageToImage(oneSubmitCommandList.commandBuffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, { blitRegion });
+
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, i - 1);
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_WRITE_BIT , VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, i);
+
+
+	}
+	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, image.numMip-1);
+	
+	CmdListRecordEnd(oneSubmitCommandList);
+
 	SubmitSynchronizationInfo info;
 	CmdListSubmit(oneSubmitCommandList, info);
 
