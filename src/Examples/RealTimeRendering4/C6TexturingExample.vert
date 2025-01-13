@@ -8,6 +8,8 @@ layout(location = 5) in vec3 in5;
 layout(location = 0) out vec3 outPosition;//世界空间中的位置
 layout(location = 1) out vec3 outNormal;//世界空间中的法向量
 layout(location = 2) out vec3 outTexCoord;//纹理坐标u,v,w
+layout(location = 3) out vec3 outTan;//世界空间中的Tan向量,在几何着色器中计算
+layout(location = 4) out vec3 outBiTan;//世界空间中的BiTan向量,在几何着色器中计算
 layout(set = 0,binding = 0,std140) uniform SimpleSceenExampleBuffer{
 	mat4 world;
 	mat4 view;

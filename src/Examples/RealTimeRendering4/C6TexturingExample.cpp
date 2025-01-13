@@ -5,6 +5,7 @@ void C6TexturingExample::InitSubPassInfo()
 {
 	ShaderCodePaths drawSceenCodePath;
 	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C6TexturingExample.vert";
+	drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C6TexturingExample.geom";
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C6TexturingExample.frag";
 
 
@@ -62,7 +63,7 @@ void C6TexturingExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
 
-	bufferBindInfos["Info"].size = sizeof(float);
+	bufferBindInfos["Info"].size = sizeof(glm::vec4) * 3;
 	bufferBindInfos["Info"].binding = 3;
 	bufferBindInfos["Info"].pipeId = 0;
 	
@@ -171,12 +172,32 @@ void C6TexturingExample::InitResourceInfos()
 	textureBindInfos["satbw"].formatComponentByteSize = sizeof(float);
 	
 
+	//一个alpha贴图
+	TextureDataSource alphaDataSource;
+	alphaDataSource.picturePath = std::string(PROJECT_DIR) + "/resources/material/AsphaltDamageSet001_1K-JPG/AsphaltDamageSet001.png";
+	textureBindInfos["alphaT"].textureDataSources.push_back(alphaDataSource);
+	textureBindInfos["alphaT"].binding = 4;
+
+	//一个法线贴图
+	TextureDataSource normalDataSource;
+	normalDataSource.picturePath = std::string(PROJECT_DIR) + "/resources/material/AsphaltDamageSet001_1K-JPG/AsphaltDamageSet001_1K-JPG_NormalGL.jpg";
+	textureBindInfos["alphaT"].textureDataSources.push_back(normalDataSource);
+	textureBindInfos["alphaT"].binding = 5;
 	
+
+	//一个纹理albedo贴图
+	TextureDataSource albedoDataSource;
+	albedoDataSource.picturePath = std::string(PROJECT_DIR) + "/resources/material/Wood066_1K-JPG/Wood066_1K-JPG_Color.jpg";
+	textureBindInfos["albedo"].textureDataSources.push_back(albedoDataSource);
+	textureBindInfos["albedo"].binding = 6;
 }
 
 void C6TexturingExample::Loop()
 {
 	uint32_t i = 0;;
+	uint32_t exampleType = 0;
+
+
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 
 
@@ -195,8 +216,18 @@ void C6TexturingExample::Loop()
 		camera.Rotate(RotateAction::AROUND_Y_POSITIVE);
 		}, "点击right 相机往右看");
 	WindowEventHandler::SetEventCallBack(KEY_LEFT_PRESS, [&camera]() {camera.Rotate(RotateAction::AROUND_Y_NEGATIVE); }, "点击left 相机往左看");
-
-
+	WindowEventHandler::SetEventCallBack(KEY_I_PRESS, [&]() {
+		std::cout << "输入一个整数值: 范围[0,6]: " << std::endl;
+		uint32_t tmp = 0;
+		std::cin >> tmp;
+		if (tmp > 6)
+		{
+			std::cout << "输入非法。" << std::endl;
+			return;
+		}
+		exampleType = tmp;
+		 }, "点击i 控制显示的实例类: 0: 直接获取纹素值 ; 1:mipmap ;2: SAT; 3:随机生成的纹理;4:纹理动画;5:材质纹理;6:alpha贴图");
+	std::cout << "当前为0: 直接获取纹素值 " << std::endl;
 
 
 	struct Buffer {
@@ -224,6 +255,9 @@ void C6TexturingExample::Loop()
 	BindBuffer("Info");
 	BindTexture("bw");
 	BindTexture("satbw");
+	BindTexture("alphaT");
+	BindTexture("albedo");
+
 	textures["satbw"].image.WriteToJpg("satbw.jpg",0,0);
 	float delta = 0.5;
 	while (!WindowEventHandler::WindowShouldClose())
@@ -236,11 +270,13 @@ void C6TexturingExample::Loop()
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
-		delta += 0.01;
+		delta += 0.001;
 		if (delta > 1) {
 			delta = 0;
 		}
 		FillBuffer(buffers["Info"], 0, sizeof(float), (const char*)&delta);
+		FillBuffer(buffers["Info"], sizeof(glm::vec4), sizeof(glm::vec3), (const char*)&camera.GetPos());
+		FillBuffer(buffers["Info"], sizeof(glm::vec4) * 2, sizeof(uint32_t), (const char*)&exampleType);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		WindowEventHandler::ProcessEvent();
