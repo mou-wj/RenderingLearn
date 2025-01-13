@@ -8,7 +8,12 @@ layout(location = 0) out vec4 outColor;
 
 layout(set = 0,binding = 1) uniform sampler2D pic;
 // 声明绑定的图像
-layout(set = 0,binding = 2, rgba32f) uniform image2D myImage;
+layout(set = 0,binding = 2, rgba32f) readonly uniform image2D myImage;
+
+
+layout(set = 0,binding = 3,std140) uniform Info{
+	float animateDelta;
+};
 
 void RawFetch(){
 	ivec2 size = textureSize(pic,0);
@@ -80,8 +85,48 @@ void SATSample(){
 
 }
 
+float SimpleRandom(float seed,float fac){
+	return (sin(seed * 444000.766) + 1)/2.0;
+
+}
+
+vec3 ProcessTexture(vec2 uv){
+	float rx = SimpleRandom(uv.x,444000.766);
+	float ry = SimpleRandom(uv.x,3332.998);
+	return vec3(rx,ry,0);
+}
+
+//直接通过计算得到的纹理值
+void ProcessTextureSample(){
+	vec3 color = ProcessTexture(inTexCoord.xy);
+	outColor = vec4(color,1);
+
+}
+
+//纹理动画，通过改变每一帧的uv值来实现纹理动画
+void TextureAnimateSample(){
+	vec2 uv = inTexCoord.xy;
+	uv.y += animateDelta;
+	if(uv.y > 1){
+		uv.y -= 1;
+	
+	}
+
+	ivec2 size = textureSize(pic,0);
+	vec3 sampleColor = texelFetch(pic,ivec2(uv * size),0).xyz;
+	outColor = vec4(sampleColor,1);
+
+}
+
+
+void MaterialMapSample(){
+	
+	
+
+}
+
 void main(){
 
-	SATSample();
+	ProcessTextureSample();
 
 }

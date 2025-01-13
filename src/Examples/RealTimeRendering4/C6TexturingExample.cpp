@@ -62,12 +62,14 @@ void C6TexturingExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
 
-
+	bufferBindInfos["Info"].size = sizeof(float);
+	bufferBindInfos["Info"].binding = 3;
+	bufferBindInfos["Info"].pipeId = 0;
 	
 	//黑白棋盘纹理
 	std::vector<char> bwDatas(512 * 512 * 4);
 	uint32_t pattern[2][2] = { 0,1,1,0 };
-	uint32_t blockWidth = 256;
+	uint32_t blockWidth = 32;
 	for (uint32_t i = 0; i < 512; i++)
 	{
 		for (uint32_t j = 0; j < 512; j++)
@@ -219,10 +221,11 @@ void C6TexturingExample::Loop()
 
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
+	BindBuffer("Info");
 	BindTexture("bw");
 	BindTexture("satbw");
 	textures["satbw"].image.WriteToJpg("satbw.jpg",0,0);
-
+	float delta = 0.5;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
@@ -233,6 +236,11 @@ void C6TexturingExample::Loop()
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		delta += 0.01;
+		if (delta > 1) {
+			delta = 0;
+		}
+		FillBuffer(buffers["Info"], 0, sizeof(float), (const char*)&delta);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		WindowEventHandler::ProcessEvent();
