@@ -367,7 +367,7 @@ struct TextureBindInfo {
 	VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;//指定要创建的纹理的format
 	uint32_t formatComponentByteSize = 1;//指定format每个颜色分量的字节大小，如果指定出错会导致填充image数据出问题
 	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
-	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
+	uint32_t passId = 0,pipeId = 0, setId = 0, binding = 0, elementId = 0;
 	bool compute = false;//是否用于compute pipeline的标志
 	VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 	bool buildMipmap = false;
@@ -447,7 +447,7 @@ struct SubpassInfo {
 
 struct BufferBindInfo {
 	uint32_t size;
-	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
+	uint32_t passId = 0,pipeId = 0, setId = 0, binding = 0, elementId = 0;
 	bool compute = false;//是否用于compute pipeline的标志
 };
 
@@ -463,6 +463,20 @@ struct SubmitSynchronizationInfo {
 	std::vector<VkSemaphore> sigSemaphores;//指明要触发的信号量
 
 };
+
+
+struct RenderPassInfo {
+
+	SubpassInfo subpassInfo;//子pass信息
+	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;//每个子pass对应的pipeline信息
+	std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;//每个subpass要绘制的几何体
+	RenderTargets renderTargets;//每个pass的渲染结果对象
+	VkRenderPass renderPass = VK_NULL_HANDLE;
+	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
+
+};
+
+
 
 class ExampleBase {
 	//
@@ -515,9 +529,9 @@ protected:
 	//runtime
 	std::vector<Geometry> geoms;
 	CommandList graphicCommandList;
-	SubpassInfo subpassInfo;
+	//SubpassInfo subpassInfo;
 	ComputeDesc computeDesc;
-	std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;
+	//std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;
 	//uint32_t numFences = 1;
 	uint32_t numSemaphores = 1;
 	void WaitIdle();
@@ -535,7 +549,7 @@ protected:
 protected:
 	//这里的数据不能被派生类创建和析构
 	//render pass ֻ
-	RenderTargets renderTargets;
+	//RenderTargets renderTargets;
 	std::vector<Image> swapchainImages;
 	uint32_t windowWidth = 512, windowHeight = 512;
 	std::map<std::string, Texture> textures;
@@ -549,11 +563,14 @@ private:
 	//graphic
 
 	virtual void InitContex();
-	virtual void InitAttanchmentDesc();
-	virtual void InitRenderPass();
-	virtual void InitFrameBuffer();
+	virtual void InitAttanchmentDesc(RenderPassInfo& renderPassInfo);
+	void InitRenderPass(RenderPassInfo& renderPassInfo);
+	
+	
+	virtual void InitRenderPasses();
+	virtual void InitFrameBuffer(RenderPassInfo& renderPassInfo);
 	void InitSyncObject();
-	virtual void InitGraphicPipelines();
+	virtual void InitGraphicPipelines(RenderPassInfo& renderPassInfo);
 	virtual void InitRecources();
 	virtual void InitQueryPool();
 	virtual void InitCommandList();
@@ -633,7 +650,7 @@ private:
 	void TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLSLFile, std::vector<uint32_t>& outSpirvCode);
 	void ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo);
 	void ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spirvCode, ShaderResourceInfo& dstCacheShaderResource);
-	void ParseShaderFiles();
+	void ParseShaderFiles(RenderPassInfo& renderPassInfo);
 
 
 
@@ -682,7 +699,8 @@ private:
 		{VK_FORMAT_R8G8B8A8_SSCALED,"VK_FORMAT_R8G8B8A8_SSCALED"},
 		{VK_FORMAT_R8G8B8A8_UINT,"VK_FORMAT_R8G8B8A8_UINT"},
 		{VK_FORMAT_R8G8B8A8_SINT,"VK_FORMAT_R8G8B8A8_SINT"},
-		{VK_FORMAT_R32G32B32A32_SFLOAT,"VK_FORMAT_R32G32B32A32_SFLOAT"}
+		{VK_FORMAT_R32G32B32A32_SFLOAT,"VK_FORMAT_R32G32B32A32_SFLOAT"},
+		{VK_FORMAT_D32_SFLOAT,"VK_FORMAT_D32_SFLOAT"}
 	};
 
 	//VkFormat textureFormat;
@@ -708,14 +726,14 @@ private:
 	const uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
 
 	//先不考虑compute pipeline
-	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
+	//std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
 	ComputePipelineInfos computePipelineInfos;
 
-	VkRenderPass renderPass = VK_NULL_HANDLE;
+	//VkRenderPass renderPass = VK_NULL_HANDLE;
 
-	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
+	//VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 
-
+	std::vector<RenderPassInfo> renderPassInfos;
 
 
 

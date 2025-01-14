@@ -10,7 +10,7 @@ void C5ShadingBasicsExample::InitSubPassInfo()
 
 
 	//InitDefaultGraphicSubpassInfo();
-	//两个subpass 一个绘制天空盒，一个绘制场景
+	
 	subpassInfo.subpassDescs.resize(1);
 	//设置着色器路径
 	subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = drawSceenCodePath;

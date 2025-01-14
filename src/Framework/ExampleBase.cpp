@@ -39,6 +39,7 @@ void ExampleBase::BindTexture(const std::string& textureName)
 	auto& textureInfo = textureBindInfos[textureName];
 	if (!textureInfo.compute)
 	{
+		auto& graphcisPipelineInfos = renderPassInfos[textureInfo.passId].graphcisPipelineInfos;
 		auto descriptorType = GetDescriptorType(graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId], textureInfo.binding);
 		BindTexture(textures[textureName], graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
 	}
@@ -55,6 +56,7 @@ void ExampleBase::BindBuffer(const std::string& bufferName)
 	auto& bufferInfo = bufferBindInfos[bufferName];
 	if (!bufferInfo.compute)
 	{
+		auto& graphcisPipelineInfos = renderPassInfos[bufferInfo.passId].graphcisPipelineInfos;
 		auto descriptorType = GetDescriptorType(graphcisPipelineInfos[bufferInfo.pipeId].descriptorSetInfos[bufferInfo.setId], bufferInfo.binding);
 		BindBuffer(buffers[bufferName], graphcisPipelineInfos[bufferInfo.pipeId].descriptorSetInfos[bufferInfo.setId].descriptorSet, bufferInfo.binding, bufferInfo.elementId, descriptorType);
 	}
@@ -72,14 +74,10 @@ void ExampleBase::Init()
 		return;
 	}
 	InitSubPassInfo();
-	ParseShaderFiles();
 	initFlag = true;
 	Initialize();
 	InitContex();
-	InitAttanchmentDesc();
-	InitRenderPass();
-	InitFrameBuffer();
-	InitGraphicPipelines();
+	InitRenderPasses();
 	InitQueryPool();
 	InitSyncObject();
 	InitRecources();
@@ -87,9 +85,10 @@ void ExampleBase::Init()
 	InitCompute();
 }
 
-void ExampleBase::ParseShaderFiles()
+void ExampleBase::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 {
-
+	auto& graphcisPipelineInfos = renderPassInfo.graphcisPipelineInfos;
+	auto& subpassInfo = renderPassInfo.subpassInfo;
 	graphcisPipelineInfos.resize(subpassInfo.subpassDescs.size());
 	std::vector<char> tmpCode;
 	for (uint32_t i = 0; i < subpassInfo.subpassDescs.size(); i++)
@@ -227,16 +226,16 @@ void ExampleBase::InitContex()
 
 }
 
-void ExampleBase::InitAttanchmentDesc()
+void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 {
 	//����color attachment����Դ
-	auto& colorImage = renderTargets.colorAttachment.attachmentImage;
+	auto& colorImage = renderPassInfo.renderTargets.colorAttachment.attachmentImage;
 	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
+	renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
 
-	auto& colorAttachment = renderTargets.colorAttachment.attachmentDesc;
+	auto& colorAttachment = renderPassInfo.renderTargets.colorAttachment.attachmentDesc;
 	colorAttachment.flags = 0;
 	colorAttachment.format = colorFormat;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -244,19 +243,19 @@ void ExampleBase::InitAttanchmentDesc()
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	colorAttachment.initialLayout = renderTargets.colorAttachment.attachmentImage.currentLayout;
+	colorAttachment.initialLayout = renderPassInfo.renderTargets.colorAttachment.attachmentImage.currentLayout;
 	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	renderTargets.colorAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	renderPassInfo.renderTargets.colorAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 
-	auto& depthImage = renderTargets.depthAttachment.attachmentImage;
+	auto& depthImage = renderPassInfo.renderTargets.depthAttachment.attachmentImage;
 	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-	renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
+	renderPassInfo.renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
 
 
 
-	auto& depthAttachment = renderTargets.depthAttachment.attachmentDesc;
+	auto& depthAttachment = renderPassInfo.renderTargets.depthAttachment.attachmentDesc;
 	depthAttachment.flags = 0;
 	depthAttachment.format = depthFormat;
 	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -264,9 +263,9 @@ void ExampleBase::InitAttanchmentDesc()
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depthAttachment.initialLayout = renderTargets.depthAttachment.attachmentImage.currentLayout;
+	depthAttachment.initialLayout = renderPassInfo.renderTargets.depthAttachment.attachmentImage.currentLayout;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	renderTargets.depthAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	renderPassInfo.renderTargets.depthAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 
 
@@ -274,22 +273,44 @@ void ExampleBase::InitAttanchmentDesc()
 
 }
 
-void ExampleBase::InitRenderPass()
+void ExampleBase::InitRenderPass(RenderPassInfo& renderPassInfo)
 {
+	//创建render pass
 	std::vector<VkSubpassDescription> subpassDescriptions;
-	for (uint32_t i = 0; i < subpassInfo.subpassDescs.size(); i++)
+	for (uint32_t i = 0; i < renderPassInfo.subpassInfo.subpassDescs.size(); i++)
 	{
-		subpassDescriptions.push_back(subpassInfo.subpassDescs[i].subpassDescription);
+		subpassDescriptions.push_back(renderPassInfo.subpassInfo.subpassDescs[i].subpassDescription);
 	}
-	renderPass = CreateRenderPass(device, 0, { renderTargets.colorAttachment.attachmentDesc,renderTargets.depthAttachment.attachmentDesc }, subpassDescriptions,subpassInfo.subpassDepends);
+	renderPassInfo.renderPass = CreateRenderPass(device, 0, { renderPassInfo.renderTargets.colorAttachment.attachmentDesc,renderPassInfo.renderTargets.depthAttachment.attachmentDesc }, subpassDescriptions, renderPassInfo.subpassInfo.subpassDepends);
+
+
+}
+
+void ExampleBase::InitRenderPasses()
+{
+	//分析和创建RenderPass对应的shader信息
+	for (uint32_t i = 0; i < renderPassInfos.size(); i++)
+	{
+		ParseShaderFiles(renderPassInfos[i]);
+		InitAttanchmentDesc(renderPassInfos[i]);
+		InitRenderPass(renderPassInfos[i]);
+		InitFrameBuffer(renderPassInfos[i]);
+		InitGraphicPipelines(renderPassInfos[i]);
+	}
+
+	
+
+
+
+
 
 
 
 }
 
-void ExampleBase::InitFrameBuffer()
+void ExampleBase::InitFrameBuffer(RenderPassInfo& renderPassInfo)
 {
-	frameBuffer = CreateFrameBuffer(device, 0, renderPass, { renderTargets.colorAttachment.attachmentImage.imageView,renderTargets.depthAttachment.attachmentImage.imageView }, windowWidth, windowHeight,1);
+	renderPassInfo.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, { renderPassInfo.renderTargets.colorAttachment.attachmentImage.imageView,renderPassInfo.renderTargets.depthAttachment.attachmentImage.imageView }, windowWidth, windowHeight,1);
 
 }
 
@@ -963,9 +984,12 @@ void ExampleBase::GenerateMipmap(Image& image)
 
 }
 
-void ExampleBase::InitGraphicPipelines()
+void ExampleBase::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 {
-	
+	auto& graphcisPipelineInfos = renderPassInfo.graphcisPipelineInfos;
+	auto& subpassInfo = renderPassInfo.subpassInfo;
+	auto& renderPass = renderPassInfo.renderPass;
+
 	//��ʼ��shader stage
 	for (uint32_t pipeID = 0; pipeID < graphcisPipelineInfos.size(); pipeID++)
 	{
