@@ -16,7 +16,7 @@ void SkyBoxExample::InitResourceInfos()
 
 	geoms.resize(1);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
-	subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
 
 	std::vector<std::string> skyboxImages = {
 		std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
@@ -122,6 +122,7 @@ void SkyBoxExample::Loop()
 	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

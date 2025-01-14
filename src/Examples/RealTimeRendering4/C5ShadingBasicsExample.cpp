@@ -8,9 +8,11 @@ void C5ShadingBasicsExample::InitSubPassInfo()
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C5ShadingBasicsExample.frag";
 
 
+	renderPassInfos.resize(1);
 
-	//InitDefaultGraphicSubpassInfo();
-	
+	auto& subpassInfo = renderPassInfos[0].subpassInfo;
+	auto& renderTargets = renderPassInfos[0].renderTargets;
+
 	subpassInfo.subpassDescs.resize(1);
 	//设置着色器路径
 	subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = drawSceenCodePath;
@@ -53,7 +55,7 @@ void C5ShadingBasicsExample::InitResourceInfos()
 	geoms.resize(1);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/simple_sceen.obj",geoms[0]);
 
-	subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
 
 
 
@@ -131,6 +133,7 @@ void C5ShadingBasicsExample::Loop()
 	BindBuffer("SceenInfoBuffer");
 
 
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

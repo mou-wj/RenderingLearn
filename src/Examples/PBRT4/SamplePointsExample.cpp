@@ -25,7 +25,7 @@ void SamplePointsExample::InitResourceInfos()
 	//LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geom);
 	geoms.resize(1);
 	auto& geom = geoms[0];
-	subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
 	geom.vertexAttrib.vertices = {
 		-1,1,0,
 		1,1,0,
@@ -165,6 +165,8 @@ void SamplePointsExample::Loop()
 		CaptureNum(2)
 		}, "∞¥C≤∂ªÒ“ª÷°");
 
+
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

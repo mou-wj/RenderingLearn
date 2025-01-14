@@ -10,7 +10,11 @@ void SimpleSceenExample::InitSubPassInfo()
 	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.vert";
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/SimpleSceenExample.frag";
 
+	
+	renderPassInfos.resize(1);
 
+	auto& subpassInfo = renderPassInfos[0].subpassInfo;
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 
 	//InitDefaultGraphicSubpassInfo();
 	//两个subpass 一个绘制天空盒，一个绘制场景
@@ -81,8 +85,8 @@ void SimpleSceenExample::InitResourceInfos()
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/moved_cube.obj", geoms[1]);
 
-	subpassDrawGeoInfos[0] = { 0 };
-	subpassDrawGeoInfos[1] = { 1 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[1] = { 1 };
 
 	std::vector<std::string> skyboxImages = {
 	std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
@@ -162,7 +166,7 @@ void SimpleSceenExample::Loop()
 	BindBuffer("Buffer");
 	BindBuffer("SimpleSceenExampleBuffer");
 
-
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

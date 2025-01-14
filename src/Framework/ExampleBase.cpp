@@ -23,6 +23,7 @@ ExampleBase::~ExampleBase()
 
 void ExampleBase::Run(ExampleBase* example)
 {
+	example->InitSubPassInfo();
 	example->InitResourceInfos();
 	example->InitSyncObjectNumInfo();
 	example->Init();
@@ -73,7 +74,6 @@ void ExampleBase::Init()
 	{
 		return;
 	}
-	InitSubPassInfo();
 	initFlag = true;
 	Initialize();
 	InitContex();
@@ -322,6 +322,10 @@ void ExampleBase::InitSyncObject()
 
 void ExampleBase::InitDefaultGraphicSubpassInfo(ShaderCodePaths subpassShaderCodePaths)
 {
+	renderPassInfos.resize(1);
+	auto& subpassInfo = renderPassInfos[0].subpassInfo;
+	auto& renderTargets = renderPassInfos[0].renderTargets;
+
 	subpassInfo.subpassDescs.resize(1);
 	subpassInfo.subpassDescs[0].subpassPipelineStates.Init(windowWidth, windowHeight);
 	subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = subpassShaderCodePaths;
@@ -810,7 +814,7 @@ void ExampleBase::CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcIma
 
 }
 
-void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList)
+void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 {
 	//
 	//if (renderTargets.colorAttachment.attachmentImage.currentLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL || renderTargets.depthAttachment.attachmentImage.currentLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
@@ -818,6 +822,11 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList)
 	//	ASSERT(0);
 	//}
 	
+	auto& subpassDrawGeoInfos = renderPassInfos[renderPassIndex].subpassDrawGeoInfos;
+	auto& renderPass = renderPassInfos[renderPassIndex].renderPass;
+	auto& frameBuffer = renderPassInfos[renderPassIndex].frameBuffer;
+	auto& graphcisPipelineInfos = renderPassInfos[renderPassIndex].graphcisPipelineInfos;
+	auto& renderTargets = renderPassInfos[renderPassIndex].renderTargets;
 
 	ASSERT(subpassDrawGeoInfos.size() != 0)
 	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
@@ -1153,11 +1162,9 @@ void ExampleBase::Clear()
 {
 	//清除所有vulkan资源
 	DeviceWaitIdle(device);
-	ClearGraphicPipelines();
+
 	ClearComputePipeline();
-	ClearRenderPass();
-	ClearFrameBuffer();
-	ClearAttanchment();
+	ClearRenderPasses();
 	ClearRecources();
 	ClearSyncObject();
 	ClearQueryPool();
@@ -1178,25 +1185,44 @@ void ExampleBase::ClearContex()
 	DestroyInstance(instance);
 }				  
 				  
-void ExampleBase::ClearAttanchment()
-{				  
+void ExampleBase::ClearAttanchment(RenderPassInfo& renderPassInfo)
+{				 
+	auto& renderTargets = renderPassInfo.renderTargets;
 	DestroyImage(renderTargets.colorAttachment.attachmentImage);
 	DestroyImage(renderTargets.depthAttachment.attachmentImage);
 }				  
 				  
-void ExampleBase::ClearRenderPass()
-{			
+void ExampleBase::ClearRenderPass(RenderPassInfo& renderPassInfo)
+{		
+	auto& renderPass = renderPassInfo.renderPass;
 	DestroyRenderPass(device, renderPass);
 
-}				  
+}
+
+void ExampleBase::ClearRenderPasses()
+{
+	for (uint32_t i = 0; i < renderPassInfos.size(); i++)
+	{
+		ClearGraphicPipelines(renderPassInfos[i]);
+		ClearRenderPass(renderPassInfos[i]);
+		ClearFrameBuffer(renderPassInfos[i]);
+		ClearAttanchment(renderPassInfos[i]);
+
+	}
+
+
+
+}
 				  
-void ExampleBase::ClearFrameBuffer()
+void ExampleBase::ClearFrameBuffer(RenderPassInfo& renderPassInfo)
 {				 
+	auto& frameBuffer = renderPassInfo.frameBuffer;
 	DestroyFrameBuffer(device, frameBuffer);
 }				  
 				  
-void ExampleBase::ClearGraphicPipelines()
+void ExampleBase::ClearGraphicPipelines(RenderPassInfo& renderPassInfo)
 {				 
+	auto& graphcisPipelineInfos = renderPassInfo.graphcisPipelineInfos;
 	for (uint32_t i = 0; i < graphcisPipelineInfos.size(); i++)
 	{
 
@@ -1258,7 +1284,7 @@ void ExampleBase::ClearRecources()
 				  
 void ExampleBase::ClearQueryPool()
 {
-	DestroyQueryPool(device, queryPool);
+	DestroyQueryPool(device, queryPool);	
 }
 
 void ExampleBase::ClearComputePipeline()

@@ -9,6 +9,8 @@
 #include "Examples/PBRT4/VolumeScatteringExample.h"
 #include "Examples/RealTimeRendering4/C5ShadingBasicsExample.h"
 #include "Examples/RealTimeRendering4/C6TexturingExample.h"
+#include "Examples/RealTimeRendering4/C7ShadowsExample.h"
+
 
 #include "Framework/Utils/powitacq_rgb.h"
 /*
@@ -57,7 +59,7 @@ int main()
 	CaptureNum(4);
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
-	//UniformExample example;
+	UniformExample example;
 	//SkyBoxExample example;
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
@@ -69,7 +71,8 @@ int main()
 	//GeometryShaderExample example;
 	//VolumeScatteringExample example;
 	//C5ShadingBasicsExample example;
-	C6TexturingExample example;
+	//C6TexturingExample example;
+	//C7ShadowsExample example;
 	ExampleBase::Run(&example);
 
 

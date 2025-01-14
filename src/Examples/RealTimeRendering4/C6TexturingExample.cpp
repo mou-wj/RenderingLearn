@@ -11,7 +11,11 @@ void C6TexturingExample::InitSubPassInfo()
 
 
 	//InitDefaultGraphicSubpassInfo();
-	
+	renderPassInfos.resize(1);
+
+	auto& subpassInfo = renderPassInfos[0].subpassInfo;
+	auto& renderTargets = renderPassInfos[0].renderTargets;
+
 	subpassInfo.subpassDescs.resize(1);
 	//设置着色器路径
 	subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = drawSceenCodePath;
@@ -55,7 +59,7 @@ void C6TexturingExample::InitResourceInfos()
 	geoms[0].useIndexBuffers = false;
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj",geoms[0]);
 
-	subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
 
 
 
@@ -260,6 +264,9 @@ void C6TexturingExample::Loop()
 
 	textures["satbw"].image.WriteToJpg("satbw.jpg",0,0);
 	float delta = 0.5;
+
+
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

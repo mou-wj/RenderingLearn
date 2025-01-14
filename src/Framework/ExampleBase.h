@@ -474,6 +474,9 @@ struct RenderPassInfo {
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 
+	//在这里定义一些快速设置render pass信息的接口
+
+
 };
 
 
@@ -518,7 +521,7 @@ protected:
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
 	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
 	//graphic
-	void CmdOpsDrawGeom(CommandList& cmdList);
+	void CmdOpsDrawGeom(CommandList& cmdList,uint32_t renderPassIndex = 0);
 	//execute
 	void CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info);
 	void CmdListWaitFinish(CommandList& cmdList);
@@ -550,6 +553,7 @@ protected:
 	//这里的数据不能被派生类创建和析构
 	//render pass ֻ
 	//RenderTargets renderTargets;
+	std::vector<RenderPassInfo> renderPassInfos;
 	std::vector<Image> swapchainImages;
 	uint32_t windowWidth = 512, windowHeight = 512;
 	std::map<std::string, Texture> textures;
@@ -584,10 +588,11 @@ private:
 private:
 	virtual void Clear();
 	virtual void ClearContex();
-	virtual void ClearAttanchment();
-	virtual void ClearRenderPass();
-	virtual void ClearFrameBuffer();
-	virtual void ClearGraphicPipelines();
+	virtual void ClearAttanchment(RenderPassInfo& renderPassInfo);
+	virtual void ClearRenderPass(RenderPassInfo& renderPassInfo);
+	void ClearRenderPasses();
+	virtual void ClearFrameBuffer(RenderPassInfo& renderPassInfo);
+	virtual void ClearGraphicPipelines(RenderPassInfo& renderPassInfo);
 	virtual void ClearSyncObject();
 	virtual void ClearRecources();
 	virtual void ClearQueryPool();
@@ -733,7 +738,7 @@ private:
 
 	//VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 
-	std::vector<RenderPassInfo> renderPassInfos;
+
 
 
 

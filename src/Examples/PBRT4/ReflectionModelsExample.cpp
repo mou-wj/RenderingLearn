@@ -10,7 +10,10 @@ void ReflectionModelsExample::InitSubPassInfo()
 	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/ReflectionModelsExample.vert";
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/ReflectionModelsExample.frag";
 
+	renderPassInfos.resize(1);
 
+	auto& subpassInfo = renderPassInfos[0].subpassInfo;
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 
 	//InitDefaultGraphicSubpassInfo();
 	//两个subpass 一个绘制天空盒，一个绘制场景
@@ -82,8 +85,8 @@ void ReflectionModelsExample::InitResourceInfos()
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj", geoms[1]);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cylinder.obj", geoms[2]);
 
-	subpassDrawGeoInfos[0] = { 0 };
-	subpassDrawGeoInfos[1] = { 1 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[1] = { 1 };
 
 	std::vector<std::string> skyboxImages = {
 	//std::string(PROJECT_DIR) + "/resources/pic/skybox/right.jpg",//+x
@@ -197,6 +200,7 @@ void ReflectionModelsExample::Loop()
 	BindBuffer("SceenInfo");
 
 
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

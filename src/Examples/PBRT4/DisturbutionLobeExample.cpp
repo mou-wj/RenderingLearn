@@ -10,7 +10,10 @@ void DisturbutionLobeExample::InitSubPassInfo()
 	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/DisturbutionLobeExample.vert";
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/DisturbutionLobeExample.frag";
 
+	renderPassInfos.resize(1);
 
+	auto& subpassInfo = renderPassInfos[0].subpassInfo;
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 
 	//InitDefaultGraphicSubpassInfo();
 	//两个subpass 一个绘制天空盒，一个绘制场景
@@ -81,8 +84,8 @@ void DisturbutionLobeExample::InitResourceInfos()
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/sphere.obj", geoms[1]);
 
-	subpassDrawGeoInfos[0] = { 0 };
-	subpassDrawGeoInfos[1] = { 1 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[1] = { 1 };
 
 	std::vector<std::string> skyboxImages = {
 	std::string(PROJECT_DIR) + "/resources/pic/testskybox/+x.jpg",//+x
@@ -177,6 +180,8 @@ void DisturbutionLobeExample::Loop()
 	BindBuffer("SimpleSceenExampleBuffer");
 	BindBuffer("type");
 
+
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

@@ -8,7 +8,10 @@ void C7ShadowsExample::InitSubPassInfo()
 	//drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExample.geom";
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExample.frag";
 
+	renderPassInfos.resize(1);
 
+	auto& subpassInfo = renderPassInfos[0].subpassInfo;
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 
 	//InitDefaultGraphicSubpassInfo();
 	//两个subpass 一个绘制深度，一个绘制场景
@@ -55,7 +58,7 @@ void C7ShadowsExample::InitResourceInfos()
 	geoms[0].useIndexBuffers = false;
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj",geoms[0]);
 
-	subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
 
 
 
@@ -122,7 +125,7 @@ void C7ShadowsExample::Loop()
 	BindBuffer("SimpleSceenExampleBuffer");
 
 
-
+	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
