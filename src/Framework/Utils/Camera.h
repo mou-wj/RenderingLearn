@@ -29,6 +29,9 @@ public:
 	const glm::mat4& GetView() const { return view; }
 	const glm::mat4& GetProj() const { return proj; }
 	const glm::vec3& GetPos() const { return pos; }
+
+	void SetCamera(glm::vec3 pos, glm::vec3 target, glm::vec3 down);
+
 private:
 	void Calculate();
 

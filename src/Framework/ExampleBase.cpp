@@ -475,18 +475,17 @@ void ExampleBase::PickValidPhysicalDevice()
 
 void ExampleBase::CheckCandidateTextureFormatSupport()
 {
-
 	uint64_t textureWantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
-	for (const auto& candidatedFormat : candidatedTextureFormatsMap)
+	for (const auto& candidatedFormat : candidatedTextureFormats)
 	{
-		auto textureFormatProps = GetFormatPropetirs(physicalDevice, candidatedFormat.first);
+		auto textureFormatProps = GetFormatPropetirs(physicalDevice, candidatedFormat);
 
 		if ((textureFormatProps.linearTilingFeatures & textureWantFormatFeature) == textureWantFormatFeature)
 		{
-			std::cout << "The texture format is supported: " << candidatedFormat.second << std::endl;
+			std::cout << "The texture format is supported: " << VkFormatToInfo[candidatedFormat].name << std::endl;
 		}
 		else {
-			std::cout << "The texture format is not supported: " << candidatedFormat.second << std::endl;
+			std::cout << "The texture format is not supported: " << VkFormatToInfo[candidatedFormat].name << std::endl;
 		}
 	}
 
@@ -628,7 +627,11 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 	{
 		x = textureBindInfo.textureDataSources[i].width;
 		y = textureBindInfo.textureDataSources[i].height;
-		FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x, y, 4, textureBindInfo.textureDataSources[i].imagePixelDatas.data());
+		if (!textureBindInfo.textureDataSources[i].imagePixelDatas.empty())
+		{
+			FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x, y, 4, textureBindInfo.textureDataSources[i].imagePixelDatas.data());
+		}
+		
 
 	}
 
@@ -782,6 +785,36 @@ void ExampleBase::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image srcImag
 	//CmdOpsImageMemoryBarrer(cmdList, srcImage, srcOldAccess, srcOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	//CmdOpsImageMemoryBarrer(cmdList, dstImage, dstOldAccess, dstOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+
+}
+
+void ExampleBase::CmdOpsCopyImageToImage(CommandList& cmdList, Image& srcImage, uint32_t srcLayer, uint32_t srcMip, Image& dstImage, uint32_t dstLayer, uint32_t dstMip)
+{
+	VkImageCopy copyRegion{};
+	copyRegion.srcOffset = VkOffset3D{ 0,0,0 };
+	copyRegion.dstOffset = VkOffset3D{ 0,0,0 };
+
+	//校验两个image的指定layer和mip的大小是否匹配
+	auto srcMipExtent = srcImage.GetMipLevelExtent(srcMip);
+	auto dstMipExtent = dstImage.GetMipLevelExtent(dstMip);
+	if (srcMipExtent.width != dstMipExtent.width || srcMipExtent.height != dstMipExtent.height)
+	{
+		Log("copy : two image mip are not compatible ! ", 0);
+
+	}
+
+	copyRegion.extent = srcMipExtent;
+	copyRegion.srcSubresource = VkImageSubresourceLayers{ .aspectMask = srcImage.aspect,
+														  .mipLevel = srcMip,
+														  .baseArrayLayer = srcLayer,
+														  .layerCount = 1 };
+	copyRegion.dstSubresource = VkImageSubresourceLayers{ .aspectMask = dstImage.aspect,
+														  .mipLevel = dstMip,
+														  .baseArrayLayer = dstLayer,
+														  .layerCount = 1 };
+	std::vector<VkImageCopy> copyRegions;
+	copyRegions.push_back(copyRegion);
+	CmdCopyImageToImage(cmdList.commandBuffer, srcImage.image, srcImage.currentLayout, dstImage.image, dstImage.currentLayout, copyRegions);
 
 }
 

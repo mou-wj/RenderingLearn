@@ -3,52 +3,24 @@
 
 void C7ShadowsExample::InitSubPassInfo()
 {
+	ShaderCodePaths depthPassCodePath;
+	depthPassCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExampleDepthPass.vert";
+	//drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExample.geom";
+	depthPassCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExampleDepthPass.frag";
+
+
 	ShaderCodePaths drawSceenCodePath;
 	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExample.vert";
 	//drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExample.geom";
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C7ShadowsExample.frag";
 
-	renderPassInfos.resize(1);
-
-	auto& subpassInfo = renderPassInfos[0].subpassInfo;
-	auto& renderTargets = renderPassInfos[0].renderTargets;
-
-	//InitDefaultGraphicSubpassInfo();
-	//两个subpass 一个绘制深度，一个绘制场景
-	subpassInfo.subpassDescs.resize(1);
-	//设置着色器路径
-	subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = drawSceenCodePath;
-	//初始化管线状态
-	subpassInfo.subpassDescs[0].subpassPipelineStates.Init(windowWidth, windowWidth);
-
-	//开启剔除
-	subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+	renderPassInfos.resize(2);
+	renderPassInfos[0].InitDefaultRenderPassInfo(depthPassCodePath, windowWidth, windowHeight);
+	renderPassInfos[0].InitDefaultRenderPassInfo(drawSceenCodePath, windowWidth, windowHeight);
 
 
-	auto& subpassDesc1 = subpassInfo.subpassDescs[0];
-	subpassDesc1.subpassDescription.flags = 0;
-	subpassDesc1.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpassDesc1.subpassDescription.inputAttachmentCount = 0;
-	subpassDesc1.subpassDescription.pInputAttachments = nullptr;
-	subpassDesc1.subpassDescription.colorAttachmentCount = 1;
-	subpassDesc1.subpassDescription.pColorAttachments = &renderTargets.colorRef;
-	subpassDesc1.subpassDescription.pResolveAttachments = nullptr;
-	subpassDesc1.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
-	subpassDesc1.subpassDescription.preserveAttachmentCount = 0;
-	subpassDesc1.subpassDescription.pPreserveAttachments = nullptr;
 
-
-	subpassInfo.subpassDepends.resize(1);
-	auto& subpassDepend1 = subpassInfo.subpassDepends[0];
-	subpassDepend1.srcSubpass = VK_SUBPASS_EXTERNAL;
-	subpassDepend1.dstSubpass = 0;
-	subpassDepend1.dependencyFlags = 0;
-	subpassDepend1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	subpassDepend1.srcAccessMask = 0;
-	subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-	subpassDepend1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-
+	
 }
 
 void C7ShadowsExample::InitResourceInfos()
@@ -56,7 +28,7 @@ void C7ShadowsExample::InitResourceInfos()
 
 	geoms.resize(1);
 	geoms[0].useIndexBuffers = false;
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj",geoms[0]);
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
 
@@ -67,11 +39,20 @@ void C7ShadowsExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
 
 
-	//一个纹理albedo贴图
-	TextureDataSource albedoDataSource;
-	albedoDataSource.picturePath = std::string(PROJECT_DIR) + "/resources/material/Wood066_1K-JPG/Wood066_1K-JPG_Color.jpg";
-	textureBindInfos["albedo"].textureDataSources.push_back(albedoDataSource);
-	textureBindInfos["albedo"].binding = 1;
+	//一个纹理点光源阴影贴图
+	TextureDataSource emptyDataSource;
+	emptyDataSource.width = windowWidth;
+	emptyDataSource.height = windowHeight;
+	emptyDataSource.picturePath = "";
+	textureBindInfos["pointShadowMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowMap"].binding = 1;
+	textureBindInfos["pointShadowMap"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+	textureBindInfos["pointShadowMap"].format = VK_FORMAT_R32_SFLOAT;
 }
 
 void C7ShadowsExample::Loop()
@@ -83,7 +64,7 @@ void C7ShadowsExample::Loop()
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 
 
-	Camera camera(glm::vec3(0,-1,-12),glm::vec3(0,0,0),glm::vec3(0,1,0));
+	Camera camera(glm::vec3(0,0,0),glm::vec3(0,0,1),glm::vec3(0,1,0));
 	//绑定camera响应按键的回调函数
 	WindowEventHandler::SetEventCallBack(KEY_W_PRESS, [&camera]() {camera.Move(MoveDirection::FORWARD); }, "点击w 相机前移");
 	WindowEventHandler::SetEventCallBack(KEY_S_PRESS, [&camera]() {camera.Move(MoveDirection::BACK); }, "点击s 相机后移");
@@ -123,9 +104,63 @@ void C7ShadowsExample::Loop()
 
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
+	const std::vector<glm::vec3> cubeViewTarget = {
+		glm::vec3(1,0,0),
+		glm::vec3(-1,0,0),
+		glm::vec3(0,1,0),
+		glm::vec3(0,-1,0),
+		glm::vec3(0,0,1),
+		glm::vec3(0,0,-1),
+	
+	};
+	const std::vector<glm::vec3> cubeViewDown = {
+	glm::vec3(0,1,0),
+	glm::vec3(0,1,0),
+	glm::vec3(0,0,-1),
+	glm::vec3(0,0,1),
+	glm::vec3(0,1,0),
+	glm::vec3(0,1,0),
+
+	};
+
+	//glm::vec3 lightPos = glm::vec3(-3,-6,0);
+	glm::vec3 lightPos = glm::vec3(0, 0, 0);
+	for (uint32_t i = 0; i < 6; i++)
+	{
+		//获取阴影贴图
+		camera.SetCamera(lightPos, cubeViewTarget[i], cubeViewDown[i]);
+		buffer.view = camera.GetView();
+		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
+
+		CmdListReset(graphicCommandList);
+
+		CmdListRecordBegin(graphicCommandList);
+		//进行depth pass
+		CmdOpsDrawGeom(graphicCommandList);
+		auto& depthTargetImage = renderPassInfos[0].renderTargets.depthAttachment.attachmentImage;
+
+		auto& depthOldLayout = depthTargetImage.currentLayout;
+		auto& depthTextureOldLayout = textures["pointShadowMap"].image.currentLayout;
+
+		CmdOpsImageMemoryBarrer(graphicCommandList, depthTargetImage, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
+		
+		//拷贝深度图到深度纹理
+		CmdOpsCopyImageToImage(graphicCommandList, depthTargetImage, 0, 0, textures["pointShadowMap"].image, 0, 0);
+
+		CmdOpsImageMemoryBarrer(graphicCommandList, depthTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, depthOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, depthTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	
+		CmdListRecordEnd(graphicCommandList);
+		CmdListSubmit(graphicCommandList, submitSyncInfo);
 
 
-	auto& renderTargets = renderPassInfos[0].renderTargets;
+	}
+	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap0.jpg", 0, 0);
+
+	//绘制阴影
+	auto& renderTargets = renderPassInfos[1].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

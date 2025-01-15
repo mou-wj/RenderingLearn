@@ -1,5 +1,6 @@
 #pragma once
 #include "API/VulkanAPI.h"
+#include "API/VulkanDefMap.h"
 #include "Utils/tiny_obj_loader.h"
 #include "Utils/RenderDocTool.h"
 #include "Utils/WindowEventHandler.h"
@@ -13,6 +14,8 @@
 #include <array>
 #include <spirv_glsl.hpp>
 #include <spirv_cross.hpp>
+
+#include <regex>
 
 struct DescriptorBinding {
 	std::string name = "";
@@ -84,6 +87,7 @@ struct Image {
 		return 0;
 
 	}
+
 	bool WholeCopyCompatible(const Image& other) {
 		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
 			extent.width == other.extent.width && extent.height == other.extent.height && extent.depth == other.extent.depth && ChechFormatSizeCompatible(other.format);
@@ -107,21 +111,36 @@ struct Image {
 		return size;
 	}
 	void WriteToJpg(const std::string& outJpgFile,uint32_t layer,uint32_t mip) {
-		uint32_t curW = totalMemorySize / (extent.height * 4);
+		uint32_t numChannels = VkFormatToInfo[format].componentCount;
+		uint32_t numBytesPerChannel = VkFormatToInfo[format].componentSizes[0];//假设所有分量的字节数都相同
+		if (numChannels == 0)
+		{
+			Log("未知格式",0);
+		}
+		uint32_t texelByteWidth = numBytesPerChannel* numChannels;
+		uint32_t curW = totalMemorySize / (extent.height * numChannels);
 		auto layout = layerMipLayouts[layer][mip];
-		uint32_t w = layout.rowPitch / 4;
+		uint32_t w = layout.rowPitch / texelByteWidth;
 		uint32_t h = layout.size / layout.rowPitch;
 
-		WriteJpeg(outJpgFile, (const char*)(hostMapPointer )+layout.offset, w, h);
+		WriteJpeg(outJpgFile, (const char*)(hostMapPointer )+layout.offset, w, h,numChannels);
 	}
 	void WriteToJpgFloat(const std::string& outJpgFile, uint32_t layer, uint32_t mip) {
-		uint32_t curW = totalMemorySize / (extent.height * 4);
+		uint32_t numChannels = VkFormatToInfo[format].componentCount;
+		uint32_t numBytesPerChannel = VkFormatToInfo[format].componentSizes[0];//假设所有分量的字节数都相同
+		if (numChannels == 0)
+		{
+			Log("未知格式", 0);
+		}
+		uint32_t texelByteWidth = numBytesPerChannel * numChannels;
+		uint32_t curW = totalMemorySize / (extent.height * numChannels);
 		auto layout = layerMipLayouts[layer][mip];
-		uint32_t w = layout.rowPitch / 4;
+		uint32_t w = layout.rowPitch / texelByteWidth;
 		uint32_t h = layout.size / layout.rowPitch;
 
-		WriteJpeg(outJpgFile, (const float*)(hostMapPointer)+layout.offset, w, h);
+		WriteJpeg(outJpgFile, (const float*)(hostMapPointer)+layout.offset, w, h,numChannels);
 	}
+
 };
 
 struct Barrier {
@@ -476,6 +495,114 @@ struct RenderPassInfo {
 
 	//在这里定义一些快速设置render pass信息的接口
 
+	//默认设置，一个默认subpass
+	void InitDefaultRenderPassInfo(ShaderCodePaths drawSceenCodePath/*一个subpass需要的着色器文件路径*/,uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/) {
+	
+	
+
+		//InitDefaultGraphicSubpassInfo();
+		subpassInfo.subpassDescs.resize(1);
+		//设置着色器路径
+		subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = drawSceenCodePath;
+		//初始化管线状态
+		subpassInfo.subpassDescs[0].subpassPipelineStates.Init(viewportWidth, viewportHeight);
+
+		//开启剔除
+		subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+
+
+		auto& subpassDesc1 = subpassInfo.subpassDescs[0];
+		subpassDesc1.subpassDescription.flags = 0;
+		subpassDesc1.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpassDesc1.subpassDescription.inputAttachmentCount = 0;
+		subpassDesc1.subpassDescription.pInputAttachments = nullptr;
+		subpassDesc1.subpassDescription.colorAttachmentCount = 1;
+		subpassDesc1.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+		subpassDesc1.subpassDescription.pResolveAttachments = nullptr;
+		subpassDesc1.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
+		subpassDesc1.subpassDescription.preserveAttachmentCount = 0;
+		subpassDesc1.subpassDescription.pPreserveAttachments = nullptr;
+
+
+		subpassInfo.subpassDepends.resize(1);
+		auto& subpassDepend1 = subpassInfo.subpassDepends[0];
+		subpassDepend1.srcSubpass = VK_SUBPASS_EXTERNAL;
+		subpassDepend1.dstSubpass = 0;
+		subpassDepend1.dependencyFlags = 0;
+		subpassDepend1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		subpassDepend1.srcAccessMask = 0;
+		subpassDepend1.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		subpassDepend1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	
+	
+	}
+
+	void InitDefaultRenderPassInfo(const std::vector<std::vector<ShaderCodePaths>>& renderPassSubpassShaderPaths, uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/) {
+		for (uint32_t passId = 0; passId < renderPassSubpassShaderPaths.size(); passId++)
+		{
+			subpassInfo.subpassDescs.resize(renderPassSubpassShaderPaths[passId].size());
+			//初始化subpass描述
+			for (uint32_t subpassId = 0; subpassId < renderPassSubpassShaderPaths[passId].size(); subpassId++)
+			{
+				subpassInfo.subpassDescs[subpassId].pipelinesShaderCodePaths = renderPassSubpassShaderPaths[passId][subpassId];
+				//初始化管线状态
+				subpassInfo.subpassDescs[subpassId].subpassPipelineStates.Init(viewportWidth, viewportHeight);
+
+				//开启剔除
+				subpassInfo.subpassDescs[subpassId].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+
+
+				auto& subpassDesc = subpassInfo.subpassDescs[subpassId];
+				subpassDesc.subpassDescription.flags = 0;
+				subpassDesc.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpassDesc.subpassDescription.inputAttachmentCount = 0;
+				subpassDesc.subpassDescription.pInputAttachments = nullptr;
+				subpassDesc.subpassDescription.colorAttachmentCount = 1;
+				subpassDesc.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+				subpassDesc.subpassDescription.pResolveAttachments = nullptr;
+				subpassDesc.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
+				subpassDesc.subpassDescription.preserveAttachmentCount = 0;
+				subpassDesc.subpassDescription.pPreserveAttachments = nullptr;
+
+
+
+
+			}
+
+			//初始化subpass依赖
+			subpassInfo.subpassDepends.resize(renderPassSubpassShaderPaths[passId].size());
+			for (uint32_t subpassId = 0; subpassId < renderPassSubpassShaderPaths[passId].size(); subpassId++)
+			{
+				auto& subpassDepend = subpassInfo.subpassDepends[subpassId];
+				if (subpassId == 0)
+				{
+					subpassDepend.srcSubpass = VK_SUBPASS_EXTERNAL;
+					subpassDepend.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+					subpassDepend.srcAccessMask = 0;
+					subpassDepend.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+					subpassDepend.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+				}
+				else {
+					subpassDepend.srcSubpass = subpassId - 1;
+
+					subpassDepend.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+					subpassDepend.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+					subpassDepend.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+					subpassDepend.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				}
+
+				subpassDepend.dstSubpass = subpassId;
+				subpassDepend.dependencyFlags = 0;
+
+
+
+
+			}
+		}
+	
+	
+	}
 
 };
 
@@ -519,6 +646,7 @@ protected:
 	
 	//transfer
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
+	void CmdOpsCopyImageToImage(CommandList& cmdList, Image& srcImage,uint32_t srcLayer,uint32_t srcMip, Image& dstImage, uint32_t dstLayer, uint32_t dstMip);
 	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
 	//graphic
 	void CmdOpsDrawGeom(CommandList& cmdList,uint32_t renderPassIndex = 0);
@@ -697,15 +825,15 @@ private:
 	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;
 
 
-	const std::map<VkFormat, std::string> candidatedTextureFormatsMap = {
-		{VK_FORMAT_R8G8B8A8_UNORM,"VK_FORMAT_R8G8B8A8_UNORM"},//当前使用stb读取的时srgb格式的数据，而该格式再着色器中不会进行gama解码，且颜色附件为srgb的，所以输出的时候会自动编码，所以为保证结果正确，在着色器中需要手动解码
-		{VK_FORMAT_R8G8B8A8_SNORM,"VK_FORMAT_R8G8B8A8_SNORM"},
-		{VK_FORMAT_R8G8B8A8_USCALED,"VK_FORMAT_R8G8B8A8_USCALED"},
-		{VK_FORMAT_R8G8B8A8_SSCALED,"VK_FORMAT_R8G8B8A8_SSCALED"},
-		{VK_FORMAT_R8G8B8A8_UINT,"VK_FORMAT_R8G8B8A8_UINT"},
-		{VK_FORMAT_R8G8B8A8_SINT,"VK_FORMAT_R8G8B8A8_SINT"},
-		{VK_FORMAT_R32G32B32A32_SFLOAT,"VK_FORMAT_R32G32B32A32_SFLOAT"},
-		{VK_FORMAT_D32_SFLOAT,"VK_FORMAT_D32_SFLOAT"}
+	const std::vector<VkFormat> candidatedTextureFormats = {
+		VK_FORMAT_R8G8B8A8_UNORM,//当前使用stb读取的时srgb格式的数据，而该格式再着色器中不会进行gama解码，且颜色附件为srgb的，所以输出的时候会自动编码，所以为保证结果正确，在着色器中需要手动解码
+		VK_FORMAT_R8G8B8A8_SNORM,
+		VK_FORMAT_R8G8B8A8_USCALED,
+		VK_FORMAT_R8G8B8A8_SSCALED,
+		VK_FORMAT_R8G8B8A8_UINT,
+		VK_FORMAT_R8G8B8A8_SINT,
+		VK_FORMAT_R32G32B32A32_SFLOAT,
+		VK_FORMAT_R32_SFLOAT
 	};
 
 	//VkFormat textureFormat;

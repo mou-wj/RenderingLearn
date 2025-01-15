@@ -70,6 +70,16 @@ void Camera::Rotate(RotateAction rotateAction,float angle)
 	Calculate();
 }
 
+
+
+void Camera::SetCamera(glm::vec3 pos, glm::vec3 target, glm::vec3 down)
+{
+	this->pos = pos;
+	this->target = target;
+	this->down = down;
+	Calculate();
+}
+
 void Camera::Calculate()
 {
 

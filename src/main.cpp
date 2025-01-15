@@ -59,7 +59,7 @@ int main()
 	CaptureNum(4);
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
-	UniformExample example;
+	//UniformExample example;
 	//SkyBoxExample example;
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
@@ -72,7 +72,7 @@ int main()
 	//VolumeScatteringExample example;
 	//C5ShadingBasicsExample example;
 	//C6TexturingExample example;
-	//C7ShadowsExample example;
+	C7ShadowsExample example;
 	ExampleBase::Run(&example);
 
 
