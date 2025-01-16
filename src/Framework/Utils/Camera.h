@@ -31,7 +31,7 @@ public:
 	const glm::vec3& GetPos() const { return pos; }
 
 	void SetCamera(glm::vec3 pos, glm::vec3 target, glm::vec3 down);
-
+	void SetCamera2(glm::vec3 pos, glm::vec3 forward, glm::vec3 down);
 private:
 	void Calculate();
 

@@ -29,17 +29,17 @@ void LoadCharUnsignedCharJpeg(const std::string& imageFile, const std::vector<Pi
 void WriteJpeg(const std::string& outImagePath, const char* imageData, uint32_t width, uint32_t height, uint32_t numComponent)
 {
 
-	std::vector<char> tmp(width * height * 4,(char)0);
+	std::vector<char> tmp(width * height * 4,(char)255);
 	for (uint32_t i = 0; i < width * height; i++)
 	{
 		for (uint32_t c = 0; c < numComponent; c++)
 		{
 			tmp[4 * i + c] = *(imageData + i * numComponent + c);
 		}
-		if (numComponent != 4) {
-			tmp[4 * i + 3] = (char)255;
+		//if (numComponent != 4) {
+		//	tmp[4 * i + 3] = (char)255;
 
-		}
+		//}
 
 	}
 
@@ -56,7 +56,8 @@ void WriteJpeg(const std::string& outImagePath, const float* imageData, uint32_t
 	size_t totalV = width * height * numComponent;
 	for (size_t i = 0; i < totalV; i++)
 	{
-		tmp[i] = char(*(imageData + i) * 255);
+		float cur = *(imageData + i) * 255;
+		tmp[i] = char(cur);
 	}
 	WriteJpeg(outImagePath, tmp.data(), width, height, numComponent);
 

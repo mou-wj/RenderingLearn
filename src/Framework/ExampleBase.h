@@ -118,7 +118,6 @@ struct Image {
 			Log("未知格式",0);
 		}
 		uint32_t texelByteWidth = numBytesPerChannel* numChannels;
-		uint32_t curW = totalMemorySize / (extent.height * numChannels);
 		auto layout = layerMipLayouts[layer][mip];
 		uint32_t w = layout.rowPitch / texelByteWidth;
 		uint32_t h = layout.size / layout.rowPitch;
@@ -133,12 +132,11 @@ struct Image {
 			Log("未知格式", 0);
 		}
 		uint32_t texelByteWidth = numBytesPerChannel * numChannels;
-		uint32_t curW = totalMemorySize / (extent.height * numChannels);
 		auto layout = layerMipLayouts[layer][mip];
 		uint32_t w = layout.rowPitch / texelByteWidth;
 		uint32_t h = layout.size / layout.rowPitch;
 
-		WriteJpeg(outJpgFile, (const float*)(hostMapPointer)+layout.offset, w, h,numChannels);
+		WriteJpeg(outJpgFile, (const float*)((char*)(hostMapPointer)+layout.offset), w, h,numChannels);
 	}
 
 };
@@ -645,9 +643,9 @@ protected:
 	void CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
 	//transfer
-	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
+	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage);
 	void CmdOpsCopyImageToImage(CommandList& cmdList, Image& srcImage,uint32_t srcLayer,uint32_t srcMip, Image& dstImage, uint32_t dstLayer, uint32_t dstMip);
-	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage);
+	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage);
 	//graphic
 	void CmdOpsDrawGeom(CommandList& cmdList,uint32_t renderPassIndex = 0);
 	//execute

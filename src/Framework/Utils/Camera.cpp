@@ -80,6 +80,14 @@ void Camera::SetCamera(glm::vec3 pos, glm::vec3 target, glm::vec3 down)
 	Calculate();
 }
 
+void Camera::SetCamera2(glm::vec3 pos, glm::vec3 forward, glm::vec3 down)
+{
+	this->pos = pos;
+	this->target = pos + forward;
+	this->down = down;
+	Calculate();
+}
+
 void Camera::Calculate()
 {
 

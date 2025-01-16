@@ -16,7 +16,12 @@ void C7ShadowsExample::InitSubPassInfo()
 
 	renderPassInfos.resize(2);
 	renderPassInfos[0].InitDefaultRenderPassInfo(depthPassCodePath, windowWidth, windowHeight);
-	renderPassInfos[0].InitDefaultRenderPassInfo(drawSceenCodePath, windowWidth, windowHeight);
+	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
+	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
+	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+
+	renderPassInfos[1].InitDefaultRenderPassInfo(drawSceenCodePath, windowWidth, windowHeight);
 
 
 
@@ -125,6 +130,8 @@ void C7ShadowsExample::Loop()
 
 	//glm::vec3 lightPos = glm::vec3(-3,-6,0);
 	glm::vec3 lightPos = glm::vec3(0, 0, 0);
+	//glm::vec3 lightPos = glm::vec3(0, 0, 0);
+	CaptureNum(3);
 	for (uint32_t i = 0; i < 6; i++)
 	{
 		//获取阴影贴图
@@ -132,7 +139,7 @@ void C7ShadowsExample::Loop()
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-
+		CaptureBeginMacro
 		CmdListReset(graphicCommandList);
 
 		CmdListRecordBegin(graphicCommandList);
@@ -144,20 +151,25 @@ void C7ShadowsExample::Loop()
 		auto& depthTextureOldLayout = textures["pointShadowMap"].image.currentLayout;
 
 		CmdOpsImageMemoryBarrer(graphicCommandList, depthTargetImage, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, i, 0);
 		
 		//拷贝深度图到深度纹理
-		CmdOpsCopyImageToImage(graphicCommandList, depthTargetImage, 0, 0, textures["pointShadowMap"].image, 0, 0);
+		CmdOpsCopyImageToImage(graphicCommandList, depthTargetImage, 0, 0, textures["pointShadowMap"].image, i, 0);
 
 		CmdOpsImageMemoryBarrer(graphicCommandList, depthTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, depthOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, depthTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_NONE, depthTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,i,0);
 	
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
-
+		CaptureEndMacro
 
 	}
 	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap0.jpg", 0, 0);
+	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap1.jpg", 1, 0);
+	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap2.jpg", 2, 0);
+	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap3.jpg", 3, 0);
+	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap4.jpg", 4, 0);
+	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap5.jpg", 5, 0);
 
 	//绘制阴影
 	auto& renderTargets = renderPassInfos[1].renderTargets;

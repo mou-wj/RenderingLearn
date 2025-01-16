@@ -747,7 +747,7 @@ void ExampleBase::CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> g
 }
 
 
-void ExampleBase::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image srcImage, Image dstImage)
+void ExampleBase::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image& srcImage, Image& dstImage)
 {
 	//检查两个image是否尺寸相同
 	if (!srcImage.WholeCopyCompatible(dstImage))
@@ -818,7 +818,7 @@ void ExampleBase::CmdOpsCopyImageToImage(CommandList& cmdList, Image& srcImage, 
 
 }
 
-void ExampleBase::CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image srcImage, Image dstImage)
+void ExampleBase::CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage)
 {
 	VkImageBlit blitRegion{};
 	blitRegion.srcOffsets[0] = VkOffset3D{ 0,0,0 };
