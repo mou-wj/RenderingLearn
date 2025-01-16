@@ -16,11 +16,11 @@ void C7ShadowsExample::InitSubPassInfo()
 
 	renderPassInfos.resize(2);
 	renderPassInfos[0].InitDefaultRenderPassInfo(depthPassCodePath, windowWidth, windowHeight);
-	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+	//renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-
+	renderPassInfos[0].renderTargets.colorAttachment.attachmentDesc.format = VK_FORMAT_R32_SFLOAT;
 	renderPassInfos[1].InitDefaultRenderPassInfo(drawSceenCodePath, windowWidth, windowHeight);
 
 
@@ -42,6 +42,10 @@ void C7ShadowsExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
+
+	bufferBindInfos["Tmp"].size = sizeof(float);
+	bufferBindInfos["Tmp"].binding = 1;
+	bufferBindInfos["Tmp"].pipeId = 0;
 
 
 	//一个纹理点光源阴影贴图
@@ -109,6 +113,7 @@ void C7ShadowsExample::Loop()
 
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
+	BindBuffer("Tmp");
 	const std::vector<glm::vec3> cubeViewTarget = {
 		glm::vec3(1,0,0),
 		glm::vec3(-1,0,0),
@@ -128,16 +133,19 @@ void C7ShadowsExample::Loop()
 
 	};
 
-	//glm::vec3 lightPos = glm::vec3(-3,-6,0);
-	glm::vec3 lightPos = glm::vec3(0, 0, 0);
+	glm::vec3 lightPos = glm::vec3(-3,-6,0);
 	//glm::vec3 lightPos = glm::vec3(0, 0, 0);
-	CaptureNum(3);
+	//glm::vec3 lightPos = glm::vec3(0, 0, 0);
+	CaptureNum(7);
+	float cV = 0;
 	for (uint32_t i = 0; i < 6; i++)
 	{
 		//获取阴影贴图
-		camera.SetCamera(lightPos, cubeViewTarget[i], cubeViewDown[i]);
+		camera.SetCamera2(lightPos, cubeViewTarget[i], cubeViewDown[i]);
 		buffer.view = camera.GetView();
+		cV += 1 / 6.0;
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
+		FillBuffer(buffers["Tmp"], 0, sizeof(float), (const char*)&cV);
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		CaptureBeginMacro
 		CmdListReset(graphicCommandList);
@@ -145,18 +153,18 @@ void C7ShadowsExample::Loop()
 		CmdListRecordBegin(graphicCommandList);
 		//进行depth pass
 		CmdOpsDrawGeom(graphicCommandList);
-		auto& depthTargetImage = renderPassInfos[0].renderTargets.depthAttachment.attachmentImage;
+		auto& colorTargetImage = renderPassInfos[0].renderTargets.colorAttachment.attachmentImage;
 
-		auto& depthOldLayout = depthTargetImage.currentLayout;
+		auto& colorOldLayout = colorTargetImage.currentLayout;
 		auto& depthTextureOldLayout = textures["pointShadowMap"].image.currentLayout;
 
-		CmdOpsImageMemoryBarrer(graphicCommandList, depthTargetImage, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
 		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, i, 0);
 		
 		//拷贝深度图到深度纹理
-		CmdOpsCopyImageToImage(graphicCommandList, depthTargetImage, 0, 0, textures["pointShadowMap"].image, i, 0);
+		CmdOpsCopyImageToImage(graphicCommandList, colorTargetImage, 0, 0, textures["pointShadowMap"].image, i, 0);
 
-		CmdOpsImageMemoryBarrer(graphicCommandList, depthTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, depthOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, colorOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0);
 		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_NONE, depthTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,i,0);
 	
 		CmdListRecordEnd(graphicCommandList);

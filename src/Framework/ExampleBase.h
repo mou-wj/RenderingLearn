@@ -59,7 +59,7 @@ struct Buffer {
 struct Image {
 	VkImage image;
 	VkImageView imageView;
-	VkFormat format;
+	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 	uint64_t totalMemorySize = 0;
 	VkDeviceMemory memory;
 	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -380,8 +380,13 @@ struct TextureDataSource {
 
 };
 struct TextureBindInfo {
+	static const VkFormat defaultTextureFormat = VK_FORMAT_R8G8B8A8_UNORM;
+	static const VkFormatFeatureFlags textureFormatFeatures = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+
+
+
 	std::vector<TextureDataSource> textureDataSources;
-	VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;//指定要创建的纹理的format
+	VkFormat format = defaultTextureFormat;//指定要创建的纹理的format
 	uint32_t formatComponentByteSize = 1;//指定format每个颜色分量的字节大小，如果指定出错会导致填充image数据出问题
 	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
 	uint32_t passId = 0,pipeId = 0, setId = 0, binding = 0, elementId = 0;
@@ -443,7 +448,15 @@ struct Attachment {
 struct RenderTargets {
 	Attachment colorAttachment;//render pass��0�Ÿ���
 	Attachment depthAttachment;//render pass��1�Ÿ���
+	static const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//ֻ默认的颜色附件格式，必须要支持
+	static const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ默认的颜色附件格式，必须要支持
+	static const VkFormatFeatureFlags colorAttachmentFormatFeatures = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+	static const VkFormatFeatureFlags depthAttachmentFormatFeatures = (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT);
 	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+	RenderTargets() {
+		colorAttachment.attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
+		depthAttachment.attachmentDesc.format = depthFormat;//默认深度附件格式，可以在创建附件前修改
+	}
 };
 struct ShaderCodePaths {
 	std::string vertexShaderPath = "";
@@ -771,8 +784,9 @@ private:
 	);
 
 
-
-
+	//check
+	bool CheckLinearFormatFeatureSupport(VkPhysicalDevice curPhysicalDevive, VkFormat format,VkFormatFeatureFlags features);
+	bool CheckOptimalFormatFeatureSupport(VkPhysicalDevice curPhysicalDevive, VkFormat format, VkFormatFeatureFlags features);
 private:
 	
 	//shader parse
@@ -820,8 +834,7 @@ private:
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 	VkColorSpaceKHR colorSpace;
 	//const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A ,在该格式情况下，片段着色器输出会对调R和B分量，即片段着色器输出（1，0，0，1），实际写入到附件中的是（0，0，1，1），对swapchain中的image，存储在其中的pixel的值为（1，0，0，1）则会显示蓝色,着色器中采样获取的格式为（R,G,B,A）,要想正常的在该格式下进行显示，在片段着色其中的颜色输出需要按照正常的R，G，B，A格式，采样得到的颜色也是按照R，G，B，A格式
-	const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;
-
+	const VkFormat swapchainImageFormat = RenderTargets::colorFormat;//默认交换链图像的格式 
 
 	const std::vector<VkFormat> candidatedTextureFormats = {
 		VK_FORMAT_R8G8B8A8_UNORM,//当前使用stb读取的时srgb格式的数据，而该格式再着色器中不会进行gama解码，且颜色附件为srgb的，所以输出的时候会自动编码，所以为保证结果正确，在着色器中需要手动解码
@@ -834,8 +847,6 @@ private:
 		VK_FORMAT_R32_SFLOAT
 	};
 
-	//VkFormat textureFormat;
-	const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ�����ֵ�ĸ�ʽ
 	VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
 
@@ -859,13 +870,6 @@ private:
 	//先不考虑compute pipeline
 	//std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
 	ComputePipelineInfos computePipelineInfos;
-
-	//VkRenderPass renderPass = VK_NULL_HANDLE;
-
-	//VkFramebuffer frameBuffer = VK_NULL_HANDLE;
-
-
-
 
 
 	VkQueue graphicQueue = VK_NULL_HANDLE;//该队列可以graphic，可以transfer，可以present

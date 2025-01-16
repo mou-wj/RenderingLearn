@@ -187,7 +187,7 @@ void ExampleBase::InitContex()
 	InitCommandList();
 
 	//����swapchain
-	swapchain = CreateSwapchain(device, surface, colorFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
+	swapchain = CreateSwapchain(device, surface, swapchainImageFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
 
 
 	auto swapImages = GetSwapchainImages(device, swapchain);
@@ -202,7 +202,7 @@ void ExampleBase::InitContex()
 		swapchainImages[i].extent = VkExtent3D{.width = windowWidth ,.height = windowHeight,.depth = 1};
 		swapchainImages[i].sample = VK_SAMPLE_COUNT_1_BIT;
 		swapchainImages[i].memory = VK_NULL_HANDLE;
-		swapchainImages[i].format = colorFormat;
+		swapchainImages[i].format = swapchainImageFormat;
 		//ת��swapchain image��image layout
 		TransferWholeImageLayout(swapchainImages[i], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);//�ȴ�������Ⱦ���
 
@@ -229,15 +229,25 @@ void ExampleBase::InitContex()
 void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 {
 	//����color attachment����Դ
+	auto& colorAttachment = renderPassInfo.renderTargets.colorAttachment.attachmentDesc;
 	auto& colorImage = renderPassInfo.renderTargets.colorAttachment.attachmentImage;
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+
+	if (colorAttachment.format != RenderTargets::colorFormat)
+	{
+		ASSERT(CheckLinearFormatFeatureSupport(physicalDevice, colorAttachment.format, RenderTargets::colorAttachmentFormatFeatures));
+
+
+	}
+
+
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
 
-	auto& colorAttachment = renderPassInfo.renderTargets.colorAttachment.attachmentDesc;
+	
 	colorAttachment.flags = 0;
-	colorAttachment.format = colorFormat;
+	colorAttachment.format = renderPassInfo.renderTargets.colorAttachment.attachmentDesc.format;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -248,16 +258,27 @@ void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 	renderPassInfo.renderTargets.colorAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 
+
+
 	auto& depthImage = renderPassInfo.renderTargets.depthAttachment.attachmentImage;
-	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthFormat, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+	auto& depthAttachment = renderPassInfo.renderTargets.depthAttachment.attachmentDesc;
+
+	if (depthAttachment.format != RenderTargets::depthFormat)
+	{
+
+		ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, depthAttachment.format, RenderTargets::depthAttachmentFormatFeatures));
+
+
+	}
+
+	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthAttachment.format, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 	renderPassInfo.renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
 
 
 
-	auto& depthAttachment = renderPassInfo.renderTargets.depthAttachment.attachmentDesc;
+
 	depthAttachment.flags = 0;
-	depthAttachment.format = depthFormat;
 	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -389,36 +410,19 @@ void ExampleBase::PickValidPhysicalDevice()
 			//������Լ��surface�ɵ����Ĵ�С��Χ����Ŀǰ��׼���޸Ĵ�С���Բ����
 			)
 		{
-			//���depth��format
-			auto depthFormatFeatures = GetFormatPropetirs(physicalDevices[i], depthFormat);
-			if (!(depthFormatFeatures.optimalTilingFeatures & (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)))
-			{
+			//检查默认深度附件格式支持
+
+			if (!CheckOptimalFormatFeatureSupport(physicalDevices[i], RenderTargets::depthFormat, RenderTargets::depthAttachmentFormatFeatures)) {
 				continue;
 			}
 
-			//���format�Ƿ�֧��linear tiling
-			auto colorFormatProps = GetFormatPropetirs(physicalDevices[i], colorFormat);
-			uint64_t wantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT );
-			if (!((colorFormatProps.linearTilingFeatures & wantFormatFeature) == wantFormatFeature))
-			{
-				continue;//���color format��linear tiling ��֧�ֲ�������ɫ�����������������豸
+			//检查默认颜色附件格式支持
+			if (!CheckLinearFormatFeatureSupport(physicalDevices[i], RenderTargets::colorFormat, RenderTargets::colorAttachmentFormatFeatures)) {
+				continue;
 			}
-			bool suitableTextxureFormatFound = false;
-			uint64_t textureWantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+
 			//纹理的默认格式是VK_FORMAT_R8G8B8A8_UNORM,所以这里检查一下是否支持
-
-			auto textureFormatProps = GetFormatPropetirs(physicalDevices[i], VK_FORMAT_R8G8B8A8_UNORM);
-			
-			if ((textureFormatProps.linearTilingFeatures & textureWantFormatFeature) == textureWantFormatFeature)
-			{
-				suitableTextxureFormatFound = true;
-				//textureFormat = VK_FORMAT_R8G8B8A8_UNORM;
-				
-			
-			}
-
-			if (!suitableTextxureFormatFound)
-			{
+			if (!CheckLinearFormatFeatureSupport(physicalDevices[i], TextureBindInfo::defaultTextureFormat, TextureBindInfo::textureFormatFeatures)) {
 				continue;
 			}
 
@@ -429,7 +433,7 @@ void ExampleBase::PickValidPhysicalDevice()
 			bool surpportColorFormat = false;
 			for (auto& surfaceFormatCapabilities : surfaceFormatsCapabilities)
 			{
-				if (surfaceFormatCapabilities.format == colorFormat )
+				if (surfaceFormatCapabilities.format == swapchainImageFormat )
 				{
 					surpportColorFormat = true;
 					colorSpace = surfaceFormatCapabilities.colorSpace;
@@ -475,7 +479,7 @@ void ExampleBase::PickValidPhysicalDevice()
 
 void ExampleBase::CheckCandidateTextureFormatSupport()
 {
-	uint64_t textureWantFormatFeature = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+	uint64_t textureWantFormatFeature = TextureBindInfo::defaultTextureFormat;
 	for (const auto& candidatedFormat : candidatedTextureFormats)
 	{
 		auto textureFormatProps = GetFormatPropetirs(physicalDevice, candidatedFormat);
@@ -621,6 +625,15 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 
 
 	}
+	
+	if (textureBindInfo.format != TextureBindInfo::defaultTextureFormat)
+	{
+		ASSERT(CheckLinearFormatFeatureSupport(physicalDevice, textureBindInfo.format, TextureBindInfo::textureFormatFeatures));
+
+
+	}
+
+
 	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, textureBindInfo.format, x, y, 1, texture.image.numMip, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{}, VK_IMAGE_TILING_LINEAR);
 	texture.sampler = CreateDefaultSampler(device, 1);
 	for (uint32_t i = 0; i < numLayer; i++)
@@ -1999,5 +2012,29 @@ void ExampleBase::SetSupassDescription(VkSubpassDescription& subpassDesc, VkSubp
 	{
 		subpassDesc.pPreserveAttachments = preserveAttachments.data();
 	}
+}
+
+bool ExampleBase::CheckLinearFormatFeatureSupport(VkPhysicalDevice curPhysicalDevive, VkFormat format, VkFormatFeatureFlags features)
+{
+	auto colorFormatProps = GetFormatPropetirs(curPhysicalDevive, format);
+	if (!((colorFormatProps.linearTilingFeatures & features) == features))
+	{
+		Log("the linear props does not support specific features",0);
+		return false;
+	}
+
+	return true;
+}
+
+bool ExampleBase::CheckOptimalFormatFeatureSupport(VkPhysicalDevice curPhysicalDevive, VkFormat format, VkFormatFeatureFlags features)
+{
+	auto colorFormatProps = GetFormatPropetirs(curPhysicalDevive, format);
+	if (!((colorFormatProps.optimalTilingFeatures & features) == features))
+	{
+		Log("the optimal props does not support specific features", 0);
+		return false;
+	}
+
+	return true;
 }
 
