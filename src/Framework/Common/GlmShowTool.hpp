@@ -5,6 +5,7 @@ template<int size,typename T = float>
 void ShowMat(const glm::mat <size, size,T, glm::qualifier::defaultp > & mat)
 {
 	glm::mat4();
+	std::cout << " mat show: " << std::endl;
 	static_assert(size > 0);
 	for (uint32_t i = 0; i < size; i++)
 	{
@@ -20,6 +21,7 @@ template<int size_row,int size_col, typename T = float>
 void ShowMat(const glm::mat <size_row, size_col, T, glm::qualifier::defaultp >& mat)
 {
 	glm::mat4();
+	std::cout << " mat show: " << std::endl;
 	//static_assert()
 	static_assert(size_row > 0 && size_col > 0);
 	for (uint32_t i = 0; i < size_row; i++)
@@ -37,6 +39,7 @@ void ShowMatColMajor(const glm::mat <size_row, size_col, T, glm::qualifier::defa
 {
 	glm::mat4();
 	//static_assert()
+	std::cout << " mat show: " << std::endl;
 	static_assert(size_row > 0 && size_col > 0);
 	for (uint32_t i = 0; i < size_col; i++)
 	{

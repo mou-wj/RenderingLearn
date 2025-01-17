@@ -2,6 +2,8 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
+#include <filesystem>
+
 void LoadCharUnsignedCharJpeg(const std::string& imageFile, const std::vector<PixelComponent>& wantPixelComponents, std::vector<char>& outImageData, uint32_t& outWidth, uint32_t& outHeight,bool flip)
 {
 	stbi_set_flip_vertically_on_load(flip);
@@ -43,6 +45,10 @@ void WriteJpeg(const std::string& outImagePath, const char* imageData, uint32_t 
 
 	}
 
+	if (std::filesystem::exists(outImagePath.c_str()))
+	{
+		std::filesystem::remove(outImagePath.c_str());
+	}
 
 
 	stbi_write_jpg(outImagePath.c_str(), width, height, 4, tmp.data(), 100);

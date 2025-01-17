@@ -20,9 +20,10 @@ void C7ShadowsExample::InitSubPassInfo()
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-	renderPassInfos[0].renderTargets.colorAttachment.attachmentDesc.format = VK_FORMAT_R32_SFLOAT;
+	renderPassInfos[0].renderTargets.colorAttachment.attachmentDesc.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	
 	renderPassInfos[1].InitDefaultRenderPassInfo(drawSceenCodePath, windowWidth, windowHeight);
-
+	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
 
 
 	
@@ -33,20 +34,20 @@ void C7ShadowsExample::InitResourceInfos()
 
 	geoms.resize(1);
 	geoms[0].useIndexBuffers = false;
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/simple_sceen.obj",geoms[0]);
 
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
-
+	renderPassInfos[1].subpassDrawGeoInfos[0] = { 0 };
 
 
 	bufferBindInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
 
-	bufferBindInfos["Tmp"].size = sizeof(float);
-	bufferBindInfos["Tmp"].binding = 1;
-	bufferBindInfos["Tmp"].pipeId = 0;
-
+	bufferBindInfos["SceenInfo"].size = sizeof(glm::vec4) * 2 + sizeof(glm::mat4) * 6;
+	bufferBindInfos["SceenInfo"].binding = 2;
+	bufferBindInfos["SceenInfo"].pipeId = 0;
+	bufferBindInfos["SceenInfo"].passId = 1;
 
 	//一个纹理点光源阴影贴图
 	TextureDataSource emptyDataSource;
@@ -61,7 +62,8 @@ void C7ShadowsExample::InitResourceInfos()
 	textureBindInfos["pointShadowMap"].textureDataSources.push_back(emptyDataSource);
 	textureBindInfos["pointShadowMap"].binding = 1;
 	textureBindInfos["pointShadowMap"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-	textureBindInfos["pointShadowMap"].format = VK_FORMAT_R32_SFLOAT;
+	textureBindInfos["pointShadowMap"].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	textureBindInfos["pointShadowMap"].passId = 1;
 }
 
 void C7ShadowsExample::Loop()
@@ -113,7 +115,11 @@ void C7ShadowsExample::Loop()
 
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
-	BindBuffer("Tmp");
+	BindBuffer("SceenInfo");
+
+	//绑定纹理
+	BindTexture("pointShadowMap");
+
 	const std::vector<glm::vec3> cubeViewTarget = {
 		glm::vec3(1,0,0),
 		glm::vec3(-1,0,0),
@@ -136,16 +142,18 @@ void C7ShadowsExample::Loop()
 	glm::vec3 lightPos = glm::vec3(-3,-6,0);
 	//glm::vec3 lightPos = glm::vec3(0, 0, 0);
 	//glm::vec3 lightPos = glm::vec3(0, 0, 0);
-	CaptureNum(7);
-	float cV = 0;
+	CaptureNum(9);
 	for (uint32_t i = 0; i < 6; i++)
 	{
 		//获取阴影贴图
 		camera.SetCamera2(lightPos, cubeViewTarget[i], cubeViewDown[i]);
 		buffer.view = camera.GetView();
-		cV += 1 / 6.0;
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
-		FillBuffer(buffers["Tmp"], 0, sizeof(float), (const char*)&cV);
+		glm::mat4 tmpMVP = buffer.proj * buffer.view;
+		ShowMatColMajor(tmpMVP);
+		uint32_t offset = 32 + sizeof(glm::mat4) * i;
+		FillBuffer(buffers["SceenInfo"], offset, sizeof(glm::mat4), (const char*)&tmpMVP);
+
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		CaptureBeginMacro
 		CmdListReset(graphicCommandList);
@@ -181,6 +189,14 @@ void C7ShadowsExample::Loop()
 
 	//绘制阴影
 	auto& renderTargets = renderPassInfos[1].renderTargets;
+
+	camera.SetCamera(glm::vec3(0,0,-6), glm::vec3(0,0,0), glm::vec3(0,1,0));
+	//camera.SetCamera2(lightPos, cubeViewTarget[0], cubeViewDown[0]);
+	bufferBindInfos["SimpleSceenExampleBuffer"].passId = 1;
+	BindBuffer("SimpleSceenExampleBuffer");
+
+	FillBuffer(buffers["SceenInfo"], 0, sizeof(glm::vec3), (const char*)&lightPos);
+	FillBuffer(buffers["SceenInfo"], 16, sizeof(glm::vec3), (const char*)&camera.GetPos());
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;
@@ -198,7 +214,7 @@ void C7ShadowsExample::Loop()
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
 		
-		CmdOpsDrawGeom(graphicCommandList);
+		CmdOpsDrawGeom(graphicCommandList,1);
 		
 		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
