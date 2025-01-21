@@ -10,6 +10,12 @@ layout(set = 0,binding = 0,std140) uniform SimpleSceenExampleBuffer{
 	mat4 view;
 	mat4 proj;
 };
+
+layout(location = 0) out vec3 outViewPosition;//相机空间中的位置 
+
 void main(){
 	gl_Position = proj * view * world *vec4(inPosition,1.0f);
+	vec4 viewWorldPosition = view * world * vec4(inPosition,1.0);
+	viewWorldPosition /=viewWorldPosition.w;
+	outViewPosition = viewWorldPosition.xyz;
 }

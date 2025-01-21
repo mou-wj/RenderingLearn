@@ -14,6 +14,7 @@
 #include <array>
 #include <spirv_glsl.hpp>
 #include <spirv_cross.hpp>
+#include <algorithm>
 
 #include <regex>
 
@@ -87,7 +88,86 @@ struct Image {
 		return 0;
 
 	}
+	void CopyToOther(Image& dstImage, uint32_t layer, uint32_t mip)
+	{
+		//检查格式和长宽是否匹配
+		auto dstSubLayout = dstImage.layerMipLayouts[layer][mip];
+		auto dstTexelByteSize = VkFormatToInfo[dstImage.format].totalBytesPerPixel;
+		auto dstSubW = dstSubLayout.rowPitch / dstTexelByteSize;
+		auto dstSubH = dstSubLayout.size / dstSubLayout.rowPitch;
 
+		auto srcSubLayout = layerMipLayouts[layer][mip];
+		auto srcTexelByteSize = VkFormatToInfo[format].totalBytesPerPixel;
+		auto srcSubW = srcSubLayout.rowPitch / srcTexelByteSize;
+		auto srcSubH = srcSubLayout.size / srcSubLayout.rowPitch;
+		if ((srcTexelByteSize == dstTexelByteSize)
+			&& (srcSubW == dstSubW)
+			&& (srcSubH == dstSubH)
+			&& (image != dstImage.image)
+			)
+		{
+			std::memcpy((char*)dstImage.hostMapPointer + dstSubLayout.offset, (char*)hostMapPointer + srcSubLayout.offset, dstSubW * dstSubH * dstTexelByteSize);
+
+
+		}
+	
+	
+	
+	
+	}
+
+
+	//手动调用翻转所有的layer的纵坐标数据
+	void FlipY() {
+		for (uint32_t i = 0; i < numLayer; i++)
+		{
+			for (uint32_t j = 0; j < numMip; j++)
+			{
+				FlipY(i, j);
+
+			}
+		}
+	
+
+	
+	}
+	void FlipY(uint32_t layer, uint32_t mip)
+	{
+		auto layout = layerMipLayouts[layer][mip];
+		auto texelByteSize = VkFormatToInfo[format].totalBytesPerPixel;
+		if (memory)
+		{
+			auto layoutWidth = layout.rowPitch / texelByteSize;
+			auto layoutHeight = layout.size / layout.rowPitch;
+			std::vector<char> tmpBuffer(texelByteSize);
+			size_t offset1 = 0, offset2 = 0;
+			for (uint32_t col = 0; col < layoutWidth; col++)
+			{
+				for (uint32_t raw = 0; raw < layoutHeight/2; raw++)
+				{
+					offset1 = raw * layout.rowPitch + col * texelByteSize;
+					offset2 = (layoutHeight - 1 - raw) * layout.rowPitch + col * texelByteSize;
+					
+					
+					std::memcpy(tmpBuffer.data(), (char*)hostMapPointer + layout.offset + offset1, texelByteSize);
+					std::memcpy((char*)hostMapPointer + layout.offset + offset1, (char*)hostMapPointer + layout.offset + offset2, texelByteSize);
+					std::memcpy((char*)hostMapPointer + layout.offset + offset2, tmpBuffer.data(), texelByteSize);
+
+				}
+
+
+			}
+
+
+
+
+		}
+
+
+	
+	
+	
+	}
 	bool WholeCopyCompatible(const Image& other) {
 		return  numLayer == other.numLayer && numMip == other.numMip && aspect == other.aspect &&
 			extent.width == other.extent.width && extent.height == other.extent.height && extent.depth == other.extent.depth && ChechFormatSizeCompatible(other.format);
@@ -388,7 +468,7 @@ struct TextureBindInfo {
 	std::vector<TextureDataSource> textureDataSources;
 	VkFormat format = defaultTextureFormat;//指定要创建的纹理的format
 	uint32_t formatComponentByteSize = 1;//指定format每个颜色分量的字节大小，如果指定出错会导致填充image数据出问题
-	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;//天空盒的数据需要翻转Y
 	uint32_t passId = 0,pipeId = 0, setId = 0, binding = 0, elementId = 0;
 	bool compute = false;//是否用于compute pipeline的标志
 	VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -415,7 +495,7 @@ struct Geometry
 	tinyobj::attrib_t vertexAttrib;
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
-	
+
 	bool useIndexBuffers = true;
 
 	//顶点缓冲索引缓冲
@@ -427,6 +507,17 @@ struct Geometry
 
 	//只使用顶点缓冲
 	std::vector<Buffer> shapeVertexBuffers;
+
+	std::array<float, 6> AABBs;//简单的边界包围盒
+	std::array<float, 3> AABBcenter;
+
+	bool CloserThanOther(Geometry& other, glm::vec3 viewPos) {
+		float dist = glm::distance(viewPos, glm::vec3(AABBcenter[0], AABBcenter[1], AABBcenter[2]));
+		float distOther = glm::distance(viewPos, glm::vec3(other.AABBcenter[0], other.AABBcenter[1], other.AABBcenter[2]));
+		return dist < distOther;
+	
+	}
+
 
 
 };
@@ -455,7 +546,9 @@ struct RenderTargets {
 	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 	RenderTargets() {
 		colorAttachment.attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
+		colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };//默认颜色附件清除值，可以在创建附件前修改
 		depthAttachment.attachmentDesc.format = depthFormat;//默认深度附件格式，可以在创建附件前修改
+		depthAttachment.clearValue = VkClearValue{ 1.0,0 };//默认颜色附件清除值，可以在创建附件前修改
 	}
 };
 struct ShaderCodePaths {
@@ -615,6 +708,7 @@ struct RenderPassInfo {
 	
 	}
 
+
 };
 
 
@@ -668,6 +762,9 @@ protected:
 	uint32_t GetNextPresentImageIndex(VkSemaphore sigValidSemaphore);
 
 protected:
+	//根据和相机的距离来排序要绘制的geo，小序
+	void SortGeosFollowCloseDistance(glm::vec3 cameraPos);
+
 	//runtime
 	std::vector<Geometry> geoms;
 	CommandList graphicCommandList;

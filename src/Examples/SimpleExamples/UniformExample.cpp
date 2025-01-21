@@ -56,6 +56,7 @@ void UniformExample::Loop()
 {
 	uint32_t i = 0;;
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
+	CaptureNum(3);
 	//std::vector<char> testImageData;
 
 	//testImageData.resize(512 * 512 * 4);

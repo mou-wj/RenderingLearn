@@ -32,6 +32,7 @@ void ShowMat(const glm::mat <size_row, size_col, T, glm::qualifier::defaultp >& 
 			std::cout << mat[j][i] << "      ";
 		}
 	}
+	std::cout << std::endl;
 }
 
 template<int size_row, int size_col, typename T = float>
@@ -49,6 +50,7 @@ void ShowMatColMajor(const glm::mat <size_row, size_col, T, glm::qualifier::defa
 			std::cout << mat[j][i] << "      ";
 		}
 	}
+	std::cout  << std::endl;
 }
 
 
@@ -69,6 +71,7 @@ void TrimMat(glm::mat <size_row, size_col, T, glm::qualifier::defaultp >& mat)
 			}
 		}
 	}
+	std::cout << std::endl;
 }
 
 
@@ -91,6 +94,7 @@ void CompareMatEqual(const glm::mat <size_row, size_col, T, glm::qualifier::defa
 			
 		}
 	}
+	std::cout << std::endl;
 }
 
 

@@ -170,7 +170,7 @@ void ExampleBase::InitContex()
 	//auto 
 
 	//����instance
-	instance = CreateInstance({ "VK_LAYER_KHRONOS_validation" }, wantExtensions);
+	instance = CreateInstance({ "VK_LAYER_KHRONOS_validation" }, wantExtensions);//这里只有instance开启了debug util
 	//����surface
 	surface = CreateWin32Surface(instance, window);
 	debugUtilMessager = CreateDebugInfoMessager(instance);
@@ -179,7 +179,8 @@ void ExampleBase::InitContex()
 	physicalDeviceFeatures.geometryShader = VK_TRUE;//����geometry shader
 
 	physicalDeviceFeatures.depthClamp ;
-	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, { }, { VK_KHR_SWAPCHAIN_EXTENSION_NAME }, physicalDeviceFeatures);
+
+	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, {}, { VK_KHR_SWAPCHAIN_EXTENSION_NAME }, physicalDeviceFeatures);//device之开启了swapchain拓展
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
 
 	//����command pool
@@ -242,7 +243,7 @@ void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 
 	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
+	//renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
 
 	
@@ -273,7 +274,7 @@ void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 
 	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthAttachment.format, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-	renderPassInfo.renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
+	//renderPassInfo.renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
 
 
 
@@ -1459,7 +1460,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 			curVertexData.resize(geo.shapes[zoneId].mesh.indices.size() * vertexAttributeInputFloatStride);
 			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
 			{
-				const auto & vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+				const auto& vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
 				const auto& normalIndex = geo.shapes[zoneId].mesh.indices[i].normal_index;
 				const auto& texCoordIndex = geo.shapes[zoneId].mesh.indices[i].texcoord_index;
 				//�����������
@@ -1470,7 +1471,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride;
 					std::memcpy(curVertexOffset, &curVertex, sizeof(float) * 3);
 				}
-				
+
 				//填充法线
 				if (!geo.vertexAttrib.normals.empty())
 				{
@@ -1482,7 +1483,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 				//填充纹理坐标
 				if (!geo.vertexAttrib.texcoords.empty())
 				{
-					glm::vec2 curTexCoord = glm::vec2(geo.vertexAttrib.texcoords[texCoordIndex*2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1]);
+					glm::vec2 curTexCoord = glm::vec2(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1]);
 					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 9;
 					std::memcpy(curVertexOffset, &curTexCoord, sizeof(float) * 2);
 
@@ -1500,9 +1501,51 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 
 	}
 
+	size_t numV = geo.vertexAttrib.vertices.size() / 3;
+	if (numV == 0) {
+		Log("", 0);
+	}
+	geo.AABBs[0] = geo.vertexAttrib.vertices[0];
+	geo.AABBs[1] = geo.vertexAttrib.vertices[1];
+	geo.AABBs[2] = geo.vertexAttrib.vertices[2];
+	geo.AABBs[3] = geo.vertexAttrib.vertices[0];
+	geo.AABBs[4] = geo.vertexAttrib.vertices[1];
+	geo.AABBs[5] = geo.vertexAttrib.vertices[2];
+	//计算AABB
+	for (uint32_t i = 0; i < numV; i++)
+	{
+		float x = geo.vertexAttrib.vertices[3 * i];
+		float y = geo.vertexAttrib.vertices[3 * i + 1];
+		float z = geo.vertexAttrib.vertices[3 * i + 2];
+		if (x < geo.AABBs[0])
+		{
+			geo.AABBs[0] = x;
+		}
+		if (x > geo.AABBs[3])
+		{
+			geo.AABBs[3] = x;
+		}
+		if (y < geo.AABBs[1])
+		{
+			geo.AABBs[1] = y;
+		}
+		if (y > geo.AABBs[4])
+		{
+			geo.AABBs[4] = y;
+		}
+		if (z < geo.AABBs[2])
+		{
+			geo.AABBs[2] = z;
+		}
+		if (z > geo.AABBs[5])
+		{
+			geo.AABBs[5] = z;
+		}
+	}
 
-
-
+	geo.AABBcenter[0] = (geo.AABBs[0] + geo.AABBs[3]) / 2;
+	geo.AABBcenter[1] = (geo.AABBs[1] + geo.AABBs[4]) / 2;
+	geo.AABBcenter[2] = (geo.AABBs[2] + geo.AABBs[5]) / 2;
 
 }
 
@@ -1909,6 +1952,20 @@ uint32_t ExampleBase::GetNextPresentImageIndex(VkSemaphore sigValidSemaphore)
 {
 	uint32_t nextImageIndex = VulkanAPI::GetNextValidSwapchainImageIndex(device, swapchain, sigValidSemaphore, nullptr);
 	return nextImageIndex;
+}
+
+void ExampleBase::SortGeosFollowCloseDistance(glm::vec3 cameraPos)
+{
+	for (uint32_t passId = 0; passId < renderPassInfos.size(); passId++)
+	{
+		for (uint32_t subpassId = 0; subpassId < renderPassInfos[passId].subpassDrawGeoInfos.size(); subpassId++)
+		{
+			std::sort(renderPassInfos[passId].subpassDrawGeoInfos[subpassId].begin(), renderPassInfos[passId].subpassDrawGeoInfos[subpassId].end(), [&](uint32_t geo1, uint32_t geo2) {
+				return geoms[geo1].CloserThanOther(geoms[geo2], cameraPos);
+				});
+		}
+	}
+
 }
 
 VkDescriptorType ExampleBase::GetDescriptorType(DescriptorSetInfo& descriptorSetInfo, uint32_t binding)

@@ -21,11 +21,15 @@ void C7ShadowsExample::InitSubPassInfo()
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
 	renderPassInfos[0].renderTargets.colorAttachment.attachmentDesc.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	renderPassInfos[0].renderTargets.colorAttachment.attachmentImage.numLayer = 1;
+	renderPassInfos[0].renderTargets.colorAttachment.clearValue = VkClearValue{ 1.0,100.0,10100.0,1.0 };
 	
 	renderPassInfos[1].InitDefaultRenderPassInfo(drawSceenCodePath, windowWidth, windowHeight);
 	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-
-
+	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
+	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
+	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+	renderPassInfos[1].renderTargets.colorAttachment.clearValue = VkClearValue{ 0.2,0.0,0.0,1.0 };
 	
 }
 
@@ -44,7 +48,7 @@ void C7ShadowsExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
 
-	bufferBindInfos["SceenInfo"].size = sizeof(glm::vec4) * 2 + sizeof(glm::mat4) * 6;
+	bufferBindInfos["SceenInfo"].size = sizeof(glm::vec4) * 2 + sizeof(glm::mat4) * 6 + sizeof(uint32_t);
 	bufferBindInfos["SceenInfo"].binding = 2;
 	bufferBindInfos["SceenInfo"].pipeId = 0;
 	bufferBindInfos["SceenInfo"].passId = 1;
@@ -64,6 +68,18 @@ void C7ShadowsExample::InitResourceInfos()
 	textureBindInfos["pointShadowMap"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 	textureBindInfos["pointShadowMap"].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	textureBindInfos["pointShadowMap"].passId = 1;
+
+
+	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["pointShadowArrayMap"].binding = 3;
+	textureBindInfos["pointShadowArrayMap"].viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+	textureBindInfos["pointShadowArrayMap"].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	textureBindInfos["pointShadowArrayMap"].passId = 1;
 }
 
 void C7ShadowsExample::Loop()
@@ -90,6 +106,20 @@ void C7ShadowsExample::Loop()
 		camera.Rotate(RotateAction::AROUND_Y_POSITIVE);
 		}, "点击right 相机往右看");
 	WindowEventHandler::SetEventCallBack(KEY_LEFT_PRESS, [&camera]() {camera.Rotate(RotateAction::AROUND_Y_NEGATIVE); }, "点击left 相机往左看");
+
+
+	WindowEventHandler::SetEventCallBack(KEY_I_PRESS, [&]() {
+		uint32_t tmp = 0;
+		std::cout << "输入一个整数: 范围[0,3]" << std::endl;
+		std::cin >> tmp;
+		if (exampleType > 3)
+		{
+			std::cout << "输入非法" << std::endl;
+		}
+		exampleType = tmp;
+		FillBuffer(buffers["SceenInfo"], 32 + sizeof(glm::mat4) * 6, sizeof(uint32_t), (const char*)&exampleType);
+
+		; }, "点击I 输入一个整数来切换使用的阴影贴图算法。0:表示直接通过阴影贴图; 1:PCF 百分比滤波; 2: PCSS -PCF改进版本，根据距离信息控制滤波核大小; 3:CVM 方差阴影贴图 ");
 
 
 
@@ -119,6 +149,7 @@ void C7ShadowsExample::Loop()
 
 	//绑定纹理
 	BindTexture("pointShadowMap");
+	BindTexture("pointShadowArrayMap");
 
 	const std::vector<glm::vec3> cubeViewTarget = {
 		glm::vec3(1,0,0),
@@ -149,10 +180,9 @@ void C7ShadowsExample::Loop()
 		camera.SetCamera2(lightPos, cubeViewTarget[i], cubeViewDown[i]);
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
-		glm::mat4 tmpMVP = buffer.proj * buffer.view;
-		ShowMatColMajor(tmpMVP);
+		glm::mat4 tmpVP = buffer.proj * buffer.view;
 		uint32_t offset = 32 + sizeof(glm::mat4) * i;
-		FillBuffer(buffers["SceenInfo"], offset, sizeof(glm::mat4), (const char*)&tmpMVP);
+		FillBuffer(buffers["SceenInfo"], offset, sizeof(glm::mat4), (const char*)&tmpVP);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 		CaptureBeginMacro
@@ -180,12 +210,27 @@ void C7ShadowsExample::Loop()
 		CaptureEndMacro
 
 	}
-	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap0.jpg", 0, 0);
-	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap1.jpg", 1, 0);
-	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap2.jpg", 2, 0);
-	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap3.jpg", 3, 0);
-	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap4.jpg", 4, 0);
-	textures["pointShadowMap"].image.WriteToJpgFloat("depthMap5.jpg", 5, 0);
+	textures["pointShadowMap"].image.CopyToOther(textures["pointShadowArrayMap"].image, 0, 0);
+	textures["pointShadowMap"].image.CopyToOther(textures["pointShadowArrayMap"].image, 1, 0);
+	textures["pointShadowMap"].image.CopyToOther(textures["pointShadowArrayMap"].image, 2, 0);
+	textures["pointShadowMap"].image.CopyToOther(textures["pointShadowArrayMap"].image, 3, 0);
+	textures["pointShadowMap"].image.CopyToOther(textures["pointShadowArrayMap"].image, 4, 0);
+	textures["pointShadowMap"].image.CopyToOther(textures["pointShadowArrayMap"].image, 5, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap0.jpg", 0, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap1.jpg", 1, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap2.jpg", 2, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap3.jpg", 3, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap4.jpg", 4, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap5.jpg", 5, 0);
+	////翻转Y
+	textures["pointShadowMap"].image.FlipY();
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap0Flip.jpg", 0, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap1Flip.jpg", 1, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap2Flip.jpg", 2, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap3Flip.jpg", 3, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap4Flip.jpg", 4, 0);
+	//textures["pointShadowMap"].image.WriteToJpgFloat("depthMap5Flip.jpg", 5, 0);
+
 
 	//绘制阴影
 	auto& renderTargets = renderPassInfos[1].renderTargets;
