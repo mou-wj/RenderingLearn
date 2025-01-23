@@ -115,6 +115,7 @@ void C7ShadowsExample::Loop()
 		if (exampleType > 3)
 		{
 			std::cout << "ÊäÈë·Ç·¨" << std::endl;
+			return;
 		}
 		exampleType = tmp;
 		FillBuffer(buffers["SceenInfo"], 32 + sizeof(glm::mat4) * 6, sizeof(uint32_t), (const char*)&exampleType);
@@ -193,8 +194,8 @@ void C7ShadowsExample::Loop()
 		CmdOpsDrawGeom(graphicCommandList);
 		auto& colorTargetImage = renderPassInfos[0].renderTargets.colorAttachment.attachmentImage;
 
-		auto& colorOldLayout = colorTargetImage.currentLayout;
-		auto& depthTextureOldLayout = textures["pointShadowMap"].image.currentLayout;
+		auto colorOldLayout = colorTargetImage.currentLayout;
+		auto depthTextureOldLayout = textures["pointShadowMap"].image.currentLayout;
 
 		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
 		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, i, 0);

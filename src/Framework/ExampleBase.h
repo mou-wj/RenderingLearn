@@ -518,6 +518,32 @@ struct Geometry
 	
 	}
 
+	void InitAsScreenFillRect() {
+		vertexAttrib.vertices = {
+		-1,1,0,
+		1,1,0,
+		1,-1,0,
+		-1,-1,0
+		};
+		tinyobj::shape_t triangle;
+		tinyobj::index_t index;
+		index.vertex_index = 0;
+		triangle.mesh.indices.push_back(index);
+		index.vertex_index = 1;
+		triangle.mesh.indices.push_back(index);
+		index.vertex_index = 2;
+		triangle.mesh.indices.push_back(index);
+		triangle.mesh.num_face_vertices.push_back(3);
+		index.vertex_index = 0;
+		triangle.mesh.indices.push_back(index);
+		index.vertex_index = 2;
+		triangle.mesh.indices.push_back(index);
+		index.vertex_index = 3;
+		triangle.mesh.indices.push_back(index);
+		triangle.mesh.num_face_vertices.push_back(3);
+		shapes.push_back(triangle);
+
+	}
 
 
 };
@@ -546,9 +572,11 @@ struct RenderTargets {
 	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 	RenderTargets() {
 		colorAttachment.attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
+		colorAttachment.attachmentImage.extent = VkExtent3D{.width = 512,.height = 512,.depth = 1 };//默认颜色附件尺寸，可以在创建附件前修改
 		colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };//默认颜色附件清除值，可以在创建附件前修改
 		depthAttachment.attachmentDesc.format = depthFormat;//默认深度附件格式，可以在创建附件前修改
 		depthAttachment.clearValue = VkClearValue{ 1.0,0 };//默认颜色附件清除值，可以在创建附件前修改
+		depthAttachment.attachmentImage.extent = VkExtent3D{ .width = 512,.height = 512,.depth = 1 };//默认深度附件尺寸，可以在创建附件前修改
 	}
 };
 struct ShaderCodePaths {
@@ -611,6 +639,9 @@ struct RenderPassInfo {
 		//初始化管线状态
 		subpassInfo.subpassDescs[0].subpassPipelineStates.Init(viewportWidth, viewportHeight);
 
+		renderTargets.colorAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
+		renderTargets.depthAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
+
 		//开启剔除
 		subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
 
@@ -642,6 +673,11 @@ struct RenderPassInfo {
 	}
 
 	void InitDefaultRenderPassInfo(const std::vector<std::vector<ShaderCodePaths>>& renderPassSubpassShaderPaths, uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/) {
+		
+		//初始化render target的尺寸
+		renderTargets.colorAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
+		renderTargets.depthAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
+		
 		for (uint32_t passId = 0; passId < renderPassSubpassShaderPaths.size(); passId++)
 		{
 			subpassInfo.subpassDescs.resize(renderPassSubpassShaderPaths[passId].size());

@@ -179,7 +179,6 @@ void ExampleBase::InitContex()
 	physicalDeviceFeatures.geometryShader = VK_TRUE;//����geometry shader
 
 	physicalDeviceFeatures.depthClamp ;
-
 	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, {}, { VK_KHR_SWAPCHAIN_EXTENSION_NAME }, physicalDeviceFeatures);//device之开启了swapchain拓展
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
 
@@ -241,7 +240,7 @@ void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 	}
 
 
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	//renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
@@ -272,7 +271,7 @@ void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 
 	}
 
-	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthAttachment.format, windowWidth, windowHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthAttachment.format, depthImage.extent.width, depthImage.extent.height, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 	//renderPassInfo.renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
 
@@ -332,7 +331,10 @@ void ExampleBase::InitRenderPasses()
 
 void ExampleBase::InitFrameBuffer(RenderPassInfo& renderPassInfo)
 {
-	renderPassInfo.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, { renderPassInfo.renderTargets.colorAttachment.attachmentImage.imageView,renderPassInfo.renderTargets.depthAttachment.attachmentImage.imageView }, windowWidth, windowHeight,1);
+	uint32_t width = renderPassInfo.renderTargets.colorAttachment.attachmentImage.extent.width;
+	uint32_t height = renderPassInfo.renderTargets.colorAttachment.attachmentImage.extent.height;
+
+	renderPassInfo.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, { renderPassInfo.renderTargets.colorAttachment.attachmentImage.imageView,renderPassInfo.renderTargets.depthAttachment.attachmentImage.imageView }, width, height,1);
 
 }
 
@@ -876,7 +878,9 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 	auto& renderTargets = renderPassInfos[renderPassIndex].renderTargets;
 
 	ASSERT(subpassDrawGeoInfos.size() != 0)
-	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = windowWidth,.height = windowHeight} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
+	uint32_t width = renderTargets.colorAttachment.attachmentImage.extent.width;
+	uint32_t height = renderTargets.colorAttachment.attachmentImage.extent.height;
+	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = width,.height = height} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
 	for (uint32_t curSubpassIndex = 0; curSubpassIndex < subpassDrawGeoInfos.size(); curSubpassIndex++)
 	{			
 		//bind pipelines
@@ -1490,7 +1494,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 				}
 			}
 
-			geo.shapeVertexBuffers[zoneId] = CreateIndexBuffer((const char*)curVertexData.data(), curVertexData.size() * sizeof(float));
+			geo.shapeVertexBuffers[zoneId] = CreateVertexBuffer((const char*)curVertexData.data(), curVertexData.size() * sizeof(float));
 			geo.numIndexPerZone[zoneId] = geo.shapes[zoneId].mesh.indices.size();
 
 		}
