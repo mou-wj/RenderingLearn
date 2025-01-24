@@ -11,6 +11,7 @@
 #include "Examples/RealTimeRendering4/C6TexturingExample.h"
 #include "Examples/RealTimeRendering4/C7ShadowsExample.h"
 #include "Examples/RealTimeRendering4/C9PhysicalBasedRenderingExample.h"
+#include "Examples/RealTimeRendering4/C10LocalIlluminationExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -74,7 +75,8 @@ int main()
 	//C5ShadingBasicsExample example;
 	//C6TexturingExample example;
 	//C7ShadowsExample example;
-	C9PhysicalBasedRenderingExample example;
+	//C9PhysicalBasedRenderingExample example;
+	C10LocalIlluminationExample example;
 	ExampleBase::Run(&example);
 
 
