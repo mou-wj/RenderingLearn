@@ -1,13 +1,13 @@
-#include "C10LocalIlluminationExample.h"
+#include "C11GlobalIlluminationExample.h"
 #include "glm/mat4x4.hpp"
 
-void C10LocalIlluminationExample::InitSubPassInfo()
+void C11GlobalIlluminationExample::InitSubPassInfo()
 {
 
 	ShaderCodePaths drawSceenCodePath;
-	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C10LocalIlluminationExample.vert";
-	drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C10LocalIlluminationExample.geom";
-	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C10LocalIlluminationExample.frag";
+	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C11GlobalIlluminationExample.vert";
+	drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C11GlobalIlluminationExample.geom";
+	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C11GlobalIlluminationExample.frag";
 
 
 
@@ -18,7 +18,7 @@ void C10LocalIlluminationExample::InitSubPassInfo()
 
 }
 
-void C10LocalIlluminationExample::InitResourceInfos()
+void C11GlobalIlluminationExample::InitResourceInfos()
 {
 
 	geoms.resize(2);
@@ -50,7 +50,7 @@ void C10LocalIlluminationExample::InitResourceInfos()
 
 }
 
-void C10LocalIlluminationExample::Loop()
+void C11GlobalIlluminationExample::Loop()
 {
 	uint32_t i = 0;;
 	uint32_t exampleType = 0;
@@ -164,7 +164,7 @@ void C10LocalIlluminationExample::Loop()
 }
 
 
-void C10LocalIlluminationExample::InitSyncObjectNumInfo()
+void C11GlobalIlluminationExample::InitSyncObjectNumInfo()
 {
 	numSemaphores = 2;
 }

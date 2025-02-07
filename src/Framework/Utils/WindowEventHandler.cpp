@@ -12,18 +12,19 @@ void WindowEventHandler::scroll_callback(GLFWwindow* window, double xoffset, dou
 }
 
 void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (action != GLFW_PRESS)
-    {
-        return;
-    }
+
     switch (key)
     {
     case GLFW_KEY_ESCAPE: {
+        if (action != GLFW_PRESS)
+        {
+            return;
+        }
         glfwSetWindowShouldClose(window, GLFW_TRUE);  // 按下 ESC 关闭窗口
         break;
     }
     case GLFW_KEY_W: {
-        if (s_eventCallBacks[KEY_W_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_W_PRESS])
         {
             s_eventCallBacks[KEY_W_PRESS]();
         }
@@ -32,42 +33,42 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_S: {
-        if (s_eventCallBacks[KEY_S_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_S_PRESS])
         {
             s_eventCallBacks[KEY_S_PRESS]();
         }
         break;
     }
     case GLFW_KEY_A: {
-        if (s_eventCallBacks[KEY_A_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_A_PRESS])
         {
             s_eventCallBacks[KEY_A_PRESS]();
         }
         break;
     }
     case GLFW_KEY_D: {
-        if (s_eventCallBacks[KEY_D_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_D_PRESS])
         {
             s_eventCallBacks[KEY_D_PRESS]();
         }
         break;
     }
     case GLFW_KEY_UP: {
-        if (s_eventCallBacks[KEY_UP_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_UP_PRESS])
         {
             s_eventCallBacks[KEY_UP_PRESS]();
         }
         break;
     }
     case GLFW_KEY_DOWN: {
-        if (s_eventCallBacks[KEY_DOWN_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_DOWN_PRESS])
         {
             s_eventCallBacks[KEY_DOWN_PRESS]();
         }
         break;
     }
     case GLFW_KEY_RIGHT: {
-        if (s_eventCallBacks[KEY_RIGHT_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_RIGHT_PRESS])
         {
             s_eventCallBacks[KEY_RIGHT_PRESS]();
         }
@@ -75,7 +76,7 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_LEFT: {
-        if (s_eventCallBacks[KEY_LEFT_PRESS])
+        if (action == GLFW_REPEAT && s_eventCallBacks[KEY_LEFT_PRESS])
         {
             s_eventCallBacks[KEY_LEFT_PRESS]();
         }
@@ -83,7 +84,7 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_I: {
-        if (s_eventCallBacks[KEY_I_PRESS])
+        if (action == GLFW_PRESS && s_eventCallBacks[KEY_I_PRESS])
         {
             s_eventCallBacks[KEY_I_PRESS]();
         }
@@ -91,7 +92,7 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_J: {
-        if (s_eventCallBacks[KEY_J_PRESS])
+        if (action == GLFW_PRESS && s_eventCallBacks[KEY_J_PRESS])
         {
             s_eventCallBacks[KEY_J_PRESS]();
         }
@@ -99,7 +100,7 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_K: {
-        if (s_eventCallBacks[KEY_K_PRESS])
+        if (action == GLFW_PRESS && s_eventCallBacks[KEY_K_PRESS])
         {
             s_eventCallBacks[KEY_K_PRESS]();
         }
@@ -107,7 +108,7 @@ void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode,
         break;
     }
     case GLFW_KEY_C: {
-        if (s_eventCallBacks[KEY_C_PRESS])
+        if (action == GLFW_PRESS && s_eventCallBacks[KEY_C_PRESS])
         {
             s_eventCallBacks[KEY_C_PRESS]();
         }
