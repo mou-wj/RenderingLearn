@@ -1322,6 +1322,10 @@ void ExampleBase::ClearRecources()
 		{
 			DestroyBuffer(geoms[i].indexBuffers[zoneId]);
 		}
+		for (uint32_t zoneId = 0; zoneId < geoms[i].shapeVertexBuffers.size(); zoneId++)
+		{
+			DestroyBuffer(geoms[i].shapeVertexBuffers[zoneId]);
+		}
 	}
 
 	//清除Uniform buffer
