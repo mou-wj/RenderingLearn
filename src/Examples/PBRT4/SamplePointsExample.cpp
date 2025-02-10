@@ -4,7 +4,7 @@ void SamplePointsExample::InitComputeInfo()
 {
 	//需要计算管线
 	computeDesc.valid = true;
-	computeDesc.computeShaderPath = std::string(PROJECT_DIR) + "/src/Examples/PBRT4/SamplePointsExample.comp";
+	computeDesc.computeShaderPaths = { std::string(PROJECT_DIR) + "/src/Examples/PBRT4/SamplePointsExample.comp" };
 
 
 }
@@ -180,10 +180,10 @@ void SamplePointsExample::Loop()
 		CmdListRecordBegin(graphicCommandList);
 		//利用计算管线生成一张采样点的结果图片
 		//转换布局
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["image"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+		//CmdOpsImageMemoryBarrer(graphicCommandList, textures["image"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 		CmdOpsDispatch(graphicCommandList);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["image"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-
+		//CmdOpsImageMemoryBarrer(graphicCommandList, textures["image"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["image"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 
 

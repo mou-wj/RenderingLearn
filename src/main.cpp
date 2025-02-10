@@ -13,6 +13,7 @@
 #include "Examples/RealTimeRendering4/C9PhysicalBasedRenderingExample.h"
 #include "Examples/RealTimeRendering4/C10LocalIlluminationExample.h"
 #include "Examples/RealTimeRendering4/C11GlobalIlluminationExample.h"
+#include "Examples/RealTimeRendering4/C12ImageSpaceEffectesExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -78,7 +79,8 @@ int main()
 	//C7ShadowsExample example;
 	//C9PhysicalBasedRenderingExample example;
 	//C10LocalIlluminationExample example;
-	C11GlobalIlluminationExample example;
+	//C11GlobalIlluminationExample example;
+	C12ImageSpaceEffectesExample example;
 	ExampleBase::Run(&example);
 
 

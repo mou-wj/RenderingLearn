@@ -1,0 +1,124 @@
+#version 450
+// 定义计算工作组的大小
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0,binding = 0) uniform sampler2D inputImage;
+layout(set = 0,binding = 3) uniform sampler2D inputImage1;
+layout(rgba8,set  = 0, binding = 1) uniform image2D outputImage; // 输出纹理
+layout(set = 0,binding = 2) uniform Info{
+    uint funcType;//要执行的函数,0表示对输入图片做高斯模糊，1表示过滤光源，2表示对两个输入执行光泛混合
+
+};
+const float s_pi = 3.141592653;
+vec3 GaussianFilterKernel2D(ivec2 pos,ivec2 size){
+    
+    //这里隐含sigma为1 ，滤波核为5x5的滤波核
+    int filterSize = 5;
+    vec3 filterColor = vec3(0);
+   for(int i = -filterSize;i <= filterSize;i++)
+   {
+       for(int j = -filterSize;j <= filterSize;j++)
+       {
+            ivec2 samplePos = pos + ivec2(i,j);
+            if(samplePos.x >=0 && samplePos.y >=0 && samplePos.x <size.x && samplePos.y < size.y)
+            {
+                //计算距离平方
+                float d2 = i * i + j * j;
+
+
+                //计算权重
+                float w = 1 / (sqrt(2 * s_pi)) * exp(- d2 / 2);
+
+                //获取样本点颜色
+                vec3 color = texelFetch(inputImage,samplePos,0).xyz;
+                color = pow(color,vec3(2.4));
+                
+                filterColor +=w * color;    
+            }
+       }
+   }
+
+   return filterColor;
+}
+
+void GaussianFilterExample(){
+    
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+
+    ivec2 size = imageSize(outputImage);
+
+    ivec2 coord = ivec2(x,y);
+    //重建该点的环境光
+    vec3 color =  GaussianFilterKernel2D(coord,size);
+    imageStore(outputImage, coord, vec4(color,1.0));
+
+}
+
+
+//过滤光源
+void LighFilterExample(){
+    vec2 size = imageSize(outputImage);
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+    ivec2 coord = ivec2(x,y);
+    vec2 uv = coord / size;
+
+    //重建该点的环境光
+    vec3 color = texture(inputImage,uv).xyz;
+    color = pow(color,vec3(2.4));
+    if(color.x < 0.9 || color.y < 0.9 || color.z < 0.9)
+    {
+        color = vec3(0);
+    }
+    imageStore(outputImage, coord, vec4(color,1.0));
+}
+
+void LightBlurBlendExample(){
+    vec2 size = imageSize(outputImage);
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+    ivec2 coord = ivec2(x,y);
+    vec2 uv = coord / size;
+
+    //重建该点的环境光
+    vec3 bgColor = texture(inputImage,uv).xyz;
+    bgColor = pow(bgColor,vec3(2.4));
+    vec3 blurColor = texture(inputImage1,uv).xyz;
+    blurColor = pow(blurColor,vec3(2.4));
+
+    imageStore(outputImage, coord, vec4(bgColor + blurColor,1.0));
+}
+
+void CopyInputToOutputExample(){
+    vec2 size = imageSize(outputImage);
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+    ivec2 coord = ivec2(x,y);
+    vec2 uv = coord / size;
+
+    //重建该点的环境光
+    vec3 color = texture(inputImage,uv).xyz;
+    color = pow(color,vec3(2.4));
+    imageStore(outputImage, coord, vec4(color,1.0));
+
+}
+
+void main(){
+    //CopyInputToOutputExample();
+    if(funcType == 0)
+    {
+        GaussianFilterExample();
+    }else if(funcType == 1)
+    {
+        LighFilterExample();
+    }else if(funcType == 2){
+    
+        LightBlurBlendExample();
+    }
+
+}

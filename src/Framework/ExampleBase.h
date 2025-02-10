@@ -430,7 +430,8 @@ struct GraphicPipelineInfos {
 
 struct ComputeDesc {
 	bool valid = false;//为true则会创建compute pipeline
-	std::string computeShaderPath = "";
+	//std::string computeShaderPath = "";
+	std::vector<std::string> computeShaderPaths;
 };
 
 struct ComputePipelineInfos {
@@ -783,7 +784,7 @@ protected:
 	void CmdListRecordEnd(CommandList& cmdList);
 	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,int layer = -1,int mip = -1);
 	//compute
-	void CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> groupSize = {1,1,1});
+	void CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex = 0, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
 	//transfer
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage);
@@ -855,7 +856,7 @@ private:
 	void InitUniformBufferResources();
 	//compute
 	void InitCompute();
-	void InitComputePipeline();
+	void InitComputePipeline(ComputePipelineInfos& computePipelineInfos);
 
 private:
 	virtual void Clear();
@@ -882,7 +883,7 @@ private:
 	Image CreateImage(VkImageType imageType, VkImageViewType viewType, VkFormat format, uint32_t width, uint32_t height, uint32_t depth, uint32_t numMip, uint32_t numLayer, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping = VkComponentMapping{}, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED);
 	
 	void FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data);
-	void DestroyImage(const Image& image);
+	void DestroyImage(Image& image);
 
 	Texture CreateTexture(TextureBindInfo& textureBindInfo);
 
@@ -1002,8 +1003,8 @@ private:
 
 	//先不考虑compute pipeline
 	//std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
-	ComputePipelineInfos computePipelineInfos;
-
+	//ComputePipelineInfos computePipelineInfos;
+	std::vector<ComputePipelineInfos> computePipelinesInfos;
 
 	VkQueue graphicQueue = VK_NULL_HANDLE;//该队列可以graphic，可以transfer，可以present
 	

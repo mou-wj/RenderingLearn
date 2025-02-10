@@ -1,0 +1,150 @@
+#version 450
+// 定义计算工作组的大小
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0,binding = 1) buffer EnvSH{
+	vec4 C[9];
+};
+layout(set = 0,binding = 2) uniform sampler2D envMap;
+layout(rgba8, binding = 0,set  = 0) uniform image2D outputImage; // 输出纹理
+
+
+// 生成Hammersley 序列的一维采样点，各个维度的序列可以使用不同的基来生成
+float HammersleySequence(uint index, uint base) {
+    float result = 0.0;
+    float f = 1.0;
+    uint i = index;
+    while (i > 0) {
+        f /= float(base);
+        result += f * float(i % base);
+        i /= base;
+    }
+    return result;
+}
+// 生成均匀分布的二维Halton采样点
+vec2 HaltonSample2D(uint index) {
+    return vec2(HammersleySequence(index, 2),HammersleySequence(index, 3)); // 基数选择 2,3
+}
+
+const float s_pi = 3.141592653;
+
+float BaseSH(uint index,float phi,float theta)
+{
+    float res = 0;
+    switch(index){
+        case 0:{
+        res = 0.5 * sqrt(1 / s_pi);
+        break;
+        }
+        case 1:{
+        res = sqrt(0.75 / s_pi) * sin(theta) * sin(phi);
+        break;
+        }
+        case 2:{
+        res = sqrt(0.75 / s_pi) * cos(theta);
+        break;
+        }
+        case 3:{
+        res = sqrt(0.75 / s_pi) * sin(theta) * cos(phi);
+        break;
+        }
+        case 4:{
+        res = 0.5 * sqrt(15 / s_pi)* sin(theta) * sin(theta)* sin(2 * phi);
+        break;
+        }
+        case 5:{
+        res = 0.5 * sqrt(15 / s_pi)* sin(theta) * cos(theta) * sin(phi);
+        break;
+        }
+        case 6:{
+        res = 0.25 * sqrt(5 / s_pi) * ( 3 * cos(theta) * cos(theta) - 1);
+        break;
+        }
+        case 7:{
+        res = 0.5 * sqrt(15 / s_pi)* sin(theta) * cos(theta) * cos(phi);
+        break;
+        }
+        case 8:{
+        res = 0.25 * sqrt(15 / s_pi) * sin(theta) * sin(theta)* cos(2 * phi);
+        break;
+        }
+        default:
+        res = 0;
+        break;
+    }
+
+
+
+
+    return res;
+}
+
+void PrecomputeEnvSH(){
+    uint numSample = 40;
+
+    vec3 curC = vec3(0);
+    for(uint c = 0;c < 9;c++)
+    {
+        for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++){
+            vec2 samplePoint = HaltonSample2D(sampleIndex);
+
+            float phi = 2 * s_pi * samplePoint.x;
+            float theta = 0.5 * s_pi * (samplePoint.y - 0.5);
+
+            //获取采样点在的环境贴图中的颜色
+            vec3 color = texture(envMap,samplePoint).xyz;
+
+            float shValue = BaseSH(c,phi,theta);
+            curC+=color * shValue;
+
+
+        }
+	
+        C[c].xyz = curC;
+        curC = vec3(0);
+    }
+
+	
+
+
+
+
+
+}
+
+
+void RebuildEvnDiffuseMapFromSH(){
+
+    vec3 curC = vec3(0);
+
+    vec2 size = imageSize(outputImage);
+
+    vec3 curColor = vec3(0);
+                // 使用循环处理每个像素
+    for (int y = 0; y < size.y; ++y) {
+        for (int x = 0; x < size.x; ++x) {
+           
+            ivec2 coord = ivec2(x,y);
+            vec2 uv = coord / size;
+
+            //重建该点的环境光
+            float phi = 2 * s_pi * uv.x;
+            float theta = 0.5 * s_pi * (uv.y - 0.5);
+
+            for(uint c = 0;c < 9;c++){
+                curColor += C[c].xyz * BaseSH(c,phi,theta);
+            
+            }
+
+            imageStore(outputImage, coord, vec4(curColor,1));
+            curColor = vec3(0);
+        }
+    }
+
+
+}
+
+void main(){
+    PrecomputeEnvSH();
+    RebuildEvnDiffuseMapFromSH();
+}

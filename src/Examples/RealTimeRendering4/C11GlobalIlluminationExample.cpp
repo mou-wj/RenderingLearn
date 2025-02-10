@@ -1,6 +1,15 @@
 #include "C11GlobalIlluminationExample.h"
 #include "glm/mat4x4.hpp"
 
+void C11GlobalIlluminationExample::InitComputeInfo()
+{
+	//需要计算管线
+	computeDesc.valid = true;
+	computeDesc.computeShaderPaths = { std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C11GlobalIlluminationExamplePrecomputeEnvSH.comp" };
+
+
+}
+
 void C11GlobalIlluminationExample::InitSubPassInfo()
 {
 
@@ -59,19 +68,34 @@ void C11GlobalIlluminationExample::InitResourceInfos()
 	bufferBindInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 
-	bufferBindInfos["Info"].size = sizeof(glm::mat4) * 2 + sizeof(glm::vec3);
+	bufferBindInfos["Info"].size = sizeof(glm::mat4) * 2 + sizeof(glm::vec4) * 2;
 	bufferBindInfos["Info"].binding = 1;
 	bufferBindInfos["Info"].passId = 1;
+
+	bufferBindInfos["EnvSH_C"].size = sizeof(glm::vec4) * 9;
+	bufferBindInfos["EnvSH_C"].binding = 1;
+	bufferBindInfos["EnvSH_C"].compute = true;
+
+	emptyDataSource.picturePath = std::string(PROJECT_DIR) + "/resources/pic/DaySkyHDRI046A_1K-TONEMAPPED.jpg";
+	textureBindInfos["envMap"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["envMap"].compute = true;
+	textureBindInfos["envMap"].binding = 2;
+	
+	textureBindInfos["envMapReconstruct"].textureDataSources.push_back(emptyDataSource);
+	textureBindInfos["envMapReconstruct"].compute = true;
+	textureBindInfos["envMapReconstruct"].binding = 0;
+	textureBindInfos["envMapReconstruct"].usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
 }
 
 void C11GlobalIlluminationExample::Loop()
 {
 	uint32_t i = 0;;
 	uint32_t exampleType = 0;
-
+	CaptureNum(6)
 
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-
+	
 
 	Camera camera(glm::vec3(0,0,-3),glm::vec3(0,0,0),glm::vec3(0,1,0));
 	//Camera camera(glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0));
@@ -99,16 +123,8 @@ void C11GlobalIlluminationExample::Loop()
 			std::cout << "输入非法" << std::endl;
 			return;
 		}
-		if (exampleType == 1)
-		{
-			renderPassInfos[0].subpassDrawGeoInfos[0] = { 1 };
-		}
-		else {
-			renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
-
-		}
 		exampleType = tmp;
-		; }, "点击I 输入一个整数来切换实例。0表示一个简单矩形面光源的blinn phong光照; 1表示使用球面坐标映射的环境贴图");
+		; }, "点击I 输入一个整数来切换实例。0表示一个SSAO; 1表示VOAO");
 
 
 
@@ -122,9 +138,32 @@ void C11GlobalIlluminationExample::Loop()
 	buffer.view = camera.GetView();
 	buffer.proj = camera.GetProj();
 
+	//绑定计算着色其的资源并执行
 
 
+	BindBuffer("EnvSH_C");
+	BindTexture("envMap");
+	BindTexture("envMapReconstruct");
+	SubmitSynchronizationInfo computeSubmitSyncInfo;
+	computeSubmitSyncInfo.waitSemaphores = { };
+	computeSubmitSyncInfo.waitStages = {  };
+	computeSubmitSyncInfo.sigSemaphores = { };
 
+	//运行计算着色器
+	CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
+	CmdListReset(graphicCommandList);
+	CaptureBeginMacro
+	CmdListRecordBegin(graphicCommandList);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["envMapReconstruct"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	CmdOpsDispatch(graphicCommandList);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["envMapReconstruct"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	CmdListRecordEnd(graphicCommandList);
+	
+	CmdListSubmit(graphicCommandList, computeSubmitSyncInfo);
+	CaptureEndMacro
+
+	//
 
 	auto swapchainValidSemaphore = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
@@ -198,6 +237,7 @@ void C11GlobalIlluminationExample::Loop()
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 		FillBuffer(buffers["Info"], 0, sizeof(glm::mat4) * 2, (const char*)&buffer.view);
 		FillBuffer(buffers["Info"], sizeof(glm::mat4) * 2, sizeof(glm::vec3), (const char*)&camera.GetPos());
+		FillBuffer(buffers["Info"], sizeof(glm::mat4) * 2 + sizeof(glm::vec3), sizeof(uint32_t), (const char*)&exampleType);
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 
 		CmdListReset(graphicCommandList);

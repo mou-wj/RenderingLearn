@@ -45,6 +45,7 @@ void ExampleBase::BindTexture(const std::string& textureName)
 		BindTexture(textures[textureName], graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
 	}
 	else {
+		auto& computePipelineInfos = computePipelinesInfos[textureInfo.passId];
 		auto descriptorType = GetDescriptorType(computePipelineInfos.descriptorSetInfos[textureInfo.setId], textureInfo.binding);
 		BindTexture(textures[textureName], computePipelineInfos.descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
 	}
@@ -62,6 +63,7 @@ void ExampleBase::BindBuffer(const std::string& bufferName)
 		BindBuffer(buffers[bufferName], graphcisPipelineInfos[bufferInfo.pipeId].descriptorSetInfos[bufferInfo.setId].descriptorSet, bufferInfo.binding, bufferInfo.elementId, descriptorType);
 	}
 	else {
+		auto& computePipelineInfos = computePipelinesInfos[bufferInfo.passId];
 		auto descriptorType = GetDescriptorType(computePipelineInfos.descriptorSetInfos[bufferInfo.setId], bufferInfo.binding);
 		BindBuffer(buffers[bufferName], computePipelineInfos.descriptorSetInfos[bufferInfo.setId].descriptorSet, bufferInfo.binding, bufferInfo.elementId, descriptorType);
 	}
@@ -583,11 +585,14 @@ void ExampleBase::FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size
 	std::memcpy(dst, data, size);
 }
 
-void ExampleBase::DestroyImage(const Image& image)
+void ExampleBase::DestroyImage(Image& image)
 {
 	VulkanAPI::DestroyImage(device, image.image);
 	DestroyImageView(device, image.imageView);
 	ReleaseMemory(device, image.memory);
+	image.image = nullptr;
+	image.imageView = nullptr;
+	image.memory = nullptr;
 }
 
 
@@ -650,8 +655,14 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 		
 
 	}
+	if (textureBindInfo.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+	{
+		TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_GENERAL);
+	}
+	else {
+		TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
 
-	TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	//获取每个layer以及mipmap的内存布局
 	for (uint32_t layer = 0; layer < texture.image.numLayer; layer++) {
 		for (uint32_t mip = 0; mip < texture.image.numMip; mip++)
@@ -749,8 +760,9 @@ void ExampleBase::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, Vk
 	image.currentLayout = dstImageLayout;
 }
 
-void ExampleBase::CmdOpsDispatch(CommandList& cmdList, std::array<uint32_t, 3> groupSize)
+void ExampleBase::CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex, std::array<uint32_t, 3> groupSize)
 {
+	auto& computePipelineInfos = computePipelinesInfos[computePassIndex];
 	CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineInfos.pipeline);
 	//绑定描述符集
 	for (const auto& setInfo : computePipelineInfos.descriptorSetInfos)
@@ -935,6 +947,7 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 
 }
 
+//如果一次提交执行的时间较长会导致vulkan报错，这个可能和显卡的关于执行长度管理的驱动具体实现相关
 void ExampleBase::CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info)
 {
 	SubmitCommands(graphicQueue, info.waitSemaphores, info.waitStages, { cmdList.commandBuffer }, info.sigSemaphores, cmdList.commandFinishFence);
@@ -967,6 +980,8 @@ void ExampleBase::DestroyBuffer(Buffer& buffer)
 {
 	VulkanAPI::DestroyBuffer(device, buffer.buffer);
 	ReleaseMemory(device, buffer.memory);
+	buffer.buffer = nullptr;
+	buffer.memory = nullptr;
 }
 
 
@@ -1346,14 +1361,22 @@ void ExampleBase::ClearComputePipeline()
 {
 	if (computeDesc.valid)
 	{
-		DestroyPipeline(device, computePipelineInfos.pipeline);
-		DestroyPipelineLayout(device, computePipelineInfos.pipelineLayout);
-		for (uint32_t setId = 0; setId < computePipelineInfos.descriptorSetInfos.size(); setId++)
+		for (uint32_t i = 0; i < computePipelinesInfos.size(); i++)
 		{
-			//ReleaseDescriptorSets(device, graphcisPipelineInfos[i].descriptorPool, { graphcisPipelineInfos[i].descriptorSetInfos[setId].descriptorSet });
-			DestroyDesctriptorSetLayout(device, computePipelineInfos.descriptorSetInfos[setId].setLayout);
+			auto& computePipelineInfos = computePipelinesInfos[i];
+			DestroyPipeline(device, computePipelineInfos.pipeline);
+			DestroyPipelineLayout(device, computePipelineInfos.pipelineLayout);
+			for (uint32_t setId = 0; setId < computePipelineInfos.descriptorSetInfos.size(); setId++)
+			{
+				//ReleaseDescriptorSets(device, graphcisPipelineInfos[i].descriptorPool, { graphcisPipelineInfos[i].descriptorSetInfos[setId].descriptorSet });
+				DestroyDesctriptorSetLayout(device, computePipelineInfos.descriptorSetInfos[setId].setLayout);
+			}
+			DestroyDescriptorPool(device, computePipelineInfos.descriptorPool);
+
 		}
-		DestroyDescriptorPool(device, computePipelineInfos.descriptorPool);
+
+
+
 	}
 
 }
@@ -1584,20 +1607,27 @@ void ExampleBase::InitCompute()
 {
 	if (computeDesc.valid)
 	{
-		//解析shader中的descriptor信息
-		TransferGLSLFileToSPIRVFileAndRead(computeDesc.computeShaderPath, computePipelineInfos.computeShaderResourceInfo.spirvCode);
-		ParseSPIRVShaderResourceInfo(computePipelineInfos.computeShaderResourceInfo.spirvCode, computePipelineInfos.computeShaderResourceInfo);
+		computePipelinesInfos.resize(computeDesc.computeShaderPaths.size());
+		for (uint32_t i = 0; i < computeDesc.computeShaderPaths.size(); i++)
+		{
+			//解析shader中的descriptor信息
+			TransferGLSLFileToSPIRVFileAndRead(computeDesc.computeShaderPaths[i], computePipelinesInfos[i].computeShaderResourceInfo.spirvCode);
+			ParseSPIRVShaderResourceInfo(computePipelinesInfos[i].computeShaderResourceInfo.spirvCode, computePipelinesInfos[i].computeShaderResourceInfo);
+			InitComputePipeline(computePipelinesInfos[i]);
+
+		}
+
 
 	
 
-		InitComputePipeline();
+
 
 
 
 	}
 }
 
-void ExampleBase::InitComputePipeline()
+void ExampleBase::InitComputePipeline(ComputePipelineInfos& computePipelineInfos)
 {
 	//创建描述符集
 	std::map<VkDescriptorType, uint32_t> needNumDescriptor;
@@ -1655,7 +1685,7 @@ void ExampleBase::InitComputePipeline()
 	computePipelineInfos.computeShaderStage.module = shaderModule;
 	computePipelineInfos.computeShaderStage.pName = computePipelineInfos.computeShaderResourceInfo.entryName.c_str();
 	computePipelineInfos.pipeline = CreateComputePipeline(device, 0, computePipelineInfos.computeShaderStage, computePipelineInfos.pipelineLayout);
-
+	DestroyShaderModule(device, shaderModule);
 }
 
 
@@ -1879,6 +1909,27 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
 		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
 	}
+
+	//����store buffer��Ϣ
+	for (uint32_t i = 0; i < resources.storage_buffers.size(); i++)
+	{
+		auto& storeBuffer = resources.storage_buffers[i];
+		auto type = shaderCompiler.get_type(storeBuffer.base_type_id);
+		bindingInfo.setId = shaderCompiler.get_decoration(storeBuffer.id, spv::Decoration::DecorationDescriptorSet);
+		bindingInfo.binding = shaderCompiler.get_decoration(storeBuffer.id, spv::DecorationBinding);
+		bindingInfo.name = storeBuffer.name;
+		if (type.array.empty())
+		{
+			bindingInfo.numDescriptor = 1;
+		}
+		else {
+			bindingInfo.numDescriptor = type.array[0];
+		}
+		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
+		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
+	}
+
 
 	//����sampler image��Ϣ
 	for (uint32_t i = 0; i < resources.sampled_images.size(); i++)

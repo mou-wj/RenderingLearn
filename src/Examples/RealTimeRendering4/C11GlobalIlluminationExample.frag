@@ -14,6 +14,7 @@ layout(set = 0,binding = 1) uniform Info{
     mat4 view;
     mat4 proj;
     vec3 cameraPos;
+    uint exampleType;//示例类。0表示SSAO，1表示VOAO
 
 
 
@@ -162,7 +163,13 @@ void VolumetricObscuranceAmbientOcclusionExample(){
 //计算环境贴图的球谐系数，然后基于球谐系数的屏幕空间的漫反射全局光照以及镜面全局光照
 
 void main(){
-    //ScreenSpaceAmbientOcclusionExample();
-    VolumetricObscuranceAmbientOcclusionExample();
+    if(exampleType == 0)
+    {
+        ScreenSpaceAmbientOcclusionExample();
+    }else if(exampleType == 1)
+    {
+        VolumetricObscuranceAmbientOcclusionExample();
+    }
+
 
 }

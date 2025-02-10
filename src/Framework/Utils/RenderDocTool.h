@@ -2,7 +2,7 @@
 #include <string>
 #include "../Common/Template.hpp"
 #include <renderdoc_app.h>
-
+//renderdoc捕获数据可能会使用device创建一些资源，这可能导致销毁device时报错没有资源被销毁,且在循环中捕获帧使用不当可能还会引起同步问题，导致提交执行失败
 class RenderDocTool:public SingleInstance<RenderDocTool> {
 	friend class SingleInstance<RenderDocTool>;
 public:

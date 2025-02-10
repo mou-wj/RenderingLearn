@@ -271,7 +271,12 @@ std::vector<VkImage> VulkanAPI::GetSwapchainImages(VkDevice device, VkSwapchainK
 uint32_t VulkanAPI::GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain, VkSemaphore  semaphore, VkFence  fence)
 {
 	uint32_t imageIndex = 0;
-	vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, fence, &imageIndex);
+	auto res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, fence, &imageIndex);
+	if (res != VK_SUCCESS)
+	{
+		ASSERT(0);
+	}
+	
 	return imageIndex;
 }
 
