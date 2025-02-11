@@ -1405,9 +1405,23 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 			//��䶥��λ������
 			FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
 
+			
+
+		}
+
+		//填充颜色
+		if (!geo.vertexAttrib.colors.empty())
+		{
+			for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
+			{
+				//��䶥��λ������
+				FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride + sizeof(float) * 3 * 2, 3 * sizeof(float), (const char*)(geo.vertexAttrib.colors.data() + vertexId * 3));
+			}
 
 
 		}
+
+
 
 		geometry.indexBuffers.resize(geo.shapes.size());
 		std::vector<uint32_t> indicesData;
@@ -1470,6 +1484,8 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 
 
 
+
+
 	}
 	else {
 
@@ -1501,6 +1517,15 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 					glm::vec3 curVertex = glm::vec3(geo.vertexAttrib.vertices[vertexIndex * 3], geo.vertexAttrib.vertices[vertexIndex * 3 + 1], geo.vertexAttrib.vertices[vertexIndex * 3 + 2]);
 					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride;
 					std::memcpy(curVertexOffset, &curVertex, sizeof(float) * 3);
+				}
+
+				//填充颜色
+				if (!geo.vertexAttrib.colors.empty())
+				{
+					glm::vec3 curColor = glm::vec3(geo.vertexAttrib.colors[vertexIndex * 3], geo.vertexAttrib.colors[vertexIndex * 3 + 1], geo.vertexAttrib.colors[vertexIndex * 3 + 2]);
+					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 6;
+					std::memcpy(curVertexOffset, &curColor, sizeof(float) * 3);
+
 				}
 
 				//填充法线

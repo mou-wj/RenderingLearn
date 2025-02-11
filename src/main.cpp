@@ -2,6 +2,7 @@
 #include "Examples/SimpleExamples/UniformExample.h"
 #include "Examples/SimpleExamples/SkyBoxExample.h"
 #include "Examples/SimpleExamples/SimpleSceenExample.h"
+#include "Examples/SimpleExamples/TranslucentBlendExample.h"
 #include "Examples/PBRT4/SamplePointsExample.h"
 #include "Examples/PBRT4/ReflectionModelsExample.h"
 #include "Examples/PBRT4/DisturbutionLobeExample.h"
@@ -14,6 +15,7 @@
 #include "Examples/RealTimeRendering4/C10LocalIlluminationExample.h"
 #include "Examples/RealTimeRendering4/C11GlobalIlluminationExample.h"
 #include "Examples/RealTimeRendering4/C12ImageSpaceEffectesExample.h"
+#include "Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -65,6 +67,7 @@ int main()
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
 	//SkyBoxExample example;
+	//TranslucentBlendExample example;
 	//SimpleSceenExample example;
 	//SamplePointsExample example;
 	//powitacq_rgb::BRDF brdf(std::string(PROJECT_DIR) + "/resources/mesured_bsdf/aniso_brushed_aluminium_1_rgb.bsdf");
@@ -80,7 +83,8 @@ int main()
 	//C9PhysicalBasedRenderingExample example;
 	//C10LocalIlluminationExample example;
 	//C11GlobalIlluminationExample example;
-	C12ImageSpaceEffectesExample example;
+	//C12ImageSpaceEffectesExample example;
+	C14VolumetricandTranslucencyRenderingExample example;
 	ExampleBase::Run(&example);
 
 
