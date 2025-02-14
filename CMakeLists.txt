@@ -9,36 +9,18 @@ set(IncludeDir3rd "${Dir3rd}/include")
 set(LibDir3rd "${Dir3rd}/lib")
 set(BinDir3rd "${Dir3rd}/bin")
 set(Libs3rd 
-	glew32.lib
 	glfw3.lib
-	assimp-vc143-mtd.lib
-
 )
-#find_package(Glslang REQUIRED)
-find_package(Vulkan REQUIRED)
+
+find_package(Vulkan)
 if(Vulkan_FOUND)
     list(APPEND Libs3rd ${Vulkan_LIBRARIES})
 	list(APPEND IncludeDir3rd "${Vulkan_INCLUDE_DIRS}")
-	message("${Vulkan_INCLUDE_DIRS} xxxx")
-#	message("${IncludeDir3rd} xxxx")
-#	message("${Libs3rd} xxxx")
-	message("${Vulkan_LIBRARIES} xxxx")
 	get_filename_component(VulkanLibDir ${Vulkan_LIBRARIES} DIRECTORY)
-	message("${VulkanLibDir} xxx")
 	list(APPEND LibDir3rd "${VulkanLibDir}")
 
-	#file(GLOB VulkanSpirvCrossLibs "${VulkanLibDir}/spirv-cross-*d.lib")
-
-	#if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-	#	list(FILTER VulkanSpirvCrossLibs INCLUDE REGEX .*spirv-cross-.*d.dll$)
-	#else() 
-	#	list(FILTER VulkanSpirvCrossLibs EXCLUDE REGEX .*spirv-cross-.*d.dll$)
-	#endif()
-	#message(FATAL_ERROR "${VulkanSpirvCrossLibs}")
-	#list(APPEND Libs3rd ${VulkanSpirvCrossLibs})
-
 else()
-	message("dsadsad")
+	message(FATAL_ERROR "vulkan is not found")
 endif()
 
 #glslang 3rd
@@ -53,11 +35,9 @@ else()
 		set(BuildType Release)
 	endif()
 	list(APPEND IncludeDir3rd ${Glslang_INSTALL_DIR}/${BuildType}/include/glslang)
-	#list(APPEND LibDir3rd ${Glslang_INSTALL_DIR}/lib)
 	file(GLOB GlslangLibs ${Glslang_INSTALL_DIR}/${BuildType}/lib/*.lib)
 	list(APPEND Libs3rd ${GlslangLibs})
-	#message(FATAL_ERROR "glslng include ${Glslang_INSTALL_DIR}/${BuildType}/include/glslang")
-	#message(FATAL_ERROR "glslng libs ${GlslangLibs}")
+
 
 
 endif()
@@ -74,10 +54,9 @@ else()
 		set(BuildType x64-Release)
 	endif()
 	list(APPEND IncludeDir3rd ${SpirvCross_INSTALL_DIR}/${BuildType}/include/spirv_cross)
-	#list(APPEND LibDir3rd ${Glslang_INSTALL_DIR}/lib)
 	file(GLOB SprivCrossLibs ${SpirvCross_INSTALL_DIR}/${BuildType}/lib/*.lib)
 	list(APPEND Libs3rd ${SprivCrossLibs})
-	#message(FATAL_ERROR "sprivcross libs ${SprivCrossLibs}")
+
 
 
 endif()
@@ -95,11 +74,9 @@ else()
 	endif()
 	list(APPEND IncludeDir3rd ${SpirvTools_INSTALL_DIR}/${BuildType}/include/spirv_tools)
 	list(APPEND LibDir3rd ${Glslang_INSTALL_DIR}/lib)
-	#list(APPEND ${LibDir3rd} ${SpirvTools_INSTALL_DIR}/${BuildType}/lib )
-	#file(GLOB SprivToolsLibs ${SpirvTools_INSTALL_DIR}/${BuildType}/lib/*.lib)
+
 	set(SprivToolsLibDir ${SpirvTools_INSTALL_DIR}/${BuildType}/lib)
 	list(APPEND Libs3rd ${SprivToolsLibs} ${SprivToolsLibDir}/SPIRV-Tools.lib ${SprivToolsLibDir}/SPIRV-Tools-opt.lib)
-	#message(FATAL_ERROR "sprivcross libs ${SprivCrossLibs}")
 
 
 endif()
@@ -121,28 +98,23 @@ target_link_libraries(${TargetName} PUBLIC ${Libs3rd})
 
 
 # 添加RenderDoc库到链接中
+#spirvtools 3rd
+set(Renderdoc_INSTALL_DIR "D:/RenderDoc")
+if(NOT EXISTS ${Renderdoc_INSTALL_DIR})
+	message(FATAL_ERROR "render not found in ${Renderdoc_INSTALL_DIR}")
+else()
 
-target_include_directories(${TargetName} PUBLIC D:/RenderDoc)
-#target_link_libraries(${TargetName} PUBLIC  D:/RenderDoc/renderdoc.dll)
+	target_include_directories(${TargetName} PUBLIC ${Renderdoc_INSTALL_DIR})
+	#target_link_libraries(${TargetName} PUBLIC  D:/RenderDoc/renderdoc.dll)
+	
+	# 设置运行时库路径，确保运行时可以找到RenderDoc的DLL
+	if (WIN32)
+	    set_target_properties(${TargetName} PROPERTIES
+	                          VS_DEBUGGER_COMMAND_ARGUMENTS "\"${CMAKE_CURRENT_SOURCE_DIR}\""  # 设置RenderDoc的DLL路径
+	                          VS_DEBUGGER_ENVIRONMENT "PATH=${Renderdoc_INSTALL_DIR}\\$<CONFIG>")
+	endif()
 
-# 设置运行时库路径，确保运行时可以找到RenderDoc的DLL
-if (WIN32)
-    set_target_properties(${TargetName} PROPERTIES
-                          VS_DEBUGGER_COMMAND_ARGUMENTS "\"${CMAKE_CURRENT_SOURCE_DIR}\""  # 设置RenderDoc的DLL路径
-                          VS_DEBUGGER_ENVIRONMENT "PATH=D:/RenderDoc\\$<CONFIG>")
+
+
 endif()
 
-#install
-#message("${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/")
-#install(FILES "${BinDir3rd}/glew32.dll" DESTINATION "${COMPILE_PDB_OUTPUT_DIRECTORY}")
-
-
-#脚本命令
-#find_program(Python_EXECUTABLE python NO_CMAKE_FIND_ROOT_PATH)
-#收集需要用脚本处理的头文件
-#file(GLOB headFiles "test/*.h")
-#设置需要运行py脚本文件
-#set(PythonScript "xxx.py")
-#execute_process(
-#	COMMAND ${Python_EXECUTABLE} ${PythonScript} "-i" "${headFiles}" "-o" "xxx.h"	
-#)
