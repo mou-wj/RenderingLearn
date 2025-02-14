@@ -25,5 +25,11 @@ void main(){
 
 	outTexCoord = inTexCoord;
 
+	if(inPosition.z > 0)
+	{
+		outTan = vec3(1,0,0);
+	}else {
+		outTan = vec3(0,0,1);
+	}
 
 }

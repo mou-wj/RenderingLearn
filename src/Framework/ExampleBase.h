@@ -71,6 +71,11 @@ struct Image {
 	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 	std::map<uint32_t, std::map<uint32_t, VkSubresourceLayout>> layerMipLayouts;
 	void* hostMapPointer = nullptr;
+	VkFormatInfo GetFormatInfo() {
+		return VkFormatToInfo[format];
+	
+	}
+
 	uint32_t GetFormatNumBits(VkFormat format) {
 		switch (format)
 		{
@@ -775,7 +780,8 @@ protected:
 protected:
 	void LoadObj(const std::string& objFilePath, Geometry& geo);
 	//resource
-	void FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data,uint32_t componentByteSize = 1);
+	void FillImageFromDataSource(Image& image, TextureBindInfo& textureBindInfo);
+
 	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
 protected:
 	//runtime

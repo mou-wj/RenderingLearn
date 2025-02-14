@@ -559,25 +559,64 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 	return image;
 }
 
-void ExampleBase::FillImage(Image& image, uint32_t layer, uint32_t mip, VkImageAspectFlags aspect, uint32_t width, uint32_t height, uint32_t numComponets, const char* data, uint32_t componentByteSize)
+void ExampleBase::FillImageFromDataSource(Image& image, TextureBindInfo& textureBindInfo)
 {
-	VkImageSubresource subresource;
-	subresource.aspectMask = aspect;
-	subresource.mipLevel = mip;
-	subresource.arrayLayer = layer;
-	auto sublayout = GetImageSubresourceLayout(device, image.image, subresource);
-	VkDeviceSize rowOffset = 0;
-	for (uint32_t i = 0; i < height; i++)
+	uint32_t texdelByteSize = VkFormatToInfo[image.format].totalBytesPerPixel;
+	if (textureBindInfo.viewType == VK_IMAGE_VIEW_TYPE_3D)
 	{
-		//填充每一行
-		rowOffset = sublayout.offset +  i * sublayout.rowPitch;
-		FillImage(image, rowOffset, width * numComponets * componentByteSize, data + i * width * numComponets * componentByteSize);
+		auto& sublayout = image.layerMipLayouts[0][0];
+		uint32_t depth = textureBindInfo.textureDataSources.size();
+		for (uint32_t d = 0; d < depth; d++)
+		{
+
+			uint32_t height = textureBindInfo.textureDataSources[d].height;
+			uint32_t width = textureBindInfo.textureDataSources[d].width;
+			uint32_t rowOffset = 0;
+			if (!textureBindInfo.textureDataSources[d].imagePixelDatas.empty()) {
+				for (uint32_t i = 0; i < height; i++)
+				{
+					//填充每一行
+					rowOffset = sublayout.offset + d * sublayout.depthPitch + i * sublayout.rowPitch;
+					FillImage(image, rowOffset, width * texdelByteSize, (const char*)textureBindInfo.textureDataSources[d].imagePixelDatas.data() + i * width * texdelByteSize);
+				}
+			
+			
+			}
 
 
+
+		}
+	}
+	else {//目前这里只处理不是array类型的纹理
+		uint32_t layer = textureBindInfo.textureDataSources.size();
+
+
+		for (uint32_t l = 0; l < layer; l++)
+		{
+			auto& sublayout = image.layerMipLayouts[l][0];
+			uint32_t width = textureBindInfo.textureDataSources[l].width;
+			uint32_t height = textureBindInfo.textureDataSources[l].height;
+			uint32_t rowOffset = 0;
+			if (!textureBindInfo.textureDataSources[l].imagePixelDatas.empty()) {
+				for (uint32_t i = 0; i < height; i++)
+				{
+					//填充每一行
+					rowOffset = sublayout.offset + i * sublayout.rowPitch;
+					FillImage(image, rowOffset, width * texdelByteSize, (const char*)textureBindInfo.textureDataSources[l].imagePixelDatas.data() + i * width * texdelByteSize);
+				}
+			}
+
+		}
+	
+	
+	
 	}
 
-	//WriteJpeg("textttt.jpg", (const char*)image.hostMapPointer, sublayout.rowPitch / 4, sublayout.size / sublayout.rowPitch);
+
+
+
 }
+
 
 void ExampleBase::FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data)
 {
@@ -633,6 +672,14 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 
 
 	}
+	VkImageType imageType = VK_IMAGE_TYPE_2D;
+	uint32_t depth = 1;
+	if (textureBindInfo.viewType == VK_IMAGE_VIEW_TYPE_3D)
+	{
+		imageType = VK_IMAGE_TYPE_3D;
+		depth = numLayer;
+		numLayer = 1;
+	}
 	
 	if (textureBindInfo.format != TextureBindInfo::defaultTextureFormat)
 	{
@@ -642,27 +689,10 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 	}
 
 
-	texture.image = CreateImage(VK_IMAGE_TYPE_2D, textureBindInfo.viewType, textureBindInfo.format, x, y, 1, texture.image.numMip, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{}, VK_IMAGE_TILING_LINEAR);
+	texture.image = CreateImage(imageType, textureBindInfo.viewType, textureBindInfo.format, x, y, depth, texture.image.numMip, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{}, VK_IMAGE_TILING_LINEAR);
 	texture.sampler = CreateDefaultSampler(device, 1);
-	for (uint32_t i = 0; i < numLayer; i++)
-	{
-		x = textureBindInfo.textureDataSources[i].width;
-		y = textureBindInfo.textureDataSources[i].height;
-		if (!textureBindInfo.textureDataSources[i].imagePixelDatas.empty())
-		{
-			FillImage(texture.image, i, 0, VK_IMAGE_ASPECT_COLOR_BIT, x, y, 4, textureBindInfo.textureDataSources[i].imagePixelDatas.data());
-		}
-		
-
-	}
-	if (textureBindInfo.usage & VK_IMAGE_USAGE_STORAGE_BIT)
-	{
-		TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_GENERAL);
-	}
-	else {
-		TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	}
-
+	
+	
 	//获取每个layer以及mipmap的内存布局
 	for (uint32_t layer = 0; layer < texture.image.numLayer; layer++) {
 		for (uint32_t mip = 0; mip < texture.image.numMip; mip++)
@@ -677,6 +707,21 @@ Texture ExampleBase::CreateTexture(TextureBindInfo& textureBindInfo)
 		}
 
 	}
+
+
+
+	//从data source中获取数据填充image
+	FillImageFromDataSource(texture.image, textureBindInfo);
+
+
+	if (textureBindInfo.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+	{
+		TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_GENERAL);
+	}
+	else {
+		TransferWholeImageLayout(texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
+
 
 	
 	

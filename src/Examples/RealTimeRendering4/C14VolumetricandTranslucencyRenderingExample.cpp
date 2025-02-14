@@ -1,22 +1,38 @@
 #include "C14VolumetricandTranslucencyRenderingExample.h"
 #include "glm/mat4x4.hpp"
 
+#include <random>
+
 void C14VolumetricandTranslucencyRenderingExample::InitSubPassInfo()
 {
 
 	ShaderCodePaths drawSceenCodePath;
 	drawSceenCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.vert";
-	drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.geom";
+	//drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.geom";
 	drawSceenCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.frag";
 
-
+	ShaderCodePaths bgCodePath;
+	bgCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExampleBackground.vert";
+	//drawSceenCodePath.geometryShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.geom";
+	bgCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExampleBackground.frag";
 
 	
 	renderPassInfos.resize(1);
-	renderPassInfos[0].InitDefaultRenderPassInfo(drawSceenCodePath,windowWidth,windowHeight);
+	renderPassInfos[0].InitDefaultRenderPassInfo({ {drawSceenCodePath,bgCodePath} }, windowWidth, windowHeight);
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+	//添加一个subpass绘制背景
+	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
+	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
+	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_NONE;
+	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+
 
 }
 
@@ -25,25 +41,79 @@ void C14VolumetricandTranslucencyRenderingExample::InitResourceInfos()
 
 	geoms.resize(1);
 	geoms[0].useIndexBuffers = false;
-	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj",geoms[0]);
-
+	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
+	renderPassInfos[0].subpassDrawGeoInfos[1] = { 0 };
+	// 创建随机数生成器，使用随机设备作为种子
+	std::random_device rd;
+	std::mt19937 gen(rd());
 
+	// 设置均匀分布，范围是 [0.0, 1.0)
+	std::uniform_real_distribution<> dis(0.0, 1.0);
 
+	std::uniform_real_distribution<> dis2(0.5, 2.0);
+
+	float  tmp[16 * 16];
 	TextureDataSource emptyDataSource;
-	emptyDataSource.width = 32;
-	emptyDataSource.height = 32;
-	emptyDataSource.picturePath = "";
+	emptyDataSource.width = 16;
+	emptyDataSource.height = 16; emptyDataSource.imagePixelDatas.resize(16*16*sizeof(float));
+	for (uint32_t i = 0; i < 16; i++) {
+		
+		for (uint32_t j = 0; j < 16 * 16; j++)
+		{
+			// 生成一个随机数
+			float random_value = dis(gen);
+			tmp[j] = random_value;
+		}
+
+
+		std::memcpy(emptyDataSource.imagePixelDatas.data(), tmp, 16 * 16 * sizeof(float));
+		textureBindInfos["SigmaT_Texture"].textureDataSources.push_back(emptyDataSource);
+	}
+
+	for (uint32_t i = 0; i < 16; i++) {
+
+		for (uint32_t j = 0; j < 16 * 16; j++)
+		{
+			// 生成一个随机数
+			float random_value = dis2(gen);
+			tmp[j] = random_value;
+		}
+
+
+		std::memcpy(emptyDataSource.imagePixelDatas.data(), tmp, 16 * 16 * sizeof(float));
+		textureBindInfos["InScatter_Texture"].textureDataSources.push_back(emptyDataSource);
+	}
+
+
+
+
+
+
+
+	textureBindInfos["SigmaT_Texture"].viewType = VK_IMAGE_VIEW_TYPE_3D;
+	textureBindInfos["SigmaT_Texture"].format = VK_FORMAT_R32_SFLOAT;
+
+	textureBindInfos["SigmaT_Texture"].binding = 1;
+
+	textureBindInfos["InScatter_Texture"].viewType = VK_IMAGE_VIEW_TYPE_3D;
+	textureBindInfos["InScatter_Texture"].format = VK_FORMAT_R32_SFLOAT;
+
+	textureBindInfos["InScatter_Texture"].binding = 3;
+
+
 
 	bufferBindInfos["SimpleSceenExampleBuffer"].size = sizeof(glm::mat4) * 3;
 	bufferBindInfos["SimpleSceenExampleBuffer"].binding = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 0;
 	bufferBindInfos["SimpleSceenExampleBuffer"].passId = 0;
 
-	//bufferBindInfos["Info"].size = sizeof(glm::vec4) * 3;
-	//bufferBindInfos["Info"].binding = 3;
-	//bufferBindInfos["Info"].pipeId = 0;
-	//bufferBindInfos["Info"].passId = 1;
+
+
+	bufferBindInfos["Info"].size = sizeof(glm::vec4) * 3;
+	bufferBindInfos["Info"].binding = 2;
+	bufferBindInfos["Info"].pipeId = 0;
+	bufferBindInfos["Info"].passId = 0;
 }
 
 void C14VolumetricandTranslucencyRenderingExample::Loop()
@@ -55,7 +125,7 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 
 
-	Camera camera(glm::vec3(0,-1,-12),glm::vec3(0,0,0),glm::vec3(0,1,0));
+	Camera camera(glm::vec3(0,0,-3),glm::vec3(0,0,0),glm::vec3(0,1,0));
 	//绑定camera响应按键的回调函数
 	WindowEventHandler::SetEventCallBack(KEY_W_PRESS, [&camera]() {camera.Move(MoveDirection::FORWARD); }, "点击w 相机前移");
 	WindowEventHandler::SetEventCallBack(KEY_S_PRESS, [&camera]() {camera.Move(MoveDirection::BACK); }, "点击s 相机后移");
@@ -70,18 +140,6 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 		camera.Rotate(RotateAction::AROUND_Y_POSITIVE);
 		}, "点击right 相机往右看");
 	WindowEventHandler::SetEventCallBack(KEY_LEFT_PRESS, [&camera]() {camera.Rotate(RotateAction::AROUND_Y_NEGATIVE); }, "点击left 相机往左看");
-
-	WindowEventHandler::SetEventCallBack(KEY_I_PRESS, [&]() {
-		uint32_t tmp = 0;
-		std::cout << "输入一个整数: 范围[0,5]" << std::endl;
-		std::cin >> tmp;
-		if (exampleType > 5)
-		{
-			std::cout << "输入非法" << std::endl;
-			return;
-		}
-		exampleType = tmp;
-		; }, "点击I 输入一个整数来切换反射模型。0表示GGX的镜面反射示例; 1表示光滑次表面散射模型;2表示粗糙次表面散射迪士尼模型;3表示粗糙次表面散射OrenNayar模型;4表示经验布料模型;5表示微表面布料模型 ");
 
 
 
@@ -111,9 +169,23 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
+	bufferBindInfos["SimpleSceenExampleBuffer"].pipeId = 1;
+	BindBuffer("SimpleSceenExampleBuffer");
+
+	BindBuffer("Info");
+	bufferBindInfos["Info"].pipeId = 1;
+	bufferBindInfos["Info"].binding = 1;
+	BindBuffer("Info");
+
+	BindTexture("SigmaT_Texture");
+	BindTexture("InScatter_Texture");
 	//BindBuffer("Info");
 	
+	glm::vec3 lightPos = glm::vec3(0, -3, 3);
+	glm::vec3 lightColor = glm::vec3(1, 1, 1);
 
+	FillBuffer(buffers["Info"], sizeof(glm::vec4), sizeof(glm::vec3), (const char*)&lightPos);
+	FillBuffer(buffers["Info"], sizeof(glm::vec4) * 2, sizeof(glm::vec3), (const char*)&lightColor);
 	SubmitSynchronizationInfo submitSyncInfo;
 	submitSyncInfo.waitSemaphores = { swapchainValidSemaphore };
 	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
@@ -130,7 +202,7 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
-
+		FillBuffer(buffers["Info"], 0, sizeof(glm::vec3), (const char*)&camera.GetPos());
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
 
 		CmdListReset(graphicCommandList);

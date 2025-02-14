@@ -84,7 +84,7 @@ void SimpleSceenExample::InitResourceInfos()
 	geoms.resize(2);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/cube.obj",geoms[0]);
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/moved_cube.obj", geoms[1]);
-
+	
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
 	renderPassInfos[0].subpassDrawGeoInfos[1] = { 1 };
 
