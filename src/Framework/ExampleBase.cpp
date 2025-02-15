@@ -3,10 +3,10 @@
 
 
 
-#include <SPIRV/GlslangToSpv.h>
-#include <Public/ShaderLang.h>
-#include <Include/ResourceLimits.h>
-#include <Public/resource_limits_c.h>
+#include "glslang/SPIRV/GlslangToSpv.h"
+#include "glslang/Public/ShaderLang.h"
+#include "glslang/Include/ResourceLimits.h"
+#include "glslang/Public/resource_limits_c.h"
 
 #include <shaderc/shaderc.h>
 #include <filesystem>

@@ -1,6 +1,11 @@
 #include "RenderDocTool.h"
 #include <iostream>
 #include <Windows.h>
+
+#ifdef ENABLE_RENDERDOC_CAPTURE
+#include <renderdoc_app.h>
+#endif
+
 void RenderDocTool::CaptureBegin()
 {
     if (numCaptures == 0)
@@ -9,7 +14,10 @@ void RenderDocTool::CaptureBegin()
     }
 
     // 启动 RenderDoc 捕获
+#ifdef ENABLE_RENDERDOC_CAPTURE
     rdoc_api->StartFrameCapture(nullptr, nullptr);
+#endif
+
     numCaptures--;
 }
 
@@ -23,15 +31,20 @@ void RenderDocTool::CaptureEnd()
     // ...
 
     // 结束 RenderDoc 捕获
+#ifdef ENABLE_RENDERDOC_CAPTURE
     rdoc_api->EndFrameCapture(nullptr, nullptr);
+#endif
+
   
 }
 
 void RenderDocTool::SetCaptureOutPath(std::string outPath)
 {
     captureOutPath = outPath;
+#ifdef ENABLE_RENDERDOC_CAPTURE
     rdoc_api->SetCaptureFilePathTemplate(captureOutPath.c_str());
-    //rdoc_api->SetLogFilePathTemplate(captureOutPath.c_str());
+#endif
+
 }
 
 void RenderDocTool::SetNumCaptures(uint32_t numCapture)
@@ -41,8 +54,12 @@ void RenderDocTool::SetNumCaptures(uint32_t numCapture)
 
 void RenderDocTool::WriteCaptureOut()
 {
+
+#ifdef ENABLE_RENDERDOC_CAPTURE
     uint32_t numCapture = rdoc_api->GetNumCaptures();
     rdoc_api->TriggerCapture();
+#endif
+
     //if (numCapture)
     //{
     //    rdoc_api->GetCapture()
@@ -52,7 +69,11 @@ void RenderDocTool::WriteCaptureOut()
 
 bool RenderDocTool::IsCapturing()
 {
-    auto res = rdoc_api->IsFrameCapturing();
+    bool res = false;
+#ifdef ENABLE_RENDERDOC_CAPTURE
+    res = rdoc_api->IsFrameCapturing();
+#endif
+
     return res;
 }
 
@@ -60,7 +81,7 @@ void RenderDocTool::Init()
 {
     // 在需要捕获的地方调用这个函数
     //RENDERDOC_API_1_1_2* rdoc_api = nullptr;
-   
+#ifdef ENABLE_RENDERDOC_CAPTURE
     HMODULE renderdoc_module = LoadLibraryA("D:/RenderDoc/renderdoc.dll"); // 替换为RenderDoc的实际DLL名称
     if (renderdoc_module != nullptr)
     {
@@ -76,10 +97,6 @@ void RenderDocTool::Init()
         }
 
     }
+#endif
 
-    // 在这里检查 rdoc_api 是否成功获取
-    // ...
-
-    // 初始化RenderDoc
-    
 }
