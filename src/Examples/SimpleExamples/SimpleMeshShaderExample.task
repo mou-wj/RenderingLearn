@@ -1,0 +1,15 @@
+#version 450
+#extension GL_EXT_mesh_shader : enable
+ // Typical limit: 128 invocations.
+ layout (local_size_x=4, local_size_y=1, local_size_z=1) in;
+
+ void main ()
+ {
+ // Prepare payload for children.
+	  uint thread_id = gl_LocalInvocationID.x;
+ // Emit mesh shader work groups as children.
+
+	EmitMeshTasksEXT(2, 1, 1);
+
+
+ }

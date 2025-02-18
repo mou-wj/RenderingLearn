@@ -27,6 +27,7 @@ namespace VulkanAPI {
 	
 	//physical device
 	VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice);
+	void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2& physicalDeviceFeatures2);
 	VkPhysicalDeviceMemoryProperties GetMemoryProperties(VkPhysicalDevice physicalDevice);
 	VkFormatProperties GetFormatPropetirs(VkPhysicalDevice physicalDevice, VkFormat format);
 	std::vector<VkExtensionProperties> EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* layerName);
@@ -35,11 +36,13 @@ namespace VulkanAPI {
 
 
 	//device
-	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, const std::vector<std::pair<uint32_t,std::vector<float>>>& wantQueueFamilyAndQueuePriorities,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures& enableFeatues);
+	VkDevice CreateDevice(VkPhysicalDevice physicalDevice, const std::vector<std::pair<uint32_t,std::vector<float>>>& wantQueueFamilyAndQueuePriorities,std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions,const VkPhysicalDeviceFeatures* enableFeatues,const void* extendInfoPointer = nullptr);
 	void DestroyDevice(VkDevice device);
 	VkQueue GetQueue(VkDevice device, uint32_t familyIndex,uint32_t queueIndex);
 	void DeviceWaitIdle(VkDevice device);
-
+	void* DeviceFuncLoader(VkDevice device, const char* funcName);
+	//加载扩展的API,让该文件封装的扩展API可以使用
+	void LoadExtensionAPIs(VkDevice device);
 
 	//surface
 	VkSurfaceKHR CreateWin32Surface(VkInstance instance, GLFWwindow* window);
@@ -309,7 +312,10 @@ namespace VulkanAPI {
 						uint32_t  firstVertex,
 						uint32_t  firstInstance);
 
-
+	void CmdDrawMeshTasksEXT(VkCommandBuffer  commandBuffer,
+		uint32_t                                    groupCountX,
+		uint32_t                                    groupCountY,
+		uint32_t                                    groupCountZ);
 	void CmdDrawIndex(VkCommandBuffer   commandBuffer,
 					uint32_t  indexCount,
 					uint32_t  instanceCount,

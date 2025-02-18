@@ -9,6 +9,7 @@
 #include <iostream>
 #include <spirv_glsl.hpp>
 #include <spirv_cross.hpp>
+
 void GLSL2SPIRV()
 {
 	std::string vulkanIncludeDir(VULKAN_INCLUDE_DIRS);

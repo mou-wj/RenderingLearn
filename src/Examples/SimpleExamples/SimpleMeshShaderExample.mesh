@@ -1,0 +1,36 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+layout(local_size_x=3) in; 
+ 
+layout(max_vertices=3, max_primitives=1) out;
+ 
+layout(triangles) out;
+ 
+layout(location = 0) out PerVertexData
+{
+  vec3 color;
+} v_out[];   
+ 
+ 
+const vec3 vertices[6] = {vec3(-1,-1,0), vec3(0,1,0), vec3(1,-1,0),vec3(-1,1,0), vec3(0,-1,0), vec3(1,1,0)};
+const vec3 colors[6] = {vec3(1.0,0.0,0.0), vec3(0.0,1.0,0.0), vec3(0.0,0.0,1.0),vec3(1.0,1.0,0.0), vec3(0.0,1.0,1.0), vec3(1.0,0.0,1.0)};
+ 
+void main()
+{
+ 
+  uint gloadId = gl_WorkGroupID.x;
+  uint thread_id = gl_LocalInvocationID.x;
+  uint curId = 3 * gloadId + thread_id;
+
+    
+  //gl_PrimitiveTriangleIndicesEXT对应的索引是局部工作组中的，不能超过上述申明的最大的图元的个数。且gl_PrimitiveTriangleIndicesEXT[x]中每个图元的索引值也不能超过上述申明的最大的点的个数
+  gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0,1,2);
+
+
+  //gl_MeshVerticesEXT对应的索引是局部工作组中的，不能超过上述申明的最大的点的个数
+  gl_MeshVerticesEXT[thread_id].gl_Position = vec4(vertices[curId], 1.0);
+
+  v_out[thread_id].color = vec3(colors[curId]);
+  SetMeshOutputsEXT(3, 1);//mesh 着色器最终输出的顶点和图元的数量，也不应超过上述申明的最大的点的个数以及最大的图元的个数
+
+}

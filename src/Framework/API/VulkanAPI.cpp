@@ -1,5 +1,11 @@
 #include "VulkanAPI.h"
 
+struct ExtensionAPI {
+	PFN_vkCmdDrawMeshTasksEXT vkCmdDrawMeshTasksEXT = nullptr;
+
+};
+
+static ExtensionAPI s_extensionAPI;
 
 std::vector<VkPhysicalDevice> VulkanAPI::EnumeratePhysicalDevice(VkInstance instance)
 {
@@ -54,12 +60,18 @@ VkPhysicalDeviceFeatures VulkanAPI::GetPhysicalDeviceFeatures(VkPhysicalDevice p
 	return features;
 }
 
-VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice,const std::vector<std::pair<uint32_t, std::vector<float>>>& wantQueueFamilyAndQueuePriorities, std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions, const VkPhysicalDeviceFeatures& enableFeatues)
+void VulkanAPI::GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2& physicalDeviceFeatures2)
+{
+	vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures2);
+}
+
+
+VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice,const std::vector<std::pair<uint32_t, std::vector<float>>>& wantQueueFamilyAndQueuePriorities, std::vector<const char*> enableLayers, std::vector<const char*> enableExtensions, const VkPhysicalDeviceFeatures* enableFeatues,const void* extendInfoPointer)
 {
 	VkDevice device = VK_NULL_HANDLE;
 	VkDeviceCreateInfo deviceCreateInfo{};
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	deviceCreateInfo.pNext = nullptr;
+	deviceCreateInfo.pNext = extendInfoPointer;
 	deviceCreateInfo.flags = 0;
 	deviceCreateInfo.queueCreateInfoCount = wantQueueFamilyAndQueuePriorities.size();
 	std::vector<VkDeviceQueueCreateInfo> queueCreaetInfos(wantQueueFamilyAndQueuePriorities.size());
@@ -78,7 +90,7 @@ VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice,const std::vect
 	deviceCreateInfo.ppEnabledLayerNames = enableLayers.data();
 	deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(enableExtensions.size());
 	deviceCreateInfo.ppEnabledExtensionNames = enableExtensions.data();
-	deviceCreateInfo.pEnabledFeatures = &enableFeatues;
+	deviceCreateInfo.pEnabledFeatures = enableFeatues;
 	auto res = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
 	ASSERT(device);
 	ASSERT(res == VK_SUCCESS);
@@ -100,6 +112,20 @@ VkQueue VulkanAPI::GetQueue(VkDevice device, uint32_t familyIndex, uint32_t queu
 void VulkanAPI::DeviceWaitIdle(VkDevice device)
 {
 	vkDeviceWaitIdle(device);
+}
+
+void* VulkanAPI::DeviceFuncLoader(VkDevice device, const char* funcName)
+{
+	auto func = vkGetDeviceProcAddr(device, funcName);
+	ASSERT(func);
+	return func;
+
+}
+
+void VulkanAPI::LoadExtensionAPIs(VkDevice device)
+{
+	s_extensionAPI.vkCmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)DeviceFuncLoader(device, "vkCmdDrawMeshTasksEXT");
+
 }
 
 VkPhysicalDeviceMemoryProperties VulkanAPI::GetMemoryProperties(VkPhysicalDevice physicalDevice)
@@ -945,6 +971,15 @@ void VulkanAPI::CmdClearDepthImage(VkCommandBuffer commandBuffer,VkImage depthIm
 void VulkanAPI::CmdDrawVertex(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 {
 	vkCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+}
+
+void VulkanAPI::CmdDrawMeshTasksEXT(VkCommandBuffer commandBuffer, uint32_t groupCountX,uint32_t groupCountY,uint32_t groupCountZ)
+{
+	if (s_extensionAPI.vkCmdDrawMeshTasksEXT)
+	{
+		s_extensionAPI.vkCmdDrawMeshTasksEXT(commandBuffer, groupCountX, groupCountY, groupCountZ);
+	}
+
 }
 
 void VulkanAPI::CmdDrawIndex(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)

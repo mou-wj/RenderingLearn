@@ -12,8 +12,8 @@
 #include <set>
 #include <string>
 #include <array>
-#include <spirv_glsl.hpp>
-#include <spirv_cross.hpp>
+#include "spirv_glsl.hpp"
+#include "spirv_cross.hpp"
 #include <algorithm>
 
 #include <regex>
@@ -573,7 +573,7 @@ struct RenderTargets {
 	Attachment depthAttachment;//render pass��1�Ÿ���
 	static const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//ֻ默认的颜色附件格式，必须要支持
 	static const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ默认的颜色附件格式，必须要支持
-	static const VkFormatFeatureFlags colorAttachmentFormatFeatures = (VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+	static const VkFormatFeatureFlags colorAttachmentFormatFeatures = (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
 	static const VkFormatFeatureFlags depthAttachmentFormatFeatures = (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT);
 	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 	RenderTargets() {
@@ -586,7 +586,12 @@ struct RenderTargets {
 	}
 };
 struct ShaderCodePaths {
+
+	std::string taskShaderPath = "";
+	std::string meshShaderPath = "";
 	std::string vertexShaderPath = "";
+	std::string tessellationControlShaderPath = "";
+	std::string tessellationEvaluationShaderPath = "";
 	std::string geometryShaderPath = "";
 	std::string fragmentShaderPath = "";
 };
@@ -627,6 +632,9 @@ struct RenderPassInfo {
 	SubpassInfo subpassInfo;//子pass信息
 	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;//每个子pass对应的pipeline信息
 	std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;//每个subpass要绘制的几何体
+	std::map<uint32_t, std::array<uint32_t,3>> subpassDrawMeshGroupInfos;//每个mesh subpas的绘制参数
+	std::map<uint32_t, bool> isMeshSubpass;//该subpass是否含mesh shader
+
 	RenderTargets renderTargets;//每个pass的渲染结果对象
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
@@ -792,6 +800,7 @@ protected:
 	//compute
 	void CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex = 0, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
+
 	//transfer
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage);
 	void CmdOpsCopyImageToImage(CommandList& cmdList, Image& srcImage,uint32_t srcLayer,uint32_t srcMip, Image& dstImage, uint32_t dstLayer, uint32_t dstMip);
@@ -832,6 +841,7 @@ protected:
 	//这里的数据不能被派生类创建和析构
 	//render pass ֻ
 	//RenderTargets renderTargets;
+	bool enableMeshShaderEXT = false;//是否开启mesh shader拓展
 	std::vector<RenderPassInfo> renderPassInfos;
 	std::vector<Image> swapchainImages;
 	uint32_t windowWidth = 512, windowHeight = 512;
@@ -927,6 +937,11 @@ private:
 	//check
 	bool CheckLinearFormatFeatureSupport(VkPhysicalDevice curPhysicalDevive, VkFormat format,VkFormatFeatureFlags features);
 	bool CheckOptimalFormatFeatureSupport(VkPhysicalDevice curPhysicalDevive, VkFormat format, VkFormatFeatureFlags features);
+	void PrintSupportedFormatFeatures(VkFormatFeatureFlags features);
+	void FindFormat(VkPhysicalDevice curPhysicalDevive, VkFormatFeatureFlags features);
+
+	bool CheckExtensionSupport(VkPhysicalDevice curPhysicalDevive, const std::vector<const char*> entensions);
+
 private:
 	
 	//shader parse
@@ -963,7 +978,12 @@ private:
 	VkInstance instance = VK_NULL_HANDLE;
 	VkDebugUtilsMessengerEXT debugUtilMessager = VK_NULL_HANDLE;
 	
+
 	VkPhysicalDeviceProperties physicalDeviceProps;
+	VkPhysicalDeviceFeatures2 physicalDeviceFeatures2;
+	VkPhysicalDeviceMeshShaderFeaturesEXT physicalDeviceMeshShaderFeaturesEXT;
+	VkPhysicalDeviceMaintenance4Features maintenance4Feature;
+
 	VkPhysicalDeviceFeatures physicalDeviceFeatures;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	;

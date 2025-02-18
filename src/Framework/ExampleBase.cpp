@@ -15,7 +15,6 @@
 
 using namespace VulkanAPI;
 
-
 ExampleBase::~ExampleBase()
 {
 	Clear();
@@ -93,28 +92,70 @@ void ExampleBase::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 	auto& subpassInfo = renderPassInfo.subpassInfo;
 	graphcisPipelineInfos.resize(subpassInfo.subpassDescs.size());
 	std::vector<char> tmpCode;
+	VkShaderStageFlagBits curShaderStage = VK_SHADER_STAGE_VERTEX_BIT;
+
 	for (uint32_t i = 0; i < subpassInfo.subpassDescs.size(); i++)
 	{
 		const auto& shaderPaths = subpassInfo.subpassDescs[i].pipelinesShaderCodePaths;
 		auto& pipelineShaderResourceInfo = graphcisPipelineInfos[i].pipelineShaderResourceInfo;
-		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].shaderFilePath = shaderPaths.vertexShaderPath;
-		//vertex
-		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.vertexShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode);
+		renderPassInfo.isMeshSubpass[i] = false;
+		if (!shaderPaths.meshShaderPath.empty())
+		{
+			renderPassInfo.isMeshSubpass[i] = true;
+		}
 		
-		ParseSPIRVShaderInputAttribute(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode, pipelineShaderResourceInfo.inputAttributesInfo);
-		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_VERTEX_BIT]);
 
-	
+		//mesh
+		curShaderStage = VK_SHADER_STAGE_MESH_BIT_EXT;
+		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.meshShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.meshShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
+		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
+
+		//task
+		curShaderStage = VK_SHADER_STAGE_TASK_BIT_EXT;
+		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.taskShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.taskShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
+		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
+
+
+
+		//vertex
+		curShaderStage = VK_SHADER_STAGE_VERTEX_BIT;
+		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.vertexShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.vertexShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
+		
+		ParseSPIRVShaderInputAttribute(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.inputAttributesInfo);
+		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
+
+		//tessellation control
+		curShaderStage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.tessellationControlShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.tessellationControlShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
+		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
+
+
+		//tessellation evaluation
+		curShaderStage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.tessellationEvaluationShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.tessellationEvaluationShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
+		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
+
 		
 		//geom
-		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].shaderFilePath = shaderPaths.geometryShaderPath;
-		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.geometryShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].spirvCode);
-		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_GEOMETRY_BIT]);
+		curShaderStage = VK_SHADER_STAGE_GEOMETRY_BIT;
+		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.geometryShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.geometryShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
+		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
 				
 		//frag
-		pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].shaderFilePath = shaderPaths.fragmentShaderPath;
-		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.fragmentShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].spirvCode);
-		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[VK_SHADER_STAGE_FRAGMENT_BIT]);
+		curShaderStage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.fragmentShaderPath;
+		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.fragmentShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
+		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
+
+
+
+
 
 	}
 
@@ -178,11 +219,34 @@ void ExampleBase::InitContex()
 	debugUtilMessager = CreateDebugInfoMessager(instance);
 	PickValidPhysicalDevice();
 	CheckCandidateTextureFormatSupport();
-	physicalDeviceFeatures.geometryShader = VK_TRUE;//����geometry shader
+	//ASSERT(physicalDeviceFeatures.geometryShader == VK_TRUE);//检查是否支持几何着色器
+	//ASSERT(physicalDeviceFeatures.tessellationShader == VK_TRUE);//检查是否支持曲面细分着色器
+	//ASSERT(physicalDeviceMeshShaderFeaturesEXT.meshShader == VK_TRUE);//检查是否支持mesh着色器
+	
+	std::vector<const char*> enableExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-	physicalDeviceFeatures.depthClamp ;
-	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, {}, { VK_KHR_SWAPCHAIN_EXTENSION_NAME }, physicalDeviceFeatures);//device之开启了swapchain拓展
+	void* extendInfoP = nullptr;
+	VkPhysicalDeviceFeatures* enableFeature = &physicalDeviceFeatures;
+	if (enableMeshShaderEXT)
+	{
+		extendInfoP = &physicalDeviceFeatures2;
+		enableFeature = nullptr; 
+		enableExtensions.push_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+		enableExtensions.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+	}
+
+	ASSERT(CheckExtensionSupport(physicalDevice, enableExtensions));
+
+
+
+	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, {}, enableExtensions, enableFeature, extendInfoP);//device之开启了swapchain拓展
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
+
+	if (enableMeshShaderEXT)
+	{
+		LoadExtensionAPIs(device);
+
+	}
 
 	//����command pool
 	commandPool = CreateCommandPool(device, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, queueFamilyIndex);
@@ -236,13 +300,13 @@ void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 
 	if (colorAttachment.format != RenderTargets::colorFormat)
 	{
-		ASSERT(CheckLinearFormatFeatureSupport(physicalDevice, colorAttachment.format, RenderTargets::colorAttachmentFormatFeatures));
+		ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, colorAttachment.format, RenderTargets::colorAttachmentFormatFeatures));
 
 
 	}
 
 
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	//renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
@@ -415,6 +479,8 @@ void ExampleBase::PickValidPhysicalDevice()
 			//������Լ��surface�ɵ����Ĵ�С��Χ����Ŀǰ��׼���޸Ĵ�С���Բ����
 			)
 		{
+
+
 			//检查默认深度附件格式支持
 
 			if (!CheckOptimalFormatFeatureSupport(physicalDevices[i], RenderTargets::depthFormat, RenderTargets::depthAttachmentFormatFeatures)) {
@@ -422,14 +488,18 @@ void ExampleBase::PickValidPhysicalDevice()
 			}
 
 			//检查默认颜色附件格式支持
-			if (!CheckLinearFormatFeatureSupport(physicalDevices[i], RenderTargets::colorFormat, RenderTargets::colorAttachmentFormatFeatures)) {
+			if (!CheckOptimalFormatFeatureSupport(physicalDevices[i], RenderTargets::colorFormat, RenderTargets::colorAttachmentFormatFeatures)) {
+				//FindFormat(physicalDevices[i], RenderTargets::colorAttachmentFormatFeatures);
 				continue;
 			}
+
 
 			//纹理的默认格式是VK_FORMAT_R8G8B8A8_UNORM,所以这里检查一下是否支持
 			if (!CheckLinearFormatFeatureSupport(physicalDevices[i], TextureBindInfo::defaultTextureFormat, TextureBindInfo::textureFormatFeatures)) {
 				continue;
 			}
+
+
 
 
 
@@ -450,6 +520,9 @@ void ExampleBase::PickValidPhysicalDevice()
 			{
 				continue;
 			}
+
+
+
 			bool surpportPresentMode = false;
 			auto presentModes = GetSurfacePresentModes(physicalDevices[i], surface);
 			for (auto& presentMode : presentModes)
@@ -467,11 +540,45 @@ void ExampleBase::PickValidPhysicalDevice()
 			}
 			
 
+			//检查特性
+
+
+			if (enableMeshShaderEXT)//如果使用feature2
+			{
+				physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+				physicalDeviceFeatures2.pNext = &physicalDeviceMeshShaderFeaturesEXT;
+				physicalDeviceMeshShaderFeaturesEXT.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+				physicalDeviceMeshShaderFeaturesEXT.pNext = &maintenance4Feature;
+		
+
+				maintenance4Feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES;
+
+				maintenance4Feature.pNext = VK_NULL_HANDLE;
+
+				GetPhysicalDeviceFeatures2(physicalDevices[i], physicalDeviceFeatures2);
+				if (physicalDeviceMeshShaderFeaturesEXT.meshShader != VK_TRUE || physicalDeviceMeshShaderFeaturesEXT.taskShader != VK_TRUE) {
+					continue;//检查是否支持mesh着色器以及task着色器
+				}
+				if (physicalDeviceFeatures2.features.geometryShader != VK_TRUE || physicalDeviceFeatures2.features.tessellationShader != VK_TRUE) {
+					continue;	//检查是否支持几何着色器以及细分着色器
+				}
+			}
+			else {
+				physicalDeviceFeatures = GetPhysicalDeviceFeatures(physicalDevices[i]);
+
+				if (physicalDeviceFeatures.geometryShader != VK_TRUE || physicalDeviceFeatures.tessellationShader != VK_TRUE) {
+					continue;	//检查是否支持几何着色器以及细分着色器
+				}
+			
+			}
+
+
 
 			queueFamilyIndex = familyIndex;
 			physicalDevice = physicalDevices[i];
 			physicalDeviceProps = physicalDeviceProperties[i];
-			physicalDeviceFeatures= GetPhysicalDeviceFeatures(physicalDevices[i]);
+
+
 			return;
 		}
 
@@ -820,6 +927,7 @@ void ExampleBase::CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex
 }
 
 
+
 void ExampleBase::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image& srcImage, Image& dstImage)
 {
 	//检查两个image是否尺寸相同
@@ -929,16 +1037,19 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 	//}
 	
 	auto& subpassDrawGeoInfos = renderPassInfos[renderPassIndex].subpassDrawGeoInfos;
+	auto& isMeshSubpass = renderPassInfos[renderPassIndex].isMeshSubpass;
+	auto& subpassDrawMeshGroupInfos = renderPassInfos[renderPassIndex].subpassDrawMeshGroupInfos;
 	auto& renderPass = renderPassInfos[renderPassIndex].renderPass;
 	auto& frameBuffer = renderPassInfos[renderPassIndex].frameBuffer;
 	auto& graphcisPipelineInfos = renderPassInfos[renderPassIndex].graphcisPipelineInfos;
 	auto& renderTargets = renderPassInfos[renderPassIndex].renderTargets;
 
-	ASSERT(subpassDrawGeoInfos.size() != 0)
+	ASSERT(subpassDrawGeoInfos.size() != 0 || subpassDrawMeshGroupInfos.size()!=0)
 	uint32_t width = renderTargets.colorAttachment.attachmentImage.extent.width;
 	uint32_t height = renderTargets.colorAttachment.attachmentImage.extent.height;
 	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = width,.height = height} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
-	for (uint32_t curSubpassIndex = 0; curSubpassIndex < subpassDrawGeoInfos.size(); curSubpassIndex++)
+	//每个subpass 会对应一个pipeline
+	for (uint32_t curSubpassIndex = 0; curSubpassIndex < graphcisPipelineInfos.size(); curSubpassIndex++)
 	{			
 		//bind pipelines
 		CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[curSubpassIndex].pipeline);
@@ -948,39 +1059,41 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 			CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[curSubpassIndex].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
 		}
 		
-		for (uint32_t i = 0; i < subpassDrawGeoInfos[curSubpassIndex].size(); i++)
+		if (isMeshSubpass[curSubpassIndex])
 		{
-			const auto& geom = geoms[subpassDrawGeoInfos[curSubpassIndex][i]];
-			if (geom.useIndexBuffers)
-			{
-
-				CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-				for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
-				{
-					CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-					CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
-				}
-
-
-			}
-			else {
-				for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
-				{
-					CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
-					CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
-				}
-
-
-
-			
-			
-			}
-
-
+			auto& drawMeshGroupInfo = subpassDrawMeshGroupInfos[curSubpassIndex];
+			CmdDrawMeshTasksEXT(cmdList.commandBuffer, drawMeshGroupInfo[0], drawMeshGroupInfo[1], drawMeshGroupInfo[2]);
 
 		}
+		else {
+			for (uint32_t i = 0; i < subpassDrawGeoInfos[curSubpassIndex].size(); i++)
+			{
+				const auto& geom = geoms[subpassDrawGeoInfos[curSubpassIndex][i]];
+				if (geom.useIndexBuffers)
+				{
+					CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+					for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+					{
+						CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+						CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+					}
+				}
+				else {
+					for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
+					{
+						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
+						CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
+					}
+				}
+			}
+		
+		
+		
+		}
 
-		if (curSubpassIndex != subpassDrawGeoInfos.size() - 1)
+
+
+		if (curSubpassIndex != graphcisPipelineInfos.size() - 1)
 		{
 			CmdNextSubpass(cmdList.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
 		}
@@ -1221,7 +1334,14 @@ void ExampleBase::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 		//��ʼ��pipeline states
 		
 		auto& pipelineStates = graphcisPipelineInfos[pipeID].pipelineStates;
-		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, &pipelineStates.vertexInputState, &pipelineStates.inputAssemblyState, &pipelineStates.tessellationState, &pipelineStates.viewportState,
+		
+		VkPipelineVertexInputStateCreateInfo* vertexInputState = &pipelineStates.vertexInputState;
+		if (enableMeshShaderEXT)
+		{
+			vertexInputState = nullptr;
+		}
+
+		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, vertexInputState, &pipelineStates.inputAssemblyState, &pipelineStates.tessellationState, &pipelineStates.viewportState,
 			&pipelineStates.rasterizationState, &pipelineStates.multisampleState, &pipelineStates.depthStencilState, &pipelineStates.colorBlendState, &pipelineStates.dynamicState, pipelineLayout,
 			renderPass, pipeID);
 		graphcisPipelineInfos[pipeID].pipeline = pipeline;
@@ -1857,11 +1977,11 @@ void ExampleBase::TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLSLF
 	uint32_t pos = vulkanIncludeDir.find_last_of("/");
 	std::string vulkanInstallDir = vulkanIncludeDir.substr(0, pos);
 	std::string glslcDir = vulkanInstallDir + "/Bin/glslc.exe";
-	std::string generateCmd = glslcDir + " " + srcGLSLFile + " -o " + "tmp.spv";
+	std::string generateCmd = glslcDir + " " + srcGLSLFile + " -o " + "tmp.spv  --target-env=vulkan1.3";
 	int ret = system(generateCmd.c_str());
 	if (ret != 0)
 	{
-		LogFunc(0);
+		ASSERT(0);
 	}
 	std::ifstream spvfile("tmp.spv", std::ios::ate | std::ios::binary);
 	if (!spvfile.is_open()) {
@@ -1883,6 +2003,10 @@ void ExampleBase::TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLSLF
 
 void ExampleBase::ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo)
 {
+	if (spirvCode.empty())
+	{
+		return;
+	}
 	spirv_cross::CompilerGLSL shaderCompiler(spirvCode);
 
 	auto resources = shaderCompiler.get_shader_resources();
@@ -2206,6 +2330,8 @@ bool ExampleBase::CheckLinearFormatFeatureSupport(VkPhysicalDevice curPhysicalDe
 	if (!((colorFormatProps.linearTilingFeatures & features) == features))
 	{
 		Log("the linear props does not support specific features",0);
+		std::cout << int(colorFormatProps.linearTilingFeatures & features) << std::endl;
+		//PrintSupportedFormatFeatures(colorFormatProps.linearTilingFeatures);
 		return false;
 	}
 
@@ -2218,9 +2344,62 @@ bool ExampleBase::CheckOptimalFormatFeatureSupport(VkPhysicalDevice curPhysicalD
 	if (!((colorFormatProps.optimalTilingFeatures & features) == features))
 	{
 		Log("the optimal props does not support specific features", 0);
+		//PrintSupportedFormatFeatures(colorFormatProps.linearTilingFeatures);
 		return false;
 	}
 
 	return true;
+}
+
+void ExampleBase::PrintSupportedFormatFeatures(VkFormatFeatureFlags features)
+{
+	std::cout << "current supported features:" << std::endl;
+	for (auto feature = VkFormatFeatureFlagBitsToString.begin(); feature != VkFormatFeatureFlagBitsToString.end(); feature++)
+	{
+		if ((features & feature->first) == feature->first) {
+			std::cout << feature->second << std::endl;		
+		}
+
+
+	}
+
+}
+
+void ExampleBase::FindFormat(VkPhysicalDevice curPhysicalDevive, VkFormatFeatureFlags features)
+{
+	std::cout << "find format by features:" << std::endl;
+	uint32_t i = 0;
+	for (auto iter = VkFormatToInfo.begin(); iter != VkFormatToInfo.end(); iter++)
+	{
+		bool res = CheckOptimalFormatFeatureSupport(curPhysicalDevive, iter->first, features);
+		if (res)
+		{
+			//ASSERT(0);
+			std::cout << "this format is surpported for this feature : " << iter->second.name << std::endl;
+		}
+
+	}
+}
+
+bool ExampleBase::CheckExtensionSupport(VkPhysicalDevice curPhysicalDevive, const std::vector<const char*> entensions)
+{
+	auto supportedExtensions = EnumerateDeviceExtensionProperties(curPhysicalDevive, nullptr);
+
+	uint32_t numSurpportedExtension = 0;
+	for (auto& wantExtensionName : entensions) {
+		for (auto& extensionProp : supportedExtensions) {
+			if (std::strcmp(extensionProp.extensionName, wantExtensionName) == 0) {
+			
+				numSurpportedExtension++;
+			}
+
+		}
+	
+	}
+	if (numSurpportedExtension == entensions.size())
+	{
+		return true;
+	}
+	return false;
 }
 

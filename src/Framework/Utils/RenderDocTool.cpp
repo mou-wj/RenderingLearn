@@ -57,6 +57,7 @@ void RenderDocTool::WriteCaptureOut()
 
 #ifdef ENABLE_RENDERDOC_CAPTURE
     uint32_t numCapture = rdoc_api->GetNumCaptures();
+
     rdoc_api->TriggerCapture();
 #endif
 

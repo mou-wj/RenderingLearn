@@ -99,15 +99,14 @@ message("3rd libs : ${Libs3rd}")
 target_link_libraries(${TargetName} PUBLIC ${Libs3rd})
 
 
-# 添加RenderDoc库到链接中
-#renderdoc 工具
+#renderdoc tool
 set(Renderdoc_INSTALL_DIR "D:/RenderDoc")
 if(NOT EXISTS ${Renderdoc_INSTALL_DIR})
 	message("render not found in ${Renderdoc_INSTALL_DIR}")
 else()
 	target_compile_definitions(${TargetName} PUBLIC -DENABLE_RENDERDOC_CAPTURE)
 	target_include_directories(${TargetName} PUBLIC ${Renderdoc_INSTALL_DIR})
-	# 设置运行时库路径，确保运行时可以找到RenderDoc的DLL
+	# setup renderdoc runtime path
     set_target_properties(${TargetName} PROPERTIES
         VS_DEBUGGER_ENVIRONMENT "PATH=%PATH%;${Renderdoc_INSTALL_DIR}"
     )

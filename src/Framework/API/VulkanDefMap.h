@@ -13,3 +13,7 @@ struct VkFormatInfo {
 };
 
 extern std::map<VkFormat, VkFormatInfo> VkFormatToInfo;
+
+extern std::map<VkFormatFeatureFlagBits, std::string> VkFormatFeatureFlagBitsToString;
+
+
