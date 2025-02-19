@@ -1,9 +1,9 @@
 #pragma once
 #include "../../Framework/ExampleBase.h"
-class C16CurvesAndCurvedSurfacesExample : public ExampleBase
+class C19AccelerationAlgorithmsExample : public ExampleBase
 {
 public:
-	C16CurvesAndCurvedSurfacesExample() = default;
+	C19AccelerationAlgorithmsExample() = default;
 
 
 

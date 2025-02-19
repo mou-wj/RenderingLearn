@@ -1,18 +1,18 @@
-#include "C16CurvesAndCurvedSurfacesExample.h"
+#include "C17CurvesAndCurvedSurfacesExample.h"
 
-void C16CurvesAndCurvedSurfacesExample::InitSubPassInfo()
+void C17CurvesAndCurvedSurfacesExample::InitSubPassInfo()
 {
 	ShaderCodePaths shaderCodePath;
-	//shaderCodePath.taskShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C16CurvesAndCurvedSurfacesExample.task";
-	shaderCodePath.meshShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C16CurvesAndCurvedSurfacesExampleCurves.mesh";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C16CurvesAndCurvedSurfacesExample.frag";
+	//shaderCodePath.taskShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExample.task";
+	shaderCodePath.meshShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExampleCurves.mesh";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExample.frag";
 	renderPassInfos.resize(2);
 	renderPassInfos[0].InitDefaultRenderPassInfo({ {shaderCodePath} }, windowWidth, windowHeight);
 	//InitDefaultGraphicSubpassInfo(shaderCodePath);
 	enableMeshShaderEXT = true;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
 	
-	shaderCodePath.meshShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C16CurvesAndCurvedSurfacesExampleSurfaces.mesh";
+	shaderCodePath.meshShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExampleSurfaces.mesh";
 	renderPassInfos[1].InitDefaultRenderPassInfo({ {shaderCodePath} }, windowWidth, windowHeight);
 	
 	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
@@ -20,7 +20,7 @@ void C16CurvesAndCurvedSurfacesExample::InitSubPassInfo()
 
 }
 
-void C16CurvesAndCurvedSurfacesExample::InitResourceInfos()
+void C17CurvesAndCurvedSurfacesExample::InitResourceInfos()
 {
 
 	bufferBindInfos["ControlPointsInfo"].size = sizeof(glm::vec4) * 8;
@@ -39,7 +39,7 @@ void C16CurvesAndCurvedSurfacesExample::InitResourceInfos()
 
 }
 
-void C16CurvesAndCurvedSurfacesExample::Loop()
+void C17CurvesAndCurvedSurfacesExample::Loop()
 {
 	uint32_t i = 0;;
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
@@ -143,7 +143,7 @@ void C16CurvesAndCurvedSurfacesExample::Loop()
 
 }
 
-void C16CurvesAndCurvedSurfacesExample::InitSyncObjectNumInfo()
+void C17CurvesAndCurvedSurfacesExample::InitSyncObjectNumInfo()
 {
 	numSemaphores = 2;
 }

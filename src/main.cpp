@@ -19,7 +19,8 @@
 #include "Examples/RealTimeRendering4/C12ImageSpaceEffectesExample.h"
 #include "Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.h"
 #include "Examples/RealTimeRendering4/C15NonPhotorealisticRenderingExample.h"
-#include "Examples/RealTimeRendering4/C16CurvesAndCurvedSurfacesExample.h"
+#include "Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExample.h"
+#include "Examples/RealTimeRendering4/C19AccelerationAlgorithmsExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -93,7 +94,8 @@ int main()
 	//C12ImageSpaceEffectesExample example;
 	//C14VolumetricandTranslucencyRenderingExample example;
 	//C15NonPhotorealisticRenderingExample example;
-	C16CurvesAndCurvedSurfacesExample example;
+	//C17CurvesAndCurvedSurfacesExample example;
+	C19AccelerationAlgorithmsExample example;
 	ExampleBase::Run(&example);
 
 
@@ -186,11 +188,14 @@ void AutoTest() {
 		ExampleBase::Run(&example);
 	}
 	{
-		C16CurvesAndCurvedSurfacesExample example;
+		C17CurvesAndCurvedSurfacesExample example;
 		ExampleBase::Run(&example);
 	}
 
-
+	{
+		C19AccelerationAlgorithmsExample example;
+		ExampleBase::Run(&example);
+	}
 
 
 }

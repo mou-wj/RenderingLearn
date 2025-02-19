@@ -54,6 +54,7 @@ struct Buffer {
 	VkDeviceMemory memory;
 	VkDeviceSize size = 0;
 	VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+	VkMemoryPropertyFlags memoryPropties = VK_MEMORY_PROPERTY_FLAG_BITS_MAX_ENUM;
 	void* hostMapPointer = nullptr;
 };
 
@@ -514,6 +515,13 @@ struct Geometry
 	//只使用顶点缓冲
 	std::vector<Buffer> shapeVertexBuffers;
 
+	bool dynamicFlag = false;//如果为true，则使用shapeDynamicVertexBuffers进行绘制，该buffers不会在初始化的时候进行填充数据
+	//
+	std::vector<Buffer> shapeDynamicVertexBuffers;
+	std::vector<uint32_t> dynamicNumVertexPerZone;//指明shapeDynamicVertexBuffers中要绘制顶点的数量
+
+
+
 	std::array<float, 6> AABBs;//简单的边界包围盒
 	std::array<float, 3> AABBcenter;
 
@@ -850,6 +858,8 @@ protected:
 	void BindTexture(const std::string& textureName);
 	void BindBuffer(const std::string& bufferName);
 
+
+	void ResizeBuffer(Buffer& buffer,VkDeviceSize newByteSize);
 private:
 
 	void Init();
