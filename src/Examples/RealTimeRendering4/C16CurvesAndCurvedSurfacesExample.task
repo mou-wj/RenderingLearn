@@ -9,7 +9,7 @@
 	  uint thread_id = gl_LocalInvocationID.x;
  // Emit mesh shader work groups as children.
 
-	EmitMeshTasksEXT(2, 1, 1);
+	EmitMeshTasksEXT(1, 1, 1);
 
 
  }

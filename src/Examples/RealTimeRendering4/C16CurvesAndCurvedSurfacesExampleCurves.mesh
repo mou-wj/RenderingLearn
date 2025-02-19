@@ -1,0 +1,236 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+layout(local_size_x=1) in; 
+ 
+layout(max_vertices=10, max_primitives=5) out;
+ 
+layout(lines) out;
+
+const uint numPoints = 4;
+
+layout(set = 0,binding = 0) uniform ControlPointInfos{
+    vec4 controlPoints[numPoints];
+    vec4 controlPointsTangentV[numPoints];//控制点的切线方向
+
+};
+
+//阶乘
+float Factorial(float n){
+    if(n <= 0)
+    {
+        return 1;
+    }
+    float res = 1;
+    for(float i = n;i>=1;i--)
+    {
+        res*=i;
+    }
+    return res;
+}
+
+float BernsteinCoefficient(float n,float i,float t)
+{
+    float oneSubT = max(1-t,0);
+    float nSubI = max(n-i,0);
+    float pow1 = 1;
+    float pow2 = 1;
+    if(i > 0)
+    {
+       pow1 = pow(t,i);
+    }
+    if(nSubI >0)
+    {
+       pow2 = pow(oneSubT,nSubI);
+    }
+
+    //这里一个问题: pow(x,y)，当x变量具体值为0.0，且y变量具体值也为0.0时，这个计算会出错溢出
+    return pow1 * pow2 * Factorial(n) / (Factorial(i) * Factorial(n-i));
+}
+
+//使用Bernstein方程的Bezier曲线
+void ComputeBernsteinBezierSegment(){
+   
+  SetMeshOutputsEXT(2, 1);
+  gl_PrimitiveLineIndicesEXT[0] = uvec2(0,1);
+
+   uint numSegment = gl_NumWorkGroups.x;
+   float deltaT = 1.0/numSegment;
+   uint curSegmentId = gl_WorkGroupID.x;
+
+   vec3 p1 = vec3(0),p2 = vec3(0);
+   float p1T = curSegmentId * deltaT;
+   float p2T = p1T + deltaT;
+   float n = float(numPoints -1);
+   for(int p = 0;p < numPoints;p++)
+   {
+       p1+= BernsteinCoefficient(n,float(p),p1T) * controlPoints[p].xyz;
+       p2+= BernsteinCoefficient(n,float(p),p2T) * controlPoints[p].xyz;
+   }
+  gl_MeshVerticesEXT[0].gl_Position = vec4(p1, 1.0);
+  gl_MeshVerticesEXT[1].gl_Position = vec4(p2, 1.0); 
+
+}
+
+// Hermite插值函数
+vec3 HermiteInterpolation(float t, vec3 P0, vec3 P1, vec3 T0, vec3 T1) {
+    // 计算Hermite基函数
+    float h00 = 2.0 * t * t * t - 3.0 * t * t + 1.0;
+    float h10 = t * t * t - 2.0 * t * t + t;
+    float h01 = -2.0 * t * t * t + 3.0 * t * t;
+    float h11 = t * t * t - t * t;
+
+    // 计算插值结果
+    vec3 result = h00 * P0 + h10 * T0 + h01 * P1 + h11 * T1;
+    return result;
+}
+
+
+//使用Hermite插值曲线
+void ComputeHermiteSegment(){
+   
+
+
+
+   uint numSubSegment = gl_NumWorkGroups.x;
+   float deltaT = 1.0/numSubSegment;
+   uint curSegmentId = gl_WorkGroupID.x;//在索引为curSegmentId 以及curSegmentId +1 的控制点之间插值
+   float p1T = curSegmentId * deltaT;
+   float p2T = p1T + deltaT;
+
+   uint numEmitSubSegment = numPoints-1;
+   SetMeshOutputsEXT(2 * numEmitSubSegment,numEmitSubSegment);
+
+
+
+
+
+   vec3 pt1,pt2;
+   for(int p = 0;p < numEmitSubSegment;p++)
+   {
+       pt1 = HermiteInterpolation(p1T,controlPoints[p].xyz,controlPoints[p+1].xyz,controlPointsTangentV[p].xyz,controlPointsTangentV[p+1].xyz);
+       pt2 = HermiteInterpolation(p2T,controlPoints[p].xyz,controlPoints[p+1].xyz,controlPointsTangentV[p].xyz,controlPointsTangentV[p+1].xyz);
+       gl_MeshVerticesEXT[p * 2].gl_Position = vec4(pt1, 1.0);
+       gl_MeshVerticesEXT[p * 2 + 1].gl_Position = vec4(pt2, 1.0); 
+       gl_PrimitiveLineIndicesEXT[p] = uvec2(p * 2,p * 2 + 1);
+   }
+
+
+
+
+}
+
+
+//Kochanek-Bartels 曲线
+void ComputeKochanekBartelsSegment(){
+   
+
+   uint numSubSegment = gl_NumWorkGroups.x;
+   float deltaT = 1.0/numSubSegment;
+   uint curSegmentId = gl_WorkGroupID.x;//在索引为curSegmentId 以及curSegmentId +1 的控制点之间插值
+   float p1T = curSegmentId * deltaT;
+   float p2T = p1T + deltaT;
+
+   uint numEmitSubSegment = numPoints-1;
+   SetMeshOutputsEXT(2 * numEmitSubSegment,numEmitSubSegment);
+
+
+   float a = 0,b = 0,c = 0;
+   float f1 = (1 - a) * (1 - b);
+   float f2 = (1 - a) * (1 + b);
+   float f3= (1 - c);
+   float f4 = (1 + c);
+
+   float fs1 = f2 * f3 / 2.0;
+   float fs2 = f1 * f4 / 2.0;
+
+   float fd1 = f2 * f4 / 2.0;
+   float fd2 = f1 * f3 / 2.0;
+
+   vec3 controlPointsTV[numPoints * 2 - 2];
+   controlPointsTV[0] = controlPointsTangentV[0].xyz;
+   controlPointsTV[numPoints * 2 - 3] = controlPointsTangentV[numPoints -1].xyz;
+   
+
+   vec3 v1 ,v2;
+   for(uint p = 1;p < numPoints -1;p++)
+   {
+        v1 = normalize(controlPoints[p].xyz - controlPoints[p-1].xyz);
+        v2 = normalize(controlPoints[p + 1].xyz - controlPoints[p].xyz);
+        controlPointsTV[p * 2 - 1] = fs1 * v1 + fs2 * v2;
+        controlPointsTV[p * 2] = fd1 * v1 + fd2 * v2;
+   }
+
+
+   vec3 pt1,pt2;
+
+
+
+
+   for(int p = 0;p < numEmitSubSegment;p++)
+   {
+       //计算si
+       
+
+       pt1 = HermiteInterpolation(p1T,controlPoints[p].xyz,controlPoints[p+1].xyz,controlPointsTV[p*2],controlPointsTV[p*2 + 1]);
+       pt2 = HermiteInterpolation(p2T,controlPoints[p].xyz,controlPoints[p+1].xyz,controlPointsTV[p*2],controlPointsTV[p*2 + 1]);
+       gl_MeshVerticesEXT[p * 2].gl_Position = vec4(pt1, 1.0);
+       gl_MeshVerticesEXT[p * 2 + 1].gl_Position = vec4(pt2, 1.0); 
+       gl_PrimitiveLineIndicesEXT[p] = uvec2(p * 2,p * 2 + 1);
+   }
+
+
+}
+
+float BSpline(float alpha){
+    float res = 0;
+    float absAlpha = abs(alpha);
+    if(absAlpha <1)
+    {
+        res = 2.0 / 3.0 - 0.5 * pow(absAlpha,2) * (2 - absAlpha);
+    }else if(absAlpha < 2)
+    {
+        res = 1.0 / 6.0 * pow(2 - absAlpha,3);
+    }
+    
+    return res;
+
+}
+
+
+void ComputeBSplineSegment(){
+    
+   uint numSubSegment = gl_NumWorkGroups.x;
+   float deltaAlpha = 4.0/numSubSegment;
+   uint curSegmentId = gl_WorkGroupID.x;//在索引为curSegmentId 以及curSegmentId +1 的控制点之间插值
+   float alpha1 = curSegmentId * deltaAlpha - 2.0;
+   float alpha2 = alpha1 + deltaAlpha;
+
+   uint numEmitSubSegment = numPoints-3;
+   SetMeshOutputsEXT(2 * numEmitSubSegment,numEmitSubSegment);
+
+   vec3 pt1,pt2;
+   for(int p = 1;p <= numEmitSubSegment;p++)
+   {
+       //计算si
+       
+
+       pt1 = BSpline(-alpha1 - 1.0) * controlPoints[p-1].xyz + BSpline(-alpha1) * controlPoints[p].xyz  + BSpline(-alpha1 + 1.0) * controlPoints[p + 1].xyz  + BSpline(-alpha1 + 2.0) * controlPoints[p + 2].xyz;
+       pt2 = BSpline(-alpha2 - 1.0) * controlPoints[p-1].xyz + BSpline(-alpha2) * controlPoints[p].xyz  + BSpline(-alpha2 + 1.0) * controlPoints[p + 1].xyz  + BSpline(-alpha2 + 2.0) * controlPoints[p + 2].xyz;
+       gl_MeshVerticesEXT[p * 2 - 2].gl_Position = vec4(pt1, 1.0);
+       gl_MeshVerticesEXT[p * 2 - 1].gl_Position = vec4(pt2, 1.0); 
+       gl_PrimitiveLineIndicesEXT[p-1] = uvec2(p * 2 -2,p * 2 - 1);
+   }
+
+
+
+}
+
+
+void main()
+{
+
+  //ComputeBernsteinBezierSegment();
+  //ComputeHermiteSegment();
+  //ComputeKochanekBartelsSegment();
+  ComputeBSplineSegment();
+}

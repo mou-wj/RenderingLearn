@@ -19,6 +19,7 @@
 #include "Examples/RealTimeRendering4/C12ImageSpaceEffectesExample.h"
 #include "Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.h"
 #include "Examples/RealTimeRendering4/C15NonPhotorealisticRenderingExample.h"
+#include "Examples/RealTimeRendering4/C16CurvesAndCurvedSurfacesExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -74,7 +75,7 @@ int main()
 	//TranslucentBlendExample example;
 	//SimpleSceenExample example;
 	//SimpleTessellationExample example;
-	SimpleMeshShaderExample example;
+	//SimpleMeshShaderExample example;
 	//SamplePointsExample example;
 	//powitacq_rgb::BRDF brdf(std::string(PROJECT_DIR) + "/resources/mesured_bsdf/aniso_brushed_aluminium_1_rgb.bsdf");
 	
@@ -92,6 +93,7 @@ int main()
 	//C12ImageSpaceEffectesExample example;
 	//C14VolumetricandTranslucencyRenderingExample example;
 	//C15NonPhotorealisticRenderingExample example;
+	C16CurvesAndCurvedSurfacesExample example;
 	ExampleBase::Run(&example);
 
 
@@ -183,7 +185,10 @@ void AutoTest() {
 		C15NonPhotorealisticRenderingExample example;
 		ExampleBase::Run(&example);
 	}
-
+	{
+		C16CurvesAndCurvedSurfacesExample example;
+		ExampleBase::Run(&example);
+	}
 
 
 

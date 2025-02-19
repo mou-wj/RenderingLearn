@@ -883,6 +883,7 @@ Buffer ExampleBase::CreateShaderAccessBuffer(const char* buf, VkDeviceSize size)
 
 void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data)
 {
+	ASSERT(buffer.size >= offset + size);
 	char* dst = (char*)buffer.hostMapPointer + offset;
 	std::memcpy(dst, data, size);
 
@@ -1336,12 +1337,14 @@ void ExampleBase::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 		auto& pipelineStates = graphcisPipelineInfos[pipeID].pipelineStates;
 		
 		VkPipelineVertexInputStateCreateInfo* vertexInputState = &pipelineStates.vertexInputState;
+		VkPipelineInputAssemblyStateCreateInfo* inputAssemblyState = &pipelineStates.inputAssemblyState;
 		if (enableMeshShaderEXT)
 		{
 			vertexInputState = nullptr;
+			inputAssemblyState = nullptr;
 		}
 
-		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, vertexInputState, &pipelineStates.inputAssemblyState, &pipelineStates.tessellationState, &pipelineStates.viewportState,
+		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, vertexInputState, inputAssemblyState, &pipelineStates.tessellationState, &pipelineStates.viewportState,
 			&pipelineStates.rasterizationState, &pipelineStates.multisampleState, &pipelineStates.depthStencilState, &pipelineStates.colorBlendState, &pipelineStates.dynamicState, pipelineLayout,
 			renderPass, pipeID);
 		graphcisPipelineInfos[pipeID].pipeline = pipeline;

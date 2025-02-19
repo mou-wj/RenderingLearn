@@ -1,0 +1,119 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+layout(local_size_x=1) in; 
+ 
+layout(max_vertices=4, max_primitives=2) out;
+ 
+layout(triangles) out;
+
+const uint DimX = 4;
+const uint DimY = 4;
+
+layout(set = 0,binding = 0) uniform ControlPointInfos{
+    vec4 controlPoints[DimX][DimY];
+   
+};
+
+layout(set = 0,binding = 1) uniform Transform{
+    mat4 transform;//mvp matrix
+   
+};
+
+//阶乘
+float Factorial(float n){
+    if(n <= 0)
+    {
+        return 1;
+    }
+    float res = 1;
+    for(float i = n;i>=1;i--)
+    {
+        res*=i;
+    }
+    return res;
+}
+
+float BernsteinCoefficient(float n,float i,float t)
+{
+    float oneSubT = max(1-t,0);
+    float nSubI = max(n-i,0);
+    float pow1 = 1;
+    float pow2 = 1;
+    if(i > 0)
+    {
+       pow1 = pow(t,i);
+    }
+    if(nSubI >0)
+    {
+       pow2 = pow(oneSubT,nSubI);
+    }
+
+    //这里一个问题: pow(x,y)，当x变量具体值为0.0，且y变量具体值也为0.0时，这个计算会出错溢出
+    return pow1 * pow2 * Factorial(n) / (Factorial(i) * Factorial(n-i));
+}
+
+//使用Bernstein方程的Bezier曲面
+void ComputeBernsteinBezierFacets(){
+   
+  SetMeshOutputsEXT(4, 2);
+
+
+   uint dimX = gl_NumWorkGroups.x;
+   float deltaTX = 1.0/dimX;
+   uint dimY = gl_NumWorkGroups.y;
+   float deltaTY = 1.0/dimY;
+   uint curXId = gl_WorkGroupID.x;
+   uint curYId = gl_WorkGroupID.y;
+
+   vec3 p1 = vec3(0),p2 = vec3(0),p3 = vec3(0),p4 = vec3(0);
+   
+   
+   float p1XT = curXId * deltaTX;
+   float p2XT = p1XT + deltaTX;
+
+   float p1YT = curYId * deltaTY;
+   float p2YT = p1YT + deltaTY;
+
+   float nx = float(DimX -1);
+   float ny = float(DimY -1);
+   
+   float bu1,bu2,bv1,bv2;
+   for(int i = 0;i < DimX;i++)
+   {
+      for(int j = 0;j < DimY;j++)
+      {
+         bu1 = BernsteinCoefficient(nx,float(i),p1XT);
+         bu2 = BernsteinCoefficient(nx,float(i),p2XT);
+         bv1 = BernsteinCoefficient(ny,float(j),p1YT);
+         bv2 = BernsteinCoefficient(ny,float(j),p2YT);
+
+         p1+= bu1 * bv1 * controlPoints[i][j].xyz;
+         p2+= bu1 * bv2 * controlPoints[i][j].xyz;
+         p3+= bu2 * bv1 * controlPoints[i][j].xyz;
+         p4+= bu2 * bv2 * controlPoints[i][j].xyz;
+      }
+
+   }
+
+  gl_MeshVerticesEXT[0].gl_Position = vec4(transform * vec4(p1,1.0));
+  gl_MeshVerticesEXT[1].gl_Position = vec4(transform * vec4(p2,1.0)); 
+  gl_MeshVerticesEXT[2].gl_Position = vec4(transform * vec4(p3,1.0));
+  gl_MeshVerticesEXT[3].gl_Position = vec4(transform * vec4(p4,1.0)); 
+
+  //gl_MeshVerticesEXT[0].gl_Position = vec4(p1,1.0);
+  //gl_MeshVerticesEXT[1].gl_Position = vec4(p2,1.0); 
+  //gl_MeshVerticesEXT[2].gl_Position = vec4(p3,1.0);
+  //gl_MeshVerticesEXT[3].gl_Position = vec4(p4,1.0); 
+
+
+  gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0,1,2);
+  gl_PrimitiveTriangleIndicesEXT[1] = uvec3(1,2,3);
+
+}
+
+
+
+void main()
+{
+  ComputeBernsteinBezierFacets();
+}
