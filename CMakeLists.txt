@@ -74,7 +74,7 @@ else()
 endif()
 
 #spirvtools 3rd
-set(SpirvTools_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/install//SPIRV-Tools")
+set(SpirvTools_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/install/SPIRV-Tools")
 if(NOT EXISTS ${SpirvTools_INSTALL_DIR})
 	message(FATAL_ERROR "spriv_tools not found in ${SpirvTools_INSTALL_DIR}")
 else()
@@ -82,8 +82,18 @@ else()
 	list(APPEND IncludeDir3rd ${SpirvTools_INSTALL_DIR}/${BuildType}/include/spirv_tools)
 	set(SprivToolsLibDir ${SpirvTools_INSTALL_DIR}/${BuildType}/lib)
 	list(APPEND Libs3rd ${SprivToolsLibs} ${SprivToolsLibDir}/SPIRV-Tools.lib ${SprivToolsLibDir}/SPIRV-Tools-opt.lib)
+endif()
 
 
+#tiny gltf
+set(TinyGLTF_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/install/tinygltf")
+if(NOT EXISTS ${TinyGLTF_INSTALL_DIR})
+	message(FATAL_ERROR "tiny gltf not found in ${TinyGLTF_INSTALL_DIR}")
+else()
+	
+	list(APPEND IncludeDir3rd ${TinyGLTF_INSTALL_DIR}/${BuildType}/include)
+	file(GLOB TinyGLTFLibs ${TinyGLTF_INSTALL_DIR}/${BuildType}/lib/*.lib)
+	list(APPEND Libs3rd ${TinyGLTFLibs})
 endif()
 
 

@@ -10,6 +10,70 @@
 #include <spirv_glsl.hpp>
 #include <spirv_cross.hpp>
 
+#include "tiny_gltf.h"
+#include "stb_image_write.h"
+
+
+void LoadGLBTest() {
+
+	tinygltf::Model model;
+	tinygltf::TinyGLTF loader;
+	const std::string& glbFilePath = std::string(PROJECT_DIR) + "/resources/GLB/metallic_barrel_with_lod.glb";
+	std::string err;
+	bool res = loader.LoadBinaryFromFile(&model, &err, nullptr, glbFilePath);
+	int a = 10;
+	model.accessors;
+
+	// 假设访问第一个网格的第一个图元
+	const tinygltf::Mesh& mesh = model.meshes[0];
+	const tinygltf::Primitive& primitive = mesh.primitives[0];
+
+	// 查找位置属性
+	auto it = primitive.attributes.find("POSITION");
+	if (it == primitive.attributes.end()) {
+		std::cerr << "POSITION attribute not found!" << std::endl;
+		return;
+	}
+
+	// 获取位置属性的访问器
+	int positionAccessorIndex = it->second;
+	const tinygltf::Accessor& positionAccessor = model.accessors[positionAccessorIndex];
+
+	// 获取缓冲区视图和缓冲区
+	const tinygltf::BufferView& bufferView = model.bufferViews[positionAccessor.bufferView];
+	const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+
+	// 提取顶点数据
+	const float* positions = reinterpret_cast<const float*>(
+		&buffer.data[bufferView.byteOffset + positionAccessor.byteOffset]
+		);
+
+	size_t vertexCount = positionAccessor.count; // 顶点数量
+	size_t componentCount = tinygltf::GetNumComponentsInType(positionAccessor.type); // 每个顶点的组件数量
+
+	std::cout << "Vertex Positions:" << std::endl;
+	for (size_t i = 0; i < vertexCount; ++i) {
+		float x = positions[i * componentCount + 0];
+		float y = positions[i * componentCount + 1];
+		float z = positions[i * componentCount + 2];
+		std::cout << "  Vertex " << i << ": (" << x << ", " << y << ", " << z << ")" << std::endl;
+	}
+
+	//for (size_t i = 0; i < model.textures.size(); ++i) {
+	//	const auto& texture = model.textures[i];
+	//	const auto& image = model.images[texture.source];
+	//	auto name = model.bufferViews[image.bufferView].name;
+	//	std::string texture_filename = name + ".jpg";
+
+	//	stbi_write_jpg(texture_filename.c_str(), image.width, image.height, image.component, reinterpret_cast<const char*>(image.image.data()), 100);
+	//
+	//}
+
+
+
+}
+
+
 void GLSL2SPIRV()
 {
 	std::string vulkanIncludeDir(VULKAN_INCLUDE_DIRS);

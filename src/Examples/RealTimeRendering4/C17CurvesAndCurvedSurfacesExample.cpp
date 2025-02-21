@@ -7,13 +7,13 @@ void C17CurvesAndCurvedSurfacesExample::InitSubPassInfo()
 	shaderCodePath.meshShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExampleCurves.mesh";
 	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExample.frag";
 	renderPassInfos.resize(2);
-	renderPassInfos[0].InitDefaultRenderPassInfo({ {shaderCodePath} }, windowWidth, windowHeight);
+	renderPassInfos[0].InitDefaultRenderPassInfo({shaderCodePath}, windowWidth, windowHeight);
 	//InitDefaultGraphicSubpassInfo(shaderCodePath);
 	enableMeshShaderEXT = true;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
 	
 	shaderCodePath.meshShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExampleSurfaces.mesh";
-	renderPassInfos[1].InitDefaultRenderPassInfo({ {shaderCodePath} }, windowWidth, windowHeight);
+	renderPassInfos[1].InitDefaultRenderPassInfo({shaderCodePath}, windowWidth, windowHeight);
 	
 	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
 	renderPassInfos[1].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_NONE;

@@ -18,7 +18,7 @@ void C14VolumetricandTranslucencyRenderingExample::InitSubPassInfo()
 
 	
 	renderPassInfos.resize(1);
-	renderPassInfos[0].InitDefaultRenderPassInfo({ {drawSceenCodePath,bgCodePath} }, windowWidth, windowHeight);
+	renderPassInfos[0].InitDefaultRenderPassInfo({drawSceenCodePath,bgCodePath}, windowWidth, windowHeight);
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;

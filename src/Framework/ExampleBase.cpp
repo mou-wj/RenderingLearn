@@ -102,6 +102,7 @@ void ExampleBase::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 	std::vector<char> tmpCode;
 	VkShaderStageFlagBits curShaderStage = VK_SHADER_STAGE_VERTEX_BIT;
 
+	
 	for (uint32_t i = 0; i < subpassInfo.subpassDescs.size(); i++)
 	{
 		const auto& shaderPaths = subpassInfo.subpassDescs[i].pipelinesShaderCodePaths;
@@ -313,8 +314,14 @@ void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 
 	}
 
+	VkImageUsageFlags colorAttachmentImageUsages = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	if (renderPassInfo.renderTargets.enaleInputAttachment)
+	{
+		colorAttachmentImageUsages |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+	}
 
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+
+	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, colorAttachmentImageUsages, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	//renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
 
@@ -391,6 +398,12 @@ void ExampleBase::InitRenderPasses()
 		InitRenderPass(renderPassInfos[i]);
 		InitFrameBuffer(renderPassInfos[i]);
 		InitGraphicPipelines(renderPassInfos[i]);
+
+		if (renderPassInfos[i].renderTargets.enaleInputAttachment)
+		{
+			BindInputAttachment(renderPassInfos[i]);
+		}
+
 	}
 
 	
@@ -1045,13 +1058,14 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 	//	ASSERT(0);
 	//}
 	
-	auto& subpassDrawGeoInfos = renderPassInfos[renderPassIndex].subpassDrawGeoInfos;
-	auto& isMeshSubpass = renderPassInfos[renderPassIndex].isMeshSubpass;
-	auto& subpassDrawMeshGroupInfos = renderPassInfos[renderPassIndex].subpassDrawMeshGroupInfos;
-	auto& renderPass = renderPassInfos[renderPassIndex].renderPass;
-	auto& frameBuffer = renderPassInfos[renderPassIndex].frameBuffer;
-	auto& graphcisPipelineInfos = renderPassInfos[renderPassIndex].graphcisPipelineInfos;
-	auto& renderTargets = renderPassInfos[renderPassIndex].renderTargets;
+	auto& renderPassInfo = renderPassInfos[renderPassIndex];
+	auto& subpassDrawGeoInfos = renderPassInfo.subpassDrawGeoInfos;
+	auto& isMeshSubpass = renderPassInfo.isMeshSubpass;
+	auto& subpassDrawMeshGroupInfos = renderPassInfo.subpassDrawMeshGroupInfos;
+	auto& renderPass = renderPassInfo.renderPass;
+	auto& frameBuffer = renderPassInfo.frameBuffer;
+	auto& graphcisPipelineInfos = renderPassInfo.graphcisPipelineInfos;
+	auto& renderTargets = renderPassInfo.renderTargets;
 
 	ASSERT(subpassDrawGeoInfos.size() != 0 || subpassDrawMeshGroupInfos.size()!=0)
 	uint32_t width = renderTargets.colorAttachment.attachmentImage.extent.width;
@@ -1060,6 +1074,8 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 	//每个subpass 会对应一个pipeline
 	for (uint32_t curSubpassIndex = 0; curSubpassIndex < graphcisPipelineInfos.size(); curSubpassIndex++)
 	{			
+
+
 		//bind pipelines
 		CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[curSubpassIndex].pipeline);
 		//绑定描述符集
@@ -1115,8 +1131,10 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 		
 		
 		}
-
-
+		if (renderPassInfo.truncateNextSubpassDraw && curSubpassIndex == renderPassInfo.truncatedNextSubpassIndex - 1 && renderPassInfo.truncatedNextSubpassIndex !=0)
+		{
+			break;
+		}
 
 		if (curSubpassIndex != graphcisPipelineInfos.size() - 1)
 		{
@@ -1736,6 +1754,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 				if (!geo.vertexAttrib.texcoords.empty())
 				{
 					glm::vec2 curTexCoord = glm::vec2(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1]);
+					curTexCoord.y = -curTexCoord.y;//翻转一下y
 					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 9;
 					std::memcpy(curVertexOffset, &curTexCoord, sizeof(float) * 2);
 
@@ -1770,47 +1789,98 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 	if (numV == 0) {
 		Log("", 0);
 	}
-	geo.AABBs[0] = geo.vertexAttrib.vertices[0];
-	geo.AABBs[1] = geo.vertexAttrib.vertices[1];
-	geo.AABBs[2] = geo.vertexAttrib.vertices[2];
-	geo.AABBs[3] = geo.vertexAttrib.vertices[0];
-	geo.AABBs[4] = geo.vertexAttrib.vertices[1];
-	geo.AABBs[5] = geo.vertexAttrib.vertices[2];
+	geo.AABBs.minX = geo.vertexAttrib.vertices[1];
+	geo.AABBs.maxX = geo.vertexAttrib.vertices[0];
+	geo.AABBs.minY = geo.vertexAttrib.vertices[2];
+	geo.AABBs.maxY = geo.vertexAttrib.vertices[0];
+	geo.AABBs.minZ = geo.vertexAttrib.vertices[1];
+	geo.AABBs.maxZ = geo.vertexAttrib.vertices[2];
 	//计算AABB
 	for (uint32_t i = 0; i < numV; i++)
 	{
 		float x = geo.vertexAttrib.vertices[3 * i];
 		float y = geo.vertexAttrib.vertices[3 * i + 1];
 		float z = geo.vertexAttrib.vertices[3 * i + 2];
-		if (x < geo.AABBs[0])
+		if (x < geo.AABBs.minX)
 		{
-			geo.AABBs[0] = x;
+			geo.AABBs.minX = x;
 		}
-		if (x > geo.AABBs[3])
+		if (x > geo.AABBs.maxX)
 		{
-			geo.AABBs[3] = x;
+			geo.AABBs.maxX = x;
 		}
-		if (y < geo.AABBs[1])
+		if (y < geo.AABBs.minY)
 		{
-			geo.AABBs[1] = y;
+			geo.AABBs.minY = y;
 		}
-		if (y > geo.AABBs[4])
+		if (y > geo.AABBs.maxY)
 		{
-			geo.AABBs[4] = y;
+			geo.AABBs.maxY = y;
 		}
-		if (z < geo.AABBs[2])
+		if (z < geo.AABBs.minZ)
 		{
-			geo.AABBs[2] = z;
+			geo.AABBs.minZ = z;
 		}
-		if (z > geo.AABBs[5])
+		if (z > geo.AABBs.maxZ)
 		{
-			geo.AABBs[5] = z;
+			geo.AABBs.maxZ = z;
 		}
 	}
 
-	geo.AABBcenter[0] = (geo.AABBs[0] + geo.AABBs[3]) / 2;
-	geo.AABBcenter[1] = (geo.AABBs[1] + geo.AABBs[4]) / 2;
-	geo.AABBcenter[2] = (geo.AABBs[2] + geo.AABBs[5]) / 2;
+	geo.AABBcenter[0] = (geo.AABBs.minX + geo.AABBs.maxX) / 2;
+	geo.AABBcenter[1] = (geo.AABBs.minY + geo.AABBs.maxY) / 2;
+	geo.AABBcenter[2] = (geo.AABBs.minZ + geo.AABBs.maxZ) / 2;
+
+
+	geo.shadeAABBs.resize(geo.shapes.size());
+	for (uint32_t zoneId = 0; zoneId < geo.shadeAABBs.size(); zoneId++)
+	{
+		const auto& firsetVertexIndex = geo.shapes[zoneId].mesh.indices[0].vertex_index;
+		glm::vec3 curVertex = glm::vec3(geo.vertexAttrib.vertices[firsetVertexIndex * 3], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 1], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 2]);
+		Geometry::AABB &curAABB = geo.shadeAABBs[zoneId];
+
+		curAABB.minX = curAABB.maxX = curVertex.x;
+		curAABB.minY = curAABB.maxY = curVertex.y;
+		curAABB.minZ = curAABB.maxZ = curVertex.z;
+
+		//当前shape的所有片元的点数
+		for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
+		{
+			const auto& vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+			if (!geo.vertexAttrib.vertices.empty())
+			{
+				curVertex = glm::vec3(geo.vertexAttrib.vertices[vertexIndex * 3], geo.vertexAttrib.vertices[vertexIndex * 3 + 1], geo.vertexAttrib.vertices[vertexIndex * 3 + 2]);
+				if (curVertex.x < curAABB.minX)
+				{
+					curAABB.minX = curVertex.x;
+				}
+				if (curVertex.x > curAABB.maxX)
+				{
+					curAABB.maxX = curVertex.x;
+				}
+				if (curVertex.y < curAABB.minY)
+				{
+					curAABB.minY = curVertex.y;
+				}
+				if (curVertex.y > curAABB.maxY)
+				{
+					curAABB.maxY = curVertex.y;
+				}
+				if (curVertex.z < curAABB.minZ)
+				{
+					curAABB.minZ = curVertex.z;
+				}
+				if (curVertex.z > curAABB.maxZ)
+				{
+					curAABB.maxZ = curVertex.z;
+				}
+			}
+
+		}
+
+	}
+
+
 
 }
 
@@ -2210,7 +2280,25 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
 	}
 
-
+	//����input attachment��Ϣ
+	for (uint32_t i = 0; i < resources.subpass_inputs.size(); i++)
+	{
+		auto& inputAttachment = resources.subpass_inputs[i];
+		auto type = shaderCompiler.get_type(inputAttachment.base_type_id);
+		bindingInfo.setId = shaderCompiler.get_decoration(inputAttachment.id, spv::Decoration::DecorationDescriptorSet);
+		bindingInfo.binding = shaderCompiler.get_decoration(inputAttachment.id, spv::DecorationBinding);
+		bindingInfo.name = inputAttachment.name;
+		if (type.array.empty())
+		{
+			bindingInfo.numDescriptor = 1;
+		}
+		else {
+			bindingInfo.numDescriptor = type.array[0];
+		}
+		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
+		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
+	}
 }
 
 
@@ -2300,6 +2388,42 @@ void ExampleBase::BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, u
 	descriptorBufferInfo.offset = 0;
 	descriptorBufferInfo.range = uniformBuffer.size;
 	UpdateDescriptorSetBindingResources(device, set, binding, elemenId, 1, descriptorType, {  }, { descriptorBufferInfo }, {});
+
+}
+
+void ExampleBase::BindInputAttachment(RenderPassInfo& renderPassInfo)
+{
+	for (const auto& pipelineInfo : renderPassInfo.graphcisPipelineInfos)
+	{
+		for (const auto& setInfo : pipelineInfo.descriptorSetInfos)
+		{
+			for (const auto& bindingInfo : setInfo.second.bindings)
+			{
+				if (bindingInfo.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
+				{
+
+					VkDescriptorImageInfo descriptorImageInfo{};
+					descriptorImageInfo.sampler = nullptr;
+					descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+					descriptorImageInfo.imageView = renderPassInfo.renderTargets.colorAttachment.attachmentImage.imageView;
+
+					UpdateDescriptorSetBindingResources(device, setInfo.second.descriptorSet, bindingInfo.binding, 0, 1, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, { descriptorImageInfo }, {}, {});
+
+
+
+				}
+
+
+			}
+
+
+		}
+
+
+	}
+
+
+
 
 }
 

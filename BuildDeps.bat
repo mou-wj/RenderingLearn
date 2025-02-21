@@ -58,3 +58,16 @@ if not exist "./install/glfw" (
 )
 
 
+if not exist "tinygltf" (
+	git clone --branch release https://github.com/syoyo/tinygltf.git
+)
+
+if not exist "./install/tinygltf" (
+	cmake -S ./tinygltf -B ./build -DCMAKE_INSTALL_PREFIX=./install/tinygltf/Debug
+	cmake --build ./build --config Debug --target install
+	rmdir /s /q build
+	cmake -S ./tinygltf -B ./build -DCMAKE_INSTALL_PREFIX=./install/tinygltf/Release
+	cmake --build ./build --config Release --target install
+	rmdir /s /q build
+)
+pause

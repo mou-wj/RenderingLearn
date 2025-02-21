@@ -520,10 +520,32 @@ struct Geometry
 	std::vector<Buffer> shapeDynamicVertexBuffers;
 	std::vector<uint32_t> dynamicNumVertexPerZone;//指明shapeDynamicVertexBuffers中要绘制顶点的数量
 
+	struct AABB {
+		float minX = 0, maxX = 0;
+		float minY = 0, maxY = 0;
+		float minZ = 0, maxZ = 0;
+
+		static bool CheckAABBsIntersect(Geometry::AABB& aabb1, Geometry::AABB& aabb2) {
+			return (aabb1.minX <= aabb2.maxX && aabb1.maxX >= aabb2.minX &&
+				aabb1.minY <= aabb2.maxY && aabb1.maxY >= aabb2.minY &&
+				aabb1.minZ <= aabb2.maxZ && aabb1.maxZ >= aabb2.minZ);
+		
+		}
+		// 判断AABB a是否完全包含在AABB b中
+		static bool IsContained(Geometry::AABB& a, Geometry::AABB& b) {
+			return (a.minX >= b.minX && a.maxX <= b.maxX &&
+				a.minY >= b.minY && a.maxY <= b.maxY &&
+				a.minZ >= b.minZ && a.maxZ <= b.maxZ);
+		}
 
 
-	std::array<float, 6> AABBs;//简单的边界包围盒
-	std::array<float, 3> AABBcenter;
+	};
+
+	AABB AABBs;//简单的边界包围盒
+	glm::vec3 AABBcenter;
+
+	std::vector<AABB> shadeAABBs;
+
 
 	bool CloserThanOther(Geometry& other, glm::vec3 viewPos) {
 		float dist = glm::distance(viewPos, glm::vec3(AABBcenter[0], AABBcenter[1], AABBcenter[2]));
@@ -584,6 +606,8 @@ struct RenderTargets {
 	static const VkFormatFeatureFlags colorAttachmentFormatFeatures = (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
 	static const VkFormatFeatureFlags depthAttachmentFormatFeatures = (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT);
 	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+	bool enaleInputAttachment = false;
+	const VkAttachmentReference inputAttachmentRef = { .attachment = 0,.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
 	RenderTargets() {
 		colorAttachment.attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
 		colorAttachment.attachmentImage.extent = VkExtent3D{.width = 512,.height = 512,.depth = 1 };//默认颜色附件尺寸，可以在创建附件前修改
@@ -640,6 +664,8 @@ struct RenderPassInfo {
 	SubpassInfo subpassInfo;//子pass信息
 	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;//每个子pass对应的pipeline信息
 	std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;//每个subpass要绘制的几何体
+	bool truncateNextSubpassDraw = false;//表明是否要截断某个subpass之后的subpass的绘制
+	uint32_t truncatedNextSubpassIndex = 1;//要截断的subpass id,即从某个id的subpass开始以及后续subpass不再进行绘制
 	std::map<uint32_t, std::array<uint32_t,3>> subpassDrawMeshGroupInfos;//每个mesh subpas的绘制参数
 	std::map<uint32_t, bool> isMeshSubpass;//该subpass是否含mesh shader
 
@@ -694,68 +720,67 @@ struct RenderPassInfo {
 	
 	}
 
-	void InitDefaultRenderPassInfo(const std::vector<std::vector<ShaderCodePaths>>& renderPassSubpassShaderPaths, uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/) {
+	void InitDefaultRenderPassInfo(const std::vector<ShaderCodePaths>& renderPassSubpassShaderPaths, uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/) {
 		
 		//初始化render target的尺寸
 		renderTargets.colorAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
 		renderTargets.depthAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
 		
-		for (uint32_t passId = 0; passId < renderPassSubpassShaderPaths.size(); passId++)
+
+		subpassInfo.subpassDescs.resize(renderPassSubpassShaderPaths.size());
+		//初始化subpass描述
+		for (uint32_t subpassId = 0; subpassId < renderPassSubpassShaderPaths.size(); subpassId++)
 		{
-			subpassInfo.subpassDescs.resize(renderPassSubpassShaderPaths[passId].size());
-			//初始化subpass描述
-			for (uint32_t subpassId = 0; subpassId < renderPassSubpassShaderPaths[passId].size(); subpassId++)
+			subpassInfo.subpassDescs[subpassId].pipelinesShaderCodePaths = renderPassSubpassShaderPaths[subpassId];
+			//初始化管线状态
+			subpassInfo.subpassDescs[subpassId].subpassPipelineStates.Init(viewportWidth, viewportHeight);
+
+			//开启剔除
+			subpassInfo.subpassDescs[subpassId].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+
+
+			auto& subpassDesc = subpassInfo.subpassDescs[subpassId];
+			subpassDesc.subpassDescription.flags = 0;
+			subpassDesc.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpassDesc.subpassDescription.inputAttachmentCount = 0;
+			subpassDesc.subpassDescription.pInputAttachments = nullptr;
+			subpassDesc.subpassDescription.colorAttachmentCount = 1;
+			subpassDesc.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+			subpassDesc.subpassDescription.pResolveAttachments = nullptr;
+			subpassDesc.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
+			subpassDesc.subpassDescription.preserveAttachmentCount = 0;
+			subpassDesc.subpassDescription.pPreserveAttachments = nullptr;
+
+
+
+
+		}
+
+		//初始化subpass依赖
+		subpassInfo.subpassDepends.resize(renderPassSubpassShaderPaths.size());
+		for (uint32_t subpassId = 0; subpassId < renderPassSubpassShaderPaths.size(); subpassId++)
+		{
+			auto& subpassDepend = subpassInfo.subpassDepends[subpassId];
+			if (subpassId == 0)
 			{
-				subpassInfo.subpassDescs[subpassId].pipelinesShaderCodePaths = renderPassSubpassShaderPaths[passId][subpassId];
-				//初始化管线状态
-				subpassInfo.subpassDescs[subpassId].subpassPipelineStates.Init(viewportWidth, viewportHeight);
-
-				//开启剔除
-				subpassInfo.subpassDescs[subpassId].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-
-
-				auto& subpassDesc = subpassInfo.subpassDescs[subpassId];
-				subpassDesc.subpassDescription.flags = 0;
-				subpassDesc.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpassDesc.subpassDescription.inputAttachmentCount = 0;
-				subpassDesc.subpassDescription.pInputAttachments = nullptr;
-				subpassDesc.subpassDescription.colorAttachmentCount = 1;
-				subpassDesc.subpassDescription.pColorAttachments = &renderTargets.colorRef;
-				subpassDesc.subpassDescription.pResolveAttachments = nullptr;
-				subpassDesc.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
-				subpassDesc.subpassDescription.preserveAttachmentCount = 0;
-				subpassDesc.subpassDescription.pPreserveAttachments = nullptr;
-
-
-
+				subpassDepend.srcSubpass = VK_SUBPASS_EXTERNAL;
+				subpassDepend.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				subpassDepend.srcAccessMask = 0;
+				subpassDepend.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+				subpassDepend.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 			}
+			else {
+				subpassDepend.srcSubpass = subpassId - 1;
 
-			//初始化subpass依赖
-			subpassInfo.subpassDepends.resize(renderPassSubpassShaderPaths[passId].size());
-			for (uint32_t subpassId = 0; subpassId < renderPassSubpassShaderPaths[passId].size(); subpassId++)
-			{
-				auto& subpassDepend = subpassInfo.subpassDepends[subpassId];
-				if (subpassId == 0)
-				{
-					subpassDepend.srcSubpass = VK_SUBPASS_EXTERNAL;
-					subpassDepend.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-					subpassDepend.srcAccessMask = 0;
-					subpassDepend.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-					subpassDepend.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				subpassDepend.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+				subpassDepend.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				subpassDepend.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+				subpassDepend.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			}
 
-				}
-				else {
-					subpassDepend.srcSubpass = subpassId - 1;
-
-					subpassDepend.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-					subpassDepend.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-					subpassDepend.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-					subpassDepend.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-				}
-
-				subpassDepend.dstSubpass = subpassId;
-				subpassDepend.dependencyFlags = 0;
+			subpassDepend.dstSubpass = subpassId;
+			subpassDepend.dependencyFlags = 0;
 
 
 
@@ -764,7 +789,7 @@ struct RenderPassInfo {
 		}
 	
 	
-	}
+	
 
 
 };
@@ -928,6 +953,9 @@ private:
 	VkDescriptorType GetDescriptorType(DescriptorSetInfo& descriptorSetInfo,uint32_t binding);
 	void BindTexture(const Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId ,VkDescriptorType descriptorType);
 	void BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType);
+
+	void BindInputAttachment(RenderPassInfo& renderPassInfo);
+
 
 	void CreateSemaphores(uint32_t numSemaphores);
 	//void CreateFences(uint32_t numFences);

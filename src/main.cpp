@@ -62,8 +62,12 @@ vulkanµƒNDC£¨”“ ÷œµ
  */
 void TransformTest();
 void AutoTest();
+
+
 int main()
 {
+
+
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
