@@ -76,6 +76,10 @@ namespace Transform {
 	*/
 	glm::mat4 GetPerspectiveProj(float near, float far, float viewAngle, float ratioWH);
 
+
+
+	glm::mat4 GetParallelProj(float near, float far, float width, float height);
+
 }
 
 

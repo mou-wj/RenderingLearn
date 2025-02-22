@@ -23,6 +23,7 @@ struct DescriptorBinding {
 	uint32_t binding;
 	uint32_t setId;
 	uint32_t numDescriptor;
+	uint32_t inputAttachmentIndex;
 	VkDescriptorType descriptorType;
 };
 
@@ -311,7 +312,7 @@ struct GraphicsPipelineStates {
 	VkViewport viewport;
 	VkRect2D scissor;
 	GraphicsPipelineStates() = default;
-	void Init(uint32_t width, uint32_t height) {
+	void Init(uint32_t width, uint32_t height,uint32_t numColorAttachments = 1) {
 		//����shader stage���г�ʼ��
 
 		vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -390,7 +391,7 @@ struct GraphicsPipelineStates {
 		colorBlendState.flags = 0;
 		colorBlendState.logicOpEnable = VK_FALSE;
 		colorBlendState.logicOp = VK_LOGIC_OP_AND;
-		colorBlendAttachmentStates.resize(1);
+		colorBlendAttachmentStates.resize(numColorAttachments);
 		colorBlendState.attachmentCount = colorBlendAttachmentStates.size();
 		for (uint32_t i = 0; i < colorBlendAttachmentStates.size(); i++)
 		{
@@ -430,6 +431,9 @@ struct GraphicPipelineInfos {
 	std::map<uint32_t, DescriptorSetInfo> descriptorSetInfos;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline pipeline;
+
+	//input attachment 绑定信息，表示某个set中某个binding上对应的附件索引
+	std::map<uint32_t, std::map<uint32_t, uint32_t>> setBindingAttachmentIds;
 
 
 };
@@ -599,22 +603,53 @@ struct Attachment {
 	VkClearValue clearValue;
 };
 struct RenderTargets {
-	Attachment colorAttachment;//render pass��0�Ÿ���
-	Attachment depthAttachment;//render pass��1�Ÿ���
+	uint32_t width = 512, height = 512;
+
+
 	static const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//ֻ默认的颜色附件格式，必须要支持
 	static const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ默认的颜色附件格式，必须要支持
 	static const VkFormatFeatureFlags colorAttachmentFormatFeatures = (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
 	static const VkFormatFeatureFlags depthAttachmentFormatFeatures = (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT);
-	const VkAttachmentReference colorRef{ .attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL }, depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+
+
+	std::vector<Attachment> colorAttachments = { Attachment()};
+	std::vector<VkAttachmentReference> colorRefs = { VkAttachmentReference{.attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL } };
+
 	bool enaleInputAttachment = false;
-	const VkAttachmentReference inputAttachmentRef = { .attachment = 0,.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+	std::vector<VkAttachmentReference> inputAttachmentRefs = { VkAttachmentReference{.attachment = 0,.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } };
+
+	Attachment depthAttachment;//render pass��1�Ÿ���
+	VkAttachmentReference	depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+
 	RenderTargets() {
-		colorAttachment.attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
-		colorAttachment.attachmentImage.extent = VkExtent3D{.width = 512,.height = 512,.depth = 1 };//默认颜色附件尺寸，可以在创建附件前修改
-		colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };//默认颜色附件清除值，可以在创建附件前修改
+		//colorAttachments.resize(1);
+		InitRenderTarget(1, width, height);
+	}
+
+	void InitRenderTarget(uint32_t numColorAttachments,uint32_t rtWidth , uint32_t rtHeight) {
+		ASSERT(numColorAttachments >= 1);
+		colorAttachments.resize(numColorAttachments);
+		colorRefs.resize(numColorAttachments);
+		inputAttachmentRefs.resize(numColorAttachments);
+		for (uint32_t i = 0; i < colorAttachments.size(); i++)
+		{
+			colorAttachments[i].attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
+			colorAttachments[i].attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认颜色附件尺寸，可以在创建附件前修改
+			colorAttachments[i].clearValue = VkClearValue{ 0,0,0,1 };//默认颜色附件清除值，可以在创建附件前修改
+			inputAttachmentRefs[i].attachment = i;
+			inputAttachmentRefs[i].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			colorRefs[i].attachment = i;
+			colorRefs[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+
 		depthAttachment.attachmentDesc.format = depthFormat;//默认深度附件格式，可以在创建附件前修改
 		depthAttachment.clearValue = VkClearValue{ 1.0,0 };//默认颜色附件清除值，可以在创建附件前修改
-		depthAttachment.attachmentImage.extent = VkExtent3D{ .width = 512,.height = 512,.depth = 1 };//默认深度附件尺寸，可以在创建附件前修改
+		depthAttachment.attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认深度附件尺寸，可以在创建附件前修改
+		depthRef.attachment = numColorAttachments;
+
+	
 	}
 };
 struct ShaderCodePaths {
@@ -629,9 +664,11 @@ struct ShaderCodePaths {
 };
 
 struct SubpassDesc {
+	bool enableInputAttachment = false;
 	VkSubpassDescription subpassDescription;
 	GraphicsPipelineStates subpassPipelineStates;
 	ShaderCodePaths pipelinesShaderCodePaths;
+
 
 };
 struct SubpassInfo {
@@ -676,20 +713,19 @@ struct RenderPassInfo {
 	//在这里定义一些快速设置render pass信息的接口
 
 	//默认设置，一个默认subpass
-	void InitDefaultRenderPassInfo(ShaderCodePaths drawSceenCodePath/*一个subpass需要的着色器文件路径*/,uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/) {
+	void InitDefaultRenderPassInfo(ShaderCodePaths drawSceenCodePath/*一个subpass需要的着色器文件路径*/,uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/,uint32_t numColorAttachments = 1) {
 	
 	
 
 		//InitDefaultGraphicSubpassInfo();
 		subpassInfo.subpassDescs.resize(1);
+
 		//设置着色器路径
 		subpassInfo.subpassDescs[0].pipelinesShaderCodePaths = drawSceenCodePath;
 		//初始化管线状态
-		subpassInfo.subpassDescs[0].subpassPipelineStates.Init(viewportWidth, viewportHeight);
+		subpassInfo.subpassDescs[0].subpassPipelineStates.Init(viewportWidth, viewportHeight, numColorAttachments);
 
-		renderTargets.colorAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
-		renderTargets.depthAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
-
+		renderTargets.InitRenderTarget(numColorAttachments, viewportWidth, viewportHeight);
 		//开启剔除
 		subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
 
@@ -699,8 +735,8 @@ struct RenderPassInfo {
 		subpassDesc1.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpassDesc1.subpassDescription.inputAttachmentCount = 0;
 		subpassDesc1.subpassDescription.pInputAttachments = nullptr;
-		subpassDesc1.subpassDescription.colorAttachmentCount = 1;
-		subpassDesc1.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+		subpassDesc1.subpassDescription.colorAttachmentCount = renderTargets.colorAttachments.size();
+		subpassDesc1.subpassDescription.pColorAttachments = renderTargets.colorRefs.data();
 		subpassDesc1.subpassDescription.pResolveAttachments = nullptr;
 		subpassDesc1.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
 		subpassDesc1.subpassDescription.preserveAttachmentCount = 0;
@@ -720,12 +756,10 @@ struct RenderPassInfo {
 	
 	}
 
-	void InitDefaultRenderPassInfo(const std::vector<ShaderCodePaths>& renderPassSubpassShaderPaths, uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/) {
+	void InitDefaultRenderPassInfo(const std::vector<ShaderCodePaths>& renderPassSubpassShaderPaths, uint32_t viewportWidth/*视口宽度*/, uint32_t viewportHeight/*视口高度*/, uint32_t numColorAttachments = 1, std::map<uint32_t, bool> subpassInputAttachmentEnables = {}) {
 		
-		//初始化render target的尺寸
-		renderTargets.colorAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
-		renderTargets.depthAttachment.attachmentImage.extent = VkExtent3D{ .width = viewportWidth,.height = viewportHeight,.depth = 1 };
-		
+		//初始化render target的信息
+		renderTargets.InitRenderTarget(numColorAttachments, viewportWidth, viewportHeight);
 
 		subpassInfo.subpassDescs.resize(renderPassSubpassShaderPaths.size());
 		//初始化subpass描述
@@ -733,7 +767,7 @@ struct RenderPassInfo {
 		{
 			subpassInfo.subpassDescs[subpassId].pipelinesShaderCodePaths = renderPassSubpassShaderPaths[subpassId];
 			//初始化管线状态
-			subpassInfo.subpassDescs[subpassId].subpassPipelineStates.Init(viewportWidth, viewportHeight);
+			subpassInfo.subpassDescs[subpassId].subpassPipelineStates.Init(viewportWidth, viewportHeight, numColorAttachments);
 
 			//开启剔除
 			subpassInfo.subpassDescs[subpassId].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -744,8 +778,14 @@ struct RenderPassInfo {
 			subpassDesc.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 			subpassDesc.subpassDescription.inputAttachmentCount = 0;
 			subpassDesc.subpassDescription.pInputAttachments = nullptr;
-			subpassDesc.subpassDescription.colorAttachmentCount = 1;
-			subpassDesc.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+			if (subpassInputAttachmentEnables[subpassId])
+			{
+				renderTargets.enaleInputAttachment |= subpassInputAttachmentEnables[subpassId];
+				subpassDesc.subpassDescription.inputAttachmentCount = renderTargets.inputAttachmentRefs.size();
+				subpassDesc.subpassDescription.pInputAttachments = renderTargets.inputAttachmentRefs.data();
+			}
+			subpassDesc.subpassDescription.colorAttachmentCount = renderTargets.colorAttachments.size();
+			subpassDesc.subpassDescription.pColorAttachments = renderTargets.colorRefs.data();
 			subpassDesc.subpassDescription.pResolveAttachments = nullptr;
 			subpassDesc.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
 			subpassDesc.subpassDescription.preserveAttachmentCount = 0;

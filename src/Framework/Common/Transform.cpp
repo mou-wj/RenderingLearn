@@ -137,3 +137,14 @@ glm::mat4 Transform::GetPerspectiveProj(float near, float far, float viewAngle, 
 	return scale * press;
 }
 
+glm::mat4 Transform::GetParallelProj(float near, float far, float width, float height)
+{
+	glm::mat4 res(1.0);
+	res[0][0] = 2 / width;
+	res[1][1] = 2 / height;
+	res[2][2] = 1 / (far - near);
+	res[3][2] = -near / (far - near);
+	return res;
+}
+
+

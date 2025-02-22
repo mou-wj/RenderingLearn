@@ -34,9 +34,10 @@ void C19AccelerationAlgorithmsExample::InitSubPassInfo()
 
 
 	renderPassInfos.resize(1);
-	renderPassInfos[0].renderTargets.colorAttachment.clearValue = VkClearValue{0.3,0.3,0,1};
-	renderPassInfos[0].InitDefaultRenderPassInfo({ shaderMeshCodePath, shaderCodePath,lodBlendCodePath }, windowWidth, windowHeight);
-	renderPassInfos[0].renderTargets.enaleInputAttachment = true;
+
+	
+	renderPassInfos[0].InitDefaultRenderPassInfo({ shaderMeshCodePath, shaderCodePath,lodBlendCodePath }, windowWidth, windowHeight, 1, { {2,true} });
+	renderPassInfos[0].renderTargets.colorAttachments[0].clearValue = VkClearValue{ 0.3,0.3,0,1 };
 					
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
@@ -49,7 +50,7 @@ void C19AccelerationAlgorithmsExample::InitSubPassInfo()
 	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;//写入深度附件
 
 	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassDescription.inputAttachmentCount = 1;
-	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassDescription.pInputAttachments = &renderPassInfos[0].renderTargets.inputAttachmentRef;				
+	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassDescription.pInputAttachments = &renderPassInfos[0].renderTargets.inputAttachmentRefs[0];
 	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassPipelineStates.rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
 	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
@@ -259,10 +260,10 @@ void C19AccelerationAlgorithmsExample::Loop()
 
 
 		CmdOpsDrawGeom(graphicCommandList);
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE,VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachment.attachmentImage, swapchainImages[nexIndex]);
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachment.attachmentImage, VK_ACCESS_TRANSFER_READ_BIT,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, swapchainImages[nexIndex]);
+		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_TRANSFER_READ_BIT,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);

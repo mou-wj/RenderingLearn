@@ -72,6 +72,21 @@ void Camera::Rotate(RotateAction rotateAction,float angle)
 
 
 
+void Camera::SetProjectType(bool isPerspective)
+{
+	this->perspective = isPerspective;
+}
+
+void Camera::SetPerspectiveProjectParams(float near, float far, float viewAngle, float ratioWH)
+{
+	projParams = glm::vec4(near, far, viewAngle, ratioWH);
+}
+
+void Camera::SetParallelProjectParams(float near, float far, float nearPlaneWidth, float nearPlaneHeight)
+{
+	projParams = glm::vec4(near, far, nearPlaneWidth, nearPlaneHeight);
+}
+
 void Camera::SetCamera(glm::vec3 pos, glm::vec3 target, glm::vec3 down)
 {
 	this->pos = pos;
@@ -93,7 +108,14 @@ void Camera::Calculate()
 
 	view = Transform::GetViewMatrix(pos, target, down);
 	view = rotate * view;
-	proj = Transform::GetPerspectiveProj(0.1, 100, 90, 1);
+	if (perspective)
+	{
+		proj = Transform::GetPerspectiveProj(projParams.x, projParams.y, projParams.z, projParams.w);
+	}
+	else {
+		proj = Transform::GetParallelProj(projParams.x, projParams.y, projParams.z, projParams.w);
+	}
+
 
 	x = glm::vec3(view[0][0], view[1][0], view[2][0]);
 	y = glm::vec3(view[0][1], view[1][1], view[2][1]);

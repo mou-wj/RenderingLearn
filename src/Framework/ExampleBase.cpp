@@ -94,6 +94,8 @@ void ExampleBase::Init()
 	InitCompute();
 }
 
+
+
 void ExampleBase::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 {
 	auto& graphcisPipelineInfos = renderPassInfo.graphcisPipelineInfos;
@@ -113,6 +115,7 @@ void ExampleBase::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 			renderPassInfo.isMeshSubpass[i] = true;
 		}
 		
+		bool& inputAttachmentEnable = subpassInfo.subpassDescs[i].enableInputAttachment;
 
 		//mesh
 		curShaderStage = VK_SHADER_STAGE_MESH_BIT_EXT;
@@ -161,7 +164,6 @@ void ExampleBase::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.fragmentShaderPath;
 		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.fragmentShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
 		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
-
 
 
 
@@ -304,39 +306,48 @@ void ExampleBase::InitContex()
 void ExampleBase::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 {
 	//����color attachment����Դ
-	auto& colorAttachment = renderPassInfo.renderTargets.colorAttachment.attachmentDesc;
-	auto& colorImage = renderPassInfo.renderTargets.colorAttachment.attachmentImage;
-
-	if (colorAttachment.format != RenderTargets::colorFormat)
+	ASSERT(renderPassInfo.renderTargets.colorAttachments.size() >= 1);
+	for (uint32_t i = 0;i < renderPassInfo.renderTargets.colorAttachments.size();i++)
 	{
-		ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, colorAttachment.format, RenderTargets::colorAttachmentFormatFeatures));
+
+		auto& colorAttachment = renderPassInfo.renderTargets.colorAttachments[i].attachmentDesc;
+		auto& colorImage = renderPassInfo.renderTargets.colorAttachments[i].attachmentImage;
+
+		if (colorAttachment.format != RenderTargets::colorFormat)
+		{
+			ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, colorAttachment.format, RenderTargets::colorAttachmentFormatFeatures));
+
+
+		}
+
+		VkImageUsageFlags colorAttachmentImageUsages = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		if (renderPassInfo.renderTargets.enaleInputAttachment)
+		{
+			colorAttachmentImageUsages |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+		}
+
+
+		colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, colorAttachmentImageUsages, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+		//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		//renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
+
+
+
+		colorAttachment.flags = 0;
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachment.initialLayout = colorImage.currentLayout;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorImage.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
 
 
 	}
 
-	VkImageUsageFlags colorAttachmentImageUsages = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-	if (renderPassInfo.renderTargets.enaleInputAttachment)
-	{
-		colorAttachmentImageUsages |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-	}
-
-
-	colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, colorAttachmentImageUsages, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
-	//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	//renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
-
-
-	
-	colorAttachment.flags = 0;
-	colorAttachment.format = renderPassInfo.renderTargets.colorAttachment.attachmentDesc.format;
-	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	colorAttachment.initialLayout = renderPassInfo.renderTargets.colorAttachment.attachmentImage.currentLayout;
-	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	renderPassInfo.renderTargets.colorAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 
 
@@ -383,7 +394,15 @@ void ExampleBase::InitRenderPass(RenderPassInfo& renderPassInfo)
 	{
 		subpassDescriptions.push_back(renderPassInfo.subpassInfo.subpassDescs[i].subpassDescription);
 	}
-	renderPassInfo.renderPass = CreateRenderPass(device, 0, { renderPassInfo.renderTargets.colorAttachment.attachmentDesc,renderPassInfo.renderTargets.depthAttachment.attachmentDesc }, subpassDescriptions, renderPassInfo.subpassInfo.subpassDepends);
+	std::vector<VkAttachmentDescription> attachmentDescriptions;
+	for (uint32_t i = 0; i < renderPassInfo.renderTargets.colorAttachments.size(); i++)
+	{
+		attachmentDescriptions.push_back(renderPassInfo.renderTargets.colorAttachments[i].attachmentDesc);
+
+	}
+	attachmentDescriptions.push_back(renderPassInfo.renderTargets.depthAttachment.attachmentDesc);
+
+	renderPassInfo.renderPass = CreateRenderPass(device, 0, attachmentDescriptions, subpassDescriptions, renderPassInfo.subpassInfo.subpassDepends);
 
 
 }
@@ -418,10 +437,16 @@ void ExampleBase::InitRenderPasses()
 
 void ExampleBase::InitFrameBuffer(RenderPassInfo& renderPassInfo)
 {
-	uint32_t width = renderPassInfo.renderTargets.colorAttachment.attachmentImage.extent.width;
-	uint32_t height = renderPassInfo.renderTargets.colorAttachment.attachmentImage.extent.height;
+	uint32_t width = renderPassInfo.renderTargets.width;
+	uint32_t height = renderPassInfo.renderTargets.height;
 
-	renderPassInfo.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, { renderPassInfo.renderTargets.colorAttachment.attachmentImage.imageView,renderPassInfo.renderTargets.depthAttachment.attachmentImage.imageView }, width, height,1);
+	std::vector<VkImageView> attachmentsImagViews;
+	for (uint32_t i = 0; i < renderPassInfo.renderTargets.colorAttachments.size(); i++)
+	{
+		attachmentsImagViews.push_back(renderPassInfo.renderTargets.colorAttachments[i].attachmentImage.imageView);
+	}
+	attachmentsImagViews.push_back(renderPassInfo.renderTargets.depthAttachment.attachmentImage.imageView);
+	renderPassInfo.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, attachmentsImagViews, width, height,1);
 
 }
 
@@ -445,8 +470,8 @@ void ExampleBase::InitDefaultGraphicSubpassInfo(ShaderCodePaths subpassShaderCod
 	subpassDesc1.subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	subpassDesc1.subpassDescription.inputAttachmentCount = 0;
 	subpassDesc1.subpassDescription.pInputAttachments = nullptr;
-	subpassDesc1.subpassDescription.colorAttachmentCount = 1;
-	subpassDesc1.subpassDescription.pColorAttachments = &renderTargets.colorRef;
+	subpassDesc1.subpassDescription.colorAttachmentCount = renderTargets.colorAttachments.size();
+	subpassDesc1.subpassDescription.pColorAttachments = renderTargets.colorRefs.data();
 	subpassDesc1.subpassDescription.pResolveAttachments = nullptr;
 	subpassDesc1.subpassDescription.pDepthStencilAttachment = &renderTargets.depthRef;
 	subpassDesc1.subpassDescription.preserveAttachmentCount = 0;
@@ -1068,9 +1093,17 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 	auto& renderTargets = renderPassInfo.renderTargets;
 
 	ASSERT(subpassDrawGeoInfos.size() != 0 || subpassDrawMeshGroupInfos.size()!=0)
-	uint32_t width = renderTargets.colorAttachment.attachmentImage.extent.width;
-	uint32_t height = renderTargets.colorAttachment.attachmentImage.extent.height;
-	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = width,.height = height} }, { renderTargets.colorAttachment.clearValue, renderTargets.depthAttachment.clearValue }, VK_SUBPASS_CONTENTS_INLINE);
+	uint32_t width = renderTargets.width;
+	uint32_t height = renderTargets.height;
+	std::vector<VkClearValue> attachmentClearValues;
+	for (uint32_t i = 0; i < renderPassInfo.renderTargets.colorAttachments.size(); i++)
+	{
+		attachmentClearValues.push_back(renderTargets.colorAttachments[i].clearValue);
+	}
+	attachmentClearValues.push_back(renderTargets.depthAttachment.clearValue);
+
+
+	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = width,.height = height} }, attachmentClearValues, VK_SUBPASS_CONTENTS_INLINE);
 	//每个subpass 会对应一个pipeline
 	for (uint32_t curSubpassIndex = 0; curSubpassIndex < graphcisPipelineInfos.size(); curSubpassIndex++)
 	{			
@@ -1133,6 +1166,10 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 		}
 		if (renderPassInfo.truncateNextSubpassDraw && curSubpassIndex == renderPassInfo.truncatedNextSubpassIndex - 1 && renderPassInfo.truncatedNextSubpassIndex !=0)
 		{
+			for (uint32_t i = curSubpassIndex; i < graphcisPipelineInfos.size() - 1; i++)
+			{
+				CmdNextSubpass(cmdList.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+			}
 			break;
 		}
 
@@ -1333,6 +1370,14 @@ void ExampleBase::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 						binding.stageFlags = kv.first;
 						needNumDescriptor[binding.descriptorType] += binding.descriptorCount;
 						descriptorSetBindings[setId].push_back(binding);//����descriptor set
+
+						//如果是input attachment 则将附件对应信息存到绑定信息
+						if (binding.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
+						{
+							graphcisPipelineInfos[pipeID].setBindingAttachmentIds[setId][binding.binding] = setAndBindings.second[bindingId].inputAttachmentIndex;
+
+						}
+						
 					}
 					
 				}
@@ -1464,7 +1509,12 @@ void ExampleBase::ClearContex()
 void ExampleBase::ClearAttanchment(RenderPassInfo& renderPassInfo)
 {				 
 	auto& renderTargets = renderPassInfo.renderTargets;
-	DestroyImage(renderTargets.colorAttachment.attachmentImage);
+
+	for (auto& colorAttachment : renderPassInfo.renderTargets.colorAttachments)
+	{
+		DestroyImage(colorAttachment.attachmentImage);
+	}
+
 	DestroyImage(renderTargets.depthAttachment.attachmentImage);
 }				  
 				  
@@ -2287,6 +2337,7 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		auto type = shaderCompiler.get_type(inputAttachment.base_type_id);
 		bindingInfo.setId = shaderCompiler.get_decoration(inputAttachment.id, spv::Decoration::DecorationDescriptorSet);
 		bindingInfo.binding = shaderCompiler.get_decoration(inputAttachment.id, spv::DecorationBinding);
+		bindingInfo.inputAttachmentIndex = shaderCompiler.get_decoration(inputAttachment.id, spv::DecorationInputAttachmentIndex);
 		bindingInfo.name = inputAttachment.name;
 		if (type.array.empty())
 		{
@@ -2298,6 +2349,7 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
 		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
+		
 	}
 }
 
@@ -2393,31 +2445,29 @@ void ExampleBase::BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, u
 
 void ExampleBase::BindInputAttachment(RenderPassInfo& renderPassInfo)
 {
-	for (const auto& pipelineInfo : renderPassInfo.graphcisPipelineInfos)
+
+
+
+	for (auto& pipelineInfo : renderPassInfo.graphcisPipelineInfos)
 	{
-		for (const auto& setInfo : pipelineInfo.descriptorSetInfos)
+		for (auto& setBindingAttachmentInfo : pipelineInfo.setBindingAttachmentIds)
 		{
-			for (const auto& bindingInfo : setInfo.second.bindings)
+			auto& set = pipelineInfo.descriptorSetInfos[setBindingAttachmentInfo.first].descriptorSet;
+			for (auto& bindingAttachmentId : setBindingAttachmentInfo.second)
 			{
-				if (bindingInfo.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
-				{
+				auto& binding = bindingAttachmentId.first;
+				auto& attachmentId = bindingAttachmentId.second;
+				VkDescriptorImageInfo descriptorImageInfo{};
+				descriptorImageInfo.sampler = nullptr;
+				descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+				descriptorImageInfo.imageView = renderPassInfo.renderTargets.colorAttachments[attachmentId].attachmentImage.imageView;
 
-					VkDescriptorImageInfo descriptorImageInfo{};
-					descriptorImageInfo.sampler = nullptr;
-					descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-					descriptorImageInfo.imageView = renderPassInfo.renderTargets.colorAttachment.attachmentImage.imageView;
-
-					UpdateDescriptorSetBindingResources(device, setInfo.second.descriptorSet, bindingInfo.binding, 0, 1, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, { descriptorImageInfo }, {}, {});
-
-
-
-				}
-
+				UpdateDescriptorSetBindingResources(device, set, binding, 0, 1, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, { descriptorImageInfo }, {}, {});
 
 			}
 
-
 		}
+
 
 
 	}
