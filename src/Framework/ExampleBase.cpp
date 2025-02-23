@@ -909,6 +909,114 @@ void ExampleBase::LoadObj(const std::string& objFilePath, Geometry& geo)
 		LogFunc(0);
 	}
 
+	size_t numV = geo.vertexAttrib.vertices.size() / 3;
+	if (numV == 0) {
+		Log("", 0);
+	}
+	geo.AABBs.minX = geo.vertexAttrib.vertices[1];
+	geo.AABBs.maxX = geo.vertexAttrib.vertices[0];
+	geo.AABBs.minY = geo.vertexAttrib.vertices[2];
+	geo.AABBs.maxY = geo.vertexAttrib.vertices[0];
+	geo.AABBs.minZ = geo.vertexAttrib.vertices[1];
+	geo.AABBs.maxZ = geo.vertexAttrib.vertices[2];
+	//计算AABB
+	for (uint32_t i = 0; i < numV; i++)
+	{
+		float x = geo.vertexAttrib.vertices[3 * i];
+		float y = geo.vertexAttrib.vertices[3 * i + 1];
+		float z = geo.vertexAttrib.vertices[3 * i + 2];
+		if (x < geo.AABBs.minX)
+		{
+			geo.AABBs.minX = x;
+		}
+		if (x > geo.AABBs.maxX)
+		{
+			geo.AABBs.maxX = x;
+		}
+		if (y < geo.AABBs.minY)
+		{
+			geo.AABBs.minY = y;
+		}
+		if (y > geo.AABBs.maxY)
+		{
+			geo.AABBs.maxY = y;
+		}
+		if (z < geo.AABBs.minZ)
+		{
+			geo.AABBs.minZ = z;
+		}
+		if (z > geo.AABBs.maxZ)
+		{
+			geo.AABBs.maxZ = z;
+		}
+	}
+
+	geo.AABBcenter[0] = (geo.AABBs.minX + geo.AABBs.maxX) / 2;
+	geo.AABBcenter[1] = (geo.AABBs.minY + geo.AABBs.maxY) / 2;
+	geo.AABBcenter[2] = (geo.AABBs.minZ + geo.AABBs.maxZ) / 2;
+
+
+	geo.shadeAABBs.resize(geo.shapes.size());
+	for (uint32_t zoneId = 0; zoneId < geo.shadeAABBs.size(); zoneId++)
+	{
+		const auto& firsetVertexIndex = geo.shapes[zoneId].mesh.indices[0].vertex_index;
+		glm::vec3 curVertex = glm::vec3(geo.vertexAttrib.vertices[firsetVertexIndex * 3], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 1], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 2]);
+		Geometry::AABB& curAABB = geo.shadeAABBs[zoneId];
+
+		curAABB.minX = curAABB.maxX = curVertex.x;
+		curAABB.minY = curAABB.maxY = curVertex.y;
+		curAABB.minZ = curAABB.maxZ = curVertex.z;
+
+		//当前shape的所有片元的点数
+		for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
+		{
+			const auto& vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+			if (!geo.vertexAttrib.vertices.empty())
+			{
+				curVertex = glm::vec3(geo.vertexAttrib.vertices[vertexIndex * 3], geo.vertexAttrib.vertices[vertexIndex * 3 + 1], geo.vertexAttrib.vertices[vertexIndex * 3 + 2]);
+				if (curVertex.x < curAABB.minX)
+				{
+					curAABB.minX = curVertex.x;
+				}
+				if (curVertex.x > curAABB.maxX)
+				{
+					curAABB.maxX = curVertex.x;
+				}
+				if (curVertex.y < curAABB.minY)
+				{
+					curAABB.minY = curVertex.y;
+				}
+				if (curVertex.y > curAABB.maxY)
+				{
+					curAABB.maxY = curVertex.y;
+				}
+				if (curVertex.z < curAABB.minZ)
+				{
+					curAABB.minZ = curVertex.z;
+				}
+				if (curVertex.z > curAABB.maxZ)
+				{
+					curAABB.maxZ = curVertex.z;
+				}
+			}
+
+		}
+
+	}
+
+	uint32_t numVertx = geo.vertexAttrib.vertices.size() / 3;
+	float d = 0;
+	for (uint32_t i = 0; i < numVertx; i++)
+	{
+		glm::vec3 curV = glm::vec3(geo.vertexAttrib.vertices[3 * i], geo.vertexAttrib.vertices[3 * i + 1], geo.vertexAttrib.vertices[3 * i + 2]);
+		float curD = glm::distance(geo.AABBcenter, curV);
+		if (curD > d)
+		{
+			d = curD;
+		}
+	}
+	geo.BVSphereRadius = d;
+
 }
 
 Buffer ExampleBase::CreateVertexBuffer(const char* buf, VkDeviceSize size)
@@ -1072,6 +1180,26 @@ void ExampleBase::CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image& srcIm
 		ASSERT(0);
 	}
 	CmdBlitImageToImage(cmdList.commandBuffer, srcImage.image, srcImage.currentLayout, dstImage.image, dstImage.currentLayout, blitRegions);
+
+}
+
+void ExampleBase::CmdOpsClearWholeColorImage(CommandList& cmdList, Image& image, VkClearColorValue clearValue)
+{
+	std::vector<VkImageSubresourceRange> clearRanges;
+	VkImageSubresourceRange wholeRange;
+	wholeRange.aspectMask = image.aspect;
+	wholeRange.baseArrayLayer = 0;
+	wholeRange.layerCount = image.numLayer;
+	wholeRange.baseMipLevel = 0;
+	wholeRange.levelCount = image.numMip;
+
+
+
+	clearRanges.push_back(wholeRange);
+	std::vector<VkClearColorValue> clearColorValues;
+	clearColorValues.push_back(clearValue);
+	CmdClearColorImage(cmdList.commandBuffer, image.image, image.currentLayout, clearColorValues, clearRanges);
+
 
 }
 
@@ -1831,105 +1959,6 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 		geo.shapeDynamicVertexBuffers[zoneId] = CreateVertexBuffer(nullptr, sizeof(float));
 		geo.dynamicNumVertexPerZone[zoneId] = 0;
 	}
-
-
-
-
-	size_t numV = geo.vertexAttrib.vertices.size() / 3;
-	if (numV == 0) {
-		Log("", 0);
-	}
-	geo.AABBs.minX = geo.vertexAttrib.vertices[1];
-	geo.AABBs.maxX = geo.vertexAttrib.vertices[0];
-	geo.AABBs.minY = geo.vertexAttrib.vertices[2];
-	geo.AABBs.maxY = geo.vertexAttrib.vertices[0];
-	geo.AABBs.minZ = geo.vertexAttrib.vertices[1];
-	geo.AABBs.maxZ = geo.vertexAttrib.vertices[2];
-	//计算AABB
-	for (uint32_t i = 0; i < numV; i++)
-	{
-		float x = geo.vertexAttrib.vertices[3 * i];
-		float y = geo.vertexAttrib.vertices[3 * i + 1];
-		float z = geo.vertexAttrib.vertices[3 * i + 2];
-		if (x < geo.AABBs.minX)
-		{
-			geo.AABBs.minX = x;
-		}
-		if (x > geo.AABBs.maxX)
-		{
-			geo.AABBs.maxX = x;
-		}
-		if (y < geo.AABBs.minY)
-		{
-			geo.AABBs.minY = y;
-		}
-		if (y > geo.AABBs.maxY)
-		{
-			geo.AABBs.maxY = y;
-		}
-		if (z < geo.AABBs.minZ)
-		{
-			geo.AABBs.minZ = z;
-		}
-		if (z > geo.AABBs.maxZ)
-		{
-			geo.AABBs.maxZ = z;
-		}
-	}
-
-	geo.AABBcenter[0] = (geo.AABBs.minX + geo.AABBs.maxX) / 2;
-	geo.AABBcenter[1] = (geo.AABBs.minY + geo.AABBs.maxY) / 2;
-	geo.AABBcenter[2] = (geo.AABBs.minZ + geo.AABBs.maxZ) / 2;
-
-
-	geo.shadeAABBs.resize(geo.shapes.size());
-	for (uint32_t zoneId = 0; zoneId < geo.shadeAABBs.size(); zoneId++)
-	{
-		const auto& firsetVertexIndex = geo.shapes[zoneId].mesh.indices[0].vertex_index;
-		glm::vec3 curVertex = glm::vec3(geo.vertexAttrib.vertices[firsetVertexIndex * 3], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 1], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 2]);
-		Geometry::AABB &curAABB = geo.shadeAABBs[zoneId];
-
-		curAABB.minX = curAABB.maxX = curVertex.x;
-		curAABB.minY = curAABB.maxY = curVertex.y;
-		curAABB.minZ = curAABB.maxZ = curVertex.z;
-
-		//当前shape的所有片元的点数
-		for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
-		{
-			const auto& vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
-			if (!geo.vertexAttrib.vertices.empty())
-			{
-				curVertex = glm::vec3(geo.vertexAttrib.vertices[vertexIndex * 3], geo.vertexAttrib.vertices[vertexIndex * 3 + 1], geo.vertexAttrib.vertices[vertexIndex * 3 + 2]);
-				if (curVertex.x < curAABB.minX)
-				{
-					curAABB.minX = curVertex.x;
-				}
-				if (curVertex.x > curAABB.maxX)
-				{
-					curAABB.maxX = curVertex.x;
-				}
-				if (curVertex.y < curAABB.minY)
-				{
-					curAABB.minY = curVertex.y;
-				}
-				if (curVertex.y > curAABB.maxY)
-				{
-					curAABB.maxY = curVertex.y;
-				}
-				if (curVertex.z < curAABB.minZ)
-				{
-					curAABB.minZ = curVertex.z;
-				}
-				if (curVertex.z > curAABB.maxZ)
-				{
-					curAABB.maxZ = curVertex.z;
-				}
-			}
-
-		}
-
-	}
-
 
 
 }

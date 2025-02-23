@@ -36,6 +36,9 @@ public:
 	
 	void SetCamera(glm::vec3 pos, glm::vec3 target, glm::vec3 down);
 	void SetCamera2(glm::vec3 pos, glm::vec3 forward, glm::vec3 down);
+
+	void GenerateRay(glm::vec2 ScreenCoord/*屏幕的纹理坐标，x从左到右，y从上到下，范围[-1,1]*/, glm::vec3& rayOrigin, glm::vec3& rayDirection);
+
 private:
 	void Calculate();
 

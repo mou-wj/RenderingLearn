@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <array>
 
 enum EventType {
 	KEY_W_PRESS,
@@ -17,17 +18,20 @@ enum EventType {
 	KEY_I_PRESS,
 	KEY_J_PRESS,
 	KEY_K_PRESS,
-	KEY_C_PRESS
+	KEY_C_PRESS,
+	MOUSE_LEFT_BUTTON_CLICKED
 
 };
 
 class WindowEventHandler {
 
 public:
-	static void BindWindow(GLFWwindow *window);
+	static void BindWindow(GLFWwindow* window);
 	static void ProcessEvent();
 	static bool WindowShouldClose();
-	static void SetEventCallBack(EventType eventType, std::function<void()> callback,const std::string& actionDescription);
+	static void SetEventCallBack(EventType eventType, std::function<void()> callback, const std::string& actionDescription);
+	static std::array<float,2> GetMousePos();
+	
 	//static void ProcessKeyEvent();
 	//static void ProcessMouseEvent();
 private:

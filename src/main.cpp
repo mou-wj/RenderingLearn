@@ -22,6 +22,7 @@
 #include "Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExample.h"
 #include "Examples/RealTimeRendering4/C19AccelerationAlgorithmsExample.h"
 #include "Examples/RealTimeRendering4/C20EfficientShadingExample.h"
+#include "Examples/RealTimeRendering4/C21IntersectionTestMethodsExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -101,7 +102,8 @@ int main()
 	//C15NonPhotorealisticRenderingExample example;
 	//C17CurvesAndCurvedSurfacesExample example;
 	//C19AccelerationAlgorithmsExample example;
-	C20EfficientShadingExample example;
+	//C20EfficientShadingExample example;
+	C21IntersectionTestMethodsExample example;
 	ExampleBase::Run(&example);
 
 
@@ -204,6 +206,10 @@ void AutoTest() {
 	}
 	{
 		C20EfficientShadingExample example;
+		ExampleBase::Run(&example);
+	}
+	{
+		C21IntersectionTestMethodsExample example;
 		ExampleBase::Run(&example);
 	}
 

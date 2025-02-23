@@ -550,6 +550,7 @@ struct Geometry
 
 	std::vector<AABB> shadeAABBs;
 
+	float BVSphereRadius = 0;
 
 	bool CloserThanOther(Geometry& other, glm::vec3 viewPos) {
 		float dist = glm::distance(viewPos, glm::vec3(AABBcenter[0], AABBcenter[1], AABBcenter[2]));
@@ -878,6 +879,9 @@ protected:
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage);
 	void CmdOpsCopyImageToImage(CommandList& cmdList, Image& srcImage,uint32_t srcLayer,uint32_t srcMip, Image& dstImage, uint32_t dstLayer, uint32_t dstMip);
 	void CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage);
+	
+	void CmdOpsClearWholeColorImage(CommandList& cmdList, Image& image,VkClearColorValue clearValue);
+	
 	//graphic
 	void CmdOpsDrawGeom(CommandList& cmdList,uint32_t renderPassIndex = 0);
 	//execute

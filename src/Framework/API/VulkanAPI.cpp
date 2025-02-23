@@ -987,6 +987,13 @@ void VulkanAPI::CmdDrawIndex(VkCommandBuffer commandBuffer, uint32_t indexCount,
 	vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
+void VulkanAPI::CmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const std::vector<VkClearColorValue>& clearColors, const std::vector<VkImageSubresourceRange>& clearRanges)
+{
+	ASSERT(clearColors.size() == clearRanges.size());
+	vkCmdClearColorImage(commandBuffer, image, imageLayout, clearColors.data(), clearRanges.size(), clearRanges.data());
+}
+
+
 void VulkanAPI::CmdCopyImageToImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, const std::vector<VkImageCopy>& copyRegions)
 {
 
@@ -1081,7 +1088,6 @@ void VulkanAPI::UpdateDescriptorSetBindingResources(VkDevice device, VkDescripto
 	writeDescriptorSet.pBufferInfo = bufferInfos.size() ? bufferInfos.data() : nullptr;
 	writeDescriptorSet.pTexelBufferView = texelBufferViews.size() ? texelBufferViews.data() : nullptr;
 	vkUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0, nullptr);
-
 
 
 }

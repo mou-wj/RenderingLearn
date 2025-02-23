@@ -1,5 +1,6 @@
 #include "Camera.h"
 #include "../Common/Transform.h"
+#include "glm/glm.hpp"
 
 Camera::Camera(glm::vec3 pos, glm::vec3 target, glm::vec3 down):pos(pos),target(target),down(down)
 {
@@ -75,16 +76,19 @@ void Camera::Rotate(RotateAction rotateAction,float angle)
 void Camera::SetProjectType(bool isPerspective)
 {
 	this->perspective = isPerspective;
+	Calculate();
 }
 
 void Camera::SetPerspectiveProjectParams(float near, float far, float viewAngle, float ratioWH)
 {
 	projParams = glm::vec4(near, far, viewAngle, ratioWH);
+	Calculate();
 }
 
 void Camera::SetParallelProjectParams(float near, float far, float nearPlaneWidth, float nearPlaneHeight)
 {
 	projParams = glm::vec4(near, far, nearPlaneWidth, nearPlaneHeight);
+	Calculate();
 }
 
 void Camera::SetCamera(glm::vec3 pos, glm::vec3 target, glm::vec3 down)
@@ -101,6 +105,38 @@ void Camera::SetCamera2(glm::vec3 pos, glm::vec3 forward, glm::vec3 down)
 	this->target = pos + forward;
 	this->down = down;
 	Calculate();
+}
+
+void Camera::GenerateRay(glm::vec2 ScreenCoord, glm::vec3& rayOrigin, glm::vec3& rayDirection)
+{
+	if (perspective)
+	{
+		rayOrigin = pos;
+		float nearPlaneHalfHeight = glm::tan(glm::radians(projParams.z / 2)) * projParams.x;
+		float nearPlaneHalfWidth = projParams.w * nearPlaneHalfHeight;
+
+		glm::vec2 nearPlaneSize = glm::vec2(nearPlaneHalfWidth,nearPlaneHalfHeight);
+
+
+		rayDirection = glm::vec3(nearPlaneSize * ScreenCoord, projParams.x);
+		rayDirection = glm::normalize(rayDirection);
+	}
+	else {
+		glm::mat4 viewInverse = glm::inverse(view);
+		glm::vec2 halfViewPortWH = glm::vec2(glm::abs(projParams.z) / 2, glm::abs(projParams.w) / 2);
+		glm::vec4 o = glm::vec4(ScreenCoord * halfViewPortWH, projParams.x,1);
+		o = viewInverse * o;
+		o /= o.w;
+		rayOrigin = glm::vec3(o);
+
+		glm::vec4 t = glm::vec4(ScreenCoord * halfViewPortWH, projParams.y ,1);
+		t = viewInverse * t;
+		t /= t.w;
+		rayDirection = glm::normalize(glm::vec3(t-o));
+	}
+
+
+
 }
 
 void Camera::Calculate()

@@ -323,6 +323,12 @@ namespace VulkanAPI {
 					int32_t   vertexOffset,
 					uint32_t  firstInstance);
 
+	void CmdClearColorImage(VkCommandBuffer  commandBuffer,
+					VkImage                                     image,
+					VkImageLayout                               imageLayout,
+					const std::vector<VkClearColorValue>& claerColors,
+					const std::vector<VkImageSubresourceRange>& clearRanges);
+
 	void CmdCopyImageToImage(VkCommandBuffer commandBuffer,
 					VkImage                                     srcImage,
 					VkImageLayout                               srcImageLayout,
