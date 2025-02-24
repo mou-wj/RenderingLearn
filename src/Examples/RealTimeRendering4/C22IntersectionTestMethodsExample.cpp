@@ -1,17 +1,22 @@
-#include "C21IntersectionTestMethodsExample.h"
+#include "C22IntersectionTestMethodsExample.h"
 
-void C21IntersectionTestMethodsExample::InitSubPassInfo()
+void C22IntersectionTestMethodsExample::InitSubPassInfo()
 {
 	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C21IntersectionTestMethodsExample.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C21IntersectionTestMethodsExample.frag";
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.frag";
 	
 	ShaderCodePaths BVMeshCodePath;
-	BVMeshCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C21IntersectionTestMethodsExample.vert";
-	BVMeshCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C21IntersectionTestMethodsExampleBVMesh.frag";
+	BVMeshCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.vert";
+	BVMeshCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C22IntersectionTestMethodsExampleBVMesh.frag";
+
+	ShaderCodePaths pickTrianbleCodePath;
+	pickTrianbleCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.vert";
+	pickTrianbleCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C22IntersectionTestMethodsExamplePickTriangle.frag";
+
 
 	renderPassInfos.resize(1);
-	renderPassInfos[0].InitDefaultRenderPassInfo({ shaderCodePath,BVMeshCodePath }, windowWidth, windowHeight);
+	renderPassInfos[0].InitDefaultRenderPassInfo({ shaderCodePath,BVMeshCodePath,pickTrianbleCodePath }, windowWidth, windowHeight);
 
 
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
@@ -23,13 +28,18 @@ void C21IntersectionTestMethodsExample::InitSubPassInfo()
 	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
 	renderPassInfos[0].subpassInfo.subpassDescs[1].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;//写入深度附件
+
+	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassPipelineStates.rasterizationState.cullMode = VK_CULL_MODE_NONE;
+	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassPipelineStates.depthStencilState.depthTestEnable = VK_TRUE;
+	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+	renderPassInfos[0].subpassInfo.subpassDescs[2].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;//写入深度附件
 }
 
-void C21IntersectionTestMethodsExample::InitResourceInfos()
+void C22IntersectionTestMethodsExample::InitResourceInfos()
 {
 
 	
-	geoms.resize(3);
+	geoms.resize(4);
 
 	auto& geom = geoms[0];
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/monkey.obj", geom);
@@ -47,7 +57,7 @@ void C21IntersectionTestMethodsExample::InitResourceInfos()
 	bufferBindInfos["IntersectInfo"].pipeId = 1;
 }
 
-void C21IntersectionTestMethodsExample::Loop()
+void C22IntersectionTestMethodsExample::Loop()
 {
 	uint32_t i = 0;;
 	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
@@ -73,21 +83,38 @@ void C21IntersectionTestMethodsExample::Loop()
 		auto pos = WindowEventHandler::GetMousePos();
 		float halfW = windowWidth / 2, halfH = windowHeight / 2;
 		float normalizeX = (pos[0] - halfW)/halfW;
-		float normalizeY = (pos[0] - halfH)/halfH;
+		float normalizeY = (pos[1] - halfH)/halfH;
 
 		glm::vec3 rayOrigin, rayDirection;
 		camera.GenerateRay(glm::vec2(normalizeX,normalizeY), rayOrigin, rayDirection);
 		float t = 0;
 		auto intersect = IntersectRaySphere(rayOrigin, rayDirection, geoms[0].AABBcenter, geoms[0].BVSphereRadius, t);
-		FillBuffer(buffers["IntersectInfo"], 0, sizeof(bool), (const char*)&intersect);
+		
+		auto intersectAABB = IntersectRayAABB(rayOrigin, rayDirection, geoms[0].AABBs, t);
+		FillBuffer(buffers["IntersectInfo"], 0, sizeof(bool), (const char*)&intersectAABB);
+
+		bool pickSuccess = PickTriangleFromGeom(geoms[0], rayOrigin, rayDirection, geoms[3]);
+
+		if (pickSuccess)
+		{
+			renderPassInfos[0].subpassDrawGeoInfos[2] = { 3 };
+			WaitIdle();//等待队列执行完
+			ReInitGeometryResources(geoms[3]);
+		}
+		else {
+			renderPassInfos[0].subpassDrawGeoInfos[2] = {};
+		}
 		
 		ShowVec(rayDirection);
-		}, "点击left 相机往左看");
+		}, "鼠标点击屏幕发射一条射线，如果和边界盒相交，其对应边界的几何网格变为蓝色，如果和模型上的三角形相交，则显示该三角形为紫色");
 
 
 	BindBuffer("Transform");
 	bufferBindInfos["Transform"].pipeId = 1;
 	BindBuffer("Transform");
+	bufferBindInfos["Transform"].pipeId = 2;
+	BindBuffer("Transform");
+
 
 	BindBuffer("IntersectInfo");
 
@@ -129,12 +156,12 @@ void C21IntersectionTestMethodsExample::Loop()
 
 }
 
-void C21IntersectionTestMethodsExample::InitSyncObjectNumInfo()
+void C22IntersectionTestMethodsExample::InitSyncObjectNumInfo()
 {
 	numSemaphores = 2;
 }
 
-void C21IntersectionTestMethodsExample::BuildAABBGeometry(Geometry& srcGeo, Geometry& aabbGeo)
+void C22IntersectionTestMethodsExample::BuildAABBGeometry(Geometry& srcGeo, Geometry& aabbGeo)
 {
 	Geometry::AABB& aabb = srcGeo.AABBs;
 
@@ -198,7 +225,7 @@ void C21IntersectionTestMethodsExample::BuildAABBGeometry(Geometry& srcGeo, Geom
 
 }
 
-void C21IntersectionTestMethodsExample::BuildSphereBVGeometry(Geometry& srcGeo, Geometry& sphereBVGeo)
+void C22IntersectionTestMethodsExample::BuildSphereBVGeometry(Geometry& srcGeo, Geometry& sphereBVGeo)
 {
 	static const float M_PI = 3.141592653;
 
@@ -287,7 +314,7 @@ void C21IntersectionTestMethodsExample::BuildSphereBVGeometry(Geometry& srcGeo, 
 
 }
 
-bool C21IntersectionTestMethodsExample::IntersectRaySphere(glm::vec3 rayOrigin, glm::vec3 rayDirection, glm::vec3 sphereCenter, float radius, float& t)
+bool C22IntersectionTestMethodsExample::IntersectRaySphere(glm::vec3 rayOrigin, glm::vec3 rayDirection, glm::vec3 sphereCenter, float radius, float& t)
 {
 	rayDirection = glm::normalize(rayDirection);
 	
@@ -296,7 +323,6 @@ bool C21IntersectionTestMethodsExample::IntersectRaySphere(glm::vec3 rayOrigin, 
 	float l2 = pow(glm::length(l), 2);//射线原点到球心距离平方
 
 
-	float cosTheta = glm::dot(glm::normalize(l), rayDirection);
 
 	float s = glm::dot(l, rayDirection);//射线原点到球心向量在射线方向上的投影
 	if (s < 0 && l2 >= r2)
@@ -315,4 +341,269 @@ bool C21IntersectionTestMethodsExample::IntersectRaySphere(glm::vec3 rayOrigin, 
 	float q = glm::sqrt(q2);
 	t = s - q;
 	return true;
+}
+
+bool C22IntersectionTestMethodsExample::IntersectRayAABB(glm::vec3 rayOrigin, glm::vec3 rayDirection, Geometry::AABB& aabb, float& t)
+{
+	rayDirection = glm::normalize(rayDirection);//归一化
+
+	// Initialize tMin and tMax as the extreme values
+	float tMin = -INFINITY;
+	float tMax = INFINITY;
+
+	// Check intersection along the X axis
+	if (rayDirection.x != 0) {
+		float t1 = (aabb.minX - rayOrigin.x) / rayDirection.x;
+		float t2 = (aabb.maxX - rayOrigin.x) / rayDirection.x;
+		if (t1 > t2) std::swap(t1, t2);  // Ensure t1 <= t2
+
+		tMin = std::max(tMin, t1);
+		tMax = std::min(tMax, t2);
+
+		// If tMin > tMax, no intersection
+		if (tMin > tMax) return false;
+	}
+	else {
+		// If rayDirection.x is 0, check if ray is inside the AABB along the x-axis
+		if (rayOrigin.x < aabb.minX || rayOrigin.x > aabb.maxX) {
+			return false;  // No intersection
+		}
+	}
+
+	// Check intersection along the Y axis
+	if (rayDirection.y != 0) {
+		float t1 = (aabb.minY - rayOrigin.y) / rayDirection.y;
+		float t2 = (aabb.maxY - rayOrigin.y) / rayDirection.y;
+		if (t1 > t2) std::swap(t1, t2);  // Ensure t1 <= t2
+
+		tMin = std::max(tMin, t1);
+		tMax = std::min(tMax, t2);
+
+		// If tMin > tMax, no intersection
+		if (tMin > tMax) return false;
+	}
+	else {
+		// If rayDirection.y is 0, check if ray is inside the AABB along the y-axis
+		if (rayOrigin.y < aabb.minY || rayOrigin.y > aabb.maxY) {
+			return false;  // No intersection
+		}
+	}
+
+	// Check intersection along the Z axis
+	if (rayDirection.z != 0) {
+		float t1 = (aabb.minZ - rayOrigin.z) / rayDirection.z;
+		float t2 = (aabb.maxZ - rayOrigin.z) / rayDirection.z;
+		if (t1 > t2) std::swap(t1, t2);  // Ensure t1 <= t2
+
+		tMin = std::max(tMin, t1);
+		tMax = std::min(tMax, t2);
+
+		// If tMin > tMax, no intersection
+		if (tMin > tMax) return false;
+	}
+	else {
+		// If rayDirection.z is 0, check if ray is inside the AABB along the z-axis
+		if (rayOrigin.z < aabb.minZ || rayOrigin.z > aabb.maxZ) {
+			return false;  // No intersection
+		}
+	}
+
+	// If tMin is greater than or equal to zero, we have a valid intersection
+	if (tMin >= 0) {
+		t = tMin;
+		return true;
+	}
+
+	// If tMax is greater than or equal to zero, we have a valid intersection
+	if (tMax >= 0) {
+		t = tMax;
+		return true;
+	}
+
+	return false; // No intersection
+}
+
+bool C22IntersectionTestMethodsExample::IntersectRayTriangle(glm::vec3 rayOrigin, glm::vec3 rayDirection, std::array<glm::vec3, 3>& trianglePoints, float& t)
+{
+	glm::vec3 e1 = trianglePoints[1] - trianglePoints[0];
+	glm::vec3 e2 = trianglePoints[2] - trianglePoints[0];
+	glm::vec3 s = rayOrigin - trianglePoints[0];
+
+	
+
+	//计算行列式| -d  e1 e2 |
+	float detNdE1E2 = glm::determinant(glm::mat3(-rayDirection, e1, e2));
+	if (detNdE1E2 == 0)
+	{
+		return false;
+	}
+	float detSE1E2 = glm::determinant(glm::mat3(s, e1, e2));
+	float detNdSE2 = glm::determinant(glm::mat3(-rayDirection, s, e2));
+	float detNdE1S = glm::determinant(glm::mat3(-rayDirection, e1, s));
+
+	glm::vec3 tuv = glm::vec3(detSE1E2, detNdSE2, detNdE1S) / detNdE1E2;
+	if (tuv.y < 0 || tuv.z < 0 || tuv.y + tuv.z > 1)
+	{
+		return false;
+	}
+
+
+	t = tuv.x;
+	
+	if (t < 0)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+bool C22IntersectionTestMethodsExample::IntersectTwoTriangle(std::array<glm::vec3, 3>& trianglePoints1, std::array<glm::vec3, 3>& trianglePoints2)
+{
+	std::array<glm::vec4, 3> triangle1 = { glm::vec4(trianglePoints1[0], 1.0) ,glm::vec4(trianglePoints1[1], 1.0) ,glm::vec4(trianglePoints1[2], 1.0) };
+	std::array<glm::vec4, 3> triangle2 = { glm::vec4(trianglePoints2[0], 1.0) ,glm::vec4(trianglePoints2[1], 1.0) ,glm::vec4(trianglePoints2[2], 1.0) };
+	//glm::vec4 p1 = glm::vec4(trianglePoints1[0], 1.0);
+	//glm::vec4 p2 = glm::vec4(trianglePoints1[1], 1.0);
+	//glm::vec4 p3 = glm::vec4(trianglePoints1[2], 1.0);
+	//glm::vec4 q1 = glm::vec4(trianglePoints1[0], 1.0);
+	//glm::vec4 q2 = glm::vec4(trianglePoints1[1], 1.0);
+	//glm::vec4 q3 = glm::vec4(trianglePoints1[2], 1.0);
+	
+	auto det = [](glm::vec4 v1, glm::vec4 v2, glm::vec4 v3, glm::vec4 v4)->float {
+		float res = glm::determinant(glm::mat4(v1, v2, v3, v4));
+		return res;
+		};
+	
+	//判断三角形是否和另外一个三角形所在的平面相交
+	int flag1 = 0, flag2 = 0;
+
+	std::array<float, 6> res;
+	for (uint32_t i = 0; i < 3; i++)
+	{
+		float res1 = det(triangle1[0], triangle1[1], triangle1[2], triangle2[i]);
+		float res2 = det(triangle2[0], triangle2[1], triangle2[2], triangle1[i]);
+
+		if (res1 > 0)
+		{
+			flag1++;
+		}
+		else if (res1 < 0)
+		{
+			flag1+=10;
+		}
+		else {
+			flag1 += 100;
+		}
+		if (res2 > 0)
+		{
+			flag2++;
+		}
+		else if (res2 < 0)
+		{
+			flag2+=10;
+
+		}
+		else {
+			flag2 += 100;
+		}
+		res[i] = res1;
+		res[3 + i] = res2;
+	}
+
+	if (flag1 == 3 || flag1 == 30 || flag2 == 3 || flag2 == 30) {
+		return false;
+	}
+
+
+	//重排序
+
+	for (uint32_t i = 0; i < 3; i++)
+	{
+		if ((flag1 == 102 || flag1 == 120) && res[i] == 0)
+		{
+			//将i号元素和0号元素交换
+			std::swap(triangle1[0], triangle1[i]);
+		}
+		if (flag1 == 12 && res[i] < 0) {
+			std::swap(triangle1[0], triangle1[i]);
+		}
+		if (flag1 == 21 && res[i] > 0) {
+			std::swap(triangle1[0], triangle1[i]);
+		}
+		
+		if ((flag2 == 102 || flag2 == 120) && res[i + 3] == 0)
+		{
+			//将i号元素和0号元素交换
+			std::swap(triangle2[3], triangle2[i + 3]);
+		}
+		if (flag2 == 12 && res[i+3] < 0) {
+			std::swap(triangle2[3], triangle2[i + 3]);
+		}
+		if (flag2 == 21 && res[i + 3] > 0) {
+			std::swap(triangle2[3], triangle2[i + 3]);
+		}
+
+	}
+
+	//计算两个三角形和两个所在平面交线的相交部分
+	float det1 = det(triangle1[0], triangle1[1], triangle1[0], triangle2[1]);
+	float det2 = det(triangle1[0], triangle1[2], triangle1[2], triangle2[0]);
+
+	if (det1 <= 0 && det2 <= 0)
+	{
+		return true;
+	}
+	
+	return false;
+}
+
+bool C22IntersectionTestMethodsExample::PickTriangleFromGeom(Geometry& srcGeo, glm::vec3 rayOrigin, glm::vec3 rayDirection, Geometry& dstPickTrianglesGeo)
+{
+	dstPickTrianglesGeo.vertexAttrib.vertices.clear();
+	dstPickTrianglesGeo.shapes.resize(1);
+	dstPickTrianglesGeo.shapes[0].mesh.indices.clear();
+	float t = 0;
+	std::array<glm::vec3, 3> triangle;
+	uint32_t numIntersectTriangle = 0;
+	uint32_t curIndex = 0;
+	bool pickSuccess = false;
+	for (auto shapeId = 0; shapeId < srcGeo.shapes.size(); shapeId++)
+	{
+		uint32_t numTriangles = srcGeo.shapes[shapeId].mesh.indices.size() / 3;
+		for (uint32_t triangleId = 0; triangleId < numTriangles; triangleId++)
+		{
+			uint32_t vertexId1 = srcGeo.shapes[shapeId].mesh.indices[3 * triangleId].vertex_index;
+			uint32_t vertexId2 = srcGeo.shapes[shapeId].mesh.indices[3 * triangleId + 1].vertex_index;
+			uint32_t vertexId3 = srcGeo.shapes[shapeId].mesh.indices[3 * triangleId + 2].vertex_index;
+			glm::vec3 trianglePoint1 = glm::vec3(srcGeo.vertexAttrib.vertices[3 * vertexId1], srcGeo.vertexAttrib.vertices[3 * vertexId1 + 1], srcGeo.vertexAttrib.vertices[3 * vertexId1 + 2]);
+			glm::vec3 trianglePoint2 = glm::vec3(srcGeo.vertexAttrib.vertices[3 * vertexId2], srcGeo.vertexAttrib.vertices[3 * vertexId2 + 1], srcGeo.vertexAttrib.vertices[3 * vertexId2 + 2]);
+			glm::vec3 trianglePoint3 = glm::vec3(srcGeo.vertexAttrib.vertices[3 * vertexId3], srcGeo.vertexAttrib.vertices[3 * vertexId3 + 1], srcGeo.vertexAttrib.vertices[3 * vertexId3 + 2]);
+
+			triangle = { trianglePoint1 ,trianglePoint2 ,trianglePoint3 };
+			auto intersect = IntersectRayTriangle(rayOrigin, rayDirection,triangle , t);
+
+			if (intersect)
+			{
+				pickSuccess = true;
+				numIntersectTriangle++;
+				for (uint32_t i = 0; i < 3; i++)
+				{
+					dstPickTrianglesGeo.vertexAttrib.vertices.push_back(triangle[i][0]);
+					dstPickTrianglesGeo.vertexAttrib.vertices.push_back(triangle[i][1]);
+					dstPickTrianglesGeo.vertexAttrib.vertices.push_back(triangle[i][2]);
+					dstPickTrianglesGeo.shapes[0].mesh.indices.push_back({int(curIndex++)});
+				}
+			}
+
+
+		}
+
+
+
+	}
+
+
+	dstPickTrianglesGeo.shapes[0].mesh.num_face_vertices.resize(numIntersectTriangle, 3);
+	
+	return pickSuccess;
 }

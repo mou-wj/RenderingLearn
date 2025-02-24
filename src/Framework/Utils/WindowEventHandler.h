@@ -19,7 +19,9 @@ enum EventType {
 	KEY_J_PRESS,
 	KEY_K_PRESS,
 	KEY_C_PRESS,
-	MOUSE_LEFT_BUTTON_CLICKED
+	MOUSE_LEFT_BUTTON_CLICKED,
+	MOUSE_SCROLL_FORWARD,
+	MOUSE_SCROLL_BACK
 
 };
 
@@ -31,6 +33,7 @@ public:
 	static bool WindowShouldClose();
 	static void SetEventCallBack(EventType eventType, std::function<void()> callback, const std::string& actionDescription);
 	static std::array<float,2> GetMousePos();
+
 	
 	//static void ProcessKeyEvent();
 	//static void ProcessMouseEvent();

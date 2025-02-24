@@ -519,10 +519,6 @@ struct Geometry
 	//只使用顶点缓冲
 	std::vector<Buffer> shapeVertexBuffers;
 
-	bool dynamicFlag = false;//如果为true，则使用shapeDynamicVertexBuffers进行绘制，该buffers不会在初始化的时候进行填充数据
-	//
-	std::vector<Buffer> shapeDynamicVertexBuffers;
-	std::vector<uint32_t> dynamicNumVertexPerZone;//指明shapeDynamicVertexBuffers中要绘制顶点的数量
 
 	struct AABB {
 		float minX = 0, maxX = 0;
@@ -926,6 +922,9 @@ protected:
 	std::map<std::string, Buffer> buffers;
 	void BindTexture(const std::string& textureName);
 	void BindBuffer(const std::string& bufferName);
+
+
+	void ReInitGeometryResources(Geometry& geo);
 
 
 	void ResizeBuffer(Buffer& buffer,VkDeviceSize newByteSize);

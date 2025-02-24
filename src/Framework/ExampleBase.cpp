@@ -69,6 +69,27 @@ void ExampleBase::BindBuffer(const std::string& bufferName)
 	
 }
 
+void ExampleBase::ReInitGeometryResources(Geometry& geo)
+{
+	DestroyBuffer(geo.vertexBuffer);
+	for (uint32_t zoneId = 0; zoneId < geo.indexBuffers.size(); zoneId++)
+	{
+		DestroyBuffer(geo.indexBuffers[zoneId]);
+	}
+	for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
+	{
+		DestroyBuffer(geo.shapeVertexBuffers[zoneId]);
+	}
+	//for (uint32_t zoneId = 0; zoneId < geo.shapeDynamicVertexBuffers.size(); zoneId++)
+	//{
+	//	DestroyBuffer(geo.shapeDynamicVertexBuffers[zoneId]);
+	//}
+
+	InitGeometryResources(geo);
+
+
+}
+
 void ExampleBase::ResizeBuffer(Buffer& buffer, VkDeviceSize newByteSize)
 {
 	DestroyBuffer(buffer);
@@ -1255,35 +1276,27 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 			for (uint32_t i = 0; i < subpassDrawGeoInfos[curSubpassIndex].size(); i++)
 			{
 				const auto& geom = geoms[subpassDrawGeoInfos[curSubpassIndex][i]];
-				if (geom.dynamicFlag)
+				
+				
+				if (geom.useIndexBuffers)
 				{
-					for (uint32_t i = 0; i < geom.shapeDynamicVertexBuffers.size(); i++)
+					CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+					for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
 					{
-						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeDynamicVertexBuffers[i].buffer }, { 0 });
-						CmdDrawVertex(cmdList.commandBuffer, geom.dynamicNumVertexPerZone[i], 1, 0, 0);
+						CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+						CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
 					}
 				}
 				else {
-				
-					if (geom.useIndexBuffers)
+					for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
 					{
-						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-						for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
-						{
-							CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-							CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
-						}
+						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
+						CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
 					}
-					else {
-						for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
-						{
-							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
-							CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
-						}
-					}
-				
-				
 				}
+				
+				
+				
 				
 				
 
@@ -1729,10 +1742,6 @@ void ExampleBase::ClearRecources()
 		{
 			DestroyBuffer(geoms[i].shapeVertexBuffers[zoneId]);
 		}
-		for (uint32_t zoneId = 0; zoneId < geoms[i].shapeDynamicVertexBuffers.size(); zoneId++)
-		{
-			DestroyBuffer(geoms[i].shapeDynamicVertexBuffers[zoneId]);
-		}
 	}
 
 	//清除Uniform buffer
@@ -1784,12 +1793,18 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 	{
 		LogFunc(0);
 	}
+	uint32_t numVertex = geo.vertexAttrib.vertices.size() / 3;
+	geo.numVertex = numVertex;
+	if (numVertex == 0)
+	{
+		return;
+	}
 	if (geo.useIndexBuffers)
 	{
 
-		uint32_t numVertex = geo.vertexAttrib.vertices.size() / 3;
+
 		Geometry& geometry = geo;
-		geometry.numVertex = numVertex;
+
 		//����vertex buffer
 		geometry.vertexBuffer = CreateVertexBuffer(nullptr, vertexAttributeInputStride * numVertex);
 		for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
@@ -1948,16 +1963,6 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 
 
 
-	}
-
-
-	//创建动态顶点缓冲
-	geo.shapeDynamicVertexBuffers.resize(geo.shapes.size());
-	geo.dynamicNumVertexPerZone.resize(geo.shapes.size());
-	for (uint32_t zoneId = 0; zoneId < geo.shapeDynamicVertexBuffers.size(); zoneId++)
-	{
-		geo.shapeDynamicVertexBuffers[zoneId] = CreateVertexBuffer(nullptr, sizeof(float));
-		geo.dynamicNumVertexPerZone[zoneId] = 0;
 	}
 
 

@@ -13,6 +13,16 @@ void WindowEventHandler::mouse_button_callback(GLFWwindow* window, int button, i
 }
 void WindowEventHandler::scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     // 处理滚轮事件
+    if (s_eventCallBacks[MOUSE_SCROLL_FORWARD])
+    {
+        s_eventCallBacks[MOUSE_SCROLL_FORWARD]();
+    }
+    if (s_eventCallBacks[MOUSE_SCROLL_BACK])
+    {
+        s_eventCallBacks[MOUSE_SCROLL_BACK]();
+    }
+
+
 }
 
 void WindowEventHandler::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
