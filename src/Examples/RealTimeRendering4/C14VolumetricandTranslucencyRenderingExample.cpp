@@ -49,7 +49,7 @@ void C14VolumetricandTranslucencyRenderingExample::InitResourceInfos()
 	std::mt19937 gen(rd());
 
 	// 设置均匀分布，范围是 [0.0, 1.0)
-	std::uniform_real_distribution<> dis(0.0, 1.0);
+	std::uniform_real_distribution<> dis(0.0, 0.2);
 
 	std::uniform_real_distribution<> dis2(0.5, 2.0);
 
@@ -196,15 +196,15 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 	{
 		i++;
 		WindowEventHandler::ProcessEvent();
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 		FillBuffer(buffers["Info"], 0, sizeof(glm::vec3), (const char*)&camera.GetPos());
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-
+		//确保presentFence在创建时已经触发
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);

@@ -68,10 +68,11 @@ void SimpleMeshShaderExample::Loop()
 	{
 		i++;
 		WindowEventHandler::ProcessEvent();
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 		CaptureBeginMacro
 		CmdListWaitFinish(graphicCommandList);
+		//确保presentFence在创建时已经触发
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CmdListRecordBegin(graphicCommandList);
 		CmdOpsDrawGeom(graphicCommandList);

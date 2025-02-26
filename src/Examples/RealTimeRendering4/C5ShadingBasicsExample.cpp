@@ -139,13 +139,14 @@ void C5ShadingBasicsExample::Loop()
 		i++;
 
 		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		WindowEventHandler::ProcessEvent();
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro

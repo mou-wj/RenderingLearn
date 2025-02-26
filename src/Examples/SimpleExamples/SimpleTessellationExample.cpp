@@ -72,9 +72,10 @@ void SimpleTessellationExample::Loop()
 		i++;
 		WindowEventHandler::ProcessEvent();
 		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 		CaptureBeginMacro
 		CmdListWaitFinish(graphicCommandList);
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CmdListRecordBegin(graphicCommandList);
 		CmdOpsDrawGeom(graphicCommandList);
@@ -85,10 +86,10 @@ void SimpleTessellationExample::Loop()
 		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
-		CaptureEndMacro
+		
 		Present(nexIndex, { finishCopyTargetToSwapchain });
 		
-
+		CaptureEndMacro
 
 
 	}

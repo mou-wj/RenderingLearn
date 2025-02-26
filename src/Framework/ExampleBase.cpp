@@ -22,6 +22,7 @@ ExampleBase::~ExampleBase()
 
 void ExampleBase::Run(ExampleBase* example)
 {
+	example->InitRaytrcingPipelineInfo();
 	example->InitSubPassInfo();
 	example->InitResourceInfos();
 	example->InitSyncObjectNumInfo();
@@ -39,9 +40,20 @@ void ExampleBase::BindTexture(const std::string& textureName)
 	auto& textureInfo = textureBindInfos[textureName];
 	if (!textureInfo.compute)
 	{
-		auto& graphcisPipelineInfos = renderPassInfos[textureInfo.passId].graphcisPipelineInfos;
-		auto descriptorType = GetDescriptorType(graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId], textureInfo.binding);
-		BindTexture(textures[textureName], graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
+
+		if (!textureInfo.rayTracing)
+		{
+			auto& graphcisPipelineInfos = renderPassInfos[textureInfo.passId].graphcisPipelineInfos;
+			auto descriptorType = GetDescriptorType(graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId], textureInfo.binding);
+			BindTexture(textures[textureName], graphcisPipelineInfos[textureInfo.pipeId].descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
+		}
+		else {
+			auto& rayTracingPipelineInfos = rayTracingPipelinesInfos[textureInfo.passId];
+			auto descriptorType = GetDescriptorType(rayTracingPipelineInfos.descriptorSetInfos[textureInfo.setId], textureInfo.binding);
+			BindTexture(textures[textureName], rayTracingPipelineInfos.descriptorSetInfos[textureInfo.setId].descriptorSet, textureInfo.binding, textureInfo.elementId, descriptorType);
+
+		}
+	
 	}
 	else {
 		auto& computePipelineInfos = computePipelinesInfos[textureInfo.passId];
@@ -69,8 +81,26 @@ void ExampleBase::BindBuffer(const std::string& bufferName)
 	
 }
 
+void ExampleBase::BindAccelerationStructure(const std::string& accelerationStructureName)
+{
+	ASSERT(accelerationStructureBindInfos.find(accelerationStructureName) != accelerationStructureBindInfos.end());
+
+	auto& bindInfo = accelerationStructureBindInfos[accelerationStructureName];
+	auto& rayTracingPipelineInfo = rayTracingPipelinesInfos[bindInfo.pipeId];
+	auto descriptorType = GetDescriptorType(rayTracingPipelineInfo.descriptorSetInfos[bindInfo.setId], bindInfo.binding);
+
+	BindAccelerationStructure(bindInfo.geometryIndex, rayTracingPipelineInfo.descriptorSetInfos[bindInfo.setId].descriptorSet, bindInfo.binding, bindInfo.elementId, descriptorType);
+
+}
+
 void ExampleBase::ReInitGeometryResources(Geometry& geo)
 {
+	if (rayTracingPipelinsDesc.valid)
+	{
+		DestroyAccelerationStructureKHR(device,geo.accelerationStructureKHR);
+	}
+
+
 	DestroyBuffer(geo.vertexBuffer);
 	for (uint32_t zoneId = 0; zoneId < geo.indexBuffers.size(); zoneId++)
 	{
@@ -113,6 +143,7 @@ void ExampleBase::Init()
 	InitRecources();
 	InitComputeInfo();
 	InitCompute();
+	InitRayTracing();
 }
 
 
@@ -199,7 +230,7 @@ void ExampleBase::InitContex()
 {
 	//��������
 	window = CreateWin32Window(windowWidth, windowHeight, "MainWindow");
-
+	
 	//绑定回调
 	WindowEventHandler::BindWindow(window);
 
@@ -262,19 +293,43 @@ void ExampleBase::InitContex()
 	if (enableMeshShaderEXT)
 	{
 		extendInfoP = &physicalDeviceFeatures2;
+		physicalDeviceFeatures2.pNext = &physicalDeviceMeshShaderFeaturesEXT;
 		enableFeature = nullptr; 
 		enableExtensions.push_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
 		enableExtensions.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
 	}
+	if (rayTracingPipelinsDesc.valid)
+	{
+		extendInfoP = &physicalDeviceFeatures2;
+		physicalDeviceAccelerationStructureFeaturesKHR.pNext = physicalDeviceFeatures2.pNext;
+		physicalDeviceFeatures2.pNext = &physicalDeviceRayTracingPipelineFeaturesKHR;
+		enableFeature = nullptr;
+		enableExtensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+		enableExtensions.push_back(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME); 
+		enableExtensions.push_back(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
+		enableExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+		enableExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+		enableExtensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+		
+		//enableExtensions.push_back("VK_KHR_portability_subset");
+
+	}
+	void* pNext = physicalDeviceFeatures2.pNext;
+	while (pNext != nullptr) {
+		// 获取结构体的类型
+		const VkBaseInStructure* base = reinterpret_cast<const VkBaseInStructure*>(pNext);
+		std::cout << "Structure type: ";
+		// 移动到下一个结构体
+		pNext = (void*)base->pNext;
+	}
 
 	ASSERT(CheckExtensionSupport(physicalDevice, enableExtensions));
 
-
-
+	
 	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, {}, enableExtensions, enableFeature, extendInfoP);//device之开启了swapchain拓展
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
 
-	if (enableMeshShaderEXT)
+	if (enableMeshShaderEXT || rayTracingPipelinsDesc.valid)
 	{
 		LoadExtensionAPIs(device);
 
@@ -546,8 +601,6 @@ void ExampleBase::PickValidPhysicalDevice()
 			//������Լ��surface�ɵ����Ĵ�С��Χ����Ŀǰ��׼���޸Ĵ�С���Բ����
 			)
 		{
-
-
 			//检查默认深度附件格式支持
 
 			if (!CheckOptimalFormatFeatureSupport(physicalDevices[i], RenderTargets::depthFormat, RenderTargets::depthAttachmentFormatFeatures)) {
@@ -609,17 +662,16 @@ void ExampleBase::PickValidPhysicalDevice()
 
 			//检查特性
 
-
+			physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+			physicalDeviceFeatures2.pNext = VK_NULL_HANDLE;
 			if (enableMeshShaderEXT)//如果使用feature2
 			{
-				physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 				physicalDeviceFeatures2.pNext = &physicalDeviceMeshShaderFeaturesEXT;
 				physicalDeviceMeshShaderFeaturesEXT.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
 				physicalDeviceMeshShaderFeaturesEXT.pNext = &maintenance4Feature;
 		
 
 				maintenance4Feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES;
-
 				maintenance4Feature.pNext = VK_NULL_HANDLE;
 
 				GetPhysicalDeviceFeatures2(physicalDevices[i], physicalDeviceFeatures2);
@@ -629,6 +681,7 @@ void ExampleBase::PickValidPhysicalDevice()
 				if (physicalDeviceFeatures2.features.geometryShader != VK_TRUE || physicalDeviceFeatures2.features.tessellationShader != VK_TRUE) {
 					continue;	//检查是否支持几何着色器以及细分着色器
 				}
+
 			}
 			else {
 				physicalDeviceFeatures = GetPhysicalDeviceFeatures(physicalDevices[i]);
@@ -641,17 +694,49 @@ void ExampleBase::PickValidPhysicalDevice()
 
 
 
+			if (rayTracingPipelinsDesc.valid)
+			{
+				physicalDeviceFeatures2.pNext = &physicalDeviceRayTracingPipelineFeaturesKHR;
+				physicalDeviceRayTracingPipelineFeaturesKHR.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+				physicalDeviceRayTracingPipelineFeaturesKHR.pNext = &physicalDeviceVulkanMemoryModelFeatures;
+				
+
+				physicalDeviceVulkanMemoryModelFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
+				physicalDeviceVulkanMemoryModelFeatures.pNext = &physicalDeviceBufferDeviceAddressFeaturesKHR;
+
+				physicalDeviceBufferDeviceAddressFeaturesKHR.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+				physicalDeviceBufferDeviceAddressFeaturesKHR.pNext = &physicalDeviceAccelerationStructureFeaturesKHR;
+
+
+				physicalDeviceAccelerationStructureFeaturesKHR.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+				physicalDeviceAccelerationStructureFeaturesKHR.pNext = VK_NULL_HANDLE;
+
+
+				GetPhysicalDeviceFeatures2(physicalDevices[i], physicalDeviceFeatures2);
+				if (!physicalDeviceRayTracingPipelineFeaturesKHR.rayTracingPipeline ||
+					!physicalDeviceVulkanMemoryModelFeatures.vulkanMemoryModel ||
+					!physicalDeviceBufferDeviceAddressFeaturesKHR.bufferDeviceAddress ||
+					!physicalDeviceAccelerationStructureFeaturesKHR.accelerationStructure 
+
+					) {
+					continue;
+
+				}
+			}
+
+
 			queueFamilyIndex = familyIndex;
 			physicalDevice = physicalDevices[i];
 			physicalDeviceProps = physicalDeviceProperties[i];
 
-
+			physicalDeviceFeatures2.pNext = VK_NULL_HANDLE;
 			return;
 		}
 
 
 	}
 
+	ASSERT(physicalDevice);
 	LogFunc(0);
 
 }
@@ -721,7 +806,7 @@ Image ExampleBase::CreateImage(VkImageType imageType,VkImageViewType viewType,Vk
 		image.numMip, image.numLayer, image.sample, image.tiling, usage, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex });
 	auto imageMemRequiredments = GetImageMemoryRequirments(device, image.image);
 	auto memtypeIndex = GetMemoryTypeIndex(imageMemRequiredments.memoryTypeBits, memoryProperies);
-	image.memory = AllocateMemory(device, imageMemRequiredments.size, memtypeIndex);
+	image.memory = AllocateMemory(device, imageMemRequiredments.size, memtypeIndex,0);
 	image.totalMemorySize = imageMemRequiredments.size;
 	BindMemoryToImage(device, image.memory, image.image, 0);
 	if (memoryProperies & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
@@ -1042,7 +1127,6 @@ void ExampleBase::LoadObj(const std::string& objFilePath, Geometry& geo)
 
 Buffer ExampleBase::CreateVertexBuffer(const char* buf, VkDeviceSize size)
 {
-
 	return CreateBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, buf, size, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 }
 
@@ -1054,6 +1138,174 @@ Buffer ExampleBase::CreateIndexBuffer(const char* buf, VkDeviceSize size)
 Buffer ExampleBase::CreateShaderAccessBuffer(const char* buf, VkDeviceSize size)
 {
 	return CreateBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, buf, size, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+}
+
+void ExampleBase::BuildAccelerationStructure(Geometry& geo)
+{
+	std::vector<VkAccelerationStructureGeometryKHR> accelerationStructureGeometryKHRs;
+	std::vector<VkAccelerationStructureBuildRangeInfoKHR>  accelerationStructureBuildRangeInfoKHRs{};
+
+
+	std::vector<char> acceleratBuffer;
+	VkDeviceSize bufferTotalSize = 0;
+	VkDeviceSize indexDataOffset = 0;
+	if (geo.useIndexBuffers)
+	{
+		accelerationStructureBuildRangeInfoKHRs.resize(1);
+		uint32_t numTriangles = 0;
+		for (uint32_t i = 0; i < geo.shapeIndices.size(); i++)
+		{
+			numTriangles += geo.shapeIndices[i].size() / 3;
+		}
+
+		VkDeviceSize vertexAttributeDataSize = geo.vertexAttributesDatas.size() * sizeof(float);
+		bufferTotalSize = vertexAttributeDataSize;
+		indexDataOffset = vertexAttributeDataSize;
+		auto& accelerationStructureBuildRangeInfoKHR = accelerationStructureBuildRangeInfoKHRs[0];
+		accelerationStructureBuildRangeInfoKHR.firstVertex = geo.shapeIndices[0][0];//为geometry的三角形图元的第一个顶点的索引
+		accelerationStructureBuildRangeInfoKHR.primitiveCount = numTriangles;//定义对应加速结构中geometry的图元数量
+		accelerationStructureBuildRangeInfoKHR.primitiveOffset = 0;//指定图元数据在内存中的起始字节偏移量
+		accelerationStructureBuildRangeInfoKHR.transformOffset = 0;//指定变换矩阵数据在内存中的起始字节偏移量
+		bufferTotalSize += numTriangles * 3 * sizeof(uint32_t);
+
+	
+	}
+	else {
+		for (uint32_t i = 0; i < geo.shapeVertexAttributesBuffers.size(); i++)
+		{
+			bufferTotalSize += geo.shapeVertexAttributesBuffers[i].size() * sizeof(float);
+		}
+
+	}
+	
+	//查询scratch 数据的最小字节对齐
+	VkPhysicalDeviceAccelerationStructurePropertiesKHR physicalDeviceAccelerationStructurePropertiesKHR{};
+	physicalDeviceAccelerationStructurePropertiesKHR.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+	physicalDeviceAccelerationStructurePropertiesKHR.pNext = nullptr;
+	auto physicalDeviceProperties = GetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceAccelerationStructurePropertiesKHR);
+
+
+
+
+
+
+
+
+	accelerationStructureGeometryKHRs.resize(1);
+
+	auto& geometryKHR = accelerationStructureGeometryKHRs[0];
+	geometryKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;;
+	geometryKHR.pNext = nullptr;
+	geometryKHR.flags = 0;
+	geometryKHR.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;//描述了该加速结构引用的类型
+	VkAccelerationStructureGeometryDataKHR geometryDataKHR{};
+	{
+		VkAccelerationStructureGeometryTrianglesDataKHR trianglesKHR{};
+		{
+			//
+			trianglesKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+			trianglesKHR.pNext = VK_NULL_HANDLE;
+			trianglesKHR.vertexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };
+			trianglesKHR.vertexStride = vertexAttributeInputStride;//为每个顶点间的字节步长大小
+			trianglesKHR.maxVertex = geo.vertexAttrib.vertices.size() / 3 - 1;//为vertexData 中的顶点数量减去1
+			trianglesKHR.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;//为顶点元素的数据VkFormat格式
+			trianglesKHR.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };//为包含索引数据的device 或者host端的地址
+			trianglesKHR.indexType = VK_INDEX_TYPE_UINT32;//为索引元素的数据类型 VkIndexType			
+			trianglesKHR.transformData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0};//为包含可选的VkTransformMatrixKHR 数据的device 或者host端的地址，描述从geometry的顶点所在的空间到加速结构定义所在的空间的变换
+		}
+		geometryDataKHR.triangles = trianglesKHR;// VkAccelerationStructureGeometryTrianglesDataKHR 值 
+		geometryKHR.geometry = geometryDataKHR;
+	}
+
+	//查询构建加速结构的大小信息
+
+
+
+	VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfoKHR{};
+	accelerationStructureBuildGeometryInfoKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	accelerationStructureBuildGeometryInfoKHR.pNext = nullptr;
+	accelerationStructureBuildGeometryInfoKHR.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+	VkDeviceOrHostAddressKHR scratchData{};
+	{
+		scratchData.deviceAddress = 0;
+		scratchData.hostAddress = 0;
+	}
+	accelerationStructureBuildGeometryInfoKHR.scratchData = scratchData;
+	accelerationStructureBuildGeometryInfoKHR.srcAccelerationStructure = VK_NULL_HANDLE;
+	accelerationStructureBuildGeometryInfoKHR.dstAccelerationStructure = VK_NULL_HANDLE;
+	accelerationStructureBuildGeometryInfoKHR.geometryCount = 1;
+	accelerationStructureBuildGeometryInfoKHR.pGeometries = &geometryKHR;
+	accelerationStructureBuildGeometryInfoKHR.ppGeometries = VK_NULL_HANDLE;
+	accelerationStructureBuildGeometryInfoKHR.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	accelerationStructureBuildGeometryInfoKHR.flags = 0;
+
+
+	auto buildSize = GetAccelerationStructureBuildSizesKHR(device, accelerationStructureBuildGeometryInfoKHR);
+
+	bufferTotalSize = std::max(bufferTotalSize, buildSize.accelerationStructureSize);
+
+	//填充buffer
+	acceleratBuffer.resize(bufferTotalSize);
+	if (geo.useIndexBuffers)
+	{
+
+		//填充buffer	
+		std::memcpy(acceleratBuffer.data(), geo.vertexAttributesDatas.data(), geo.vertexAttributesDatas.size() * sizeof(float));
+		VkDeviceSize offset = 0;
+		for (uint32_t i = 0; i < geo.shapeIndices.size(); i++)
+		{
+			std::memcpy(acceleratBuffer.data() + indexDataOffset + offset, geo.shapeIndices[i].data(), geo.shapeIndices[i].size() * sizeof(uint32_t));
+			offset += geo.shapeIndices[i].size() * sizeof(uint32_t);
+		}
+
+	}
+	else {
+		//填充buffer
+		for (uint32_t i = 0; i < geo.shapeVertexAttributesBuffers.size(); i++)
+		{
+			std::memcpy(acceleratBuffer.data(), geo.shapeVertexAttributesBuffers[i].data(), geo.shapeVertexAttributesBuffers[i].size() * sizeof(float));
+		}
+	}
+
+
+	//创建加速结构的buffer
+	geo.accelerationStructureKHRBuffer = CreateBuffer( VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT , acceleratBuffer.data(), bufferTotalSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+	VkDeviceAddress bufferAddress = GetBufferDeviceAddressKHR(device, geo.accelerationStructureKHRBuffer.buffer);
+
+
+	geo.accelerationStructureKHR = CreateAccelerationStructureKHR(device, 0, geo.accelerationStructureKHRBuffer.buffer, 0, bufferTotalSize, VK_ACCELERATION_STRUCTURE_TYPE_GENERIC_KHR);
+
+
+	//创建scratch buffer
+	geo.accelerationStructureScratchBuffer = CreateBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, nullptr, buildSize.buildScratchSize, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+	VkDeviceAddress scratchDeviceAddress = GetBufferDeviceAddressKHR(device, geo.accelerationStructureScratchBuffer.buffer);
+
+
+	//设置加速结构构建顶点索引数据buffer地址信息
+
+	if (geo.useIndexBuffers)
+	{
+		geometryKHR.geometry.triangles.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = bufferAddress + indexDataOffset };//为包含索引数据的device 或者host端的地址
+		geometryKHR.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;//为索引元素的数据类型 VkIndexType
+	}
+	else {
+
+		geometryKHR.geometry.triangles.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };//为包含索引数据的device 或者host端的地址
+		geometryKHR.geometry.triangles.indexType = VK_INDEX_TYPE_MAX_ENUM;//为索引元素的数据类型 VkIndexType
+	}
+
+	geometryKHR.geometry.triangles.vertexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = bufferAddress };
+
+	VkDeviceOrHostAddressKHR scratchAddress = VkDeviceOrHostAddressKHR{ .deviceAddress = scratchDeviceAddress };
+
+	//构建加速结构
+	CmdListWaitFinish(oneSubmitCommandList);
+	CmdListRecordBegin(oneSubmitCommandList);
+	CmdBuildBottomAccelerationStructureKHR(oneSubmitCommandList.commandBuffer, accelerationStructureGeometryKHRs, accelerationStructureBuildRangeInfoKHRs, geo.accelerationStructureKHR, scratchAddress);
+	CmdListRecordEnd(oneSubmitCommandList);
+	SubmitSynchronizationInfo info;
+	CmdListSubmit(oneSubmitCommandList, info);
 }
 
 void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data)
@@ -1100,6 +1352,46 @@ void ExampleBase::CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex
 	CmdDispatch(cmdList.commandBuffer, groupSize[0], groupSize[1], groupSize[2]);
 
 
+}
+
+void ExampleBase::CmdOpsTraceRays(CommandList& cmdList, uint32_t rayTracingPipelineIndex,std::array<uint32_t, 3> groupSize)
+{
+	auto& rayTracingPipelineInfos = rayTracingPipelinesInfos[rayTracingPipelineIndex];
+	CmdBindPipeline(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rayTracingPipelineInfos.pipeline);
+	//绑定描述符集
+	for (const auto& setInfo : rayTracingPipelineInfos.descriptorSetInfos)
+	{
+		CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rayTracingPipelineInfos.pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
+	}
+
+	VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable = nullptr;
+	VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable = nullptr;
+	VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable = nullptr;
+	VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable = nullptr;
+
+	if (rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_RAYGEN_BIT_KHR].size != 0)
+	{
+		pRaygenShaderBindingTable = &rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_RAYGEN_BIT_KHR];
+	}
+
+	if (rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_MISS_BIT_KHR].size != 0)
+	{
+		pMissShaderBindingTable = &rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_MISS_BIT_KHR];
+	}
+	if (rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_ANY_HIT_BIT_KHR].size != 0)
+	{
+		pHitShaderBindingTable = &rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_ANY_HIT_BIT_KHR];
+	}
+	if (rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR].size != 0)
+	{
+		ASSERT(pHitShaderBindingTable == nullptr);
+		pHitShaderBindingTable = &rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR];
+	}
+	if (rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_CALLABLE_BIT_KHR].size != 0)
+	{
+		pCallableShaderBindingTable = &rayTracingPipelinesInfos[rayTracingPipelineIndex].rayTracingShaderBindingRangeInfos[VK_SHADER_STAGE_CALLABLE_BIT_KHR];
+	}
+	CmdTraceRaysKHR(cmdList.commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, groupSize[0], groupSize[1], groupSize[2]);
 }
 
 
@@ -1624,7 +1916,7 @@ void ExampleBase::Clear()
 {
 	//清除所有vulkan资源
 	DeviceWaitIdle(device);
-
+	ClearRayTracingPipeline();
 	ClearComputePipeline();
 	ClearRenderPasses();
 	ClearRecources();
@@ -1742,6 +2034,13 @@ void ExampleBase::ClearRecources()
 		{
 			DestroyBuffer(geoms[i].shapeVertexBuffers[zoneId]);
 		}
+		if (rayTracingPipelinsDesc.valid)
+		{
+			DestroyAccelerationStructureKHR(device, geoms[i].accelerationStructureKHR);
+			DestroyBuffer(geoms[i].accelerationStructureKHRBuffer);
+			DestroyBuffer(geoms[i].accelerationStructureScratchBuffer);
+		}
+
 	}
 
 	//清除Uniform buffer
@@ -1782,6 +2081,30 @@ void ExampleBase::ClearComputePipeline()
 
 }
 
+void ExampleBase::ClearRayTracingPipeline()
+{
+	if (rayTracingPipelinsDesc.valid)
+	{
+		for (uint32_t i = 0; i < rayTracingPipelinesInfos.size(); i++)
+		{
+			auto& rayTracingPipelineInfos = rayTracingPipelinesInfos[i];
+			DestroyPipeline(device, rayTracingPipelineInfos.pipeline);
+			DestroyPipelineLayout(device, rayTracingPipelineInfos.pipelineLayout);
+			for (uint32_t setId = 0; setId < rayTracingPipelineInfos.descriptorSetInfos.size(); setId++)
+			{
+				//ReleaseDescriptorSets(device, graphcisPipelineInfos[i].descriptorPool, { graphcisPipelineInfos[i].descriptorSetInfos[setId].descriptorSet });
+				DestroyDesctriptorSetLayout(device, rayTracingPipelineInfos.descriptorSetInfos[setId].setLayout);
+			}
+			DestroyDescriptorPool(device, rayTracingPipelineInfos.descriptorPool);
+			DestroyBuffer(rayTracingPipelineInfos.stbBuffer);
+		}
+
+
+
+	}
+
+}
+
 
 
 
@@ -1799,6 +2122,13 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 	{
 		return;
 	}
+	geo.vertexAttributesDatas.resize(numVertex * vertexAttributeInputFloatStride);
+
+	auto FillVertexBuffer = [&](uint32_t vertexIndex,uint32_t component,float* srcAttibuteData, std::vector<float>& dstVertexDatas) {
+		std::memcpy(dstVertexDatas.data() + vertexIndex * vertexAttributeInputFloatStride + component * 3, srcAttibuteData, sizeof(float) * 3);
+		
+		};
+
 	if (geo.useIndexBuffers)
 	{
 
@@ -1806,12 +2136,12 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 		Geometry& geometry = geo;
 
 		//����vertex buffer
-		geometry.vertexBuffer = CreateVertexBuffer(nullptr, vertexAttributeInputStride * numVertex);
+		
 		for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
 		{
 			//��䶥��λ������
-			FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
-
+			//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
+			FillVertexBuffer(vertexId, VAT_Position_float32, geo.vertexAttrib.vertices.data() + vertexId * 3, geo.vertexAttributesDatas);
 			
 
 		}
@@ -1822,16 +2152,17 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 			for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
 			{
 				//��䶥��λ������
-				FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride + sizeof(float) * 3 * 2, 3 * sizeof(float), (const char*)(geo.vertexAttrib.colors.data() + vertexId * 3));
+				//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride + sizeof(float) * 3 * 2, 3 * sizeof(float), (const char*)(geo.vertexAttrib.colors.data() + vertexId * 3));
+				FillVertexBuffer(vertexId, VAT_Color_float32, geo.vertexAttrib.colors.data() + vertexId * 3, geo.vertexAttributesDatas);
 			}
 
 
 		}
 
-
+		geo.shapeIndices.resize(geo.shapes.size());
 
 		geometry.indexBuffers.resize(geo.shapes.size());
-		std::vector<uint32_t> indicesData;
+		
 		geometry.numIndexPerZone.resize(geometry.indexBuffers.size());
 		//手动计算法线
 		std::vector<glm::vec3> vertexNormals(numVertex, glm::vec3(0));
@@ -1849,6 +2180,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
 				}
 			}
+			auto& indicesData = geo.shapeIndices[zoneId];
 			indicesData.resize(geo.shapes[zoneId].mesh.num_face_vertices.size() * 3);
 			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
 			{
@@ -1883,25 +2215,25 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 			//归一化
 			curV = glm::normalize(curV);
 			//填充法向量
-			FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
-
+			//FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
+			FillVertexBuffer(v, VAT_Normal_float32, (float*)&curV, geo.vertexAttributesDatas);
 		}
 
 
-
+		geometry.vertexBuffer = CreateVertexBuffer((const char*)geo.vertexAttributesDatas.data(), vertexAttributeInputStride * numVertex);
 
 
 
 
 	}
 	else {
-
+		geo.shapeVertexAttributesBuffers.resize(geo.shapes.size());
 		geo.shapeVertexBuffers.resize(geo.shapes.size());
 		geo.numIndexPerZone.resize(geo.shapeVertexBuffers.size());
-		std::vector<float> curVertexData;
+		
 		for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
 		{
-
+			std::vector<float>& curVertexData = geo.shapeVertexAttributesBuffers[zoneId];
 			for (uint32_t cellId = 0; cellId < geo.shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
 			{
 				if (geo.shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
@@ -1910,7 +2242,6 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 				}
 			}
 			//当前shape的所有片元的点数据
-			uint32_t vertexAttributeInputFloatStride = vertexAttributeInputStride / sizeof(float);
 			curVertexData.resize(geo.shapes[zoneId].mesh.indices.size() * vertexAttributeInputFloatStride);
 			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
 			{
@@ -1921,18 +2252,13 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 				//填充顶点位置
 				if (!geo.vertexAttrib.vertices.empty())
 				{
-					glm::vec3 curVertex = glm::vec3(geo.vertexAttrib.vertices[vertexIndex * 3], geo.vertexAttrib.vertices[vertexIndex * 3 + 1], geo.vertexAttrib.vertices[vertexIndex * 3 + 2]);
-					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride;
-					std::memcpy(curVertexOffset, &curVertex, sizeof(float) * 3);
+					FillVertexBuffer(i, VAT_Position_float32, geo.vertexAttrib.vertices.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
 				}
 
 				//填充颜色
 				if (!geo.vertexAttrib.colors.empty())
 				{
-					glm::vec3 curColor = glm::vec3(geo.vertexAttrib.colors[vertexIndex * 3], geo.vertexAttrib.colors[vertexIndex * 3 + 1], geo.vertexAttrib.colors[vertexIndex * 3 + 2]);
-					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 6;
-					std::memcpy(curVertexOffset, &curColor, sizeof(float) * 3);
-
+					FillVertexBuffer(i, VAT_Color_float32, geo.vertexAttrib.colors.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
 				}
 
 				//填充法线
@@ -1940,17 +2266,16 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 				{
 					glm::vec3 curNormal = glm::vec3(geo.vertexAttrib.normals[normalIndex * 3], geo.vertexAttrib.normals[normalIndex * 3 + 1], geo.vertexAttrib.normals[normalIndex * 3 + 2]);
 					curNormal = glm::normalize(curNormal);
-					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 3;
-					std::memcpy(curVertexOffset, &curNormal, sizeof(float) * 3);
+					FillVertexBuffer(i, VAT_Normal_float32, (float*)&curNormal, geo.shapeVertexAttributesBuffers[zoneId]);
+
 				}
 				//填充纹理坐标
 				if (!geo.vertexAttrib.texcoords.empty())
 				{
-					glm::vec2 curTexCoord = glm::vec2(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1]);
+					glm::vec3 curTexCoord = glm::vec3(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1],1);
 					curTexCoord.y = -curTexCoord.y;//翻转一下y
-					float* curVertexOffset = curVertexData.data() + i * vertexAttributeInputFloatStride + 9;
-					std::memcpy(curVertexOffset, &curTexCoord, sizeof(float) * 2);
 
+					FillVertexBuffer(i, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.shapeVertexAttributesBuffers[zoneId]);
 				}
 			}
 
@@ -1965,6 +2290,12 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 
 	}
 
+
+
+	if (rayTracingPipelinsDesc.valid)
+	{
+		BuildAccelerationStructure(geo);
+	}
 
 }
 
@@ -2076,6 +2407,218 @@ void ExampleBase::InitComputePipeline(ComputePipelineInfos& computePipelineInfos
 	DestroyShaderModule(device, shaderModule);
 }
 
+void ExampleBase::InitRayTracing()
+{
+
+	if (rayTracingPipelinsDesc.valid)
+	{
+		VkShaderStageFlagBits curShaderStage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+		std::string curShaderPath = "";
+		rayTracingPipelinesInfos.resize(rayTracingPipelinsDesc.raytracingPipelineShaderPaths.size());
+		for (uint32_t i = 0; i < rayTracingPipelinsDesc.raytracingPipelineShaderPaths.size(); i++)
+		{
+			//解析shader中的descriptor信息
+			auto& rayTracingPipelineInfos = rayTracingPipelinesInfos[i];
+					//ray generate
+			curShaderStage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+			curShaderPath = rayTracingPipelinsDesc.raytracingPipelineShaderPaths[i].rayGenerateShaderPath;
+			rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].shaderFilePath = curShaderPath;
+			TransferGLSLFileToSPIRVFileAndRead(curShaderPath, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode);
+			ParseSPIRVShaderResourceInfo(rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage]);
+
+
+			curShaderStage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+			curShaderPath = rayTracingPipelinsDesc.raytracingPipelineShaderPaths[i].closeHitShaderPath;
+			rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].shaderFilePath = curShaderPath;
+			TransferGLSLFileToSPIRVFileAndRead(curShaderPath, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode);
+			ParseSPIRVShaderResourceInfo(rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage]);
+
+
+			curShaderStage = VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+			curShaderPath = rayTracingPipelinsDesc.raytracingPipelineShaderPaths[i].anyHitShaderPath;
+			rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].shaderFilePath = curShaderPath;
+			TransferGLSLFileToSPIRVFileAndRead(curShaderPath, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode);
+			ParseSPIRVShaderResourceInfo(rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage]);
+
+			curShaderStage = VK_SHADER_STAGE_MISS_BIT_KHR;
+			curShaderPath = rayTracingPipelinsDesc.raytracingPipelineShaderPaths[i].missShaderPath;
+			rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].shaderFilePath = curShaderPath;
+			TransferGLSLFileToSPIRVFileAndRead(curShaderPath, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode);
+			ParseSPIRVShaderResourceInfo(rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage]);
+
+			curShaderStage = VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+			curShaderPath = rayTracingPipelinsDesc.raytracingPipelineShaderPaths[i].intersectionShaderPath;
+			rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].shaderFilePath = curShaderPath;
+			TransferGLSLFileToSPIRVFileAndRead(curShaderPath, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode);
+			ParseSPIRVShaderResourceInfo(rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage]);
+		
+			curShaderStage = VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+			curShaderPath = rayTracingPipelinsDesc.raytracingPipelineShaderPaths[i].callableShaderPath;
+			rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].shaderFilePath = curShaderPath;
+			TransferGLSLFileToSPIRVFileAndRead(curShaderPath, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode);
+			ParseSPIRVShaderResourceInfo(rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage].spirvCode, rayTracingPipelineInfos.rayTracingshaderResourceInfos[curShaderStage]);
+
+
+			InitRayTracingPipeline(rayTracingPipelineInfos);
+		}
+
+	}
+
+}
+
+void ExampleBase::InitRayTracingPipeline(RayTracingPipelineInfos& rayTracingPipelineInfos)
+{
+	//��ʼ��shader stage
+
+
+	std::map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> descriptorSetBindings;
+	VkDescriptorSetLayoutBinding binding;
+	std::map<VkDescriptorType, uint32_t> needNumDescriptor;
+
+
+	for (const auto& kv : rayTracingPipelineInfos.rayTracingshaderResourceInfos)
+	{
+		if (kv.second.spirvCode.size() != 0)
+		{
+
+
+
+			//����spirv code����shader module
+			auto shaderModule = CreateShaderModule(device, 0, kv.second.spirvCode);
+			rayTracingPipelineInfos.rayTracingShaderBindingRangeInfos[kv.first].size = 1;
+
+
+			//��ʼ��shader state ��Ϣ
+			VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo{ };
+			pipelineShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			pipelineShaderStageCreateInfo.pNext = nullptr;
+			pipelineShaderStageCreateInfo.flags = 0;
+			pipelineShaderStageCreateInfo.stage = kv.first;
+			pipelineShaderStageCreateInfo.module = shaderModule;
+			pipelineShaderStageCreateInfo.pName = kv.second.entryName.c_str();
+			pipelineShaderStageCreateInfo.pSpecializationInfo = nullptr;
+			rayTracingPipelineInfos.rayTracingShaderStages.push_back(pipelineShaderStageCreateInfo);
+
+			//��ȡ�󶨺�set��Ϣ
+			//auto& bindins = kv.second.descriptorSetBindings;
+
+			for (auto& setAndBindings : kv.second.descriptorSetBindings)
+			{
+				auto setId = setAndBindings.first;
+				for (auto bindingId = 0; bindingId < setAndBindings.second.size(); bindingId++)
+				{
+					binding.binding = setAndBindings.second[bindingId].binding;
+					binding.descriptorCount = setAndBindings.second[bindingId].numDescriptor;
+					binding.descriptorType = setAndBindings.second[bindingId].descriptorType;
+					binding.pImmutableSamplers = nullptr;//��ʱ��ʹ�ò����sampler
+					binding.stageFlags = kv.first;
+					needNumDescriptor[binding.descriptorType] += binding.descriptorCount;
+					descriptorSetBindings[setId].push_back(binding);//����descriptor set
+
+				}
+
+			}
+		}
+	}
+
+	//����descriptor pool
+	std::vector<VkDescriptorPoolSize> poolSizes;
+	for (const auto& needDescriptor : needNumDescriptor)
+	{
+		VkDescriptorPoolSize poolSize;
+		poolSize.type = needDescriptor.first;
+		poolSize.descriptorCount = needDescriptor.second;
+		poolSizes.push_back(poolSize);
+	}
+	auto descriptorPool = CreateDescriptorPool(device, 0, descriptorSetBindings.size() + 1, poolSizes);
+	rayTracingPipelineInfos.descriptorPool = descriptorPool;
+
+
+	//����descriptor set
+	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+	for (const auto& setAndBindingInfos : descriptorSetBindings)
+	{
+		//����descriptor set layout
+		auto descriptorSetLayout = CreateDescriptorSetLayout(device, 0, setAndBindingInfos.second);
+		rayTracingPipelineInfos.descriptorSetInfos[setAndBindingInfos.first].setLayout = descriptorSetLayout;
+		auto descriptorSet = AllocateDescriptorSet(device, rayTracingPipelineInfos.descriptorPool, { descriptorSetLayout });
+		rayTracingPipelineInfos.descriptorSetInfos[setAndBindingInfos.first].descriptorSet = descriptorSet;
+		descriptorSetLayouts.push_back(descriptorSetLayout);
+		rayTracingPipelineInfos.descriptorSetInfos[setAndBindingInfos.first].bindings = descriptorSetBindings[setAndBindingInfos.first];
+	}
+
+	//����pipeline layout
+	auto pipelineLayout = CreatePipelineLayout(device, 0, descriptorSetLayouts, {});
+	rayTracingPipelineInfos.pipelineLayout = pipelineLayout;
+
+
+
+	//��ʼ��pipeline states
+
+	auto& pipelineStates = rayTracingPipelineInfos.rayTracingShaderStages;
+
+	//为了方便，每个shader stage创建一个shader group
+	auto pipeline = CreateRayTracingPipeline(device, pipelineStates, 10, pipelineLayout);
+	rayTracingPipelineInfos.pipeline = pipeline;
+
+
+	//delete shader module
+	for (const auto& shaderStageInfo : rayTracingPipelineInfos.rayTracingShaderStages)
+	{
+		DestroyShaderModule(device, shaderStageInfo.module);
+	}
+
+
+
+	//初始化ray tracing 的shader binding table
+
+
+	//获取shader group句柄长度
+
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingPipelineProperties = {};
+	rayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+	rayTracingPipelineProperties.pNext = nullptr;
+
+	auto physicalDeviceProperties = GetPhysicalDeviceProperties2(physicalDevice, &rayTracingPipelineProperties);
+	uint32_t shaderGroupStride = std::max(rayTracingPipelineProperties.shaderGroupBaseAlignment, rayTracingPipelineProperties.shaderGroupHandleSize);
+
+
+	std::vector<char> tmp;
+	tmp.resize(rayTracingPipelineProperties.shaderGroupHandleSize* pipelineStates.size());
+	GetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, pipelineStates.size(), tmp);
+
+	std::vector<char> stbBuffer;
+	stbBuffer.resize(pipelineStates.size()* shaderGroupStride);
+	for (uint32_t i = 0; i < pipelineStates.size(); i++)
+	{
+		std::memcpy(stbBuffer.data() + i * shaderGroupStride, tmp.data() + i * rayTracingPipelineProperties.shaderGroupHandleSize, rayTracingPipelineProperties.shaderGroupHandleSize);
+
+	}
+
+
+
+
+	//创建shader binding table
+	rayTracingPipelineInfos.stbBuffer = CreateBuffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR, stbBuffer.data(), stbBuffer.size(), VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+	VkDeviceAddress stbBufferAddress = GetBufferDeviceAddressKHR(device, rayTracingPipelineInfos.stbBuffer.buffer);
+
+
+	VkDeviceSize offset = 0;
+
+	for (uint32_t i = 0; i < pipelineStates.size(); i++)
+	{
+		auto& shaderStage = pipelineStates[i].stage;
+		rayTracingPipelineInfos.rayTracingShaderBindingRangeInfos[shaderStage].deviceAddress = stbBufferAddress + offset;
+		rayTracingPipelineInfos.rayTracingShaderBindingRangeInfos[shaderStage].size = shaderGroupStride;
+		rayTracingPipelineInfos.rayTracingShaderBindingRangeInfos[shaderStage].stride = shaderGroupStride;
+		offset += shaderGroupStride;
+		VkDeviceSize ext = (stbBufferAddress + offset) % rayTracingPipelineProperties.shaderGroupBaseAlignment;
+	}
+
+
+}
+
 
 
 void ExampleBase::ReadGLSLShaderFile(const std::string& shaderPath, std::vector<char>& shaderCode)
@@ -2175,7 +2718,7 @@ void ExampleBase::TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLSLF
 	uint32_t pos = vulkanIncludeDir.find_last_of("/");
 	std::string vulkanInstallDir = vulkanIncludeDir.substr(0, pos);
 	std::string glslcDir = vulkanInstallDir + "/Bin/glslc.exe";
-	std::string generateCmd = glslcDir + " " + srcGLSLFile + " -o " + "tmp.spv  --target-env=vulkan1.3";
+	std::string generateCmd = glslcDir + " " + srcGLSLFile + " -o " + "tmp.spv  --target-env=vulkan1.4";
 	int ret = system(generateCmd.c_str());
 	if (ret != 0)
 	{
@@ -2385,6 +2928,31 @@ void ExampleBase::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spir
 		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
 		
 	}
+
+
+	//acceleration struct
+	for (uint32_t i = 0; i < resources.acceleration_structures.size(); i++)
+	{
+		auto& acceleration = resources.acceleration_structures[i];
+		auto type = shaderCompiler.get_type(acceleration.base_type_id);
+		bindingInfo.setId = shaderCompiler.get_decoration(acceleration.id, spv::Decoration::DecorationDescriptorSet);
+		bindingInfo.binding = shaderCompiler.get_decoration(acceleration.id, spv::DecorationBinding);
+		bindingInfo.name = acceleration.name;
+		if (type.array.empty())
+		{
+			bindingInfo.numDescriptor = 1;
+		}
+		else {
+			bindingInfo.numDescriptor = type.array[0];
+		}
+		//bindingInfo.numDescriptor = shaderCompiler.get_declared_struct_size(type);
+		bindingInfo.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+		dstCacheShaderResource.descriptorSetBindings[bindingInfo.setId].push_back(bindingInfo);
+
+	}
+
+
+
 }
 
 
@@ -2399,7 +2967,12 @@ Buffer ExampleBase::CreateBuffer(VkBufferUsageFlags usage, const char* buf, VkDe
 	//�����ڴ�
 	auto memRequirements = GetBufferMemoryRequirements(device, buffer.buffer);
 	auto memtypeIndex = GetMemoryTypeIndex(memRequirements.memoryTypeBits, memoryPropties);
-	buffer.memory = AllocateMemory(device, memRequirements.size, memtypeIndex);
+	VkMemoryAllocateFlags memoryAllocationFlags = 0;
+	if ((usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) == VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+		memoryAllocationFlags |= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+	}
+
+	buffer.memory = AllocateMemory(device, memRequirements.size, memtypeIndex, memoryAllocationFlags);
 	BindMemoryToBuffer(device, buffer.memory, buffer.buffer, 0);
 	if (memoryPropties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
 	{
@@ -2474,6 +3047,16 @@ void ExampleBase::BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, u
 	descriptorBufferInfo.offset = 0;
 	descriptorBufferInfo.range = uniformBuffer.size;
 	UpdateDescriptorSetBindingResources(device, set, binding, elemenId, 1, descriptorType, {  }, { descriptorBufferInfo }, {});
+
+}
+
+void ExampleBase::BindAccelerationStructure(uint32_t geometryIndex, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType)
+{
+	VkWriteDescriptorSetAccelerationStructureKHR accelerationStructureWrite = {};
+	accelerationStructureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+	accelerationStructureWrite.accelerationStructureCount = 1;
+	accelerationStructureWrite.pAccelerationStructures = &geoms[geometryIndex].accelerationStructureKHR; // TLAS 的句柄
+	UpdateDescriptorSetBindingResources(device, set, binding, elemenId, 1, descriptorType, {  }, { }, {},&accelerationStructureWrite);
 
 }
 

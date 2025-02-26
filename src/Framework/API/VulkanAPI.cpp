@@ -2,9 +2,17 @@
 
 struct ExtensionAPI {
 	PFN_vkCmdDrawMeshTasksEXT vkCmdDrawMeshTasksEXT = nullptr;
+	PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR = nullptr;
+	PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR = nullptr;
+	PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR = nullptr;
+	PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR = nullptr;
+	PFN_vkBuildAccelerationStructuresKHR vkBuildAccelerationStructuresKHR = nullptr;
+	PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR = nullptr;
+	PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR = nullptr;
+	PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR = nullptr;
+	PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR = nullptr;
 
 };
-
 static ExtensionAPI s_extensionAPI;
 
 std::vector<VkPhysicalDevice> VulkanAPI::EnumeratePhysicalDevice(VkInstance instance)
@@ -60,6 +68,16 @@ VkPhysicalDeviceFeatures VulkanAPI::GetPhysicalDeviceFeatures(VkPhysicalDevice p
 	return features;
 }
 
+VkPhysicalDeviceProperties2 VulkanAPI::GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,void* pNext)
+{
+	VkPhysicalDeviceProperties2 physicalDeviceProperties2{};
+	physicalDeviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+	physicalDeviceProperties2.pNext = pNext;
+	vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties2);
+	return physicalDeviceProperties2;
+
+}
+
 void VulkanAPI::GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2& physicalDeviceFeatures2)
 {
 	vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures2);
@@ -71,6 +89,7 @@ VkDevice VulkanAPI::CreateDevice(VkPhysicalDevice physicalDevice,const std::vect
 	VkDevice device = VK_NULL_HANDLE;
 	VkDeviceCreateInfo deviceCreateInfo{};
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	const VkBaseInStructure* base = reinterpret_cast<const VkBaseInStructure*>(extendInfoPointer);
 	deviceCreateInfo.pNext = extendInfoPointer;
 	deviceCreateInfo.flags = 0;
 	deviceCreateInfo.queueCreateInfoCount = wantQueueFamilyAndQueuePriorities.size();
@@ -117,7 +136,7 @@ void VulkanAPI::DeviceWaitIdle(VkDevice device)
 void* VulkanAPI::DeviceFuncLoader(VkDevice device, const char* funcName)
 {
 	auto func = vkGetDeviceProcAddr(device, funcName);
-	ASSERT(func);
+	//ASSERT(func);
 	return func;
 
 }
@@ -125,6 +144,15 @@ void* VulkanAPI::DeviceFuncLoader(VkDevice device, const char* funcName)
 void VulkanAPI::LoadExtensionAPIs(VkDevice device)
 {
 	s_extensionAPI.vkCmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)DeviceFuncLoader(device, "vkCmdDrawMeshTasksEXT");
+	s_extensionAPI.vkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)DeviceFuncLoader(device,"vkCreateRayTracingPipelinesKHR");
+	s_extensionAPI.vkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)DeviceFuncLoader(device, "vkCmdTraceRaysKHR");
+	s_extensionAPI.vkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)DeviceFuncLoader(device, "vkCreateAccelerationStructureKHR");
+	s_extensionAPI.vkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)DeviceFuncLoader(device, "vkDestroyAccelerationStructureKHR");
+	s_extensionAPI.vkBuildAccelerationStructuresKHR = (PFN_vkBuildAccelerationStructuresKHR)DeviceFuncLoader(device, "vkBuildAccelerationStructuresKHR");
+	s_extensionAPI.vkGetBufferDeviceAddressKHR = (PFN_vkGetBufferDeviceAddressKHR)DeviceFuncLoader(device, "vkGetBufferDeviceAddressKHR");
+	s_extensionAPI.vkCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)DeviceFuncLoader(device, "vkCmdBuildAccelerationStructuresKHR");
+	s_extensionAPI.vkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)DeviceFuncLoader(device, "vkGetAccelerationStructureBuildSizesKHR");	
+	s_extensionAPI.vkGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)DeviceFuncLoader(device, "vkGetRayTracingShaderGroupHandlesKHR");
 
 }
 
@@ -157,6 +185,7 @@ std::vector<VkExtensionProperties> VulkanAPI::EnumerateDeviceExtensionProperties
 
 
 }
+
 
 std::vector<VkLayerProperties> VulkanAPI::EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice)
 {
@@ -306,12 +335,19 @@ uint32_t VulkanAPI::GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchain
 	return imageIndex;
 }
 
-VkDeviceMemory VulkanAPI::AllocateMemory(VkDevice device, VkDeviceSize allocationSize, uint32_t memoryTypeIndex)
+VkDeviceMemory VulkanAPI::AllocateMemory(VkDevice device, VkDeviceSize allocationSize, uint32_t memoryTypeIndex, VkMemoryAllocateFlags allocationFlags)
 {
 	VkDeviceMemory deviceMemory = VK_NULL_HANDLE;
-	VkMemoryAllocateInfo memoryAllocateInfo{};
+	VkMemoryAllocateInfo memoryAllocateInfo{}; 
+	VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo{};
+	memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+	memoryAllocateFlagsInfo.pNext = nullptr;
+	memoryAllocateFlagsInfo.deviceMask = 0;
+	memoryAllocateFlagsInfo.flags = allocationFlags;
+
+
 	memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	memoryAllocateInfo.pNext = nullptr;
+	memoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
 	memoryAllocateInfo.allocationSize = allocationSize;
 	memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
 	auto res = vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &deviceMemory);
@@ -444,6 +480,24 @@ VkMemoryRequirements VulkanAPI::GetBufferMemoryRequirements(VkDevice device, VkB
 	return requirements;
 }
 
+VkDeviceAddress VulkanAPI::GetBufferDeviceAddressKHR(VkDevice device, VkBuffer buffer)
+{
+	VkDeviceAddress address = 0;
+	VkBufferDeviceAddressInfo addressInfo{};
+	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	addressInfo.pNext = nullptr;
+	addressInfo.buffer = buffer;
+
+	if (s_extensionAPI.vkGetBufferDeviceAddressKHR)
+	{
+		address = s_extensionAPI.vkGetBufferDeviceAddressKHR(device, &addressInfo);
+		ASSERT(address);
+	}
+
+
+	return address;
+}
+
 VkBufferView VulkanAPI::CreateBufferView(VkDevice device, VkBufferViewCreateFlags flags, VkBuffer buffer, VkFormat format, VkDeviceSize offset, VkDeviceSize range)
 {
 	VkBufferView bufferView = VK_NULL_HANDLE;
@@ -465,6 +519,96 @@ void VulkanAPI::DestroyBufferView(VkDevice device, VkBufferView bufferView)
 {
 	vkDestroyBufferView(device, bufferView, nullptr);
 }
+
+VkAccelerationStructureKHR VulkanAPI::CreateAccelerationStructureKHR(VkDevice device, VkAccelerationStructureCreateFlagsKHR createFlags, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkAccelerationStructureTypeKHR type)
+{
+	VkAccelerationStructureCreateInfoKHR accelerationStructureCreateInfoKHR{};
+	accelerationStructureCreateInfoKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+	accelerationStructureCreateInfoKHR.pNext = nullptr;
+	accelerationStructureCreateInfoKHR.buffer = buffer;//是将存储加速度结构的buffer。其数据通过vkCmdBuildAccelerationStructuresKHR, vkBuildAccelerationStructuresKHR, vkCmdCopyAccelerationStructureKHR, 和 vkCopyAccelerationStructureKHR命令填充
+	accelerationStructureCreateInfoKHR.offset = offset;//是与加速度结构将被存储的buffer的相对其基本地址的一个字节偏移量，并且必须是256的倍数。
+	accelerationStructureCreateInfoKHR.size = size;//是加速结构所需的字节大小。
+	accelerationStructureCreateInfoKHR.type = type;//是一个指定将要创建的加速度结构类型的VkAccelerationStructureTypeKHR值。
+	accelerationStructureCreateInfoKHR.deviceAddress = 0;//是加速结构需要的device address，需要accelerationStructureCaptureReplay 特性开启，如果为0，则表示不需要特定的地址，常规使用尽量避免使用该项
+	accelerationStructureCreateInfoKHR.createFlags = createFlags;
+
+	VkAccelerationStructureKHR accelerationStructureKHR = VK_NULL_HANDLE;
+
+	if (s_extensionAPI.vkCreateAccelerationStructureKHR)
+	{
+		auto res = s_extensionAPI.vkCreateAccelerationStructureKHR(device, &accelerationStructureCreateInfoKHR, nullptr, &accelerationStructureKHR);
+
+		ASSERT(res == VK_SUCCESS);
+	}
+
+	return accelerationStructureKHR;
+}
+
+void VulkanAPI::DestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructureKHR)
+{
+	if (s_extensionAPI.vkDestroyAccelerationStructureKHR)
+	{
+		s_extensionAPI.vkDestroyAccelerationStructureKHR(device, accelerationStructureKHR, nullptr);
+
+	}
+}
+
+VkAccelerationStructureBuildSizesInfoKHR VulkanAPI::GetAccelerationStructureBuildSizesKHR(VkDevice device,const VkAccelerationStructureBuildGeometryInfoKHR& accelerationStructureBuildGeometryInfoKHR)
+{
+	VkDeviceSize buildSize = 0;
+	uint32_t infoCount = 1;
+	VkAccelerationStructureBuildSizesInfoKHR buildSizeInfoKHR{};
+	buildSizeInfoKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+	buildSizeInfoKHR.pNext = nullptr;
+	buildSizeInfoKHR.updateScratchSize = 0;//是更新操作中scratch buffer所需要的字节数大小
+	buildSizeInfoKHR.buildScratchSize = 0;//是构建操作中scratch buffer所需要的字节数大小
+	buildSizeInfoKHR.accelerationStructureSize = 0;//是VkAccelerationStructureKHR加速结构中构建或更新操作所需的字节大小。
+
+	if (s_extensionAPI.vkGetAccelerationStructureBuildSizesKHR)
+	{
+		s_extensionAPI.vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_OR_DEVICE_KHR, &accelerationStructureBuildGeometryInfoKHR, &infoCount, &buildSizeInfoKHR);
+	}
+	
+
+
+
+	return buildSizeInfoKHR;
+}
+
+void VulkanAPI::GetRayTracingShaderGroupHandlesKHR(VkDevice  device,VkPipeline  pipeline,uint32_t  firstGroup,uint32_t  groupCount,std::vector<char>& outData)
+{
+
+	if (s_extensionAPI.vkGetRayTracingShaderGroupHandlesKHR)
+	{
+		s_extensionAPI.vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, outData.size(), outData.data());
+	}
+}
+
+//void VulkanAPI::BuildBottomAccelerationStructureKHR(VkDevice device, const std::vector<VkAccelerationStructureGeometryKHR>& geomsInfos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR>& buildRanges,VkAccelerationStructureKHR accelerationStructureKHR)
+//{
+//	VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfoKHR{};//其他信息见p3235
+//	accelerationStructureBuildGeometryInfoKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+//	accelerationStructureBuildGeometryInfoKHR.pNext = nullptr;
+//	accelerationStructureBuildGeometryInfoKHR.flags = 0;
+//	accelerationStructureBuildGeometryInfoKHR.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;//为VkAccelerationStructureTypeKHR 值指明加速结构构建的类型
+//	accelerationStructureBuildGeometryInfoKHR.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;// VkBuildAccelerationStructureModeKHR 值指明操作的类型
+//	accelerationStructureBuildGeometryInfoKHR.srcAccelerationStructure = VK_NULL_HANDLE;//为当mode 为VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR的时候用来更新dstAccelerationStructure 的一个现存的 acceleration structure
+//	accelerationStructureBuildGeometryInfoKHR.dstAccelerationStructure = accelerationStructureKHR;//为要更新的acceleration structure
+//	accelerationStructureBuildGeometryInfoKHR.geometryCount = geomsInfos.size();//指明要构建到dstAccelerationStructure 中的几何体数量
+//
+//	accelerationStructureBuildGeometryInfoKHR.pGeometries = geomsInfos.data();
+//	accelerationStructureBuildGeometryInfoKHR.ppGeometries = VK_NULL_HANDLE;//一组VkAccelerationStructureGeometryKHR 数组指针的数组指针  ,和pGeometries 不能同时使用,必有一个为VK_NULL_HANDLE,shader中以 RayGeometryIndexKHR进行访问
+//	accelerationStructureBuildGeometryInfoKHR.scratchData = VkDeviceOrHostAddressKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0/*.hostAddress host端地址*/ /*假设这是一个有效的VkDeviceOrHostAddressKHR*/ };//为用于构建的scratch的 device 或者 host端的内存地址
+//	
+//
+//	if (s_extensionAPI.vkBuildAccelerationStructuresKHR)
+//	{
+//		auto res = s_extensionAPI.vkBuildAccelerationStructuresKHR(device, VK_NULL_HANDLE, 1, &accelerationStructureBuildGeometryInfoKHR,(const VkAccelerationStructureBuildRangeInfoKHR* const*)buildRanges.data());
+//		ASSERT(res == VK_SUCCESS);
+//	}
+//}
+
+
 
 VkRenderPass VulkanAPI::CreateRenderPass(VkDevice device, VkRenderPassCreateFlags flags, const std::vector<VkAttachmentDescription>& attachments, const std::vector<VkSubpassDescription>& subpasses, const std::vector<VkSubpassDependency> dependencies)
 {
@@ -669,6 +813,87 @@ VkPipeline VulkanAPI::CreateComputePipeline(VkDevice device, VkPipelineCreateFla
 	ASSERT(res == VK_SUCCESS);
 	return pipeline;
 
+}
+
+VkPipeline VulkanAPI::CreateRayTracingPipeline(VkDevice device, const std::vector<VkPipelineShaderStageCreateInfo>& shaderStages, uint32_t maxPipelineRayRecursionDepth, VkPipelineLayout pipelineLayout)
+{
+
+
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> rayTracingShaderGroupCreateInfoKHRs{};
+
+	rayTracingShaderGroupCreateInfoKHRs.resize(shaderStages.size(), VkRayTracingShaderGroupCreateInfoKHR{});
+	for (uint32_t i = 0; i < shaderStages.size(); i++)
+	{
+		//初始化shader group 信息
+		VkRayTracingShaderGroupCreateInfoKHR& rayTracingShaderGroupCreateInfoKHR = rayTracingShaderGroupCreateInfoKHRs[i];
+		rayTracingShaderGroupCreateInfoKHR.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		rayTracingShaderGroupCreateInfoKHR.pNext = nullptr;
+		rayTracingShaderGroupCreateInfoKHR.pShaderGroupCaptureReplayHandle = nullptr;
+		rayTracingShaderGroupCreateInfoKHR.type = (VkRayTracingShaderGroupTypeKHR)i;
+		rayTracingShaderGroupCreateInfoKHR.generalShader = VK_SHADER_UNUSED_KHR;
+		rayTracingShaderGroupCreateInfoKHR.closestHitShader = VK_SHADER_UNUSED_KHR;
+		rayTracingShaderGroupCreateInfoKHR.anyHitShader = VK_SHADER_UNUSED_KHR;
+		rayTracingShaderGroupCreateInfoKHR.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+
+	}
+
+	//VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR  = 0  , 指明一个miss shader和ray gen shader
+	//VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR  = 1 ,  指明一个any hit shader和close hit shader
+	//VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR   = 2 ,  指明一个intersectioin shader
+
+
+	for (uint32_t i = 0; i < rayTracingShaderGroupCreateInfoKHRs.size(); i++)
+	{
+
+		if (shaderStages[i].stage == VK_SHADER_STAGE_RAYGEN_BIT_KHR || shaderStages[i].stage == VK_SHADER_STAGE_MISS_BIT_KHR || shaderStages[i].stage == VK_SHADER_STAGE_CALLABLE_BIT_KHR)
+		{
+			rayTracingShaderGroupCreateInfoKHRs[i].generalShader = i;
+			rayTracingShaderGroupCreateInfoKHRs[i].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+		}
+
+		if(shaderStages[i].stage == VK_SHADER_STAGE_ANY_HIT_BIT_KHR)
+		{
+			rayTracingShaderGroupCreateInfoKHRs[i].anyHitShader = i;
+			rayTracingShaderGroupCreateInfoKHRs[i].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+		}
+		if (shaderStages[i].stage == VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
+		{
+			rayTracingShaderGroupCreateInfoKHRs[i].closestHitShader = i;
+			rayTracingShaderGroupCreateInfoKHRs[i].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+		}
+		if (shaderStages[i].stage == VK_SHADER_STAGE_INTERSECTION_BIT_KHR)
+		{
+			rayTracingShaderGroupCreateInfoKHRs[i].intersectionShader = i;
+			rayTracingShaderGroupCreateInfoKHRs[i].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
+		}
+
+	}
+
+
+
+
+
+	VkRayTracingPipelineCreateInfoKHR rayTracingPipelineCreateInfoKHR;
+	rayTracingPipelineCreateInfoKHR.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+	rayTracingPipelineCreateInfoKHR.pNext = nullptr;
+	rayTracingPipelineCreateInfoKHR.flags = 0;
+	rayTracingPipelineCreateInfoKHR.stageCount = shaderStages.size();
+	rayTracingPipelineCreateInfoKHR.pStages = shaderStages.data();
+	rayTracingPipelineCreateInfoKHR.groupCount = rayTracingShaderGroupCreateInfoKHRs.size();
+	rayTracingPipelineCreateInfoKHR.pGroups = rayTracingShaderGroupCreateInfoKHRs.data();
+	rayTracingPipelineCreateInfoKHR.maxPipelineRayRecursionDepth = maxPipelineRayRecursionDepth;
+	rayTracingPipelineCreateInfoKHR.pLibraryInfo = nullptr;
+	rayTracingPipelineCreateInfoKHR.pLibraryInterface = nullptr;
+	rayTracingPipelineCreateInfoKHR.pDynamicState = nullptr;
+	rayTracingPipelineCreateInfoKHR.layout = pipelineLayout;
+	rayTracingPipelineCreateInfoKHR.basePipelineHandle = VK_NULL_HANDLE;
+	rayTracingPipelineCreateInfoKHR.basePipelineIndex = -1;
+	VkPipeline pipeline{ VK_NULL_HANDLE };
+	ASSERT(s_extensionAPI.vkCreateRayTracingPipelinesKHR);
+	auto res = s_extensionAPI.vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rayTracingPipelineCreateInfoKHR, nullptr, &pipeline);
+	ASSERT(res == VK_SUCCESS);
+	return pipeline;
 }
 
 
@@ -1017,6 +1242,40 @@ void VulkanAPI::CmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX,
 	vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
 }
 
+void VulkanAPI::CmdBuildBottomAccelerationStructureKHR(VkCommandBuffer commandBuffer, const std::vector<VkAccelerationStructureGeometryKHR>& geomsInfos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR>& buildRanges, VkAccelerationStructureKHR accelerationStructureKHR,const VkDeviceOrHostAddressKHR& scratchData)
+{
+	VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfoKHR{};//其他信息见p3235
+	accelerationStructureBuildGeometryInfoKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	accelerationStructureBuildGeometryInfoKHR.pNext = nullptr;
+	accelerationStructureBuildGeometryInfoKHR.flags = 0;
+	accelerationStructureBuildGeometryInfoKHR.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;//为VkAccelerationStructureTypeKHR 值指明加速结构构建的类型
+	accelerationStructureBuildGeometryInfoKHR.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;// VkBuildAccelerationStructureModeKHR 值指明操作的类型
+	accelerationStructureBuildGeometryInfoKHR.srcAccelerationStructure = VK_NULL_HANDLE;//为当mode 为VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR的时候用来更新dstAccelerationStructure 的一个现存的 acceleration structure
+	accelerationStructureBuildGeometryInfoKHR.dstAccelerationStructure = accelerationStructureKHR;//为要更新的acceleration structure
+	accelerationStructureBuildGeometryInfoKHR.geometryCount = geomsInfos.size();//指明要构建到dstAccelerationStructure 中的几何体数量
+
+	accelerationStructureBuildGeometryInfoKHR.pGeometries = geomsInfos.data();
+	accelerationStructureBuildGeometryInfoKHR.ppGeometries = VK_NULL_HANDLE;//一组VkAccelerationStructureGeometryKHR 数组指针的数组指针  ,和pGeometries 不能同时使用,必有一个为VK_NULL_HANDLE,shader中以 RayGeometryIndexKHR进行访问
+	accelerationStructureBuildGeometryInfoKHR.scratchData = scratchData;
+	const VkAccelerationStructureBuildRangeInfoKHR* p = buildRanges.data();
+
+	if (s_extensionAPI.vkCmdBuildAccelerationStructuresKHR)
+	{
+		s_extensionAPI.vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &accelerationStructureBuildGeometryInfoKHR, &p);
+	}
+
+}
+
+void VulkanAPI::CmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth)
+{
+	if (s_extensionAPI.vkCmdTraceRaysKHR)
+	{
+		s_extensionAPI.vkCmdTraceRaysKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
+	}
+}
+
+
+
 
 
 
@@ -1074,11 +1333,11 @@ void VulkanAPI::WaitQueueIdle(VkQueue queue)
 
 
 
-void VulkanAPI::UpdateDescriptorSetBindingResources(VkDevice device, VkDescriptorSet dstSet, uint32_t dstBinding, uint32_t dstArrayElement, uint32_t descriptorCount, VkDescriptorType descriptorType, const std::vector<VkDescriptorImageInfo> imageInfos, const std::vector<VkDescriptorBufferInfo> bufferInfos, const std::vector<VkBufferView> texelBufferViews)
+void VulkanAPI::UpdateDescriptorSetBindingResources(VkDevice device, VkDescriptorSet dstSet, uint32_t dstBinding, uint32_t dstArrayElement, uint32_t descriptorCount, VkDescriptorType descriptorType, const std::vector<VkDescriptorImageInfo> imageInfos, const std::vector<VkDescriptorBufferInfo> bufferInfos, const std::vector<VkBufferView> texelBufferViews,void* pNext)
 {
 	VkWriteDescriptorSet writeDescriptorSet{};
 	writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	writeDescriptorSet.pNext = nullptr;
+	writeDescriptorSet.pNext = pNext;
 	writeDescriptorSet.dstSet = dstSet;
 	writeDescriptorSet.dstBinding = dstBinding;
 	writeDescriptorSet.dstArrayElement = dstArrayElement;
@@ -1197,7 +1456,7 @@ void VulkanAPI::DestroyInstance(VkInstance instance)
 
 void VulkanAPI::Initialize()
 {
-	glfwInit();
+	ASSERT(glfwInit());
 }
 
 std::vector<const char*> VulkanAPI::GetInstanceNeedWinGLFWExtensionNames()
@@ -1251,7 +1510,12 @@ VkBool32 DebugCallBack(
 	VkDebugUtilsMessageTypeFlagsEXT                  messageTypes,
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData) {
-	LogInfo(pCallbackData->pMessage);
+	if (messageSeverity  == VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT && (messageTypes | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) == VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
+
+		LogInfo(pCallbackData->pMessage);
+		
+	}
+
 
 	//ASSERT(1);
 	return VK_TRUE;

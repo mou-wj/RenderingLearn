@@ -6,7 +6,10 @@ std::map< EventType, std::function<void()>> WindowEventHandler::s_eventCallBacks
 void WindowEventHandler::mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
-        s_eventCallBacks[MOUSE_LEFT_BUTTON_CLICKED]();
+        if (s_eventCallBacks[MOUSE_LEFT_BUTTON_CLICKED]) {
+            s_eventCallBacks[MOUSE_LEFT_BUTTON_CLICKED]();
+        }
+        
 
     }
         // 处理左键按下事件
@@ -166,20 +169,12 @@ std::array<float, 2> WindowEventHandler::GetMousePos()
 {
     int window_x, window_y;
     glfwGetWindowPos(currentWidnow, &window_x, &window_y);
-
-
-    
     double x, y;
     glfwGetCursorPos(currentWidnow, &x, &y);
-    const char* description;
-    int code = glfwGetError(&description);
-    if (code != GLFW_NO_ERROR) {
-        std::cerr << "GLFW Error: " << description << std::endl;
-    }
     // 计算相对窗口的坐标
     double relative_x = x - window_x;
     double relative_y = y - window_y;
-    std::cout << "curser pos" << x << " " << y << std::endl;
+
     return std::array<float, 2>{float(x), float(y)};
 
 

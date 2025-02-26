@@ -78,22 +78,8 @@ struct Image {
 	
 	}
 
-	uint32_t GetFormatNumBits(VkFormat format) {
-		switch (format)
-		{
-		case VK_FORMAT_R8G8B8A8_SRGB:;
-		case VK_FORMAT_B8G8R8A8_SRGB:;
-		case VK_FORMAT_D32_SFLOAT:
-			return 32;
-		case VK_FORMAT_MAX_ENUM:
-
-			break;
-		default:
-			break;
-		}
-		assert(0);
-		return 0;
-
+	uint32_t GetFormatNumBytes(VkFormat format) {
+		return VkFormatToInfo[format].totalBytesPerPixel;
 	}
 	void CopyToOther(Image& dstImage, uint32_t layer, uint32_t mip)
 	{
@@ -186,7 +172,7 @@ struct Image {
 	}
 	bool ChechFormatSizeCompatible(VkFormat otherFormat)
 	{
-		return GetFormatNumBits(format) == GetFormatNumBits(otherFormat);
+		return GetFormatNumBytes(format) == GetFormatNumBytes(otherFormat);
 
 	}
 	VkExtent3D GetMipLevelExtent(uint32_t mipLevel)
@@ -444,6 +430,26 @@ struct ComputeDesc {
 	std::vector<std::string> computeShaderPaths;
 };
 
+
+
+struct RayTracingShaderCodePaths {
+	// rgen, rint, rmiss, rahit, rchit,rcall
+	std::string rayGenerateShaderPath = "";
+	std::string closeHitShaderPath = "";
+	std::string missShaderPath = "";
+	std::string anyHitShaderPath = "";
+	std::string intersectionShaderPath = "";
+	std::string callableShaderPath = "";
+	//
+};
+
+
+struct RayTracingPipelinesDesc {
+	bool valid = false;//为true则会创建ray tracing pipeline
+	std::vector<RayTracingShaderCodePaths> raytracingPipelineShaderPaths;
+};
+
+
 struct ComputePipelineInfos {
 	ShaderResourceInfo computeShaderResourceInfo;
 	VkPipelineShaderStageCreateInfo computeShaderStage{};
@@ -459,6 +465,21 @@ struct ComputePipelineInfos {
 		computeShaderStage.module = VK_NULL_HANDLE;
 		computeShaderStage.pName = nullptr;
 		computeShaderStage.pSpecializationInfo = nullptr;//不指定特殊常数
+	}
+};
+
+
+struct RayTracingPipelineInfos {
+	std::map<VkShaderStageFlagBits, ShaderResourceInfo> rayTracingshaderResourceInfos;
+	std::vector<VkPipelineShaderStageCreateInfo> rayTracingShaderStages{};
+	VkDescriptorPool descriptorPool;
+	std::map<uint32_t, DescriptorSetInfo> descriptorSetInfos;
+	VkPipelineLayout pipelineLayout;
+	VkPipeline pipeline;
+	Buffer stbBuffer{};
+	std::map<VkShaderStageFlagBits, VkStridedDeviceAddressRegionKHR> rayTracingShaderBindingRangeInfos;
+	RayTracingPipelineInfos() {
+
 	}
 };
 
@@ -482,6 +503,7 @@ struct TextureBindInfo {
 	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;//天空盒的数据需要翻转Y
 	uint32_t passId = 0,pipeId = 0, setId = 0, binding = 0, elementId = 0;
 	bool compute = false;//是否用于compute pipeline的标志
+	bool rayTracing = false;//是否用于ray tracing pipeline的标志
 	VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 	bool buildMipmap = false;
 	TextureBindInfo() = default;
@@ -507,6 +529,11 @@ struct Geometry
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
 
+	std::vector<float> vertexAttributesDatas;
+	std::vector<std::vector<uint32_t>> shapeIndices;
+
+
+
 	bool useIndexBuffers = true;
 
 	//顶点缓冲索引缓冲
@@ -517,8 +544,12 @@ struct Geometry
 
 
 	//只使用顶点缓冲
+	std::vector<std::vector<float>> shapeVertexAttributesBuffers;
 	std::vector<Buffer> shapeVertexBuffers;
 
+
+	VkAccelerationStructureKHR accelerationStructureKHR{};
+	Buffer accelerationStructureKHRBuffer{}, accelerationStructureScratchBuffer{};
 
 	struct AABB {
 		float minX = 0, maxX = 0;
@@ -586,12 +617,12 @@ struct Geometry
 };
 
 enum VertexAttributeType {
-	VAT_Position_float32,//x,y,z float
-	VAT_TextureCoordinates_float32,//u,v,w
-	VAT_Normal_float32,//nx,ny,nz
-	VAT_Color_float32,//r,g,b
-	VAT_AUX1_float32,//��������1,x,y,z
-	VAT_AUX2_float32//��������2,x,y,z
+	VAT_Position_float32 = 0,//x,y,z float
+	VAT_Normal_float32 = 1,//nx,ny,nz
+	VAT_Color_float32 = 2,//r,g,b
+	VAT_TextureCoordinates_float32 = 3,//u,v,w
+	VAT_AUX1_float32 = 4,//��������1,x,y,z
+	VAT_AUX2_float32 = 5//��������2,x,y,z
 };
 
 struct Attachment {
@@ -649,7 +680,7 @@ struct RenderTargets {
 	
 	}
 };
-struct ShaderCodePaths {
+struct GraphicsPipelineShaderCodePaths {
 
 	std::string taskShaderPath = "";
 	std::string meshShaderPath = "";
@@ -658,7 +689,14 @@ struct ShaderCodePaths {
 	std::string tessellationEvaluationShaderPath = "";
 	std::string geometryShaderPath = "";
 	std::string fragmentShaderPath = "";
+	//
 };
+using ShaderCodePaths = GraphicsPipelineShaderCodePaths;
+
+
+
+
+
 
 struct SubpassDesc {
 	bool enableInputAttachment = false;
@@ -678,6 +716,12 @@ struct BufferBindInfo {
 	uint32_t passId = 0,pipeId = 0, setId = 0, binding = 0, elementId = 0;
 	bool compute = false;//是否用于compute pipeline的标志
 };
+
+struct AccelerationStructureBindInfo {
+	uint32_t geometryIndex = 0;
+	uint32_t pipeId = 0, setId = 0, binding = 0, elementId = 0;
+};
+
 
 struct CommandList {
 	VkCommandBuffer commandBuffer  = VK_NULL_HANDLE;
@@ -850,6 +894,8 @@ protected:
 
 
 protected:
+	//如果需要创建ray tracing pipeline，则派生这个函数，并初始化相关信息
+	virtual void InitRaytrcingPipelineInfo() {}
 	virtual void InitComputeInfo() {}
 	virtual void InitSubPassInfo() = 0;
 	virtual void InitSyncObjectNumInfo() = 0;
@@ -870,6 +916,10 @@ protected:
 	//compute
 	void CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex = 0, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
+	//ray tracing
+	void CmdOpsTraceRays(CommandList& cmdList, uint32_t rayTracingPipelineIndex = 0, std::array<uint32_t, 3> groupSize = { 1,1,1 });
+
+
 
 	//transfer
 	void CmdOpsCopyWholeImageToImage(CommandList& cmdList, Image& srcImage, Image& dstImage);
@@ -895,6 +945,10 @@ protected:
 	CommandList graphicCommandList;
 	//SubpassInfo subpassInfo;
 	ComputeDesc computeDesc;
+
+	//
+	RayTracingPipelinesDesc rayTracingPipelinsDesc;
+
 	//std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;
 	//uint32_t numFences = 1;
 	uint32_t numSemaphores = 1;
@@ -909,6 +963,7 @@ protected:
 
 	std::map<std::string, TextureBindInfo> textureBindInfos;
 	std::map<std::string, BufferBindInfo> bufferBindInfos;
+	std::map<std::string, AccelerationStructureBindInfo> accelerationStructureBindInfos;
 
 protected:
 	//这里的数据不能被派生类创建和析构
@@ -922,7 +977,7 @@ protected:
 	std::map<std::string, Buffer> buffers;
 	void BindTexture(const std::string& textureName);
 	void BindBuffer(const std::string& bufferName);
-
+	void BindAccelerationStructure(const std::string& accelerationStructureName);
 
 	void ReInitGeometryResources(Geometry& geo);
 
@@ -952,6 +1007,11 @@ private:
 	void InitCompute();
 	void InitComputePipeline(ComputePipelineInfos& computePipelineInfos);
 
+	//ray tracing
+	void InitRayTracing();
+	void InitRayTracingPipeline(RayTracingPipelineInfos& rayTracingPipelineInfos);
+
+
 private:
 	virtual void Clear();
 	virtual void ClearContex();
@@ -964,6 +1024,7 @@ private:
 	virtual void ClearRecources();
 	virtual void ClearQueryPool();
 	virtual void ClearComputePipeline();
+	virtual void ClearRayTracingPipeline();
 	
 
 
@@ -985,6 +1046,8 @@ private:
 	Buffer CreateVertexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateShaderAccessBuffer(const char* buf, VkDeviceSize size);
+
+	void BuildAccelerationStructure(Geometry& geo);
 	
 	void DestroyBuffer(Buffer& buffer);
 
@@ -996,6 +1059,7 @@ private:
 	VkDescriptorType GetDescriptorType(DescriptorSetInfo& descriptorSetInfo,uint32_t binding);
 	void BindTexture(const Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId ,VkDescriptorType descriptorType);
 	void BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType);
+	void BindAccelerationStructure(uint32_t geometryIndex, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType);
 
 	void BindInputAttachment(RenderPassInfo& renderPassInfo);
 
@@ -1065,6 +1129,16 @@ private:
 	VkPhysicalDeviceMeshShaderFeaturesEXT physicalDeviceMeshShaderFeaturesEXT;
 	VkPhysicalDeviceMaintenance4Features maintenance4Feature;
 
+	//和光线追踪功能相关的特性
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR physicalDeviceRayTracingPipelineFeaturesKHR{};
+	VkPhysicalDeviceVulkanMemoryModelFeatures physicalDeviceVulkanMemoryModelFeatures{};
+	VkPhysicalDeviceBufferDeviceAddressFeaturesKHR physicalDeviceBufferDeviceAddressFeaturesKHR{};
+	//VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT physicalDevicePipelineLibraryGroupHandlesFeaturesEXT{};
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR physicalDeviceAccelerationStructureFeaturesKHR{};
+	
+	
+
+
 	VkPhysicalDeviceFeatures physicalDeviceFeatures;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	;
@@ -1107,11 +1181,14 @@ private:
 
 
 	const uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
+	const uint32_t vertexAttributeInputFloatStride = 3 * vertexAttributes.size();
 
 	//先不考虑compute pipeline
 	//std::vector<GraphicPipelineInfos> graphcisPipelineInfos;
 	//ComputePipelineInfos computePipelineInfos;
 	std::vector<ComputePipelineInfos> computePipelinesInfos;
+
+	std::vector<RayTracingPipelineInfos> rayTracingPipelinesInfos;
 
 	VkQueue graphicQueue = VK_NULL_HANDLE;//该队列可以graphic，可以transfer，可以present
 	

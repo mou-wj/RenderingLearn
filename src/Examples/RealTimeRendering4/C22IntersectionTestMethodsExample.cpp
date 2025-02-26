@@ -105,7 +105,6 @@ void C22IntersectionTestMethodsExample::Loop()
 			renderPassInfos[0].subpassDrawGeoInfos[2] = {};
 		}
 		
-		ShowVec(rayDirection);
 		}, "鼠标点击屏幕发射一条射线，如果和边界盒相交，其对应边界的几何网格变为蓝色，如果和模型上的三角形相交，则显示该三角形为紫色");
 
 
@@ -134,10 +133,11 @@ void C22IntersectionTestMethodsExample::Loop()
 		i++;
 		WindowEventHandler::ProcessEvent();
 		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 		glm::mat4 transform = camera.GetProj() * camera.GetView();//不进行世界坐标变换
 		FillBuffer(buffers["Transform"], 0, sizeof(glm::mat4), (const char*)&transform);
 		CmdListWaitFinish(graphicCommandList);
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);

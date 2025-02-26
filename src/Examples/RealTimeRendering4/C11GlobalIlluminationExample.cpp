@@ -229,8 +229,7 @@ void C11GlobalIlluminationExample::Loop()
 
 
 
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
@@ -239,7 +238,8 @@ void C11GlobalIlluminationExample::Loop()
 		FillBuffer(buffers["Info"], sizeof(glm::mat4) * 2, sizeof(glm::vec3), (const char*)&camera.GetPos());
 		FillBuffer(buffers["Info"], sizeof(glm::mat4) * 2 + sizeof(glm::vec3), sizeof(uint32_t), (const char*)&exampleType);
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-
+		//确保presentFence在创建时已经触发
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);

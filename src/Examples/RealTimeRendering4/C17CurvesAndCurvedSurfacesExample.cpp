@@ -119,10 +119,10 @@ void C17CurvesAndCurvedSurfacesExample::Loop()
 		WindowEventHandler::ProcessEvent();
 		mvpTransform = camera.GetProj() * camera.GetView();
 		FillBuffer(buffers["Transform"], 0, sizeof(glm::mat4), (const char*)&mvpTransform);
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 		CaptureBeginMacro
 		CmdListWaitFinish(graphicCommandList);
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CmdListRecordBegin(graphicCommandList);
 		CmdOpsDrawGeom(graphicCommandList, passId);

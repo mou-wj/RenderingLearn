@@ -5,6 +5,7 @@ struct RENDERDOC_API_1_6_0;
 
 
 //renderdoc捕获数据可能会使用device创建一些资源，这可能导致销毁device时报错没有资源被销毁,且在循环中捕获帧使用不当可能还会引起同步问题，导致提交执行失败
+//renderdoc可能还会导致某些设备拓展无线正常显示，具体原因目前不明
 class RenderDocTool:public SingleInstance<RenderDocTool> {
 	friend class SingleInstance<RenderDocTool>;
 public:

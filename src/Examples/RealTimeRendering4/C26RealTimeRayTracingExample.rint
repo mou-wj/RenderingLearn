@@ -1,0 +1,19 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+
+// 自定义几何体的相交测试
+hitAttributeEXT vec2 hitAttributes;
+
+void main() {
+    // 假设我们有一个简单的平面几何体
+    vec3 rayOrigin = gl_WorldRayOriginEXT;
+    vec3 rayDirection = gl_WorldRayDirectionEXT;
+
+    // 平面方程：z = 0
+    float t = -rayOrigin.z / rayDirection.z;
+
+    if (t > 0.0) {
+        // 报告命中点
+        reportIntersectionEXT(t, 0);
+    }
+}

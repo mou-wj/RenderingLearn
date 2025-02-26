@@ -18,6 +18,7 @@ find_package(Vulkan)
 if(Vulkan_FOUND)
     list(APPEND Libs3rd ${Vulkan_LIBRARIES})
 	list(APPEND IncludeDir3rd "${Vulkan_INCLUDE_DIRS}")
+	
 else()
 	message(FATAL_ERROR "vulkan is not found")
 endif()

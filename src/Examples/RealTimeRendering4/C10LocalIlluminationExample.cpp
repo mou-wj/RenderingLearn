@@ -130,8 +130,6 @@ void C10LocalIlluminationExample::Loop()
 	{
 		i++;
 		WindowEventHandler::ProcessEvent();
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 
 		//buffer.view = Transform::GetEularRotateMatrix(0, 0, 0.2) * buffer.view;
 		buffer.view = camera.GetView();
@@ -140,6 +138,8 @@ void C10LocalIlluminationExample::Loop()
 		FillBuffer(buffers["Info"], sizeof(glm::vec4) * 2, sizeof(uint32_t), (const char*)&exampleType);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
+		//确保presentFence在创建时已经触发
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro

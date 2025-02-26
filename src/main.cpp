@@ -23,6 +23,7 @@
 #include "Examples/RealTimeRendering4/C19AccelerationAlgorithmsExample.h"
 #include "Examples/RealTimeRendering4/C20EfficientShadingExample.h"
 #include "Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.h"
+#include "Examples/RealTimeRendering4/C26RealTimeRayTracingExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -64,16 +65,16 @@ vulkanµƒNDC£¨”“ ÷œµ
  */
 void TransformTest();
 void AutoTest();
-
+int Vulkankk();
 
 int main()
 {
-
+	//Vulkankk();
 
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
-	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	CaptureNum(4);
+	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
+	//CaptureNum(4);
 	//AutoTest();
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
@@ -103,7 +104,8 @@ int main()
 	//C17CurvesAndCurvedSurfacesExample example;
 	//C19AccelerationAlgorithmsExample example;
 	//C20EfficientShadingExample example;
-	C22IntersectionTestMethodsExample example;
+	//C22IntersectionTestMethodsExample example;
+	C26RealTimeRayTracingExample example;
 	ExampleBase::Run(&example);
 
 

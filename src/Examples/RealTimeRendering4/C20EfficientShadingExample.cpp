@@ -152,11 +152,11 @@ void C20EfficientShadingExample::Loop()
 	{
 		i++;
 
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+		
 
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		WindowEventHandler::ProcessEvent();
 		
 

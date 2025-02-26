@@ -127,9 +127,10 @@ void TranslucentBlendExample::Loop()
 		i++;
 		WindowEventHandler::ProcessEvent();
 		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 
 		CmdListWaitFinish(graphicCommandList);
+		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);

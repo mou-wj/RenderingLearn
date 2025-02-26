@@ -27,6 +27,8 @@ namespace VulkanAPI {
 	
 	//physical device
 	VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice);
+	VkPhysicalDeviceProperties2 GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,void* pNext = nullptr);
+
 	void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2& physicalDeviceFeatures2);
 	VkPhysicalDeviceMemoryProperties GetMemoryProperties(VkPhysicalDevice physicalDevice);
 	VkFormatProperties GetFormatPropetirs(VkPhysicalDevice physicalDevice, VkFormat format);
@@ -99,16 +101,33 @@ namespace VulkanAPI {
 	void DestroyBuffer(VkDevice device, VkBuffer buffer);
 	VkMemoryRequirements GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer);
 
+	VkDeviceAddress GetBufferDeviceAddressKHR(VkDevice device,VkBuffer buffer);
 
 	//buffer view   
 	VkBufferView CreateBufferView(VkDevice device, VkBufferViewCreateFlags flags, VkBuffer buffer, VkFormat format, VkDeviceSize offset, VkDeviceSize range);
 	void DestroyBufferView(VkDevice device, VkBufferView bufferView);
 
 
+	VkAccelerationStructureKHR CreateAccelerationStructureKHR(VkDevice device, 
+														VkAccelerationStructureCreateFlagsKHR    createFlags,
+														VkBuffer                                 buffer,
+														VkDeviceSize                             offset,
+														VkDeviceSize                             size,
+														VkAccelerationStructureTypeKHR           type);
+
+
+	void DestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructureKHR);
+
+	VkAccelerationStructureBuildSizesInfoKHR GetAccelerationStructureBuildSizesKHR(VkDevice device, const VkAccelerationStructureBuildGeometryInfoKHR& accelerationStructureBuildGeometryInfoKHR);
+	//void BuildBottomAccelerationStructureKHR(VkDevice device,const std::vector<VkAccelerationStructureGeometryKHR>& geomsInfos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR>& buildRanges,VkAccelerationStructureKHR accelerationStructureKHR);
+
+	void GetRayTracingShaderGroupHandlesKHR(VkDevice  device,VkPipeline  pipeline,uint32_t  firstGroup,uint32_t  groupCount,std::vector<char>& outData);
+
+
 	//memory 
 	VkDeviceMemory AllocateMemory(VkDevice device,
 		VkDeviceSize       allocationSize,
-		uint32_t           memoryTypeIndex);
+		uint32_t           memoryTypeIndex, VkMemoryAllocateFlags allocationFlags);
 	void ReleaseMemory(VkDevice device, VkDeviceMemory deviceMemory);
 
 	void* MapMemory(VkDevice device, VkDeviceMemory deviceMemory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags mapFlags);
@@ -192,6 +211,9 @@ namespace VulkanAPI {
 	VkPipelineShaderStageCreateInfo    stage,
 	VkPipelineLayout                   layout);
 
+	VkPipeline CreateRayTracingPipeline(VkDevice device,const std::vector<VkPipelineShaderStageCreateInfo>& shaderStages,uint32_t maxPipelineRayRecursionDepth,VkPipelineLayout pipelineLayout);
+
+
 
 	void DestroyPipeline(VkDevice device, VkPipeline pipeline);
 
@@ -218,7 +240,8 @@ namespace VulkanAPI {
 											 VkDescriptorType                 descriptorType,
 											 const std::vector<VkDescriptorImageInfo> imageInfos,
 											 const std::vector<VkDescriptorBufferInfo> bufferInfos,
-											 const std::vector<VkBufferView> texelBufferViews);
+											 const std::vector<VkBufferView> texelBufferViews,
+											void* pNext = nullptr);
 	
 	//query pool
 	VkQueryPool CreateQueryPool(VkDevice device, VkQueryPoolCreateFlags  flags,VkQueryType     queryType, uint32_t    queryCount, VkQueryPipelineStatisticFlags    pipelineStatistics);
@@ -355,6 +378,21 @@ namespace VulkanAPI {
 
 	//compute cmd
 	void CmdDispatch(VkCommandBuffer  commandBuffer,uint32_t  groupCountX,uint32_t  groupCountY,uint32_t  groupCountZ);
+
+
+	//ray tracing cmd
+	void CmdBuildBottomAccelerationStructureKHR(VkCommandBuffer commandBuffer, const std::vector<VkAccelerationStructureGeometryKHR>& geomsInfos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR>& buildRanges, VkAccelerationStructureKHR accelerationStructureKHR, const VkDeviceOrHostAddressKHR& scratchData);
+
+	void CmdTraceRaysKHR(VkCommandBuffer                             commandBuffer,
+		const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable,
+		const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable,
+		const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable,
+		const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable,
+		uint32_t                                    width,
+		uint32_t                                    height,
+		uint32_t                                    depth);
+
+
 
 	
 	//-------------------------------------------------------------------------------------
