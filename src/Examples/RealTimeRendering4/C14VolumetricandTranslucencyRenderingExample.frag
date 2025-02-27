@@ -39,7 +39,7 @@ float PhaseMieScatteringSchlick(float cosTheta,float g){
 
 //计算透射率,从起始点沿着方向direction进行采样
 float Transmittance(vec3 startPos,vec3 direction){
-	float res = 0;
+	float res = 1;
 
 	uint numSample = 30;
 	float d = distance(cameraPos,inPosition);

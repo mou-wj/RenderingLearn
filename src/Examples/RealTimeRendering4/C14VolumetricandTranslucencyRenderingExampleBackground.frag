@@ -35,7 +35,7 @@ void ComputePointLightVolume(){
 		//计算采样点到相机的透光率
 		float transmittanceV = exp(-sigmaT * curDv);
 		
-		float attenation = 1 / (1 + 3 * curDl*curDl);
+		float attenation = 1 / (1 + 2* curDl*curDl);
 
 		//计算到光源的透光率
 		float transmittanceL = exp(-sigmaT * curDl);
