@@ -15,8 +15,8 @@ void C26RealTimeRayTracingExample::InitRaytrcingPipelineInfo()
 void C26RealTimeRayTracingExample::InitSubPassInfo()
 {
 	ShaderCodePaths shaderCodePath;
-	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C26RealTimeRayTracingExample.vert";
-	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/RealTimeRendering4/C26RealTimeRayTracingExample.frag";
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/DrawSimpleTriangle.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Examples/SimpleExamples/DrawSimgleTriangle.frag";
 	//InitDefaultGraphicSubpassInfo(shaderCodePath);
 
 
@@ -98,6 +98,7 @@ void C26RealTimeRayTracingExample::Loop()
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
+		//CmdOpsDrawGeom(graphicCommandList);
 		CmdOpsTraceRays(graphicCommandList, 0, { windowWidth,windowHeight,1 });
 		CmdOpsImageMemoryBarrer(graphicCommandList, textures["rayTracingOutputTexture"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE,VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);

@@ -14,10 +14,12 @@ public:
 	void SetCaptureOutPath(std::string outPath);
 	void SetNumCaptures(uint32_t numCapture);
 	void WriteCaptureOut();
+	void SetDevice(void* device);
 	bool IsCapturing();
 private:
 	void Init();
 	std::string captureOutPath;
+	void* devicePointer = nullptr;
 	RENDERDOC_API_1_6_0* rdoc_api = nullptr;
 	uint32_t numCaptures = 1;
 	RenderDocTool() {
@@ -29,3 +31,4 @@ private:
 #define CaptureEndMacro RenderDocTool::GetInstance()->CaptureEnd();
 #define IsRenderDocCapturing RenderDocTool::GetInstance()->IsCapturing()
 #define CaptureNum(num) RenderDocTool::GetInstance()->SetNumCaptures(num);
+#define CaotureSetDevice(device) RenderDocTool::GetInstance()->SetDevice(device);

@@ -24,6 +24,8 @@
 #include "Examples/RealTimeRendering4/C20EfficientShadingExample.h"
 #include "Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.h"
 #include "Examples/RealTimeRendering4/C26RealTimeRayTracingExample.h"
+#include "Examples/Artifacts/PBRArtifactExample.h"
+
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -73,8 +75,8 @@ int main()
 
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
-	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	//CaptureNum(4);
+	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
+	CaptureNum(4);
 	//AutoTest();
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
@@ -84,6 +86,7 @@ int main()
 	//SimpleSceenExample example;
 	//SimpleTessellationExample example;
 	//SimpleMeshShaderExample example;
+	//NormalTextureExample example;
 	//SamplePointsExample example;
 	//powitacq_rgb::BRDF brdf(std::string(PROJECT_DIR) + "/resources/mesured_bsdf/aniso_brushed_aluminium_1_rgb.bsdf");
 	
@@ -105,7 +108,8 @@ int main()
 	//C19AccelerationAlgorithmsExample example;
 	//C20EfficientShadingExample example;
 	//C22IntersectionTestMethodsExample example;
-	C26RealTimeRayTracingExample example;
+	//C26RealTimeRayTracingExample example;
+	PBRArtifactExample example;
 	ExampleBase::Run(&example);
 
 
@@ -214,7 +218,14 @@ void AutoTest() {
 		C22IntersectionTestMethodsExample example;
 		ExampleBase::Run(&example);
 	}
-
+	{
+		C26RealTimeRayTracingExample example;
+		ExampleBase::Run(&example);
+	}
+	{
+		PBRArtifactExample example;
+		ExampleBase::Run(&example);
+	}
 }
 
 

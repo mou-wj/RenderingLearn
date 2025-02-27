@@ -259,11 +259,12 @@ void ExampleBase::InitContex()
 	//开启校验层
 	auto supportLayers = EnumerateLayerProperties();
 	bool supportValidateLayer = false;
+	std::vector<const char*> enableInstanceLayers{};
 	for (uint32_t i = 0; i < supportLayers.size(); i++)
 	{
 		if (strcmp(supportLayers[i].layerName, "VK_LAYER_KHRONOS_validation") == 0)
 		{
-			supportValidateLayer = true;
+			enableInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 			break;
 		}
 	}
@@ -271,12 +272,13 @@ void ExampleBase::InitContex()
 	if (!supportValidateLayer)
 	{
 		LogFunc(0);
+		LogInfo("validation layer is not surpported");
 	}
 
 	//auto 
 
 	//����instance
-	instance = CreateInstance({ "VK_LAYER_KHRONOS_validation" }, wantExtensions);//这里只有instance开启了debug util
+	instance = CreateInstance(enableInstanceLayers, wantExtensions);//这里只有instance开启了debug util
 	//����surface
 	surface = CreateWin32Surface(instance, window);
 	debugUtilMessager = CreateDebugInfoMessager(instance);
@@ -2182,6 +2184,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 			}
 			auto& indicesData = geo.shapeIndices[zoneId];
 			indicesData.resize(geo.shapes[zoneId].mesh.num_face_vertices.size() * 3);
+			std::map<uint32_t, uint32_t> vertexIdToTexId;
 			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
 			{
 				indicesData[i] = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
@@ -2197,10 +2200,23 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 						vertexNormalIds[indicesData[i]].insert(normalIndex);
 						vertexNormals[indicesData[i]] += curNormal;
 					}
-
-
-					//FillBuffer(geometry.vertexBuffer, indicesData[i] * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(geo.vertexAttrib.normals.data() + normalIndex * 3));
 				}
+
+				//const auto& texCoordIndex = geo.shapes[zoneId].mesh.indices[i].texcoord_index;
+				//auto vertexId = indicesData[i];
+				////填充纹理坐标，这里假定所有顶点的纹理坐标都相同，否则报错
+				//if (!geo.vertexAttrib.texcoords.empty())
+				//{
+				//	glm::vec3 curTexCoord = glm::vec3(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1],1);
+				//	if (vertexIdToTexId[vertexId] != 0 && vertexIdToTexId[vertexId]!= texCoordIndex)
+				//	{
+				//		ASSERT(0);//报错
+				//	}
+				//	vertexIdToTexId[vertexId] = texCoordIndex;
+				//
+				//	FillVertexBuffer(vertexId, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.vertexAttributesDatas);
+				//}
+
 			}
 
 			geometry.indexBuffers[zoneId] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
@@ -2273,7 +2289,7 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 				if (!geo.vertexAttrib.texcoords.empty())
 				{
 					glm::vec3 curTexCoord = glm::vec3(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1],1);
-					curTexCoord.y = -curTexCoord.y;//翻转一下y
+					//curTexCoord.y = 1-curTexCoord.y;//翻转一下y
 
 					FillVertexBuffer(i, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.shapeVertexAttributesBuffers[zoneId]);
 				}

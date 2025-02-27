@@ -9,5 +9,5 @@ layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main() {
     // 如果光线未命中物体，返回背景颜色
-    payload.color = vec4(0.2, 0.5, 0.8, 1.0); // 浅蓝色背景
+    payload.color = vec4(1, 0.5, 0.8, 1.0); // 浅蓝色背景
 }

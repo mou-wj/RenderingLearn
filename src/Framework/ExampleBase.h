@@ -1142,7 +1142,7 @@ private:
 	VkPhysicalDeviceFeatures physicalDeviceFeatures;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	;
-	VkDevice device = VK_NULL_HANDLE;
+	protected:VkDevice device = VK_NULL_HANDLE;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 
 	GLFWwindow* window = nullptr;

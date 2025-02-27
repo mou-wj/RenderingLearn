@@ -115,7 +115,7 @@ set(Renderdoc_INSTALL_DIR "D:/RenderDoc")
 if(NOT EXISTS ${Renderdoc_INSTALL_DIR})
 	message("render not found in ${Renderdoc_INSTALL_DIR}")
 else()
-	target_compile_definitions(${TargetName} PUBLIC -DENABLE_RENDERDOC_CAPTURE)
+	target_compile_definitions(${TargetName} PUBLIC -DENABLE_RENDERDOC_CAPTURE -DRenderdoc_INSTALL_DIR="${Renderdoc_INSTALL_DIR}")
 	target_include_directories(${TargetName} PUBLIC ${Renderdoc_INSTALL_DIR})
 	# setup renderdoc runtime path
     set_target_properties(${TargetName} PROPERTIES

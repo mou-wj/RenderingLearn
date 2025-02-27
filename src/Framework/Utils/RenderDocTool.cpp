@@ -15,7 +15,7 @@ void RenderDocTool::CaptureBegin()
 
     // 启动 RenderDoc 捕获
 #ifdef ENABLE_RENDERDOC_CAPTURE
-    rdoc_api->StartFrameCapture(nullptr, nullptr);
+    rdoc_api->StartFrameCapture(devicePointer, nullptr);
 #endif
 
     numCaptures--;
@@ -32,7 +32,7 @@ void RenderDocTool::CaptureEnd()
 
     // 结束 RenderDoc 捕获
 #ifdef ENABLE_RENDERDOC_CAPTURE
-    rdoc_api->EndFrameCapture(nullptr, nullptr);
+    rdoc_api->EndFrameCapture(devicePointer, nullptr);
 #endif
 
   
@@ -68,6 +68,11 @@ void RenderDocTool::WriteCaptureOut()
 
 }
 
+void RenderDocTool::SetDevice(void* device)
+{
+    devicePointer = device;
+}
+
 bool RenderDocTool::IsCapturing()
 {
     bool res = false;
@@ -82,8 +87,9 @@ void RenderDocTool::Init()
 {
     // 在需要捕获的地方调用这个函数
     //RENDERDOC_API_1_1_2* rdoc_api = nullptr;
+    std::string renderdocDll = std::string(Renderdoc_INSTALL_DIR) + "/renderdoc.dll";
 #ifdef ENABLE_RENDERDOC_CAPTURE
-    HMODULE renderdoc_module = LoadLibraryA("D:/RenderDoc/renderdoc.dll"); // 替换为RenderDoc的实际DLL名称
+    HMODULE renderdoc_module = LoadLibraryA(renderdocDll.c_str()); // 替换为RenderDoc的实际DLL名称
     if (renderdoc_module != nullptr)
     {
         pRENDERDOC_GetAPI RENDERDOC_GetAPI =
