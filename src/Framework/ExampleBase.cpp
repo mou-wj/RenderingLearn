@@ -1528,6 +1528,7 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 	
 	auto& renderPassInfo = renderPassInfos[renderPassIndex];
 	auto& subpassDrawGeoInfos = renderPassInfo.subpassDrawGeoInfos;
+	auto& subpassDrawGeoShapeInfos = renderPassInfo.subpassDrawGeoShapeInfos;
 	auto& isMeshSubpass = renderPassInfo.isMeshSubpass;
 	auto& subpassDrawMeshGroupInfos = renderPassInfo.subpassDrawMeshGroupInfos;
 	auto& renderPass = renderPassInfo.renderPass;
@@ -1569,24 +1570,53 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 		else {
 			for (uint32_t i = 0; i < subpassDrawGeoInfos[curSubpassIndex].size(); i++)
 			{
-				const auto& geom = geoms[subpassDrawGeoInfos[curSubpassIndex][i]];
+				auto geoIndex = subpassDrawGeoInfos[curSubpassIndex][i];
+				const auto& geom = geoms[geoIndex];
 				
 				
 				if (geom.useIndexBuffers)
 				{
 					CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-					for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+					if (subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].empty())
 					{
-						CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-						CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+						for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+						{
+							CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+							CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+						}
 					}
+					else {
+						for (uint32_t i = 0; i < subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].size(); i++)
+						{
+							auto shadpIndex = subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex][i];
+							CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[shadpIndex].buffer, 0, VK_INDEX_TYPE_UINT32);
+							CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[shadpIndex], 1, 0, 0, 0);
+						}
+					}
+
 				}
 				else {
-					for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
+
+					if (subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].empty())
 					{
-						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
-						CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
+
+						for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
+						{
+							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
+							CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
+						}
+	
 					}
+					else {
+						for (uint32_t i = 0; i < subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].size(); i++)
+						{
+							auto shadpIndex = subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex][i];
+							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[shadpIndex].buffer }, { 0 });
+							CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[shadpIndex], 1, 0, 0);
+						}
+					
+					}
+
 				}
 				
 				

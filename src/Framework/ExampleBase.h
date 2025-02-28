@@ -742,6 +742,7 @@ struct RenderPassInfo {
 	SubpassInfo subpassInfo;//子pass信息
 	std::vector<GraphicPipelineInfos> graphcisPipelineInfos;//每个子pass对应的pipeline信息
 	std::map<uint32_t, std::vector<uint32_t>> subpassDrawGeoInfos;//每个subpass要绘制的几何体
+	std::map<uint32_t, std::map<uint32_t, std::vector<uint32_t>>> subpassDrawGeoShapeInfos;//每个subpass要绘制的几何体中指定的shape信息，更加精细的控制绘制geo
 	bool truncateNextSubpassDraw = false;//表明是否要截断某个subpass之后的subpass的绘制
 	uint32_t truncatedNextSubpassIndex = 1;//要截断的subpass id,即从某个id的subpass开始以及后续subpass不再进行绘制
 	std::map<uint32_t, std::array<uint32_t,3>> subpassDrawMeshGroupInfos;//每个mesh subpas的绘制参数
