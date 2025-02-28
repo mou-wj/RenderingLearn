@@ -132,6 +132,57 @@ vec3 CaculateLamberDiffuseColor(vec3 n){
 	return res;	
 }
 
+//假设镜面反射的波瓣是各项同行的，且在和法线的夹角服从0.75 * pow(cos(theta),3),theta范围-0.5pi到0.5pi，则分布函数设为y，
+float InverseCDF(float y){
+	float x;
+	if(y == 0)
+	{
+		return -0.5 * s_pi;
+	}
+	if(y == 1)
+	{
+		return 0.5 * s_pi;
+	}
+
+	//计算CDF 得到x = F-1(y)的公式，然后计算x
+	float a1 = acos(1-2 * y) / 3;
+	float a2 = 2 *  cos(a1);
+	x = asin(a2);
+	return x;//y为逆向CDF中分布函数的值，值域为[0,1],x为随机变量，这里x即为返回theta的值
+}
+
+
+// 计算 F'(theta) (CDF 的导数)
+float CDF_Derivative(float theta) {
+    return (9.0 / 16.0) * cos(theta) + (3.0 / 16.0) * cos(3.0 * theta);
+}
+
+// 计算 F(theta) (CDF)
+float CDF(float theta) {
+    return 0.5 + (9.0 / 16.0) * sin(theta) + (1.0 / 16.0) * sin(3.0 * theta);
+}
+
+// 逆 CDF 计算 (牛顿迭代法)
+float inverse_CDF(float p) {
+    // 初始猜测：使用 arcsin 近似计算
+    float theta = asin((p - 0.5) * (16.0 / 9.0));
+
+    // 限制范围 [-π/2, π/2]
+    theta = clamp(theta, -1.570796, 1.570796);
+
+    // 牛顿迭代法求解
+    const int MAX_ITER = 6;  // 迭代步数 (GLSL 不能动态循环，6 次足够)
+    for (int i = 0; i < MAX_ITER; i++) {
+        float f_theta = CDF(theta) - p;
+        float f_prime_theta = CDF_Derivative(theta);
+        theta -= f_theta / f_prime_theta;
+    }
+    
+    return theta;
+}
+
+
+
 //根据一个符合均匀分布的各项范围在-1到1之间的样本，拟合变换得到一个近似微平面反射光的方向和完美反射光之间的theta和fine差值的分布结果，返回值第一项为theta的差值，范围-pi到pi，第二项为fine的差值，范围-pi/2 到pi/2
 vec2 FittingInverseCDFSparrowReflect(vec2 daltaXY/*两个分别为-1到1之间的二维参数*/){
 	vec2 res;
@@ -160,7 +211,116 @@ vec3 CaculateGGXSpecularColor(vec3 n,float roughness){
 
 	float nDotL = 0;
 
-	uint numSample = 4;
+		//根据世界空间的法线构建上半球坐标系
+	vec3 y = -normalize(n);
+	vec3 x,z;
+	if((1 - abs(y.x)) > 0.00000001)
+	{
+		x = vec3(1,0,0);
+	}else {
+		x = vec3(0,1,0);
+	}
+	z = normalize(cross(x,y));
+	x = normalize(cross(y,z));
+	mat3 nornalMatrix = mat3(x,y,z);
+	mat3 normalMatrixInverse = inverse(nornalMatrix);
+
+		//将反射向量变换到法向量的本地坐标系中
+	vec3 wr = reflect(-v,n);
+	wr = normalize(normalMatrixInverse * wr);
+	//计算wr在本地坐标系中的theta值和fine值
+	float theta_r = atan(wr.z,wr.x);
+	if(theta_r <0)
+	{
+		theta_r+=2* s_pi;
+	}
+	float fine_r = acos(-wr.y) ; 
+	float totalW = 0;
+
+	//float deltaTheta = 2 * s_pi / 5;
+	//float deltaPhi = 0.5 * s_pi / 5;
+
+	uint numThetaStep = 5;
+	float deltaTheta = 2 * s_pi / numThetaStep;
+
+	uint numPhiStep = 5;
+	float deltaPhi = 0;
+
+	float du = 1.0 / numPhiStep;
+	float dp = 0;
+	for(uint thetaStepId = 0;thetaStepId < numThetaStep;thetaStepId++)
+	{
+		float random1 =	HammersleySequence(thetaStepId,2);
+		curTheta = random1 * 2 * s_pi;
+
+		for(uint phiStepId = 0;phiStepId < numPhiStep;phiStepId++)
+		{
+			float random2 = HammersleySequence(phiStepId,3);
+			curPhi = inverse_CDF(random2);
+
+			//计算采样向量
+
+			l.y = -cos(curPhi);
+			l.x = sin(curPhi) * cos(curTheta);
+			l.z = sin(curPhi) * sin(curTheta);
+
+			
+			l = nornalMatrix * l;//变换到世界坐标系中的向量
+
+
+
+
+			vec3 h = normalize((l + v) / 2);
+			float hDotL = dot(h,l);
+			float hDotV = dot(h,v);
+			float nDotL = dot(l,n);
+			float nDotV = dot(v,n);
+
+			float lambdaV = LambdaGGX_Isotropy(hDotV,roughness);
+			float lambdaL = LambdaGGX_Isotropy(hDotL,roughness);
+
+
+			float ndf_ggx = NDF_GGX_Isotropy(dot(n,h),0.1);
+			float frenel =Frenel(nDotL,0.04);
+			float g2Smith = G2Smith(hDotV,hDotL,lambdaV,lambdaL);
+
+			float f_spec = frenel * g2Smith * ndf_ggx / ( 4 * abs(nDotL) * abs(nDotV) );
+
+			sampleColor = texture(bgEnvTexture,l).xyz;
+			sampleColor = pow(sampleColor, vec3(2.4));
+
+			//计算CDF导数
+			dp  = CDF_Derivative(curPhi);
+
+			//限制dp，防止采样导致的dp过大或过小从而导致deltaPhi过大，超过pi
+			dp = max(dp,0.05);
+
+			//计算dTheta
+			deltaPhi = du / dp ; //
+
+			float curDeltaL = sin(abs(curPhi)) * deltaTheta * deltaPhi;
+
+			vec3 specColor = f_spec * sampleColor * max(hDotL,0) * curDeltaL ;//这里的delta立体角应该重新计算，使用分布的反向分布函数InverseCDF可以得到theta和分布函数值y之间的关系，对其求导可以得到deltaTheta和deltaY之间的关系，而根据inverseCDF的采样原理，y是服从均匀分布的，故deltaY是可以知道的，为y的范围除以采样个数，这样就可以得到deltaTheta,进而可以计算立体角delta值
+			res += specColor;	
+		}
+	
+	}
+
+	return res;	
+}
+
+
+vec3 CaculateGGXSpecularColor2(vec3 n,float roughness){
+	vec3 res = vec3(0);
+	vec3 v = normalize(cameraPos - inPosition);
+	vec3 l;
+
+	float curPhi =0,curTheta = 0;
+	vec3 sampleColor = vec3(0);
+
+	float nDotL = 0;
+
+	uint numSample = 25;
 	vec2 samplePoint;
 	float delta = 2 * s_pi/ numSample;
 		//根据世界空间的法线构建上半球坐标系
@@ -188,6 +348,13 @@ vec3 CaculateGGXSpecularColor(vec3 n,float roughness){
 	}
 	float fine_r = acos(-wr.y) ; 
 	float totalW = 0;
+
+	//float deltaTheta = 2 * s_pi / 5;
+	//float deltaPhi = 0.5 * s_pi / 5;
+
+
+
+
 
 	for(uint sampleIndex = 0;sampleIndex < numSample;sampleIndex++)
 	{
@@ -236,12 +403,13 @@ vec3 CaculateGGXSpecularColor(vec3 n,float roughness){
 		sampleColor = texture(bgEnvTexture,l).xyz;
 		sampleColor = pow(sampleColor, vec3(2.4));
 
-		vec3 specColor = f_spec * sampleColor * max(hDotL,0) * delta;
+
+
+		vec3 specColor = f_spec * sampleColor * max(hDotL,0) * delta ;//这里的delta立体角应该重新计算，使用分布的反向分布函数InverseCDF可以得到theta和分布函数值y之间的关系，对其求导可以得到deltaTheta和deltaY之间的关系，而根据inverseCDF的采样原理，y是服从均匀分布的，故deltaY是可以知道的，为y的范围除以采样个数，这样就可以得到deltaTheta,进而可以计算立体角delta值
 		res += specColor;
 	}
 	return res;	
 }
-
 
 
 void main(){
@@ -261,7 +429,7 @@ void main(){
 	float kd = 0.8,ks = 1 - kd;
 
 	vec3 diffuse = CaculateLamberDiffuseColor(n);
-	vec3 spec = CaculateGGXSpecularColor(n,roughness);
+	vec3 spec = CaculateGGXSpecularColor2(n,roughness);
 
 
 	vec3 color =kd * diffuse * baseColor + spec * ks;
