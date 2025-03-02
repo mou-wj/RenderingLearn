@@ -8,6 +8,8 @@
 #include "glslang/Include/ResourceLimits.h"
 #include "glslang/Public/resource_limits_c.h"
 
+#include "tiny_gltf.h"
+
 #include <shaderc/shaderc.h>
 #include <filesystem>
 #include <fstream>
@@ -22,6 +24,8 @@ ExampleBase::~ExampleBase()
 
 void ExampleBase::Run(ExampleBase* example)
 {
+	const std::type_info& info = typeid(*example);
+	std::cout << "Run Example of Type : " << info.name() << std::endl;
 	example->InitRaytrcingPipelineInfo();
 	example->InitSubPassInfo();
 	example->InitResourceInfos();
@@ -1010,101 +1014,181 @@ void ExampleBase::LoadObj(const std::string& objFilePath, Geometry& geo)
 {
 	//inner data
 	geo.geoPath = objFilePath;
-
+	auto& objDataSource =  objDataSourceCache[objFilePath];
 	std::string warn, err;
-	if (!tinyobj::LoadObj(&geo.vertexAttrib, &geo.shapes, &geo.materials, &warn, &err, objFilePath.c_str()))
+	if (!tinyobj::LoadObj(&objDataSource.vertexAttrib, &objDataSource.shapes, &objDataSource.materials, &warn, &err, objFilePath.c_str()))
 	{
 		LogFunc(0);
 	}
 
-	size_t numV = geo.vertexAttrib.vertices.size() / 3;
-	if (numV == 0) {
-		Log("", 0);
-	}
-	geo.AABBs.minX = geo.vertexAttrib.vertices[1];
-	geo.AABBs.maxX = geo.vertexAttrib.vertices[0];
-	geo.AABBs.minY = geo.vertexAttrib.vertices[2];
-	geo.AABBs.maxY = geo.vertexAttrib.vertices[0];
-	geo.AABBs.minZ = geo.vertexAttrib.vertices[1];
-	geo.AABBs.maxZ = geo.vertexAttrib.vertices[2];
-	//计算AABB
-	for (uint32_t i = 0; i < numV; i++)
+	auto& vertexAttibute = objDataSource.vertexAttrib;
+	auto& shapes = objDataSource.shapes;
+
+
+	//填充geometry的顶点缓冲数据以及索引数据
+	uint32_t numVertex = vertexAttibute.vertices.size() / 3;
+	geo.numVertex = numVertex;
+	if (numVertex == 0)
 	{
-		float x = geo.vertexAttrib.vertices[3 * i];
-		float y = geo.vertexAttrib.vertices[3 * i + 1];
-		float z = geo.vertexAttrib.vertices[3 * i + 2];
-		if (x < geo.AABBs.minX)
-		{
-			geo.AABBs.minX = x;
-		}
-		if (x > geo.AABBs.maxX)
-		{
-			geo.AABBs.maxX = x;
-		}
-		if (y < geo.AABBs.minY)
-		{
-			geo.AABBs.minY = y;
-		}
-		if (y > geo.AABBs.maxY)
-		{
-			geo.AABBs.maxY = y;
-		}
-		if (z < geo.AABBs.minZ)
-		{
-			geo.AABBs.minZ = z;
-		}
-		if (z > geo.AABBs.maxZ)
-		{
-			geo.AABBs.maxZ = z;
-		}
+		return;
 	}
+	
 
-	geo.AABBcenter[0] = (geo.AABBs.minX + geo.AABBs.maxX) / 2;
-	geo.AABBcenter[1] = (geo.AABBs.minY + geo.AABBs.maxY) / 2;
-	geo.AABBcenter[2] = (geo.AABBs.minZ + geo.AABBs.maxZ) / 2;
+	auto FillVertexBuffer = [&](uint32_t vertexIndex, uint32_t component, float* srcAttibuteData, std::vector<float>& dstVertexDatas) {
+		std::memcpy(dstVertexDatas.data() + vertexIndex * vertexAttributeInputFloatStride + component * 3, srcAttibuteData, sizeof(float) * 3);
 
+		};
 
-	geo.shadeAABBs.resize(geo.shapes.size());
-	for (uint32_t zoneId = 0; zoneId < geo.shadeAABBs.size(); zoneId++)
+	if (geo.useIndexBuffers)
 	{
-		const auto& firsetVertexIndex = geo.shapes[zoneId].mesh.indices[0].vertex_index;
-		glm::vec3 curVertex = glm::vec3(geo.vertexAttrib.vertices[firsetVertexIndex * 3], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 1], geo.vertexAttrib.vertices[firsetVertexIndex * 3 + 2]);
-		Geometry::AABB& curAABB = geo.shadeAABBs[zoneId];
 
-		curAABB.minX = curAABB.maxX = curVertex.x;
-		curAABB.minY = curAABB.maxY = curVertex.y;
-		curAABB.minZ = curAABB.maxZ = curVertex.z;
+		geo.vertexAttributesDatas.resize(numVertex * vertexAttributeInputFloatStride);
+		Geometry& geometry = geo;
 
-		//当前shape的所有片元的点数
-		for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
+		//����vertex buffer
+
+		for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
 		{
-			const auto& vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
-			if (!geo.vertexAttrib.vertices.empty())
+			//��䶥��λ������
+			//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
+			FillVertexBuffer(vertexId, VAT_Position_float32, vertexAttibute.vertices.data() + vertexId * 3, geo.vertexAttributesDatas);
+
+
+		}
+
+		//填充颜色
+		if (!vertexAttibute.colors.empty())
+		{
+			for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
 			{
-				curVertex = glm::vec3(geo.vertexAttrib.vertices[vertexIndex * 3], geo.vertexAttrib.vertices[vertexIndex * 3 + 1], geo.vertexAttrib.vertices[vertexIndex * 3 + 2]);
-				if (curVertex.x < curAABB.minX)
+				//��䶥��λ������
+				//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride + sizeof(float) * 3 * 2, 3 * sizeof(float), (const char*)(geo.vertexAttrib.colors.data() + vertexId * 3));
+				FillVertexBuffer(vertexId, VAT_Color_float32, vertexAttibute.colors.data() + vertexId * 3, geo.vertexAttributesDatas);
+			}
+
+
+		}
+
+		geo.shapeIndices.resize(shapes.size());
+
+		geometry.indexBuffers.resize(shapes.size());
+
+		//手动计算法线
+		std::vector<glm::vec3> vertexNormals(numVertex, glm::vec3(0));
+		std::map<uint32_t, std::set<uint32_t>> vertexNormalIds;
+
+		//纹理坐标数据待定
+
+		for (uint32_t zoneId = 0; zoneId < geometry.indexBuffers.size(); zoneId++)
+		{
+
+			for (uint32_t cellId = 0; cellId < shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
+			{
+				if (shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
 				{
-					curAABB.minX = curVertex.x;
+					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
 				}
-				if (curVertex.x > curAABB.maxX)
+			}
+			auto& indicesData = geo.shapeIndices[zoneId];
+			indicesData.resize(shapes[zoneId].mesh.num_face_vertices.size() * 3);
+			std::map<uint32_t, uint32_t> vertexIdToTexId;
+			for (uint32_t i = 0; i < shapes[zoneId].mesh.indices.size(); i++)
+			{
+				indicesData[i] = shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+				const auto& normalIndex = shapes[zoneId].mesh.indices[i].normal_index;
+				//�����������
+				//填充法线
+				if (!vertexAttibute.normals.empty())
 				{
-					curAABB.maxX = curVertex.x;
+					glm::vec3 curNormal = glm::vec3(vertexAttibute.normals[normalIndex * 3], vertexAttibute.normals[normalIndex * 3 + 1], vertexAttibute.normals[normalIndex * 3 + 2]);
+					curNormal = glm::normalize(curNormal);
+					if (!vertexNormalIds[indicesData[i]].contains(normalIndex))//如果这是一个新的法线则加入计算
+					{
+						vertexNormalIds[indicesData[i]].insert(normalIndex);
+						vertexNormals[indicesData[i]] += curNormal;
+					}
 				}
-				if (curVertex.y < curAABB.minY)
+
+				//const auto& texCoordIndex = geo.shapes[zoneId].mesh.indices[i].texcoord_index;
+				//auto vertexId = indicesData[i];
+				////填充纹理坐标，这里假定所有顶点的纹理坐标都相同，否则报错
+				//if (!geo.vertexAttrib.texcoords.empty())
+				//{
+				//	glm::vec3 curTexCoord = glm::vec3(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1],1);
+				//	if (vertexIdToTexId[vertexId] != 0 && vertexIdToTexId[vertexId]!= texCoordIndex)
+				//	{
+				//		ASSERT(0);//报错
+				//	}
+				//	vertexIdToTexId[vertexId] = texCoordIndex;
+				//
+				//	FillVertexBuffer(vertexId, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.vertexAttributesDatas);
+				//}
+
+			}
+
+
+		}
+
+
+		for (uint32_t v = 0; v < numVertex; v++)
+		{
+			glm::vec3 curV = vertexNormals[v];
+			//归一化
+			curV = glm::normalize(curV);
+			//填充法向量
+			//FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
+			FillVertexBuffer(v, VAT_Normal_float32, (float*)&curV, geo.vertexAttributesDatas);
+		}
+	}
+	else {
+		geo.shapeVertexAttributesBuffers.resize(shapes.size());
+		geo.shapeVertexBuffers.resize(shapes.size());
+
+		for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
+		{
+			std::vector<float>& curVertexData = geo.shapeVertexAttributesBuffers[zoneId];
+			for (uint32_t cellId = 0; cellId < shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
+			{
+				if (shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
 				{
-					curAABB.minY = curVertex.y;
+					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
 				}
-				if (curVertex.y > curAABB.maxY)
+			}
+			//当前shape的所有片元的点数据
+			curVertexData.resize(shapes[zoneId].mesh.indices.size() * vertexAttributeInputFloatStride);
+			for (uint32_t i = 0; i < shapes[zoneId].mesh.indices.size(); i++)
+			{
+				const auto& vertexIndex = shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
+				const auto& normalIndex = shapes[zoneId].mesh.indices[i].normal_index;
+				const auto& texCoordIndex = shapes[zoneId].mesh.indices[i].texcoord_index;
+				//�����������
+				//填充顶点位置
+				if (!vertexAttibute.vertices.empty())
 				{
-					curAABB.maxY = curVertex.y;
+					FillVertexBuffer(i, VAT_Position_float32, vertexAttibute.vertices.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
 				}
-				if (curVertex.z < curAABB.minZ)
+
+				//填充颜色
+				if (!vertexAttibute.colors.empty())
 				{
-					curAABB.minZ = curVertex.z;
+					FillVertexBuffer(i, VAT_Color_float32, vertexAttibute.colors.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
 				}
-				if (curVertex.z > curAABB.maxZ)
+
+				//填充法线
+				if (!vertexAttibute.normals.empty())
 				{
-					curAABB.maxZ = curVertex.z;
+					glm::vec3 curNormal = glm::vec3(vertexAttibute.normals[normalIndex * 3], vertexAttibute.normals[normalIndex * 3 + 1], vertexAttibute.normals[normalIndex * 3 + 2]);
+					curNormal = glm::normalize(curNormal);
+					FillVertexBuffer(i, VAT_Normal_float32, (float*)&curNormal, geo.shapeVertexAttributesBuffers[zoneId]);
+
+				}
+				//填充纹理坐标
+				if (!vertexAttibute.texcoords.empty())
+				{
+					glm::vec3 curTexCoord = glm::vec3(vertexAttibute.texcoords[texCoordIndex * 2], vertexAttibute.texcoords[texCoordIndex * 2 + 1], 1);
+					//curTexCoord.y = 1-curTexCoord.y;//翻转一下y
+
+					FillVertexBuffer(i, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.shapeVertexAttributesBuffers[zoneId]);
 				}
 			}
 
@@ -1112,18 +1196,151 @@ void ExampleBase::LoadObj(const std::string& objFilePath, Geometry& geo)
 
 	}
 
-	uint32_t numVertx = geo.vertexAttrib.vertices.size() / 3;
-	float d = 0;
-	for (uint32_t i = 0; i < numVertx; i++)
+
+	geo.CalculateAABBInfos();
+}
+
+void ExampleBase::LoadGLB(const std::string& glbFilePath, Geometry& geo)
+{
+
+	geo.geoPath = glbFilePath;
+
+	tinygltf::Model model;
+	tinygltf::TinyGLTF loader;
+	std::string err;
+	bool res = loader.LoadBinaryFromFile(&model, &err, nullptr, glbFilePath);
+
+	uint32_t numShape = model.meshes.size();
+	if (numShape == 0)
 	{
-		glm::vec3 curV = glm::vec3(geo.vertexAttrib.vertices[3 * i], geo.vertexAttrib.vertices[3 * i + 1], geo.vertexAttrib.vertices[3 * i + 2]);
-		float curD = glm::distance(geo.AABBcenter, curV);
-		if (curD > d)
+		return;
+	}
+	//由于glb的数据结构灵活度更高一些，所以这里不使用索引缓冲区
+	geo.useIndexBuffers = false;
+
+	struct VertexAtrtibuteInfo {
+		float* p = nullptr;
+		uint32_t numVertexAttribute = 0;
+		uint32_t numComponents = 0;
+
+	};
+	auto GetVertexAttibuteInfo = [&model](const tinygltf::Primitive& primitive,const std::string& vertexAttributeName, VertexAtrtibuteInfo& info) {
+		auto it = primitive.attributes.find(vertexAttributeName);
+		if (it == primitive.attributes.end()) {
+			std::cout << vertexAttributeName << " attribute not found!" << std::endl;
+		}
+		int positionAccessorIndex = it->second;
+		const tinygltf::Accessor& positionAccessor = model.accessors[positionAccessorIndex];
+
+		// 获取缓冲区视图和缓冲区
+		const tinygltf::BufferView& bufferView = model.bufferViews[positionAccessor.bufferView];
+		const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+
+		// 提取顶点数据
+		const float* p = reinterpret_cast<const float*>(
+			&buffer.data[bufferView.byteOffset + positionAccessor.byteOffset]
+			);
+
+		size_t vertexCount = positionAccessor.count; // 顶点数量
+		size_t componentCount = tinygltf::GetNumComponentsInType(positionAccessor.type); // 每个顶点的组件数量
+		info.p = const_cast<float*>(p);
+		info.numComponents = componentCount;
+		info.numVertexAttribute = vertexCount;		
+		};
+
+	Geometry::Vertex vertex;
+	//每个mesh装成geometry中的一个shape
+	for (uint32_t i = 0; i < model.meshes.size(); i++)
+	{
+		for (uint32_t j = 0; j < model.meshes[i].primitives.size(); j++)
 		{
-			d = curD;
+			auto& primitive = model.meshes[i].primitives[j];
+			//获取顶点信息
+			
+			VertexAtrtibuteInfo positionInfo;
+			GetVertexAttibuteInfo(primitive, "POSITION", positionInfo);
+			if (positionInfo.p == nullptr)
+			{
+				ASSERT(0);
+			}
+			uint32_t numVertex = positionInfo.numVertexAttribute;
+
+			for (uint32_t i = 0; i < numVertex; i++)
+			{
+				std::memcpy(vertex.data(), positionInfo.p + i * positionInfo.numComponents, sizeof(float)* positionInfo.numComponents);
+
+				VertexAtrtibuteInfo normalInfo;
+				GetVertexAttibuteInfo(primitive, "NORMAL", normalInfo);
+				if (positionInfo.p != nullptr)
+				{
+					ASSERT(positionInfo.numVertexAttribute == normalInfo.numVertexAttribute);
+					std::memcpy(vertex.data() + VAT_Normal_float32 * 3, normalInfo.p + i * normalInfo.numComponents, sizeof(float)* normalInfo.numComponents);
+				}
+
+			}
+
+
+
+
+
+
+
 		}
 	}
-	geo.BVSphereRadius = d;
+
+
+
+	//uint32_t vertexBufferViewId = model.meshes[0];
+
+
+
+
+	// 假设访问第一个网格的第一个图元
+	const tinygltf::Mesh& mesh = model.meshes[0];
+	const tinygltf::Primitive& primitive = mesh.primitives[0];
+
+	// 查找位置属性
+	auto it = primitive.attributes.find("POSITION");
+	if (it == primitive.attributes.end()) {
+		std::cerr << "POSITION attribute not found!" << std::endl;
+		return;
+	}
+
+	// 获取位置属性的访问器
+	int positionAccessorIndex = it->second;
+	const tinygltf::Accessor& positionAccessor = model.accessors[positionAccessorIndex];
+
+	// 获取缓冲区视图和缓冲区
+	const tinygltf::BufferView& bufferView = model.bufferViews[positionAccessor.bufferView];
+	const tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+
+	// 提取顶点数据
+	const float* positions = reinterpret_cast<const float*>(
+		&buffer.data[bufferView.byteOffset + positionAccessor.byteOffset]
+		);
+
+	size_t vertexCount = positionAccessor.count; // 顶点数量
+	size_t componentCount = tinygltf::GetNumComponentsInType(positionAccessor.type); // 每个顶点的组件数量
+
+	std::cout << "Vertex Positions:" << std::endl;
+	for (size_t i = 0; i < vertexCount; ++i) {
+		float x = positions[i * componentCount + 0];
+		float y = positions[i * componentCount + 1];
+		float z = positions[i * componentCount + 2];
+		std::cout << "  Vertex " << i << ": (" << x << ", " << y << ", " << z << ")" << std::endl;
+	}
+
+	//for (size_t i = 0; i < model.textures.size(); ++i) {
+	//	const auto& texture = model.textures[i];
+	//	const auto& image = model.images[texture.source];
+	//	auto name = model.bufferViews[image.bufferView].name;
+	//	std::string texture_filename = name + ".jpg";
+
+	//	stbi_write_jpg(texture_filename.c_str(), image.width, image.height, image.component, reinterpret_cast<const char*>(image.image.data()), 100);
+	//
+	//}
+
+	geo.CalculateAABBInfos();
 
 }
 
@@ -1151,6 +1368,7 @@ void ExampleBase::BuildAccelerationStructure(Geometry& geo)
 	std::vector<char> acceleratBuffer;
 	VkDeviceSize bufferTotalSize = 0;
 	VkDeviceSize indexDataOffset = 0;
+	uint32_t numVertex = 0;
 	if (geo.useIndexBuffers)
 	{
 		accelerationStructureBuildRangeInfoKHRs.resize(1);
@@ -1159,6 +1377,7 @@ void ExampleBase::BuildAccelerationStructure(Geometry& geo)
 		{
 			numTriangles += geo.shapeIndices[i].size() / 3;
 		}
+		numVertex = geo.vertexAttributesDatas.size() / vertexAttributeInputFloatStride;
 
 		VkDeviceSize vertexAttributeDataSize = geo.vertexAttributesDatas.size() * sizeof(float);
 		bufferTotalSize = vertexAttributeDataSize;
@@ -1176,6 +1395,7 @@ void ExampleBase::BuildAccelerationStructure(Geometry& geo)
 		for (uint32_t i = 0; i < geo.shapeVertexAttributesBuffers.size(); i++)
 		{
 			bufferTotalSize += geo.shapeVertexAttributesBuffers[i].size() * sizeof(float);
+			numVertex += geo.shapeVertexAttributesBuffers[i].size() / vertexAttributeInputFloatStride;
 		}
 
 	}
@@ -1209,7 +1429,7 @@ void ExampleBase::BuildAccelerationStructure(Geometry& geo)
 			trianglesKHR.pNext = VK_NULL_HANDLE;
 			trianglesKHR.vertexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };
 			trianglesKHR.vertexStride = vertexAttributeInputStride;//为每个顶点间的字节步长大小
-			trianglesKHR.maxVertex = geo.vertexAttrib.vertices.size() / 3 - 1;//为vertexData 中的顶点数量减去1
+			trianglesKHR.maxVertex = numVertex - 1;//为vertexData 中的顶点数量减去1
 			trianglesKHR.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;//为顶点元素的数据VkFormat格式
 			trianglesKHR.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };//为包含索引数据的device 或者host端的地址
 			trianglesKHR.indexType = VK_INDEX_TYPE_UINT32;//为索引元素的数据类型 VkIndexType			
@@ -1581,16 +1801,18 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 					{
 						for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
 						{
+							uint32_t numIndex = geom.shapeIndices[i].size();
 							CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
-							CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0, 0);
+							CmdDrawIndex(cmdList.commandBuffer, numIndex, 1, 0, 0, 0);
 						}
 					}
 					else {
 						for (uint32_t i = 0; i < subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].size(); i++)
 						{
+							uint32_t numIndex = geom.shapeIndices[i].size();
 							auto shadpIndex = subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex][i];
 							CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[shadpIndex].buffer, 0, VK_INDEX_TYPE_UINT32);
-							CmdDrawIndex(cmdList.commandBuffer, geom.numIndexPerZone[shadpIndex], 1, 0, 0, 0);
+							CmdDrawIndex(cmdList.commandBuffer, numIndex, 1, 0, 0, 0);
 						}
 					}
 
@@ -1602,17 +1824,19 @@ void ExampleBase::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassIndex)
 
 						for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
 						{
+							uint32_t numVertex = geom.shapeVertexAttributesBuffers[i].size() / vertexAttributeInputFloatStride;
 							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
-							CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[i], 1, 0, 0);
+							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
 	
 					}
 					else {
 						for (uint32_t i = 0; i < subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].size(); i++)
 						{
+							uint32_t numVertex = geom.shapeVertexAttributesBuffers[i].size() / vertexAttributeInputFloatStride;
 							auto shadpIndex = subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex][i];
 							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[shadpIndex].buffer }, { 0 });
-							CmdDrawVertex(cmdList.commandBuffer, geom.numIndexPerZone[shadpIndex], 1, 0, 0);
+							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
 					
 					}
@@ -2148,192 +2372,40 @@ void ExampleBase::InitGeometryResources(Geometry& geo)
 	{
 		LogFunc(0);
 	}
-	uint32_t numVertex = geo.vertexAttrib.vertices.size() / 3;
-	geo.numVertex = numVertex;
-	if (numVertex == 0)
-	{
-		return;
-	}
-	geo.vertexAttributesDatas.resize(numVertex * vertexAttributeInputFloatStride);
 
-	auto FillVertexBuffer = [&](uint32_t vertexIndex,uint32_t component,float* srcAttibuteData, std::vector<float>& dstVertexDatas) {
-		std::memcpy(dstVertexDatas.data() + vertexIndex * vertexAttributeInputFloatStride + component * 3, srcAttibuteData, sizeof(float) * 3);
-		
-		};
 
 	if (geo.useIndexBuffers)
 	{
 
+		geo.indexBuffers.resize(geo.shapeIndices.size());
 
-		Geometry& geometry = geo;
-
-		//����vertex buffer
-		
-		for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
-		{
-			//��䶥��λ������
-			//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
-			FillVertexBuffer(vertexId, VAT_Position_float32, geo.vertexAttrib.vertices.data() + vertexId * 3, geo.vertexAttributesDatas);
-			
-
-		}
-
-		//填充颜色
-		if (!geo.vertexAttrib.colors.empty())
-		{
-			for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
-			{
-				//��䶥��λ������
-				//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride + sizeof(float) * 3 * 2, 3 * sizeof(float), (const char*)(geo.vertexAttrib.colors.data() + vertexId * 3));
-				FillVertexBuffer(vertexId, VAT_Color_float32, geo.vertexAttrib.colors.data() + vertexId * 3, geo.vertexAttributesDatas);
-			}
-
-
-		}
-
-		geo.shapeIndices.resize(geo.shapes.size());
-
-		geometry.indexBuffers.resize(geo.shapes.size());
-		
-		geometry.numIndexPerZone.resize(geometry.indexBuffers.size());
-		//手动计算法线
-		std::vector<glm::vec3> vertexNormals(numVertex, glm::vec3(0));
-		std::map<uint32_t, std::set<uint32_t>> vertexNormalIds;
-
-		//纹理坐标数据待定
-
-		for (uint32_t zoneId = 0; zoneId < geometry.indexBuffers.size(); zoneId++)
+		for (uint32_t zoneId = 0; zoneId < geo.shapeIndices.size(); zoneId++)
 		{
 
-			for (uint32_t cellId = 0; cellId < geo.shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
-			{
-				if (geo.shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
-				{
-					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
-				}
-			}
 			auto& indicesData = geo.shapeIndices[zoneId];
-			indicesData.resize(geo.shapes[zoneId].mesh.num_face_vertices.size() * 3);
-			std::map<uint32_t, uint32_t> vertexIdToTexId;
-			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
-			{
-				indicesData[i] = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
-				const auto& normalIndex = geo.shapes[zoneId].mesh.indices[i].normal_index;
-				//�����������
-				//填充法线
-				if (!geo.vertexAttrib.normals.empty())
-				{
-					glm::vec3 curNormal = glm::vec3(geo.vertexAttrib.normals[normalIndex * 3], geo.vertexAttrib.normals[normalIndex * 3 + 1], geo.vertexAttrib.normals[normalIndex * 3 + 2]);
-					curNormal = glm::normalize(curNormal);
-					if (!vertexNormalIds[indicesData[i]].contains(normalIndex))//如果这是一个新的法线则加入计算
-					{
-						vertexNormalIds[indicesData[i]].insert(normalIndex);
-						vertexNormals[indicesData[i]] += curNormal;
-					}
-				}
-
-				//const auto& texCoordIndex = geo.shapes[zoneId].mesh.indices[i].texcoord_index;
-				//auto vertexId = indicesData[i];
-				////填充纹理坐标，这里假定所有顶点的纹理坐标都相同，否则报错
-				//if (!geo.vertexAttrib.texcoords.empty())
-				//{
-				//	glm::vec3 curTexCoord = glm::vec3(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1],1);
-				//	if (vertexIdToTexId[vertexId] != 0 && vertexIdToTexId[vertexId]!= texCoordIndex)
-				//	{
-				//		ASSERT(0);//报错
-				//	}
-				//	vertexIdToTexId[vertexId] = texCoordIndex;
-				//
-				//	FillVertexBuffer(vertexId, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.vertexAttributesDatas);
-				//}
-
-			}
-
-			geometry.indexBuffers[zoneId] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
-			geometry.numIndexPerZone[zoneId] = indicesData.size();
+			geo.indexBuffers[zoneId] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
 
 		}
-
-
-		for (uint32_t v = 0; v < numVertex; v++)
+		if (geo.vertexAttributesDatas.empty())
 		{
-			glm::vec3 curV = vertexNormals[v];
-			//归一化
-			curV = glm::normalize(curV);
-			//填充法向量
-			//FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
-			FillVertexBuffer(v, VAT_Normal_float32, (float*)&curV, geo.vertexAttributesDatas);
+			return;
 		}
-
-
-		geometry.vertexBuffer = CreateVertexBuffer((const char*)geo.vertexAttributesDatas.data(), vertexAttributeInputStride * numVertex);
+		geo.vertexBuffer = CreateVertexBuffer((const char*)geo.vertexAttributesDatas.data(), geo.vertexAttributesDatas.size() * sizeof(float));
 
 
 
 
 	}
 	else {
-		geo.shapeVertexAttributesBuffers.resize(geo.shapes.size());
-		geo.shapeVertexBuffers.resize(geo.shapes.size());
-		geo.numIndexPerZone.resize(geo.shapeVertexBuffers.size());
+		geo.shapeVertexBuffers.resize(geo.shapeVertexAttributesBuffers.size());
 		
 		for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
 		{
 			std::vector<float>& curVertexData = geo.shapeVertexAttributesBuffers[zoneId];
-			for (uint32_t cellId = 0; cellId < geo.shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
-			{
-				if (geo.shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
-				{
-					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
-				}
-			}
-			//当前shape的所有片元的点数据
-			curVertexData.resize(geo.shapes[zoneId].mesh.indices.size() * vertexAttributeInputFloatStride);
-			for (uint32_t i = 0; i < geo.shapes[zoneId].mesh.indices.size(); i++)
-			{
-				const auto& vertexIndex = geo.shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
-				const auto& normalIndex = geo.shapes[zoneId].mesh.indices[i].normal_index;
-				const auto& texCoordIndex = geo.shapes[zoneId].mesh.indices[i].texcoord_index;
-				//�����������
-				//填充顶点位置
-				if (!geo.vertexAttrib.vertices.empty())
-				{
-					FillVertexBuffer(i, VAT_Position_float32, geo.vertexAttrib.vertices.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
-				}
-
-				//填充颜色
-				if (!geo.vertexAttrib.colors.empty())
-				{
-					FillVertexBuffer(i, VAT_Color_float32, geo.vertexAttrib.colors.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
-				}
-
-				//填充法线
-				if (!geo.vertexAttrib.normals.empty())
-				{
-					glm::vec3 curNormal = glm::vec3(geo.vertexAttrib.normals[normalIndex * 3], geo.vertexAttrib.normals[normalIndex * 3 + 1], geo.vertexAttrib.normals[normalIndex * 3 + 2]);
-					curNormal = glm::normalize(curNormal);
-					FillVertexBuffer(i, VAT_Normal_float32, (float*)&curNormal, geo.shapeVertexAttributesBuffers[zoneId]);
-
-				}
-				//填充纹理坐标
-				if (!geo.vertexAttrib.texcoords.empty())
-				{
-					glm::vec3 curTexCoord = glm::vec3(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1],1);
-					//curTexCoord.y = 1-curTexCoord.y;//翻转一下y
-
-					FillVertexBuffer(i, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.shapeVertexAttributesBuffers[zoneId]);
-				}
-			}
-
 			geo.shapeVertexBuffers[zoneId] = CreateVertexBuffer((const char*)curVertexData.data(), curVertexData.size() * sizeof(float));
-			geo.numIndexPerZone[zoneId] = geo.shapes[zoneId].mesh.indices.size();
+			
 
 		}
-
-
-
-
-
 	}
 
 
@@ -3176,7 +3248,7 @@ void ExampleBase::CreateSemaphores(uint32_t numSemaphores)
 	semaphores.resize(numSemaphores);
 	for (uint32_t i = 0; i < numSemaphores; i++)
 	{
-		semaphores[i] = CreateSemaphore(device, 0);
+		semaphores[i] = Create_Semaphore_(device, 0);
 	}
 
 

@@ -268,7 +268,7 @@ namespace VulkanAPI {
 	VkResult GetFenceStatus(VkDevice device, VkFence fence);
 
 	//semaphore
-	VkSemaphore CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags);
+	VkSemaphore Create_Semaphore_(VkDevice device, VkSemaphoreCreateFlags flags);
 	void DestroySemaphore(VkDevice device, VkSemaphore semaphore);
 	void WaitTimelineSemaphores(VkDevice device, VkSemaphoreWaitFlags    flags,
 						const std::vector<VkSemaphore>& semaphores,

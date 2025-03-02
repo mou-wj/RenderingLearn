@@ -31,7 +31,7 @@ void C12ImageSpaceEffectesExample::InitResourceInfos()
 {
 
 	geoms.resize(1);
-	geoms[0].useIndexBuffers = false;
+	//geoms[0].useIndexBuffers = false;
 	geoms[0].InitAsScreenFillRect();
 	
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };

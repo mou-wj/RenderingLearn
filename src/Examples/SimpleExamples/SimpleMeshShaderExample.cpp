@@ -18,31 +18,17 @@ void SimpleMeshShaderExample::InitResourceInfos()
 	geoms.resize(1);
 	auto& geom = geoms[0];
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
-	geom.vertexAttrib.vertices = {
-		-0.8,0.8,0,
-		0.8,0.8,0,
-		0.8,-0.8,0,
-		-0.8,0.7,0,
-		0.7,-0.8,0,
-		-1,-1,0
+	geom.vertexAttributesDatas = {
+		-0.8,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0.8,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0.8,-0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		-0.8,0.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0.7,-0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+
 	};
-	tinyobj::shape_t triangle;
-	tinyobj::index_t index;
-	index.vertex_index = 0;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 1;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 2;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	index.vertex_index = 3;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 4;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 5;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	geom.shapes.push_back(triangle);
+	geom.shapeIndices = { {0,1,2,3,4,5} };
 
 	renderPassInfos[0].subpassDrawMeshGroupInfos[0] = std::array<uint32_t, 3>{1, 1, 1};//设置mesh subpass的绘制参数
 

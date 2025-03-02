@@ -26,29 +26,8 @@ void SamplePointsExample::InitResourceInfos()
 	geoms.resize(1);
 	auto& geom = geoms[0];
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
-	geom.vertexAttrib.vertices = {
-		-1,1,0,
-		1,1,0,
-		1,-1,0,
-		-1,-1,0
-	};
-	tinyobj::shape_t triangle;
-	tinyobj::index_t index;
-	index.vertex_index = 0;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 1;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 2;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	index.vertex_index = 0;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 2;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 3;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	geom.shapes.push_back(triangle);
+	geom.InitAsScreenFillRect();
+
 
 
 	//	

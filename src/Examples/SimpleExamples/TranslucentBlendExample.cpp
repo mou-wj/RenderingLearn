@@ -31,55 +31,22 @@ void TranslucentBlendExample::InitResourceInfos()
 	auto& geom0 = geoms[0];
 	auto& geom1 = geoms[1];
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0,1 };
-	geom0.vertexAttrib.vertices = {
-		-1,1,0.1,
-		1,1,0.1,
-		1,0,0.1,
-		-1,0,0.1
-	};
-	geom0.vertexAttrib.colors = {
-		1,0,0,
-		1,0,0,
-		1,0,0,
-		1,0,0
-	
+	geom0.vertexAttributesDatas = {
+	   -1,1,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+		1,1,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+		1,0,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+	   -1,0,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0
 	
 	};
-	geom0.useIndexBuffers = false;
-	geom1.vertexAttrib.vertices = {
-	0,1,0,
-	1,1,0,
-	1,-1,0,
-	0,-1,0
-	};
-	geom1.vertexAttrib.colors = {
-	0,0,1,
-	0,0,1,
-	0,0,1,
-	0,0,1
-
+	geom1.vertexAttributesDatas = {
+		0,1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,
+		1,1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,
+	   1,-1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,
+	   0,-1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0
 
 	};
-	geom1.useIndexBuffers = false;
-	tinyobj::shape_t triangle;
-	tinyobj::index_t index;
-	index.vertex_index = 0;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 1;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 2;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	index.vertex_index = 0;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 2;
-	triangle.mesh.indices.push_back(index);
-	index.vertex_index = 3;
-	triangle.mesh.indices.push_back(index);
-	triangle.mesh.num_face_vertices.push_back(3);
-	geom0.shapes.push_back(triangle);
-	geom1.shapes.push_back(triangle);
-
+	geom0.shapeIndices = { {0,1,2} };
+	geom1.shapeIndices = { {0,2,3} };
 
 	bufferBindInfos["Buffer"].size = sizeof(glm::vec4);
 

@@ -170,22 +170,20 @@ void C22IntersectionTestMethodsExample::BuildAABBGeometry(Geometry& srcGeo, Geom
 		float x, y, z;
 	};
 
-	// 获取AABB对应的顶点数据
-	static std::vector<Vertex> vertices{
-
-		{aabb.minX, aabb.minY, aabb.minZ}, // 0: (minX, minY, minZ)
-		{ aabb.minX, aabb.minY, aabb.maxZ }, // 1: (minX, minY, maxZ)
-		{ aabb.minX, aabb.maxY, aabb.minZ }, // 2: (minX, maxY, minZ)
-		{ aabb.minX, aabb.maxY, aabb.maxZ }, // 3: (minX, maxY, maxZ)
-		{ aabb.maxX, aabb.minY, aabb.minZ }, // 4: (maxX, minY, minZ)
-		{ aabb.maxX, aabb.minY, aabb.maxZ }, // 5: (maxX, minY, maxZ)
-		{ aabb.maxX, aabb.maxY, aabb.minZ }, // 6: (maxX, maxY, minZ)
-		{ aabb.maxX, aabb.maxY, aabb.maxZ }  // 7: (maxX, maxY, maxZ)
+	//顶点数据
+	aabbGeo.vertexAttributesDatas = {
+		 aabb.minX, aabb.minY, aabb.minZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0, // 0: (minX, minY, minZ)
+		 aabb.minX, aabb.minY, aabb.maxZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0, // 1: (minX, minY, maxZ)
+		 aabb.minX, aabb.maxY, aabb.minZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0, // 2: (minX, maxY, minZ)
+		 aabb.minX, aabb.maxY, aabb.maxZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0, // 3: (minX, maxY, maxZ)
+		 aabb.maxX, aabb.minY, aabb.minZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0, // 4: (maxX, minY, minZ)
+		 aabb.maxX, aabb.minY, aabb.maxZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0, // 5: (maxX, minY, maxZ)
+		 aabb.maxX, aabb.maxY, aabb.minZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0, // 6: (maxX, maxY, minZ)
+		 aabb.maxX, aabb.maxY, aabb.maxZ,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0 // 7: (maxX, maxY, maxZ)
 
 	};
-
 	// 获取AABB对应的三角形索引数据
-	static std::vector<unsigned int> indices{
+	aabbGeo.shapeIndices.push_back({
 		// 底面
 		0, 2, 4, 4, 2, 6,  // 底面： (minX, minY, minZ) -> (minX, maxY, minZ) -> (maxX, minY, minZ)
 		// 顶面
@@ -198,30 +196,9 @@ void C22IntersectionTestMethodsExample::BuildAABBGeometry(Geometry& srcGeo, Geom
 		0, 1, 2, 2, 1, 3,  // 左面： (minX, minY, minZ) -> (minX, minY, maxZ) -> (minX, maxY, minZ)
 		// 右面
 		4, 6, 5, 5, 6, 7   // 右面： (maxX, minY, minZ) -> (maxX, maxY, minZ) -> (maxX, minY, maxZ)
-	};
-
-	// 填充 attrib_t 的顶点数据
-	for (const auto& vertex : vertices) {
-		aabbGeo.vertexAttrib.vertices.push_back(vertex.x);
-		aabbGeo.vertexAttrib.vertices.push_back(vertex.y);
-		aabbGeo.vertexAttrib.vertices.push_back(vertex.z);
-		aabbGeo.vertexAttrib.colors.push_back(1);
-		aabbGeo.vertexAttrib.colors.push_back(0);
-		aabbGeo.vertexAttrib.colors.push_back(0);
-	}
-
-	// 填充 shape_t 的索引数据
-	aabbGeo.shapes.resize(1);
-
-	aabbGeo.shapes[0].mesh.indices.reserve(indices.size());
-	aabbGeo.shapes[0].mesh.num_face_vertices.resize(12, 3);
-	for (size_t i = 0; i < indices.size(); ++i) {
-		tinyobj::index_t index;
-		index.vertex_index = indices[i];
-		index.normal_index = -1; // 没有法线数据
-		index.texcoord_index = -1; // 没有纹理坐标数据
-		aabbGeo.shapes[0].mesh.indices.push_back(index);
-	}
+		
+		
+		});
 
 }
 
@@ -236,11 +213,11 @@ void C22IntersectionTestMethodsExample::BuildSphereBVGeometry(Geometry& srcGeo, 
 		// slices: 经度切片数量
 		// stacks: 纬度切片数量
 		static void CreateSphereMesh(const glm::vec3& center, float radius, int slices, int stacks,
-			tinyobj::attrib_t& attrib, tinyobj::shape_t& shape) {
+			Geometry& dstGeo) {
 			// 存储球面顶点和索引数据
 			std::vector<float> vertices;
 			std::vector<unsigned int> indices;
-
+			dstGeo.shapeIndices.resize(1);
 			// 创建球面顶点
 			for (int i = 0; i <= stacks; ++i) {
 				float phi = M_PI * i / stacks;  // 纬度角，从0到π
@@ -253,12 +230,9 @@ void C22IntersectionTestMethodsExample::BuildSphereBVGeometry(Geometry& srcGeo, 
 					float z = center[2] + radius * cos(phi);
 
 					// 添加到顶点列表
-					vertices.push_back(x);
-					vertices.push_back(y);
-					vertices.push_back(z);
-					attrib.colors.push_back(0);
-					attrib.colors.push_back(1);
-					attrib.colors.push_back(0);
+
+					std::array<float, 18> vertex = std::array<float, 18>{x, y, z, 0, 0, 0, 0, 1, 0};
+					dstGeo.AddVertex(vertex);
 				}
 			}
 
@@ -269,32 +243,18 @@ void C22IntersectionTestMethodsExample::BuildSphereBVGeometry(Geometry& srcGeo, 
 					int second = first + slices + 1;
 
 					// 第一三角形
-					indices.push_back(first);
-					indices.push_back(second);
-					indices.push_back(first + 1);
+					dstGeo.shapeIndices[0].push_back(first);
+					dstGeo.shapeIndices[0].push_back(second);
+					dstGeo.shapeIndices[0].push_back(first + 1);
 
 					// 第二三角形
-					indices.push_back(first + 1);
-					indices.push_back(second);
-					indices.push_back(second + 1);
+					dstGeo.shapeIndices[0].push_back(first + 1);
+					dstGeo.shapeIndices[0].push_back(second);
+					dstGeo.shapeIndices[0].push_back(second + 1);
 
 				}
 			}
 
-			// 填充 tinyobj::attrib_t
-			attrib.vertices = vertices;
-
-			// 填充 tinyobj::shape_t
-			shape.name = "Sphere";
-			shape.mesh.indices.reserve(indices.size());
-			shape.mesh.num_face_vertices.resize(indices.size() / 3,3);
-			for (size_t i = 0; i < indices.size(); ++i) {
-				tinyobj::index_t index;
-				index.vertex_index = indices[i];
-				index.normal_index = -1; // 没有法线数据
-				index.texcoord_index = -1; // 没有纹理坐标数据
-				shape.mesh.indices.push_back(index);
-			}
 		}
 	};
 
@@ -303,9 +263,8 @@ void C22IntersectionTestMethodsExample::BuildSphereBVGeometry(Geometry& srcGeo, 
 
 
 	Sphere sphere;
-	sphereBVGeo.shapes.resize(1);
 	
-	sphere.CreateSphereMesh(sphereCenter, srcGeo.BVSphereRadius, 10, 10, sphereBVGeo.vertexAttrib, sphereBVGeo.shapes[0]);
+	sphere.CreateSphereMesh(sphereCenter, srcGeo.BVSphereRadius, 10, 10, sphereBVGeo);
 
 	std::cout << "Create sphere bounding box geo" << std::endl;
 
@@ -559,25 +518,24 @@ bool C22IntersectionTestMethodsExample::IntersectTwoTriangle(std::array<glm::vec
 
 bool C22IntersectionTestMethodsExample::PickTriangleFromGeom(Geometry& srcGeo, glm::vec3 rayOrigin, glm::vec3 rayDirection, Geometry& dstPickTrianglesGeo)
 {
-	dstPickTrianglesGeo.vertexAttrib.vertices.clear();
-	dstPickTrianglesGeo.shapes.resize(1);
-	dstPickTrianglesGeo.shapes[0].mesh.indices.clear();
+	dstPickTrianglesGeo.vertexAttributesDatas.clear();
+	dstPickTrianglesGeo.shapeIndices.resize(1);
 	float t = 0;
 	std::array<glm::vec3, 3> triangle;
 	uint32_t numIntersectTriangle = 0;
 	uint32_t curIndex = 0;
 	bool pickSuccess = false;
-	for (auto shapeId = 0; shapeId < srcGeo.shapes.size(); shapeId++)
+	for (auto shapeId = 0; shapeId < srcGeo.shapeIndices.size(); shapeId++)
 	{
-		uint32_t numTriangles = srcGeo.shapes[shapeId].mesh.indices.size() / 3;
+		uint32_t numTriangles = srcGeo.shapeIndices[shapeId].size() / 3;
 		for (uint32_t triangleId = 0; triangleId < numTriangles; triangleId++)
 		{
-			uint32_t vertexId1 = srcGeo.shapes[shapeId].mesh.indices[3 * triangleId].vertex_index;
-			uint32_t vertexId2 = srcGeo.shapes[shapeId].mesh.indices[3 * triangleId + 1].vertex_index;
-			uint32_t vertexId3 = srcGeo.shapes[shapeId].mesh.indices[3 * triangleId + 2].vertex_index;
-			glm::vec3 trianglePoint1 = glm::vec3(srcGeo.vertexAttrib.vertices[3 * vertexId1], srcGeo.vertexAttrib.vertices[3 * vertexId1 + 1], srcGeo.vertexAttrib.vertices[3 * vertexId1 + 2]);
-			glm::vec3 trianglePoint2 = glm::vec3(srcGeo.vertexAttrib.vertices[3 * vertexId2], srcGeo.vertexAttrib.vertices[3 * vertexId2 + 1], srcGeo.vertexAttrib.vertices[3 * vertexId2 + 2]);
-			glm::vec3 trianglePoint3 = glm::vec3(srcGeo.vertexAttrib.vertices[3 * vertexId3], srcGeo.vertexAttrib.vertices[3 * vertexId3 + 1], srcGeo.vertexAttrib.vertices[3 * vertexId3 + 2]);
+			uint32_t vertexId1 = srcGeo.shapeIndices[shapeId][3 * triangleId];
+			uint32_t vertexId2 = srcGeo.shapeIndices[shapeId][3 * triangleId + 1];
+			uint32_t vertexId3 = srcGeo.shapeIndices[shapeId][3 * triangleId + 2];
+			glm::vec3 trianglePoint1 = glm::vec3(srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId1], srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId1 + 1], srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId1 + 2]);
+			glm::vec3 trianglePoint2 = glm::vec3(srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId2], srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId2 + 1], srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId2 + 2]);
+			glm::vec3 trianglePoint3 = glm::vec3(srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId3], srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId3 + 1], srcGeo.vertexAttributesDatas[vertexAttributeInputFloatStride * vertexId3 + 2]);
 
 			triangle = { trianglePoint1 ,trianglePoint2 ,trianglePoint3 };
 			auto intersect = IntersectRayTriangle(rayOrigin, rayDirection,triangle , t);
@@ -588,10 +546,9 @@ bool C22IntersectionTestMethodsExample::PickTriangleFromGeom(Geometry& srcGeo, g
 				numIntersectTriangle++;
 				for (uint32_t i = 0; i < 3; i++)
 				{
-					dstPickTrianglesGeo.vertexAttrib.vertices.push_back(triangle[i][0]);
-					dstPickTrianglesGeo.vertexAttrib.vertices.push_back(triangle[i][1]);
-					dstPickTrianglesGeo.vertexAttrib.vertices.push_back(triangle[i][2]);
-					dstPickTrianglesGeo.shapes[0].mesh.indices.push_back({int(curIndex++)});
+					std::array<float, 18> vertex = std::array<float, 18>{triangle[i][0], triangle[i][1], triangle[i][2], 0, 0, 0, 0, 1, 0};
+					dstPickTrianglesGeo.AddVertex(vertex);
+					dstPickTrianglesGeo.shapeIndices[0].push_back(int(curIndex++));
 				}
 			}
 
@@ -603,7 +560,6 @@ bool C22IntersectionTestMethodsExample::PickTriangleFromGeom(Geometry& srcGeo, g
 	}
 
 
-	dstPickTrianglesGeo.shapes[0].mesh.num_face_vertices.resize(numIntersectTriangle, 3);
 	
 	return pickSuccess;
 }

@@ -77,7 +77,11 @@ namespace Transform {
 	glm::mat4 GetPerspectiveProj(float near, float far, float viewAngle, float ratioWH);
 
 
-
+	/**
+	 * @brief 获取平行投影矩阵，不区分坐标系，看向z轴正方向
+	 * @param near 近平面，far 远平面，width，近平面的宽度，height，近平面的高度
+	 * @return 返回平行投影矩阵,视锥体中所有x，y坐标变换到-1到1之间，近平面为0，远平面为1
+	*/
 	glm::mat4 GetParallelProj(float near, float far, float width, float height);
 
 }

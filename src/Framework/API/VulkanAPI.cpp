@@ -1003,7 +1003,7 @@ VkResult VulkanAPI::GetFenceStatus(VkDevice device, VkFence fence)
 	return res;
 }
 
-VkSemaphore VulkanAPI::CreateSemaphore(VkDevice device, VkSemaphoreCreateFlags flags)
+VkSemaphore VulkanAPI::Create_Semaphore_(VkDevice device, VkSemaphoreCreateFlags flags)
 {
 	VkSemaphore semaphore = VK_NULL_HANDLE;
 	VkSemaphoreCreateInfo semaphoreCreateInfo{};

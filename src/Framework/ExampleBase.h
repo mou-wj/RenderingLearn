@@ -18,6 +18,30 @@
 
 #include <regex>
 
+enum VertexAttributeType {
+	VAT_Position_float32 = 0,//x,y,z float
+	VAT_Normal_float32 = 1,//nx,ny,nz
+	VAT_Color_float32 = 2,//r,g,b
+	VAT_TextureCoordinates_float32 = 3,//u,v,w
+	VAT_AUX1_float32 = 4,//��������1,x,y,z
+	VAT_AUX2_float32 = 5//��������2,x,y,z
+};
+
+const std::array<VertexAttributeType, 6> vertexAttributes = {
+	VAT_Position_float32,//location 0
+	VAT_Normal_float32,//location 1
+	VAT_Color_float32,//location 2
+	VAT_TextureCoordinates_float32,//location 3
+	VAT_AUX1_float32,//location 4
+	VAT_AUX2_float32//location 5
+};//
+
+
+
+constexpr uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
+constexpr uint32_t vertexAttributeInputFloatStride = 3 * vertexAttributes.size();
+
+
 struct DescriptorBinding {
 	std::string name = "";
 	uint32_t binding;
@@ -522,12 +546,166 @@ struct Texture {
 	VkSampler sampler;
 
 };
-struct Geometry
-{
-	std::string geoPath = "";
+enum class GeometryDataSourceType {
+	OBJ_FILE = 0,
+	GLB_FILE = 1,
+	CUSTOM_DEFINE = 2
+};
+
+struct DataSource {
+	GeometryDataSourceType dataSourceType;
+};
+
+struct ObjFileDataSource:public DataSource {
 	tinyobj::attrib_t vertexAttrib;
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
+
+};
+
+
+
+struct Geometry
+{
+	std::string geoPath = "";
+	//顶点缓冲区中的数据按照以下方式排列
+	//	VAT_Position_float32,//location 0
+	//	VAT_Normal_float32,//location 1
+	//	VAT_Color_float32,//location 2
+	//	VAT_TextureCoordinates_float32,//location 3
+	//	VAT_AUX1_float32,//location 4
+	//	VAT_AUX2_float32//location 5
+	using Vertex = std::array<float, 18>;
+	void AddVertex(Vertex& vertex) {
+		for (uint32_t i = 0; i < 18; i++)
+		{
+			vertexAttributesDatas.push_back(vertex[i]);
+		}
+	}
+	void AddShapeVertex(Vertex& vertex,uint32_t shapeId) {
+		ASSERT(shapeId < shapeVertexAttributesBuffers.size());
+		for (uint32_t i = 0; i < 18; i++)
+		{
+			shapeVertexAttributesBuffers[shapeId].push_back(vertex[i]);
+		}
+	}
+
+	void CalculateAABBInfos() {
+
+		auto UpdateAABB = [](glm::vec3& curVertex, AABB& curAABB) {
+				if (curVertex.x < curAABB.minX)
+				{
+					curAABB.minX = curVertex.x;
+				}
+				if (curVertex.x > curAABB.maxX)
+				{
+					curAABB.maxX = curVertex.x;
+				}
+				if (curVertex.y < curAABB.minY)
+				{
+					curAABB.minY = curVertex.y;
+				}
+				if (curVertex.y > curAABB.maxY)
+				{
+					curAABB.maxY = curVertex.y;
+				}
+				if (curVertex.z < curAABB.minZ)
+				{
+					curAABB.minZ = curVertex.z;
+				}
+				if (curVertex.z > curAABB.maxZ)
+				{
+					curAABB.maxZ = curVertex.z;
+				}
+
+			};
+
+		//更新每个shape的AABB
+		if (useIndexBuffers)
+		{
+			ASSERT(!vertexAttributesDatas.empty())
+			AABBs.minX = AABBs.maxX = vertexAttributesDatas[0];
+			AABBs.minY = AABBs.maxY = vertexAttributesDatas[1];
+			AABBs.minZ = AABBs.maxZ = vertexAttributesDatas[2];
+			shadeAABBs.resize(shapeIndices.size());
+			for (uint32_t zoneId = 0; zoneId < shadeAABBs.size(); zoneId++)
+			{
+				const auto& firsetVertexIndex = shapeIndices[zoneId][0];
+				glm::vec3 curVertex = glm::vec3(vertexAttributesDatas[firsetVertexIndex * vertexAttributeInputFloatStride], vertexAttributesDatas[firsetVertexIndex * vertexAttributeInputFloatStride + 1], vertexAttributesDatas[firsetVertexIndex * vertexAttributeInputFloatStride + 2]);
+				Geometry::AABB& curAABB = shadeAABBs[zoneId];
+
+				curAABB.minX = curAABB.maxX = curVertex.x;
+				curAABB.minY = curAABB.maxY = curVertex.y;
+				curAABB.minZ = curAABB.maxZ = curVertex.z;
+
+				//当前shape的所有片元的点数
+				for (uint32_t i = 0; i < shapeIndices[zoneId].size(); i++)
+				{
+					const auto& vertexIndex = shapeIndices[zoneId][i];//��Ŷ�������
+
+					curVertex = glm::vec3(vertexAttributesDatas[vertexIndex * vertexAttributeInputFloatStride], vertexAttributesDatas[vertexIndex * vertexAttributeInputFloatStride + 1], vertexAttributesDatas[vertexIndex * vertexAttributeInputFloatStride + 2]);
+					UpdateAABB(curVertex, curAABB);
+					
+				}
+
+			}
+
+
+		}
+		else {
+			ASSERT(shapeVertexAttributesBuffers.size());
+			ASSERT(shapeVertexAttributesBuffers[0].size());
+			AABBs.minX = AABBs.maxX = shapeVertexAttributesBuffers[0][0];
+			AABBs.minY = AABBs.maxY = shapeVertexAttributesBuffers[0][1];
+			AABBs.minZ = AABBs.maxZ = shapeVertexAttributesBuffers[0][2];
+			shadeAABBs.resize(shapeVertexAttributesBuffers.size());
+			for (uint32_t zoneId = 0; zoneId < shadeAABBs.size(); zoneId++)
+			{
+				
+				glm::vec3 curVertex = glm::vec3(shapeVertexAttributesBuffers[zoneId][0], shapeVertexAttributesBuffers[zoneId][1], shapeVertexAttributesBuffers[zoneId][2]);
+				Geometry::AABB& curAABB = shadeAABBs[zoneId];
+
+				curAABB.minX = curAABB.maxX = curVertex.x;
+				curAABB.minY = curAABB.maxY = curVertex.y;
+				curAABB.minZ = curAABB.maxZ = curVertex.z;
+
+				uint32_t numVertex = shapeVertexAttributesBuffers[zoneId].size() / vertexAttributeInputFloatStride;
+				//当前shape的所有片元的点数
+				for (uint32_t i = 0; i < numVertex; i++)
+				{
+					const auto& vertexIndex = i;//��Ŷ�������
+
+					curVertex = glm::vec3(shapeVertexAttributesBuffers[zoneId][vertexIndex * vertexAttributeInputFloatStride], shapeVertexAttributesBuffers[zoneId][vertexIndex * vertexAttributeInputFloatStride + 1], shapeVertexAttributesBuffers[zoneId][vertexIndex * vertexAttributeInputFloatStride + 2]);
+					UpdateAABB(curVertex, curAABB);
+				}
+
+			}
+		
+		
+		
+		}
+		glm::vec3 pmin,pmax;
+
+		//更新整个geo的AABB
+		for (uint32_t i = 0; i < shadeAABBs.size(); i++)
+		{
+			pmin = glm::vec3(shadeAABBs[i].minX, shadeAABBs[i].minY, shadeAABBs[i].minZ);
+			pmax = glm::vec3(shadeAABBs[i].maxX, shadeAABBs[i].maxY, shadeAABBs[i].maxZ);
+			UpdateAABB(pmin, AABBs);
+			UpdateAABB(pmax, AABBs);
+		}
+		pmin = glm::vec3(AABBs.minX, AABBs.minY, AABBs.minZ);
+		pmax = glm::vec3(AABBs.maxX, AABBs.maxY, AABBs.maxZ);
+
+		float d = glm::distance(pmin, pmax);
+		BVSphereRadius = d / 2;
+	
+
+		AABBcenter[0] = (AABBs.minX + AABBs.maxX) / 2;
+		AABBcenter[1] = (AABBs.minY + AABBs.maxY) / 2;
+		AABBcenter[2] = (AABBs.minZ + AABBs.maxZ) / 2;
+	
+	}
 
 	std::vector<float> vertexAttributesDatas;
 	std::vector<std::vector<uint32_t>> shapeIndices;
@@ -540,7 +718,6 @@ struct Geometry
 	Buffer vertexBuffer;
 	std::vector<Buffer> indexBuffers;//һ��indexbuffer ����ģ���е�һ������
 	uint32_t numVertex = 0;
-	std::vector<uint32_t> numIndexPerZone;
 
 
 	//只使用顶点缓冲
@@ -587,43 +764,21 @@ struct Geometry
 	}
 
 	void InitAsScreenFillRect() {
-		vertexAttrib.vertices = {
-		-1,1,0,
-		1,1,0,
-		1,-1,0,
-		-1,-1,0
+		
+		vertexAttributesDatas = {
+		-1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 		};
-		tinyobj::shape_t triangle;
-		tinyobj::index_t index;
-		index.vertex_index = 0;
-		triangle.mesh.indices.push_back(index);
-		index.vertex_index = 1;
-		triangle.mesh.indices.push_back(index);
-		index.vertex_index = 2;
-		triangle.mesh.indices.push_back(index);
-		triangle.mesh.num_face_vertices.push_back(3);
-		index.vertex_index = 0;
-		triangle.mesh.indices.push_back(index);
-		index.vertex_index = 2;
-		triangle.mesh.indices.push_back(index);
-		index.vertex_index = 3;
-		triangle.mesh.indices.push_back(index);
-		triangle.mesh.num_face_vertices.push_back(3);
-		shapes.push_back(triangle);
 
+		shapeIndices = { {0,1,2,0,2,3} };
 	}
 
 
 };
 
-enum VertexAttributeType {
-	VAT_Position_float32 = 0,//x,y,z float
-	VAT_Normal_float32 = 1,//nx,ny,nz
-	VAT_Color_float32 = 2,//r,g,b
-	VAT_TextureCoordinates_float32 = 3,//u,v,w
-	VAT_AUX1_float32 = 4,//��������1,x,y,z
-	VAT_AUX2_float32 = 5//��������2,x,y,z
-};
+
 
 struct Attachment {
 	VkAttachmentDescription attachmentDesc;
@@ -877,7 +1032,6 @@ struct RenderPassInfo {
 };
 
 
-
 class ExampleBase {
 	//
 
@@ -904,6 +1058,7 @@ protected:
 	//
 protected:
 	void LoadObj(const std::string& objFilePath, Geometry& geo);
+	void LoadGLB(const std::string& glbFilePath, Geometry& geo);
 	//resource
 	void FillImageFromDataSource(Image& image, TextureBindInfo& textureBindInfo);
 
@@ -940,6 +1095,11 @@ protected:
 protected:
 	//根据和相机的距离来排序要绘制的geo，小序
 	void SortGeosFollowCloseDistance(glm::vec3 cameraPos);
+
+	//存放从文件中读取的缓存数据
+	std::map<std::string, ObjFileDataSource> objDataSourceCache;
+
+
 
 	//runtime
 	std::vector<Geometry> geoms;
@@ -1170,19 +1330,7 @@ private:
 
 
 
-	const std::array<VertexAttributeType, 6> vertexAttributes = {
-		VAT_Position_float32,//location 0
-		VAT_Normal_float32,//location 1
-		VAT_Color_float32,//location 2
-		VAT_TextureCoordinates_float32,//location 3
-		VAT_AUX1_float32,//location 4
-		VAT_AUX2_float32//location 5
-	};//
 
-
-
-	const uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
-	const uint32_t vertexAttributeInputFloatStride = 3 * vertexAttributes.size();
 
 	//先不考虑compute pipeline
 	//std::vector<GraphicPipelineInfos> graphcisPipelineInfos;

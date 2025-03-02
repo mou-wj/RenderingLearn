@@ -56,7 +56,7 @@ void C6TexturingExample::InitResourceInfos()
 {
 
 	geoms.resize(1);
-	geoms[0].useIndexBuffers = false;
+	geoms[0].useIndexBuffers = true;
 	LoadObj(std::string(PROJECT_DIR) + "/resources/obj/plane.obj",geoms[0]);
 
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
