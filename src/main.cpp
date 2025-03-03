@@ -73,8 +73,6 @@ int main()
 {
 	//Vulkankk();
 
-	//extern void LoadGLBTest();
-	//LoadGLBTest();
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
@@ -109,8 +107,8 @@ int main()
 	//C19AccelerationAlgorithmsExample example;
 	//C20EfficientShadingExample example;
 	//C22IntersectionTestMethodsExample example;
-	C26RealTimeRayTracingExample example;
-	//PBRArtifactExample example;
+	//C26RealTimeRayTracingExample example;
+	PBRArtifactExample example;
 	ExampleBase::Run(&example);
 
 

@@ -1058,7 +1058,6 @@ protected:
 	//
 protected:
 	void LoadObj(const std::string& objFilePath, Geometry& geo);
-	void LoadGLB(const std::string& glbFilePath, Geometry& geo);
 	//resource
 	void FillImageFromDataSource(Image& image, TextureBindInfo& textureBindInfo);
 
