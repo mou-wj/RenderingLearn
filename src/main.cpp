@@ -25,6 +25,7 @@
 #include "Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.h"
 #include "Examples/RealTimeRendering4/C26RealTimeRayTracingExample.h"
 #include "Examples/Artifacts/PBRArtifactExample.h"
+#include "Examples/Artifacts/SceenArtifactExample.h"
 
 
 
@@ -67,16 +68,14 @@ vulkanµƒNDC£¨”“ ÷œµ
  */
 void TransformTest();
 void AutoTest();
-int Vulkankk();
 
 int main()
 {
-	//Vulkankk();
 
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
-	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	//CaptureNum(4);
+	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
+	CaptureNum(4);
 	//AutoTest();
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
@@ -108,7 +107,8 @@ int main()
 	//C20EfficientShadingExample example;
 	//C22IntersectionTestMethodsExample example;
 	//C26RealTimeRayTracingExample example;
-	PBRArtifactExample example;
+	//PBRArtifactExample example;
+	SceenArtifactExample example;
 	ExampleBase::Run(&example);
 
 

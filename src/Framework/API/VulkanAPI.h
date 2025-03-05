@@ -294,6 +294,7 @@ namespace VulkanAPI {
 	void CmdEndRenderPass(VkCommandBuffer commandBuffer);
 	void CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents  subpassContents);
 
+
 	void CmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex, VkQueryControlFlags flags);
 	void CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t queryIndex);
 	void CmdResetQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQueryIndex, uint32_t numQuery);

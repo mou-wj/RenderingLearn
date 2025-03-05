@@ -20,7 +20,7 @@ enum RotateAction {
 
 class Camera {
 public:
-	Camera(glm::vec3 pos = glm::vec3(0, 0, 0), glm::vec3 target = glm::vec3(0, 0, 1), glm::vec3 down = glm::vec3(0, 1, 0));
+	Camera(glm::vec3 pos = glm::vec3(0, 0, 0), glm::vec3 target = glm::vec3(0, 0, 1), glm::vec3 down = glm::vec3(0, 1, 0),bool isPerspective  = true);
 
 
 	void Move(MoveDirection direction);

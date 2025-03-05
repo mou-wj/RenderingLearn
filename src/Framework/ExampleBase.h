@@ -1062,6 +1062,8 @@ protected:
 	void FillImageFromDataSource(Image& image, TextureBindInfo& textureBindInfo);
 
 	void FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize size, const char* data);
+
+	void ClearTexture(const std::string& textureName, VkClearColorValue clearValue);
 protected:
 	//runtime
 	void CmdListReset(CommandList& cmdList);

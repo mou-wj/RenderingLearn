@@ -2,7 +2,7 @@
 #include "../Common/Transform.h"
 #include "glm/glm.hpp"
 
-Camera::Camera(glm::vec3 pos, glm::vec3 target, glm::vec3 down):pos(pos),target(target),down(down)
+Camera::Camera(glm::vec3 pos, glm::vec3 target, glm::vec3 down, bool isPerspective):pos(pos),target(target),down(down),perspective(isPerspective)
 {
 	Calculate();
 }

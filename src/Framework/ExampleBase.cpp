@@ -1393,6 +1393,31 @@ void ExampleBase::FillBuffer(Buffer buffer, VkDeviceSize offset, VkDeviceSize si
 
 }
 
+void ExampleBase::ClearTexture(const std::string& textureName, VkClearColorValue clearValue)
+{
+	ASSERT(textures.contains(textureName));
+	auto& image = textures[textureName].image;
+	std::vector<VkImageSubresourceRange> imageRanges;
+	imageRanges.resize(1);
+	auto& range = imageRanges[0];
+	range.aspectMask = image.aspect;
+	range.baseArrayLayer = 0;
+	range.baseMipLevel = 0;
+	range.layerCount = image.numLayer;
+	range.levelCount = image.numMip;
+
+	std::vector<VkClearColorValue> clearVs = { clearValue };
+
+	//构建加速结构
+	CmdListWaitFinish(oneSubmitCommandList);
+	CmdListRecordBegin(oneSubmitCommandList);
+	CmdClearColorImage(oneSubmitCommandList.commandBuffer, image.image, image.currentLayout, clearVs, imageRanges);
+	CmdListRecordEnd(oneSubmitCommandList);
+	SubmitSynchronizationInfo info;
+	CmdListSubmit(oneSubmitCommandList, info);
+
+}
+
 void ExampleBase::CmdListReset(CommandList& cmdList)
 {
 	CommandBufferReset(cmdList.commandBuffer);
