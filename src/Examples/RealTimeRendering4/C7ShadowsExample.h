@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class C7ShadowsExample : public ExampleBase
+class C7ShadowsExample : public ExampleBaseVK
 {
 public:
 	C7ShadowsExample() = default;

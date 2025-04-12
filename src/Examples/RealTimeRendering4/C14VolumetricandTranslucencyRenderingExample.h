@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class C14VolumetricandTranslucencyRenderingExample : public ExampleBase
+class C14VolumetricandTranslucencyRenderingExample : public ExampleBaseVK
 {
 public:
 	C14VolumetricandTranslucencyRenderingExample() = default;

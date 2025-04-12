@@ -1,5 +1,5 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
 struct TreeNode {
 	std::map<uint32_t, std::vector<uint32_t>> geoShapeIndexs;
@@ -9,7 +9,7 @@ struct TreeNode {
 	TreeNode() : left(nullptr), right(nullptr) {}
 };
 
-class C19AccelerationAlgorithmsExample : public ExampleBase
+class C19AccelerationAlgorithmsExample : public ExampleBaseVK
 {
 public:
 	C19AccelerationAlgorithmsExample() = default;

@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class C12ImageSpaceEffectesExample : public ExampleBase
+class C12ImageSpaceEffectesExample : public ExampleBaseVK
 {
 public:
 	C12ImageSpaceEffectesExample() = default;

@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class C9PhysicalBasedRenderingExample : public ExampleBase
+class C9PhysicalBasedRenderingExample : public ExampleBaseVK
 {
 public:
 	C9PhysicalBasedRenderingExample() = default;

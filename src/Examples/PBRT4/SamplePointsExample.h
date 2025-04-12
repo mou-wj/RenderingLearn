@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class SamplePointsExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class SamplePointsExample : public ExampleBaseVK
 {
 public:
 	SamplePointsExample() = default;

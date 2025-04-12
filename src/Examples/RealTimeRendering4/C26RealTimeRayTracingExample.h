@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class C26RealTimeRayTracingExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class C26RealTimeRayTracingExample : public ExampleBaseVK
 {
 public:
 	C26RealTimeRayTracingExample() = default;

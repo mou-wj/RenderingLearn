@@ -1,9 +1,9 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
 #include <array>
 
-class C22IntersectionTestMethodsExample : public ExampleBase
+class C22IntersectionTestMethodsExample : public ExampleBaseVK
 {
 public:
 	C22IntersectionTestMethodsExample() = default;

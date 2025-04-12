@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class C11GlobalIlluminationExample : public ExampleBase
+class C11GlobalIlluminationExample : public ExampleBaseVK
 {
 public:
 	C11GlobalIlluminationExample() = default;

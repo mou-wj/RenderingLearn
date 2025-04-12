@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class C10LocalIlluminationExample : public ExampleBase
+class C10LocalIlluminationExample : public ExampleBaseVK
 {
 public:
 	C10LocalIlluminationExample() = default;

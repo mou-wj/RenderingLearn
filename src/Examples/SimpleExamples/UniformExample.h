@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class UniformExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class UniformExample : public ExampleBaseVK
 {
 public:
 	UniformExample() = default;

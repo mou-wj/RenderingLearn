@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 //一个带天空盒的简单场景
-class C6TexturingExample : public ExampleBase
+class C6TexturingExample : public ExampleBaseVK
 {
 public:
 	C6TexturingExample() = default;

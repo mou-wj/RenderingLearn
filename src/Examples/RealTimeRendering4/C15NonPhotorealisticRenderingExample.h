@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class C15NonPhotorealisticRenderingExample : public ExampleBase
+class C15NonPhotorealisticRenderingExample : public ExampleBaseVK
 {
 public:
 	C15NonPhotorealisticRenderingExample() = default;

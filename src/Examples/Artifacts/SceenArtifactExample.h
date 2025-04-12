@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class SceenArtifactExample : public ExampleBase
+class SceenArtifactExample : public ExampleBaseVK
 {
 public:
 	SceenArtifactExample() = default;

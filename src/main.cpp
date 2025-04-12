@@ -74,13 +74,13 @@ int main()
 
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
-	CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	CaptureNum(4);
+	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
+	//CaptureNum(4);
 	//AutoTest();
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
-	//SkyBoxExample example;
+	SkyBoxExample example;
 	//TranslucentBlendExample example;
 	//SimpleSceenExample example;
 	//SimpleTessellationExample example;
@@ -108,7 +108,7 @@ int main()
 	//C22IntersectionTestMethodsExample example;
 	//C26RealTimeRayTracingExample example;
 	//PBRArtifactExample example;
-	SceenArtifactExample example;
+	//SceenArtifactExample example;
 	ExampleBase::Run(&example);
 
 
@@ -218,11 +218,15 @@ void AutoTest() {
 		ExampleBase::Run(&example);
 	}
 	{
-		C26RealTimeRayTracingExample example;
-		ExampleBase::Run(&example);
+		//C26RealTimeRayTracingExample example;
+		//ExampleBase::Run(&example);
 	}
 	{
 		PBRArtifactExample example;
+		ExampleBase::Run(&example);
+	}
+	{
+		SceenArtifactExample example;
 		ExampleBase::Run(&example);
 	}
 }

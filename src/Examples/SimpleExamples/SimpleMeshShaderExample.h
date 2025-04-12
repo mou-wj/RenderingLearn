@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class SimpleMeshShaderExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class SimpleMeshShaderExample : public ExampleBaseVK
 {
 public:
 	SimpleMeshShaderExample() = default;

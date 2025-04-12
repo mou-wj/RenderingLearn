@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class SkyBoxExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class SkyBoxExample : public ExampleBaseVK
 {
 public:
 	SkyBoxExample() = default;

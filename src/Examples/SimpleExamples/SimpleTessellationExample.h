@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class SimpleTessellationExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class SimpleTessellationExample : public ExampleBaseVK
 {
 public:
 	SimpleTessellationExample() = default;

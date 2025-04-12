@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class TranslucentBlendExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class TranslucentBlendExample : public ExampleBaseVK
 {
 public:
 	TranslucentBlendExample() = default;

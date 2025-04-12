@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 //一个带天空盒的反射模型示例
-class ReflectionModelsExample : public ExampleBase
+class ReflectionModelsExample : public ExampleBaseVK
 {
 public:
 	ReflectionModelsExample() = default;

@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class DrawSimpleTriangleSample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class DrawSimpleTriangleSample : public ExampleBaseVK
 {
 public:
 	DrawSimpleTriangleSample() = default;

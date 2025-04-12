@@ -1,6 +1,6 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
-class C17CurvesAndCurvedSurfacesExample : public ExampleBase
+#include "../../Framework/ExampleBaseVK.h"
+class C17CurvesAndCurvedSurfacesExample : public ExampleBaseVK
 {
 public:
 	C17CurvesAndCurvedSurfacesExample() = default;

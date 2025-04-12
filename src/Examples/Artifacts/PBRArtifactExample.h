@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 
-class PBRArtifactExample : public ExampleBase
+class PBRArtifactExample : public ExampleBaseVK
 {
 public:
 	PBRArtifactExample() = default;

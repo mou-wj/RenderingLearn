@@ -1,7 +1,7 @@
 #pragma once
-#include "../../Framework/ExampleBase.h"
+#include "../../Framework/ExampleBaseVK.h"
 //一个带天空盒的简单场景
-class C5ShadingBasicsExample : public ExampleBase
+class C5ShadingBasicsExample : public ExampleBaseVK
 {
 public:
 	C5ShadingBasicsExample() = default;
