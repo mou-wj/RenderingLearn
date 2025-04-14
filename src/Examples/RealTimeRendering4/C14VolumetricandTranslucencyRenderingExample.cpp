@@ -156,16 +156,8 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 
 
 
-	auto swapchainValidSemaphore = semaphores[0];
+	auto drawFinished = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
-
-
-	SubmitSynchronizationInfo preComputePassSubmitSyncInfo;
-	preComputePassSubmitSyncInfo.waitSemaphores = {  };
-	preComputePassSubmitSyncInfo.waitStages = {  };
-	preComputePassSubmitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
-
-	
 
 	//绑定uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
@@ -187,9 +179,9 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 	FillBuffer(buffers["Info"], sizeof(glm::vec4), sizeof(glm::vec3), (const char*)&lightPos);
 	FillBuffer(buffers["Info"], sizeof(glm::vec4) * 2, sizeof(glm::vec3), (const char*)&lightColor);
 	SubmitSynchronizationInfo submitSyncInfo;
-	submitSyncInfo.waitSemaphores = { swapchainValidSemaphore };
-	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
-	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
+	submitSyncInfo.waitSemaphores = {  };
+	submitSyncInfo.waitStages = {  };
+	submitSyncInfo.sigSemaphores = { drawFinished };
 
 	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
@@ -203,23 +195,16 @@ void C14VolumetricandTranslucencyRenderingExample::Loop()
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 		FillBuffer(buffers["Info"], 0, sizeof(glm::vec3), (const char*)&camera.GetPos());
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
 		
 		CmdOpsDrawGeom(graphicCommandList);
 		
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, swapchainImages[nexIndex]);
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
 		CaptureEndMacro
-		Present(nexIndex, { finishCopyTargetToSwapchain });
+		PresentPassResult(drawFinished, 0, 0);
 
 
 

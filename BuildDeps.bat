@@ -70,4 +70,5 @@ if not exist "./install/tinygltf" (
 	cmake --build ./build --config Release --target install
 	rmdir /s /q build
 )
+
 pause

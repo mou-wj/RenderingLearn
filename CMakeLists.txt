@@ -97,6 +97,11 @@ else()
 	list(APPEND Libs3rd ${TinyGLTFLibs})
 endif()
 
+#GL
+find_package(OpenGL REQUIRED)
+
+list(APPEND Libs3rd ${OPENGL_LIBRARIES})
+
 
 file(GLOB_RECURSE SrcFiles ./src/*.cpp ./src/*.h)
 #message(FATAL_ERROR "${SrcFiles}")

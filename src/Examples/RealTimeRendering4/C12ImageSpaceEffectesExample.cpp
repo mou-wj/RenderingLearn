@@ -101,15 +101,15 @@ void C12ImageSpaceEffectesExample::Loop()
 	BindTexture("postProcessResult");
 
 
-	auto swapchainValidSemaphore = semaphores[0];
+	auto drawFinished = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
 
 	
 
 	SubmitSynchronizationInfo submitSyncInfo;
-	submitSyncInfo.waitSemaphores = {swapchainValidSemaphore };
-	submitSyncInfo.waitStages = {VK_PIPELINE_STAGE_TRANSFER_BIT };
-	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
+	submitSyncInfo.waitSemaphores = { };
+	submitSyncInfo.waitStages = { };
+	submitSyncInfo.sigSemaphores = { drawFinished };
 
 	auto& renderTargets = renderPassInfos[0].renderTargets;
 	while (!WindowEventHandler::WindowShouldClose())
@@ -119,24 +119,16 @@ void C12ImageSpaceEffectesExample::Loop()
 
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
 		
 		CmdOpsDrawGeom(graphicCommandList);
-		
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, swapchainImages[nexIndex]);
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
 		CaptureEndMacro
-		Present(nexIndex, { finishCopyTargetToSwapchain });
+		PresentPassResult(drawFinished, 0, 0);
 	}
 	WaitIdle();
 }
@@ -169,9 +161,9 @@ void C12ImageSpaceEffectesExample::GaussianFilterExample()
 	CmdListReset(graphicCommandList);
 	CaptureBeginMacro
 	CmdListRecordBegin(graphicCommandList);
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	CmdOpsDispatch(graphicCommandList, 0, { textureW,textureH,1 });
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	CmdListRecordEnd(graphicCommandList);
 
@@ -204,9 +196,9 @@ void C12ImageSpaceEffectesExample::LightBlurExample()
 	CmdListReset(graphicCommandList);
 	CaptureBeginMacro
 	CmdListRecordBegin(graphicCommandList);
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache1"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache1"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	CmdOpsDispatch(graphicCommandList, 0, { textureW,textureH,1 });
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache1"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache1"].image, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	CmdListRecordEnd(graphicCommandList);
 
@@ -234,9 +226,9 @@ void C12ImageSpaceEffectesExample::LightBlurExample()
 	CmdListReset(graphicCommandList);
 	CaptureBeginMacro
 	CmdListRecordBegin(graphicCommandList);
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache2"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache2"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	CmdOpsDispatch(graphicCommandList, 0, { textureW,textureH,1 });
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache2"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResultCache2"].image, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	CmdListRecordEnd(graphicCommandList);
 
@@ -262,9 +254,9 @@ void C12ImageSpaceEffectesExample::LightBlurExample()
 	CmdListReset(graphicCommandList);
 	CaptureBeginMacro
 	CmdListRecordBegin(graphicCommandList);
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	CmdOpsDispatch(graphicCommandList, 0, { textureW,textureH,1 });
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["postProcessResult"].image, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	CmdListRecordEnd(graphicCommandList);
 

@@ -126,6 +126,10 @@ void ExampleBaseVK::Init()
 	Initialize();
 	InitContex();
 	InitRenderPasses();
+	presentPassInfo.w = windowWidth;
+	presentPassInfo.h = windowHeight;
+	presentPassInfo.context = this;
+	presentPassInfo.Init();
 	InitQueryPool();
 	InitSyncObject();
 	InitRecources();
@@ -214,13 +218,18 @@ void ExampleBaseVK::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 
 }
 
+void ExampleBaseVK::InitPlatformSurface()
+{
+
+	window = CreateWin32Window(windowWidth, windowHeight, "MainWindow");
+	////绑定回调
+	WindowEventHandler::BindWindow(window);
+	surface = CreateWin32Surface(instance, window);
+}
+
 void ExampleBaseVK::InitContex()
 {
-	//��������
-	window = CreateWin32Window(windowWidth, windowHeight, "MainWindow");
-	
-	//绑定回调
-	WindowEventHandler::BindWindow(window);
+
 
 	auto requiredExtension = GetInstanceNeedWinGLFWExtensionNames();
 	std::vector<const char*> wantExtensions = { VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
@@ -267,9 +276,12 @@ void ExampleBaseVK::InitContex()
 
 	//����instance
 	instance = CreateInstance(enableInstanceLayers, wantExtensions);//这里只有instance开启了debug util
-	//����surface
-	surface = CreateWin32Surface(instance, window);
+
 	debugUtilMessager = CreateDebugInfoMessager(instance);
+
+	//创建平台surface
+	InitPlatformSurface();
+
 	PickValidPhysicalDevice();
 	CheckCandidateTextureFormatSupport();
 	//ASSERT(physicalDeviceFeatures.geometryShader == VK_TRUE);//检查是否支持几何着色器
@@ -330,74 +342,19 @@ void ExampleBaseVK::InitContex()
 	InitCommandList();
 
 	//����swapchain
-	swapchain = CreateSwapchain(device, surface, swapchainImageFormat, colorSpace, VkExtent2D{ .width = windowWidth,.height = windowHeight }, 1, 1, 2, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
-
-
-	auto swapImages = GetSwapchainImages(device, swapchain);
-	swapchainImages.resize(swapImages.size());
-	for (uint32_t i = 0; i < swapImages.size(); i++)
-	{
-		swapchainImages[i].image = swapImages[i];
-		swapchainImages[i].aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-		swapchainImages[i].currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		swapchainImages[i].numLayer = 1;
-		swapchainImages[i].numMip = 1;
-		swapchainImages[i].extent = VkExtent3D{.width = windowWidth ,.height = windowHeight,.depth = 1};
-		swapchainImages[i].sample = VK_SAMPLE_COUNT_1_BIT;
-		swapchainImages[i].memory = VK_NULL_HANDLE;
-		swapchainImages[i].format = swapchainImageFormat;
-		//ת��swapchain image��image layout
-		TransferWholeImageLayout(swapchainImages[i], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);//�ȴ�������Ⱦ���
-
-
-	}
-
-
-	
-
-
-
-
-
-
-
-
-
-
-
 
 
 }
 
 void ExampleBaseVK::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 {
-	//����color attachment����Դ
+	//设置颜色附件的附件描述
 	ASSERT(renderPassInfo.renderTargets.colorAttachments.size() >= 1);
 	for (uint32_t i = 0;i < renderPassInfo.renderTargets.colorAttachments.size();i++)
 	{
 
 		auto& colorAttachment = renderPassInfo.renderTargets.colorAttachments[i].attachmentDesc;
-		auto& colorImage = renderPassInfo.renderTargets.colorAttachments[i].attachmentImage;
-
-		if (colorAttachment.format != RenderTargets::colorFormat)
-		{
-			ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, colorAttachment.format, RenderTargets::colorAttachmentFormatFeatures));
-
-
-		}
-
-		VkImageUsageFlags colorAttachmentImageUsages = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		if (renderPassInfo.renderTargets.enaleInputAttachment)
-		{
-			colorAttachmentImageUsages |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-		}
-
-
-		colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, colorImage.extent.width, colorImage.extent.height, 1, 1, 1, colorAttachmentImageUsages, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
-		//TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		//renderPassInfo.renderTargets.colorAttachment.clearValue = VkClearValue{ 0,0,0,1 };
-
-
+		
 
 		colorAttachment.flags = 0;
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -405,11 +362,8 @@ void ExampleBaseVK::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		colorAttachment.initialLayout = colorImage.currentLayout;
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		colorImage.currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-
 
 
 	}
@@ -417,40 +371,32 @@ void ExampleBaseVK::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
 
 
 
-
-	auto& depthImage = renderPassInfo.renderTargets.depthAttachment.attachmentImage;
+	//设置深度附件的附件描述
 	auto& depthAttachment = renderPassInfo.renderTargets.depthAttachment.attachmentDesc;
-
-	if (depthAttachment.format != RenderTargets::depthFormat)
-	{
-
-		ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, depthAttachment.format, RenderTargets::depthAttachmentFormatFeatures));
-
-
-	}
-
-	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthAttachment.format, depthImage.extent.width, depthImage.extent.height, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
-	//TransferWholeImageLayout(depthImage, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-	//renderPassInfo.renderTargets.depthAttachment.clearValue = VkClearValue{ 1.0,0 };
-
-
-
-
 	depthAttachment.flags = 0;
 	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depthAttachment.initialLayout = renderPassInfo.renderTargets.depthAttachment.attachmentImage.currentLayout;
+	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	renderPassInfo.renderTargets.depthAttachment.attachmentImage.currentLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+}
 
-
-
-
+void ExampleBaseVK::InitFrameBuffers(RenderPassInfo& renderPassInfo)
+{
+	renderPassInfo.renderTargets.frames.resize(renderPassInfo.renderTargets.numFrame);
+	auto numFrame = renderPassInfo.renderTargets.frames.size();
+	auto numColorAttachments = renderPassInfo.renderTargets.colorAttachments.size();
+	ASSERT(numColorAttachments >= 1);
+	for (uint32_t i = 0; i < numFrame; i++)
+	{
+		CreateFrame(renderPassInfo, i, {});
+	}
 
 }
+
+
 
 void ExampleBaseVK::InitRenderPass(RenderPassInfo& renderPassInfo)
 {
@@ -481,7 +427,7 @@ void ExampleBaseVK::InitRenderPasses()
 		ParseShaderFiles(renderPassInfos[i]);
 		InitAttanchmentDesc(renderPassInfos[i]);
 		InitRenderPass(renderPassInfos[i]);
-		InitFrameBuffer(renderPassInfos[i]);
+		InitFrameBuffers(renderPassInfos[i]);
 		InitGraphicPipelines(renderPassInfos[i]);
 
 		if (renderPassInfos[i].renderTargets.enaleInputAttachment)
@@ -493,28 +439,8 @@ void ExampleBaseVK::InitRenderPasses()
 
 	
 
-
-
-
-
-
-
 }
 
-void ExampleBaseVK::InitFrameBuffer(RenderPassInfo& renderPassInfo)
-{
-	uint32_t width = renderPassInfo.renderTargets.width;
-	uint32_t height = renderPassInfo.renderTargets.height;
-
-	std::vector<VkImageView> attachmentsImagViews;
-	for (uint32_t i = 0; i < renderPassInfo.renderTargets.colorAttachments.size(); i++)
-	{
-		attachmentsImagViews.push_back(renderPassInfo.renderTargets.colorAttachments[i].attachmentImage.imageView);
-	}
-	attachmentsImagViews.push_back(renderPassInfo.renderTargets.depthAttachment.attachmentImage.imageView);
-	renderPassInfo.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, attachmentsImagViews, width, height,1);
-
-}
 
 void ExampleBaseVK::InitSyncObject()
 {
@@ -875,12 +801,93 @@ void ExampleBaseVK::FillImage(Image& image, VkDeviceSize offset, VkDeviceSize si
 
 void ExampleBaseVK::DestroyImage(Image& image)
 {
-	VulkanAPI::DestroyImage(device, image.image);
+	if (image.hostOwner)
+	{
+		VulkanAPI::DestroyImage(device, image.image);
+		ReleaseMemory(device, image.memory);
+	}
 	DestroyImageView(device, image.imageView);
-	ReleaseMemory(device, image.memory);
 	image.image = nullptr;
 	image.imageView = nullptr;
 	image.memory = nullptr;
+}
+
+void ExampleBaseVK::CreateFrame(RenderPassInfo& renderPassInfo, uint32_t frameId,const std::vector<Image>& colorAttachmentImages)
+{
+	std::vector<VkImageView> attachmentsImagViews;
+	auto numColorAttachments = renderPassInfo.renderTargets.colorAttachments.size();
+	ASSERT(colorAttachmentImages.size() == 0 || (colorAttachmentImages.size() == numColorAttachments));
+	auto& frame = renderPassInfo.renderTargets.frames[frameId];
+	frame.colorAttachmentTextures.resize(numColorAttachments);
+	uint32_t attanchWeight = renderPassInfo.renderTargets.width;
+	uint32_t attanchHeight = renderPassInfo.renderTargets.height;
+	for (uint32_t colorAttachId = 0; colorAttachId < numColorAttachments; colorAttachId++)
+	{
+
+		auto& colorAttachment = renderPassInfo.renderTargets.colorAttachments[colorAttachId].attachmentDesc;
+		auto& colorImage = frame.colorAttachmentTextures[colorAttachId].image;
+
+		if (colorAttachmentImages.size() == 0)
+		{
+			if (colorAttachment.format != RenderTargets::colorFormat)
+			{
+				ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, colorAttachment.format, RenderTargets::colorAttachmentFormatFeatures));
+
+
+			}
+			VkImageUsageFlags colorAttachmentImageUsages = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+			if (renderPassInfo.renderTargets.enaleInputAttachment)
+			{
+				colorAttachmentImageUsages |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+			}
+			colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, attanchWeight, attanchHeight, 1, 1, 1, colorAttachmentImageUsages, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+			TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		}
+		else {
+			colorImage = colorAttachmentImages[colorAttachId];
+			//colorImage.currentLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		}
+		
+
+		attachmentsImagViews.push_back(colorImage.imageView);
+		frame.colorAttachmentTextures[colorAttachId].sampler = CreateDefaultSampler(device, 1);
+	}
+
+	auto& depthImage = frame.depthAttachmentImage;
+	auto& depthAttachment = renderPassInfo.renderTargets.depthAttachment.attachmentDesc;
+
+	if (depthAttachment.format != RenderTargets::depthFormat)
+	{
+
+		ASSERT(CheckOptimalFormatFeatureSupport(physicalDevice, depthAttachment.format, RenderTargets::depthAttachmentFormatFeatures));
+
+
+	}
+
+	depthImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, depthAttachment.format, attanchWeight, attanchHeight, 1, 1, 1, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
+
+	//创建framebuffer
+	uint32_t width = renderPassInfo.renderTargets.width;
+	uint32_t height = renderPassInfo.renderTargets.height;
+	attachmentsImagViews.push_back(depthImage.imageView);
+	frame.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, attachmentsImagViews, width, height, 1);
+
+}
+
+void ExampleBaseVK::DestroyFrame(RenderPassInfo& renderPassInfo, uint32_t frameId)
+{
+	auto& frame = renderPassInfo.renderTargets.frames[frameId];
+	for (uint32_t i = 0; i < frame.colorAttachmentTextures.size(); i++)
+	{
+		DestroyImage(frame.colorAttachmentTextures[i].image);
+		DestroySampler(device, frame.colorAttachmentTextures[i].sampler);
+	}
+	//DestroyImage(frame.depthAttachmentImage);
+	//VulkanAPI::DestroyFrameBuffer(device, frame.frameBuffer);
+	//frame.frameBuffer = nullptr;
+	//frame.depthAttachmentImage.imageView = nullptr;
+	//frame.depthAttachmentImage.image = nullptr;
+
 }
 
 
@@ -991,6 +998,28 @@ Texture ExampleBaseVK::CreateTexture(TextureBindInfo& textureBindInfo)
 
 	return texture;
 
+}
+
+void ExampleBaseVK::DestroyGeomtry(Geometry& geo)
+{
+	//清除geometry
+	DestroyBuffer(geo.vertexBuffer);
+	for (uint32_t zoneId = 0; zoneId < geo.indexBuffers.size(); zoneId++)
+	{
+		DestroyBuffer(geo.indexBuffers[zoneId]);
+	}
+	for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
+	{
+		DestroyBuffer(geo.shapeVertexBuffers[zoneId]);
+	}
+	if (rayTracingPipelinsDesc.valid)
+	{
+		DestroyAccelerationStructureKHR(device, geo.accelerationStructureKHR);
+		DestroyBuffer(geo.accelerationStructureKHRBuffer);
+		DestroyBuffer(geo.accelerationStructureScratchBuffer);
+	}
+
+	
 }
 
 
@@ -1404,6 +1433,12 @@ void ExampleBaseVK::ClearTexture(const std::string& textureName, VkClearColorVal
 
 }
 
+void ExampleBaseVK::ActiveFrame(uint32_t passId, uint32_t frameIndex)
+{
+	ActiveFrame(renderPassInfos[passId], frameIndex);
+
+}
+
 void ExampleBaseVK::CmdListReset(CommandList& cmdList)
 {
 	CommandBufferReset(cmdList.commandBuffer);
@@ -1421,11 +1456,12 @@ void ExampleBaseVK::CmdListRecordEnd(CommandList& cmdList)
 
 
 
-void ExampleBaseVK::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, int layer, int mip)
+void ExampleBaseVK::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, int layer, int mip)
 {
-	auto imageBarrier = barrier.ImageBarrier(image, srcAccess, dstAccess, dstImageLayout,layer,mip);
+	auto imageBarrier = barrier.ImageBarrier(image, dstAccess, dstImageLayout,layer,mip);
 	CmdMemoryBarrier(cmdList.commandBuffer, srcStageMask, dstStageMask, 0, {}, {}, { imageBarrier });
 	image.currentLayout = dstImageLayout;
+	image.access = dstAccess;
 }
 
 void ExampleBaseVK::CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex, std::array<uint32_t, 3> groupSize)
@@ -1611,19 +1647,19 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 	//{
 	//	ASSERT(0);
 	//}
-	
 	auto& renderPassInfo = renderPassInfos[renderPassIndex];
 	auto& subpassDrawGeoInfos = renderPassInfo.subpassDrawGeoInfos;
 	auto& subpassDrawGeoShapeInfos = renderPassInfo.subpassDrawGeoShapeInfos;
 	auto& isMeshSubpass = renderPassInfo.isMeshSubpass;
 	auto& subpassDrawMeshGroupInfos = renderPassInfo.subpassDrawMeshGroupInfos;
 	auto& renderPass = renderPassInfo.renderPass;
-	auto& frameBuffer = renderPassInfo.frameBuffer;
+	auto& frameIndex = renderPassInfo.renderTargets.activeFrame;
+	auto& frameBuffer = renderPassInfo.renderTargets.frames[frameIndex].frameBuffer;
 	auto& graphcisPipelineInfos = renderPassInfo.graphcisPipelineInfos;
 	auto& renderTargets = renderPassInfo.renderTargets;
 
-	ASSERT(subpassDrawGeoInfos.size() != 0 || subpassDrawMeshGroupInfos.size()!=0)
-	uint32_t width = renderTargets.width;
+	ASSERT(subpassDrawGeoInfos.size() != 0 || subpassDrawMeshGroupInfos.size() != 0)
+		uint32_t width = renderTargets.width;
 	uint32_t height = renderTargets.height;
 	std::vector<VkClearValue> attachmentClearValues;
 	for (uint32_t i = 0; i < renderPassInfo.renderTargets.colorAttachments.size(); i++)
@@ -1636,7 +1672,7 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 	CmdBeginRenderPass(cmdList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = width,.height = height} }, attachmentClearValues, VK_SUBPASS_CONTENTS_INLINE);
 	//每个subpass 会对应一个pipeline
 	for (uint32_t curSubpassIndex = 0; curSubpassIndex < graphcisPipelineInfos.size(); curSubpassIndex++)
-	{			
+	{
 
 
 		//bind pipelines
@@ -1646,7 +1682,7 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 		{
 			CmdBindDescriptorSet(cmdList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[curSubpassIndex].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
 		}
-		
+
 		if (isMeshSubpass[curSubpassIndex])
 		{
 			auto& drawMeshGroupInfo = subpassDrawMeshGroupInfos[curSubpassIndex];
@@ -1658,8 +1694,8 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 			{
 				auto geoIndex = subpassDrawGeoInfos[curSubpassIndex][i];
 				const auto& geom = geoms[geoIndex];
-				
-				
+
+
 				if (geom.useIndexBuffers)
 				{
 					CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
@@ -1694,7 +1730,7 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
 							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
-	
+
 					}
 					else {
 						for (uint32_t i = 0; i < subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].size(); i++)
@@ -1704,22 +1740,22 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[shadpIndex].buffer }, { 0 });
 							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
-					
+
 					}
 
 				}
-				
-				
-				
-				
-				
+
+
+
+
+
 
 			}
-		
-		
-		
+
+
+
 		}
-		if (renderPassInfo.truncateNextSubpassDraw && curSubpassIndex == renderPassInfo.truncatedNextSubpassIndex - 1 && renderPassInfo.truncatedNextSubpassIndex !=0)
+		if (renderPassInfo.truncateNextSubpassDraw && curSubpassIndex == renderPassInfo.truncatedNextSubpassIndex - 1 && renderPassInfo.truncatedNextSubpassIndex != 0)
 		{
 			for (uint32_t i = curSubpassIndex; i < graphcisPipelineInfos.size() - 1; i++)
 			{
@@ -1735,7 +1771,6 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 	}
 
 	CmdEndRenderPass(cmdList.commandBuffer);
-	
 
 
 }
@@ -1752,19 +1787,18 @@ void ExampleBaseVK::CmdListWaitFinish(CommandList& cmdList)
 	ResetAllFence({ cmdList.commandFinishFence });
 }
 
-VkResult ExampleBaseVK::Present(uint32_t imageIndex, const std::vector<VkSemaphore>& waitSemaphores)
-{
-	std::vector<VkResult> res;
-	VulkanAPI::Present(graphicQueue, waitSemaphores, { swapchain }, { imageIndex }, res);
-	VkResult returnRes;
-	returnRes = res[0];
-	if (returnRes != VK_SUCCESS)
-	{
-		ASSERT(0);
-	}
-	return returnRes;
-}
 
+
+void ExampleBaseVK::PresentPassResult(VkSemaphore passDrawFinished,uint32_t renderPassIndex, uint32_t colorAttachmentId)
+{
+	auto& passActiveFrame = renderPassInfos[renderPassIndex].renderTargets.activeFrame;
+	auto& passResultTexture = renderPassInfos[renderPassIndex].renderTargets.frames[passActiveFrame].colorAttachmentTextures[colorAttachmentId];
+	VkImageLayout oldLayout = passResultTexture.image.currentLayout;
+	TransferWholeImageLayout(passResultTexture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	presentPassInfo.BindPassResultTexture(passResultTexture);
+	presentPassInfo.Present(passDrawFinished);
+	TransferWholeImageLayout(passResultTexture.image, oldLayout);
+}
 
 
 
@@ -1782,7 +1816,8 @@ void ExampleBaseVK::TransferWholeImageLayout(Image& image, VkImageLayout dstImag
 {
 	CmdListWaitFinish(oneSubmitCommandList);
 	CmdListRecordBegin(oneSubmitCommandList);
-	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, VK_ACCESS_NONE, dstImageLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	VkAccessFlags oldAccess = image.access;
+	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, oldAccess, dstImageLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	CmdListRecordEnd(oneSubmitCommandList);
 	
 	SubmitSynchronizationInfo info;
@@ -1804,8 +1839,8 @@ void ExampleBaseVK::GenerateMipmap(Image& image)
 	uint32_t w = image.extent.width, h = image.extent.height;//layer 0的宽高
 	for (uint32_t i = 1; i < image.numMip; i++)
 	{
-		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,-1, i-1);
-		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,-1,i);
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,-1, i-1);
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,-1,i);
 		
 		auto srcMipExtent = image.GetMipLevelExtent(i - 1);
 		auto dstMipExtent = image.GetMipLevelExtent(i);
@@ -1837,12 +1872,12 @@ void ExampleBaseVK::GenerateMipmap(Image& image)
 		};
 		CmdBlitImageToImage(oneSubmitCommandList.commandBuffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, { blitRegion });
 
-		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, i - 1);
-		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_WRITE_BIT , VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, i);
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, i - 1);
+		CmdOpsImageMemoryBarrer(oneSubmitCommandList, image,  VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, i);
 
 
 	}
-	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, image.numMip-1);
+	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image,  VK_ACCESS_NONE, oldlayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, -1, image.numMip-1);
 	
 	CmdListRecordEnd(oneSubmitCommandList);
 
@@ -2044,7 +2079,8 @@ void ExampleBaseVK::Clear()
 	ClearRecources();
 	ClearSyncObject();
 	ClearQueryPool();
-
+	//清空显示绘制pass的资源
+	presentPassInfo.Clear();
 	ClearContex();
 
 }
@@ -2053,25 +2089,21 @@ void ExampleBaseVK::ClearContex()
 {				
 	DesctroyCommandPool(device, commandPool);
 
-	DestroySwapchain(device, swapchain);
+	
 	DestroyDevice(device);
-	DestroySurface(instance, surface);
-	DestroyGLFWWin32Window(window);
+	ClearPlatformSurface();
 	DestroyDebugInfoMessager(instance,debugUtilMessager);
 	DestroyInstance(instance);
-}				  
-				  
-void ExampleBaseVK::ClearAttanchment(RenderPassInfo& renderPassInfo)
-{				 
-	auto& renderTargets = renderPassInfo.renderTargets;
+}
 
-	for (auto& colorAttachment : renderPassInfo.renderTargets.colorAttachments)
-	{
-		DestroyImage(colorAttachment.attachmentImage);
-	}
-
-	DestroyImage(renderTargets.depthAttachment.attachmentImage);
-}				  
+void ExampleBaseVK::ClearPlatformSurface()
+{
+	DestroySurface(instance, surface);
+	DestroyGLFWWin32Window(window);
+	window = nullptr;
+	surface = VK_NULL_HANDLE;
+}
+				  			  
 				  
 void ExampleBaseVK::ClearRenderPass(RenderPassInfo& renderPassInfo)
 {		
@@ -2086,8 +2118,8 @@ void ExampleBaseVK::ClearRenderPasses()
 	{
 		ClearGraphicPipelines(renderPassInfos[i]);
 		ClearRenderPass(renderPassInfos[i]);
-		ClearFrameBuffer(renderPassInfos[i]);
-		ClearAttanchment(renderPassInfos[i]);
+		ClearFrameBuffers(renderPassInfos[i]);
+		
 
 	}
 
@@ -2095,10 +2127,14 @@ void ExampleBaseVK::ClearRenderPasses()
 
 }
 				  
-void ExampleBaseVK::ClearFrameBuffer(RenderPassInfo& renderPassInfo)
+void ExampleBaseVK::ClearFrameBuffers(RenderPassInfo& renderPassInfo)
 {				 
-	auto& frameBuffer = renderPassInfo.frameBuffer;
-	DestroyFrameBuffer(device, frameBuffer);
+	for (uint32_t i = 0; i < renderPassInfo.renderTargets.frames.size(); i++)
+	{
+		DestroyFrame(renderPassInfo, i);
+	}
+
+
 }				  
 				  
 void ExampleBaseVK::ClearGraphicPipelines(RenderPassInfo& renderPassInfo)
@@ -2147,21 +2183,7 @@ void ExampleBaseVK::ClearRecources()
 	//清除geometry
 	for (uint32_t i = 0; i < geoms.size(); i++)
 	{
-		DestroyBuffer(geoms[i].vertexBuffer);
-		for (uint32_t zoneId = 0; zoneId < geoms[i].indexBuffers.size(); zoneId++)
-		{
-			DestroyBuffer(geoms[i].indexBuffers[zoneId]);
-		}
-		for (uint32_t zoneId = 0; zoneId < geoms[i].shapeVertexBuffers.size(); zoneId++)
-		{
-			DestroyBuffer(geoms[i].shapeVertexBuffers[zoneId]);
-		}
-		if (rayTracingPipelinsDesc.valid)
-		{
-			DestroyAccelerationStructureKHR(device, geoms[i].accelerationStructureKHR);
-			DestroyBuffer(geoms[i].accelerationStructureKHRBuffer);
-			DestroyBuffer(geoms[i].accelerationStructureScratchBuffer);
-		}
+		DestroyGeomtry(geoms[i]);
 
 	}
 
@@ -2976,12 +2998,17 @@ Buffer ExampleBaseVK::CreateBuffer(VkBufferUsageFlags usage, const char* buf, Vk
 
 
 
-
-uint32_t ExampleBaseVK::GetNextPresentImageIndex(VkSemaphore sigValidSemaphore)
+void ExampleBaseVK::ActiveFrame(RenderPassInfo& renderPassInfo, uint32_t frameIndex)
 {
-	uint32_t nextImageIndex = VulkanAPI::GetNextValidSwapchainImageIndex(device, swapchain, sigValidSemaphore, nullptr);
-	return nextImageIndex;
+	renderPassInfo.renderTargets.activeFrame = frameIndex;
+	if (renderPassInfo.renderTargets.enaleInputAttachment)
+	{
+		BindInputAttachment(renderPassInfo);
+	}
+
+
 }
+
 
 void ExampleBaseVK::SortGeosFollowCloseDistance(glm::vec3 cameraPos)
 {
@@ -3061,7 +3088,9 @@ void ExampleBaseVK::BindInputAttachment(RenderPassInfo& renderPassInfo)
 				VkDescriptorImageInfo descriptorImageInfo{};
 				descriptorImageInfo.sampler = nullptr;
 				descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-				descriptorImageInfo.imageView = renderPassInfo.renderTargets.colorAttachments[attachmentId].attachmentImage.imageView;
+				ASSERT(0);
+				auto activeFrame = renderPassInfo.renderTargets.activeFrame;
+				descriptorImageInfo.imageView = renderPassInfo.renderTargets.frames[activeFrame].colorAttachmentTextures[attachmentId].image.imageView;
 
 				UpdateDescriptorSetBindingResources(device, set, binding, 0, 1, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, { descriptorImageInfo }, {}, {});
 
@@ -3221,5 +3250,246 @@ bool ExampleBaseVK::CheckExtensionSupport(VkPhysicalDevice curPhysicalDevive, co
 		return true;
 	}
 	return false;
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::BindPassResultTexture(Texture& texture)
+{
+	auto& graphcisPipelineInfos = presentRenderPassInfo.graphcisPipelineInfos;
+	auto descriptorType = context->GetDescriptorType(graphcisPipelineInfos[0].descriptorSetInfos[0], 1);
+	context->BindTexture(texture, graphcisPipelineInfos[0].descriptorSetInfos[0].descriptorSet, 1, 0, descriptorType);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::Init()
+{
+	InitSwapchain();
+	InitSemaphores();
+	InitCommandList();
+	InitPresentRenderPassInfo();
+	InitGeometryResource();
+
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::Clear()
+{
+	ClearPresentRenderPass();
+	ClearSemaphores();
+	ClearCommandList();
+	ClearSwapchain();
+	ClearGeometryResource();
+}
+
+uint32_t ExampleBaseVK::PresentDrawPassInfo::GetNextPresentImageIndex()
+{
+	uint32_t nextImageIndex = VulkanAPI::GetNextValidSwapchainImageIndex(context->device, swapchain, swapchainValidSemaphore, nullptr);
+	return nextImageIndex;
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore)
+{
+	
+	SubmitSynchronizationInfo submitSyncInfo;
+	submitSyncInfo.waitSemaphores = { swapchainValidSemaphore,drawFinishSemaphore };
+	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	submitSyncInfo.sigSemaphores = { presenDrawFinishSemaphore };
+	
+	auto& renderPassInfo = presentRenderPassInfo;
+	auto& renderPass = renderPassInfo.renderPass;
+	auto& frameIndex = renderPassInfo.renderTargets.activeFrame;
+	auto& frameBuffer = renderPassInfo.renderTargets.frames[frameIndex].frameBuffer;
+	auto& graphcisPipelineInfos = renderPassInfo.graphcisPipelineInfos;
+	auto& renderTargets = renderPassInfo.renderTargets;
+	auto& geom = screenFillRect;
+	std::vector<VkClearValue> attachmentClearValues;
+	for (uint32_t i = 0; i < renderPassInfo.renderTargets.colorAttachments.size(); i++)
+	{
+		attachmentClearValues.push_back(renderTargets.colorAttachments[i].clearValue);
+	}
+	attachmentClearValues.push_back(renderTargets.depthAttachment.clearValue);
+	uint32_t width = renderTargets.width;
+	uint32_t height = renderTargets.height;
+
+	//绘制
+	context->CmdListWaitFinish(presenCommandList);
+	auto nexIndex = GetNextPresentImageIndex();
+	context->ActiveFrame(presentRenderPassInfo,nexIndex);
+	auto& colorAttachment = presentRenderPassInfo.renderTargets.frames[nexIndex].colorAttachmentTextures[0];
+	context->CmdListReset(presenCommandList);
+	CaptureBeginMacro
+	context->CmdListRecordBegin(presenCommandList);
+	//context->CmdOpsImageMemoryBarrer(presenCommandList, swapchainImages[nexIndex],  VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+	CmdBeginRenderPass(presenCommandList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = width,.height = height} }, attachmentClearValues, VK_SUBPASS_CONTENTS_INLINE);
+	//绘制
+	//bind pipelines
+	CmdBindPipeline(presenCommandList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[0].pipeline);
+	//绑定描述符集
+	for (const auto& setInfo : graphcisPipelineInfos[0].descriptorSetInfos)
+	{
+		CmdBindDescriptorSet(presenCommandList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[0].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
+	}
+
+	CmdBindVertexBuffers(presenCommandList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+
+	CmdBindIndexBuffer(presenCommandList.commandBuffer, geom.indexBuffers[0].buffer, 0, VK_INDEX_TYPE_UINT32);
+	uint32_t numIndex = geom.shapeIndices[0].size();
+	CmdDrawIndex(presenCommandList.commandBuffer, numIndex, 1, 0, 0, 0);
+	
+	CmdEndRenderPass(presenCommandList.commandBuffer);
+	//context->CmdOpsImageMemoryBarrer(presenCommandList, swapchainImages[nexIndex], VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+	context->CmdListRecordEnd(presenCommandList);
+	
+	context->CmdListSubmit(presenCommandList, submitSyncInfo);
+	CaptureEndMacro
+
+	//显示
+	std::vector<VkResult> res;
+	VulkanAPI::Present(context->graphicQueue, { presenDrawFinishSemaphore }, { swapchain }, { nexIndex }, res);
+	VkResult returnRes;
+	returnRes = res[0];
+	if (returnRes != VK_SUCCESS)
+	{
+		ASSERT(0);
+	}
+	
+}
+
+
+void ExampleBaseVK::PresentDrawPassInfo::InitSwapchain()
+{
+	auto& device = context->device;
+	auto& swapchainImageFormat = context->swapchainImageFormat;
+	auto& colorSpace = context->colorSpace;
+	auto& queueFamilyIndex = context->queueFamilyIndex;
+	auto& swapchainPresentMode = context->swapchainPresentMode;
+	auto& surface = context->surface;
+	//����swapchain
+	swapchain = CreateSwapchain(device, surface, swapchainImageFormat, colorSpace, VkExtent2D{ .width = (uint32_t)w,.height = (uint32_t)h }, 1, 1, 2,  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, { queueFamilyIndex }, swapchainPresentMode);
+
+
+	auto swapImages = GetSwapchainImages(device, swapchain);
+	swapchainImages.resize(swapImages.size());
+	for (uint32_t i = 0; i < swapImages.size(); i++)
+	{
+		swapchainImages[i].hostOwner = false;
+		swapchainImages[i].image = swapImages[i];
+		swapchainImages[i].aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+		swapchainImages[i].currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		swapchainImages[i].numLayer = 1;
+		swapchainImages[i].numMip = 1;
+		swapchainImages[i].extent = VkExtent3D{ .width = (uint32_t)w ,.height = (uint32_t)h,.depth = 1 };
+		swapchainImages[i].sample = VK_SAMPLE_COUNT_1_BIT;
+		swapchainImages[i].memory = VK_NULL_HANDLE;
+		swapchainImages[i].format = swapchainImageFormat;
+
+
+		VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		swapchainImages[i].imageView = CreateImageView(device, 0, swapchainImages[i].image, usage, VK_IMAGE_VIEW_TYPE_2D, swapchainImageFormat, VkComponentMapping{}, VkImageSubresourceRange{ .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,.baseMipLevel = 0,.levelCount = 1 ,.baseArrayLayer = 0,.layerCount = 1 });
+		
+		//ת��swapchain image��image layout
+		context->TransferWholeImageLayout(swapchainImages[i], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);//�ȴ�������Ⱦ���
+
+
+	}
+
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::InitSemaphores()
+{
+	auto& device = context->device;
+	swapchainValidSemaphore = Create_Semaphore_(device, 0);
+	presenDrawFinishSemaphore = Create_Semaphore_(device, 0);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::InitCommandList()
+{
+	auto& device = context->device;
+	auto& commandPool = context->commandPool;
+	presenCommandList.commandBuffer = AllocateCommandBuffer(device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	presenCommandList.commandBufferUsage = 0;
+	presenCommandList.commandFinishFence = CreateFence(device, VK_FENCE_CREATE_SIGNALED_BIT);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::InitPresentRenderPassInfo()
+{
+	//创建swapchain对应的render pass
+	ShaderCodePaths shaderCodePath;
+	shaderCodePath.vertexShaderPath = std::string(PROJECT_DIR) + "/src/Framework/PresentPass.vert";
+	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Framework/PresentPass.frag";
+
+	presentRenderPassInfo.InitDefaultRenderPassInfo(shaderCodePath, w, h);
+
+	context->ParseShaderFiles(presentRenderPassInfo);
+	context->InitAttanchmentDesc(presentRenderPassInfo);
+	presentRenderPassInfo.renderTargets.colorAttachments[0].attachmentDesc.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	context->InitRenderPass(presentRenderPassInfo);
+	
+	InitFrameBuffers();
+	context->InitGraphicPipelines(presentRenderPassInfo);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::InitGeometryResource()
+{
+	screenFillRect.useIndexBuffers = true;
+	screenFillRect.InitAsScreenFillRect();
+	context->InitGeometryResources(screenFillRect);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::InitFrameBuffers()
+{
+	//创建frame buffers
+	auto& device = context->device;
+	presentRenderPassInfo.renderTargets.numFrame = swapchainImages.size();
+	presentRenderPassInfo.renderTargets.frames.resize(swapchainImages.size());
+	for(uint32_t i = 0;i < swapchainImages.size();i++)
+	{
+		context->CreateFrame(presentRenderPassInfo, i, { swapchainImages[i] });
+	}
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearFrameBuffers()
+{
+	for (uint32_t i = 0; i < swapchainImages.size(); i++)
+	{
+		context->DestroyFrame(presentRenderPassInfo, i);
+	}
+	presentRenderPassInfo.renderTargets.frames.clear();
+	presentRenderPassInfo.renderTargets.numFrame = 0;
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearCommandList()
+{
+
+	DestroyFence(context->device, presenCommandList.commandFinishFence);
+	presenCommandList.commandBuffer = VK_NULL_HANDLE;
+	presenCommandList.commandFinishFence = VK_NULL_HANDLE;
+	presenCommandList.commandBufferUsage = 0;
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearPresentRenderPass()
+{
+	context->ClearGraphicPipelines(presentRenderPassInfo);
+	context->ClearRenderPass(presentRenderPassInfo);
+	context->ClearFrameBuffers(presentRenderPassInfo);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearSemaphores()
+{
+	DestroySemaphore(context->device, swapchainValidSemaphore);
+	DestroySemaphore(context->device, presenDrawFinishSemaphore);
+	swapchainValidSemaphore = VK_NULL_HANDLE;
+	presenDrawFinishSemaphore = VK_NULL_HANDLE;
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearSwapchain()
+{
+
+	DestroySwapchain(context->device, swapchain);
+	swapchainImages.clear();
+	swapchain = VK_NULL_HANDLE;
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearGeometryResource()
+{
+	context->DestroyGeomtry(screenFillRect);
 }
 

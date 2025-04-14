@@ -68,10 +68,12 @@ vulkanµƒNDC£¨”“ ÷œµ
  */
 void TransformTest();
 void AutoTest();
-
+extern int ImGuiOpenGLTest();
+extern int ImGuiVulkanTest();
 int main()
 {
-
+	//ImGuiOpenGLTest();
+	ImGuiVulkanTest();
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");

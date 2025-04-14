@@ -153,12 +153,11 @@ void GeometryShaderExample::Loop()
 	FillBuffer(buffers["Buffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 
-	auto swapchainValidSemaphore = semaphores[0];
-	auto finishCopyTargetToSwapchain = semaphores[1];
+	auto drawFinished = semaphores[0];
 	SubmitSynchronizationInfo submitSyncInfo;
-	submitSyncInfo.waitSemaphores = { swapchainValidSemaphore };
-	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
-	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
+	submitSyncInfo.waitSemaphores = {  };
+	submitSyncInfo.waitStages = {  };
+	submitSyncInfo.sigSemaphores = { drawFinished };
 
 
 	//绑定纹理以及uniform buffer
@@ -179,23 +178,16 @@ void GeometryShaderExample::Loop()
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
 		WindowEventHandler::ProcessEvent();
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
 		
 		CmdOpsDrawGeom(graphicCommandList);
-		
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, swapchainImages[nexIndex]);
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
 		CaptureEndMacro
-		Present(nexIndex, { finishCopyTargetToSwapchain });
+		PresentPassResult(drawFinished, 0, 0);
 
 
 

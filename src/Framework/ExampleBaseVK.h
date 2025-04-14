@@ -85,12 +85,14 @@ struct Buffer {
 };
 
 struct Image {
-	VkImage image;
-	VkImageView imageView;
+	bool hostOwner = true;//是否为主机端拥有所有权，如果是则需要在主机端主动销毁image
+	VkImage image = VK_NULL_HANDLE;
+	VkImageView imageView = VK_NULL_HANDLE;
 	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 	uint64_t totalMemorySize = 0;
 	VkDeviceMemory memory;
 	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkAccessFlags access = VK_ACCESS_NONE;
 	uint32_t numLayer = 1, numMip = 1;
 	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
 	VkExtent3D extent;
@@ -270,11 +272,11 @@ struct Barrier {
 		bufferMemoryBarrier.size = 0;
 
 	}
-	const VkImageMemoryBarrier& ImageBarrier(Image& image,VkAccessFlags srcAccess, VkAccessFlags dstAccess,VkImageLayout dstImageLayout,int layer = -1/*-1表示所有，否则表示指定的所有layer*/,int mip = -1/*-1表示所有，否则表示指定的所有miplevel*/)
+	const VkImageMemoryBarrier& ImageBarrier(Image& image, VkAccessFlags dstAccess,VkImageLayout dstImageLayout,int layer = -1/*-1表示所有，否则表示指定的所有layer*/,int mip = -1/*-1表示所有，否则表示指定的所有miplevel*/)
 	{
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		imageMemoryBarrier.pNext = nullptr;
-		imageMemoryBarrier.srcAccessMask = srcAccess;
+		imageMemoryBarrier.srcAccessMask = image.access;
 		imageMemoryBarrier.dstAccessMask = dstAccess;
 		imageMemoryBarrier.oldLayout = image.currentLayout;
 		imageMemoryBarrier.newLayout = dstImageLayout;
@@ -783,21 +785,30 @@ struct Geometry
 
 struct Attachment {
 	VkAttachmentDescription attachmentDesc;
-	Image attachmentImage;
+	//Image attachmentImage;
 	VkClearValue clearValue;
 };
+struct Frame {
+	std::vector<Texture> colorAttachmentTextures;
+	Image depthAttachmentImage;
+
+	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
+};
+
+
 struct RenderTargets {
 	uint32_t width = 512, height = 512;
 
 
 	static const VkFormat colorFormat = VK_FORMAT_R8G8B8A8_SRGB;//ֻ默认的颜色附件格式，必须要支持
 	static const VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;//ֻ默认的颜色附件格式，必须要支持
-	static const VkFormatFeatureFlags colorAttachmentFormatFeatures = (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
+	static const VkFormatFeatureFlags colorAttachmentFormatFeatures = (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
 	static const VkFormatFeatureFlags depthAttachmentFormatFeatures = (VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT);
 
 
 
 	std::vector<Attachment> colorAttachments = { Attachment()};
+
 	std::vector<VkAttachmentReference> colorRefs = { VkAttachmentReference{.attachment = 0,.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL } };
 
 	bool enaleInputAttachment = false;
@@ -806,6 +817,9 @@ struct RenderTargets {
 	Attachment depthAttachment;//render pass��1�Ÿ���
 	VkAttachmentReference	depthRef{ .attachment = 1,.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
+	uint32_t numFrame = 1;//framebuffer的初始数量
+	uint32_t activeFrame = 0;//当前使用的framebuffer
+	std::vector<Frame> frames;//实际存放的framebuffer
 
 	RenderTargets() {
 		//colorAttachments.resize(1);
@@ -820,7 +834,7 @@ struct RenderTargets {
 		for (uint32_t i = 0; i < colorAttachments.size(); i++)
 		{
 			colorAttachments[i].attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
-			colorAttachments[i].attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认颜色附件尺寸，可以在创建附件前修改
+			//colorAttachments[i].attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认颜色附件尺寸，可以在创建附件前修改
 			colorAttachments[i].clearValue = VkClearValue{ 0,0,0,1 };//默认颜色附件清除值，可以在创建附件前修改
 			inputAttachmentRefs[i].attachment = i;
 			inputAttachmentRefs[i].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -830,7 +844,7 @@ struct RenderTargets {
 
 		depthAttachment.attachmentDesc.format = depthFormat;//默认深度附件格式，可以在创建附件前修改
 		depthAttachment.clearValue = VkClearValue{ 1.0,0 };//默认颜色附件清除值，可以在创建附件前修改
-		depthAttachment.attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认深度附件尺寸，可以在创建附件前修改
+		//depthAttachment.attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认深度附件尺寸，可以在创建附件前修改
 		depthRef.attachment = numColorAttachments;
 
 	
@@ -906,7 +920,8 @@ struct RenderPassInfo {
 
 	RenderTargets renderTargets;//每个pass的渲染结果对象
 	VkRenderPass renderPass = VK_NULL_HANDLE;
-	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
+	//VkFramebuffer frameBuffer = VK_NULL_HANDLE;
+
 
 	//在这里定义一些快速设置render pass信息的接口
 
@@ -1027,8 +1042,6 @@ struct RenderPassInfo {
 		}
 	
 	
-	
-
 
 };
 
@@ -1054,11 +1067,12 @@ protected:
 
 	void ClearTexture(const std::string& textureName, VkClearColorValue clearValue);
 protected:
+	void ActiveFrame(uint32_t passId, uint32_t frameIndex);
 	//runtime
 	void CmdListReset(CommandList& cmdList);
 	void CmdListRecordBegin(CommandList& cmdList);
 	void CmdListRecordEnd(CommandList& cmdList);
-	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,int layer = -1,int mip = -1);
+	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,int layer = -1,int mip = -1);
 	//compute
 	void CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex = 0, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
@@ -1079,9 +1093,9 @@ protected:
 	//execute
 	void CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info);
 	void CmdListWaitFinish(CommandList& cmdList);
-	VkResult Present(uint32_t imageIndex, const std::vector<VkSemaphore>& waitSemaphores);
-	uint32_t GetNextPresentImageIndex(VkSemaphore sigValidSemaphore);
-
+	void PresentPassResult(VkSemaphore passDrawFinished,uint32_t renderPassIndex = 0,uint32_t colorAttachmentId = 0);
+private:
+	void ActiveFrame(RenderPassInfo& renderPassInfo, uint32_t frameIndex);
 protected:
 	//根据和相机的距离来排序要绘制的geo，小序
 	void SortGeosFollowCloseDistance(glm::vec3 cameraPos);
@@ -1138,14 +1152,14 @@ private:
 
 	void Init();
 	//graphic
-
+	void InitPlatformSurface();
 	virtual void InitContex();
 	virtual void InitAttanchmentDesc(RenderPassInfo& renderPassInfo);
+	virtual void InitFrameBuffers(RenderPassInfo& renderPassInfo);
 	void InitRenderPass(RenderPassInfo& renderPassInfo);
 	
 	
 	virtual void InitRenderPasses();
-	virtual void InitFrameBuffer(RenderPassInfo& renderPassInfo);
 	void InitSyncObject();
 	virtual void InitGraphicPipelines(RenderPassInfo& renderPassInfo);
 	virtual void InitRecources();
@@ -1166,10 +1180,10 @@ private:
 private:
 	virtual void Clear();
 	virtual void ClearContex();
-	virtual void ClearAttanchment(RenderPassInfo& renderPassInfo);
+	void ClearPlatformSurface();
 	virtual void ClearRenderPass(RenderPassInfo& renderPassInfo);
 	void ClearRenderPasses();
-	virtual void ClearFrameBuffer(RenderPassInfo& renderPassInfo);
+	virtual void ClearFrameBuffers(RenderPassInfo& renderPassInfo);
 	virtual void ClearGraphicPipelines(RenderPassInfo& renderPassInfo);
 	virtual void ClearSyncObject();
 	virtual void ClearRecources();
@@ -1191,8 +1205,12 @@ private:
 	void FillImage(Image& image, VkDeviceSize offset, VkDeviceSize size, const char* data);
 	void DestroyImage(Image& image);
 
+	void CreateFrame(RenderPassInfo& renderPassInfo,uint32_t frameId,const std::vector<Image>& colorAttachmentImages);
+	void DestroyFrame(RenderPassInfo& renderPassInfo, uint32_t frameId);
+
 	Texture CreateTexture(TextureBindInfo& textureBindInfo);
 
+	void DestroyGeomtry(Geometry& geo);
 	
 	Buffer CreateVertexBuffer(const char* buf, VkDeviceSize size);
 	Buffer CreateIndexBuffer(const char* buf, VkDeviceSize size);
@@ -1294,10 +1312,10 @@ private:
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 	;
 	protected:VkDevice device = VK_NULL_HANDLE;
-	VkSurfaceKHR surface = VK_NULL_HANDLE;
 
+	//platform surface
+	VkSurfaceKHR surface = VK_NULL_HANDLE;
 	GLFWwindow* window = nullptr;
-	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 	VkColorSpaceKHR colorSpace;
 	//const VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;//所有地方的颜色格式都为B G R A ,在该格式情况下，片段着色器输出会对调R和B分量，即片段着色器输出（1，0，0，1），实际写入到附件中的是（0，0，1，1），对swapchain中的image，存储在其中的pixel的值为（1，0，0，1）则会显示蓝色,着色器中采样获取的格式为（R,G,B,A）,要想正常的在该格式下进行显示，在片段着色其中的颜色输出需要按照正常的R，G，B，A格式，采样得到的颜色也是按照R，G，B，A格式
 	const VkFormat swapchainImageFormat = RenderTargets::colorFormat;//默认交换链图像的格式 
@@ -1348,5 +1366,39 @@ private:
 
 	VkQueryPool queryPool = VK_NULL_HANDLE;
 	
+	//这个pass使用swapchain的image来作为rendertarget的附件
+	struct PresentDrawPassInfo {
+		ExampleBaseVK* context = nullptr;
+		RenderPassInfo presentRenderPassInfo;
+		CommandList presenCommandList;
+		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+		std::vector<Image> swapchainImages;
+		Geometry screenFillRect;
+		VkSemaphore swapchainValidSemaphore = VK_NULL_HANDLE;
+		VkSemaphore presenDrawFinishSemaphore = VK_NULL_HANDLE;
+		int w = 512, h = 512;
+		void BindPassResultTexture(Texture& texture);
+		void Init();
+		void Clear();
+		uint32_t GetNextPresentImageIndex();
+		void Present(VkSemaphore drawFinishSemaphore);
+	private:
+
+		void InitSwapchain();
+		void InitSemaphores();
+		void InitCommandList();
+		void InitPresentRenderPassInfo();
+		void InitGeometryResource();
+		void InitFrameBuffers();
+		void ClearFrameBuffers();
+		void ClearCommandList();
+		void ClearPresentRenderPass();
+		void ClearSemaphores();
+		void ClearSwapchain();
+		void ClearGeometryResource();
+		
+		 
+
+	} presentPassInfo;
 
 };

@@ -21,7 +21,7 @@ void C7ShadowsExample::InitSubPassInfo()
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthWriteEnable = VK_TRUE;
 	renderPassInfos[0].subpassInfo.subpassDescs[0].subpassPipelineStates.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
 	renderPassInfos[0].renderTargets.colorAttachments[0].attachmentDesc.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	renderPassInfos[0].renderTargets.colorAttachments[0].attachmentImage.numLayer = 1;
+	//renderPassInfos[0].renderTargets.colorAttachments[0].attachmentImage.numLayer = 1;
 	renderPassInfos[0].renderTargets.colorAttachments[0].clearValue = VkClearValue{ 1.0,100.0,10100.0,1.0 };
 	
 	renderPassInfos[1].InitDefaultRenderPassInfo(drawSceenCodePath, windowWidth, windowHeight);
@@ -136,12 +136,12 @@ void C7ShadowsExample::Loop()
 
 
 
-	auto swapchainValidSemaphore = semaphores[0];
+	auto drawFinished = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
 	SubmitSynchronizationInfo submitSyncInfo;
-	submitSyncInfo.waitSemaphores = { swapchainValidSemaphore };
-	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TRANSFER_BIT };
-	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
+	submitSyncInfo.waitSemaphores = {  };
+	submitSyncInfo.waitStages = {  };
+	submitSyncInfo.sigSemaphores = { drawFinished };
 
 
 	//绑定uniform buffer
@@ -192,19 +192,19 @@ void C7ShadowsExample::Loop()
 		CmdListRecordBegin(graphicCommandList);
 		//进行depth pass
 		CmdOpsDrawGeom(graphicCommandList);
-		auto& colorTargetImage = renderPassInfos[0].renderTargets.colorAttachments[0].attachmentImage;
+		auto& colorTargetImage = renderPassInfos[0].renderTargets.frames[0].colorAttachmentTextures[0].image;
 
 		auto colorOldLayout = colorTargetImage.currentLayout;
 		auto depthTextureOldLayout = textures["pointShadowMap"].image.currentLayout;
 
-		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, i, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, i, 0);
 		
 		//拷贝深度图到深度纹理
 		CmdOpsCopyImageToImage(graphicCommandList, colorTargetImage, 0, 0, textures["pointShadowMap"].image, i, 0);
 
-		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, colorOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_NONE, depthTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,i,0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, colorOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, depthTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,i,0);
 	
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
@@ -253,9 +253,6 @@ void C7ShadowsExample::Loop()
 		FillBuffer(buffers["SimpleSceenExampleBuffer"], 0, sizeof(Buffer), (const char*)&buffer);
 
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
-
 
 		WindowEventHandler::ProcessEvent();
 		CmdListReset(graphicCommandList);
@@ -263,16 +260,10 @@ void C7ShadowsExample::Loop()
 		CmdListRecordBegin(graphicCommandList);
 		
 		CmdOpsDrawGeom(graphicCommandList,1);
-		
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, swapchainImages[nexIndex]);
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
 		CaptureEndMacro
-		Present(nexIndex, { finishCopyTargetToSwapchain });
+		PresentPassResult(drawFinished, 0, 0);
 
 
 

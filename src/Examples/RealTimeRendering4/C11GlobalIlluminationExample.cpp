@@ -154,9 +154,9 @@ void C11GlobalIlluminationExample::Loop()
 	CmdListReset(graphicCommandList);
 	CaptureBeginMacro
 	CmdListRecordBegin(graphicCommandList);
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["envMapReconstruct"].image, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["envMapReconstruct"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	CmdOpsDispatch(graphicCommandList);
-	CmdOpsImageMemoryBarrer(graphicCommandList, textures["envMapReconstruct"].image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+	CmdOpsImageMemoryBarrer(graphicCommandList, textures["envMapReconstruct"].image, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	CmdListRecordEnd(graphicCommandList);
 	
@@ -165,7 +165,7 @@ void C11GlobalIlluminationExample::Loop()
 
 	//
 
-	auto swapchainValidSemaphore = semaphores[0];
+	auto drawFinished = semaphores[0];
 	auto finishCopyTargetToSwapchain = semaphores[1];
 	auto depthPassFinish = semaphores[2];
 
@@ -181,8 +181,8 @@ void C11GlobalIlluminationExample::Loop()
 	BindTexture("depthMap");
 
 	SubmitSynchronizationInfo submitSyncInfo;
-	submitSyncInfo.waitSemaphores = { depthPassFinish, swapchainValidSemaphore };
-	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT };
+	submitSyncInfo.waitSemaphores = { depthPassFinish };
+	submitSyncInfo.waitStages = { VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT };
 	submitSyncInfo.sigSemaphores = { finishCopyTargetToSwapchain };
 
 
@@ -204,19 +204,19 @@ void C11GlobalIlluminationExample::Loop()
 		CmdListRecordBegin(graphicCommandList);
 		//进行depth pass
 		CmdOpsDrawGeom(graphicCommandList);
-		auto& colorTargetImage = renderPassInfos[0].renderTargets.colorAttachments[0].attachmentImage;
+		auto& colorTargetImage = renderPassInfos[0].renderTargets.frames[0].colorAttachmentTextures[0].image;
 
 		auto colorOldLayout = colorTargetImage.currentLayout;
 		auto precomputeTextureOldLayout = textures["depthMap"].image.currentLayout;
 
-		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["depthMap"].image, VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["depthMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
 
 		//拷贝深度图到深度纹理
 		CmdOpsCopyImageToImage(graphicCommandList, colorTargetImage, 0, 0, textures["depthMap"].image, 0, 0);
 
-		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, colorOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0);
-		CmdOpsImageMemoryBarrer(graphicCommandList, textures["depthMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_NONE, precomputeTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, colorOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0);
+		CmdOpsImageMemoryBarrer(graphicCommandList, textures["depthMap"].image, VK_ACCESS_NONE, precomputeTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
 
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, depthPassSubmitSyncInfo);
@@ -238,23 +238,17 @@ void C11GlobalIlluminationExample::Loop()
 		FillBuffer(buffers["Info"], sizeof(glm::mat4) * 2, sizeof(glm::vec3), (const char*)&camera.GetPos());
 		FillBuffer(buffers["Info"], sizeof(glm::mat4) * 2 + sizeof(glm::vec3), sizeof(uint32_t), (const char*)&exampleType);
 		CmdListWaitFinish(graphicCommandList);//因为是单线程，所以等待命令完成后再处理
-		//确保presentFence在创建时已经触发
-		auto nexIndex = GetNextPresentImageIndex(swapchainValidSemaphore);
+
 		CmdListReset(graphicCommandList);
 		CaptureBeginMacro
 		CmdListRecordBegin(graphicCommandList);
 		
 		CmdOpsDrawGeom(graphicCommandList,1);
 		
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_NONE, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-		CmdOpsCopyWholeImageToImage(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, swapchainImages[nexIndex]);
-		CmdOpsImageMemoryBarrer(graphicCommandList, renderTargets.colorAttachments[0].attachmentImage, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-		CmdOpsImageMemoryBarrer(graphicCommandList, swapchainImages[nexIndex], VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 		CmdListRecordEnd(graphicCommandList);
 		CmdListSubmit(graphicCommandList, submitSyncInfo);
 		CaptureEndMacro
-		Present(nexIndex, { finishCopyTargetToSwapchain });
+		PresentPassResult(drawFinished, 0, 0);
 
 
 
