@@ -11,6 +11,7 @@ struct ExtensionAPI {
 	PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR = nullptr;
 	PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR = nullptr;
 	PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR = nullptr;
+	PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
 
 };
 static ExtensionAPI s_extensionAPI;
@@ -153,7 +154,7 @@ void VulkanAPI::LoadExtensionAPIs(VkDevice device)
 	s_extensionAPI.vkCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)DeviceFuncLoader(device, "vkCmdBuildAccelerationStructuresKHR");
 	s_extensionAPI.vkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)DeviceFuncLoader(device, "vkGetAccelerationStructureBuildSizesKHR");	
 	s_extensionAPI.vkGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)DeviceFuncLoader(device, "vkGetRayTracingShaderGroupHandlesKHR");
-
+	s_extensionAPI.vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)DeviceFuncLoader(device, "vkSetDebugUtilsObjectNameEXT");
 }
 
 VkPhysicalDeviceMemoryProperties VulkanAPI::GetMemoryProperties(VkPhysicalDevice physicalDevice)
@@ -1543,4 +1544,26 @@ VkDebugUtilsMessengerEXT VulkanAPI::CreateDebugInfoMessager(VkInstance instance)
 void VulkanAPI::DestroyDebugInfoMessager(VkInstance instance, VkDebugUtilsMessengerEXT debugMessager)
 {
 	((PFN_vkDestroyDebugUtilsMessengerEXT)InstanceFuncLoader(instance, "vkDestroyDebugUtilsMessengerEXT"))(instance, debugMessager, nullptr);
+}
+
+void VulkanAPI::SetDebugUtilsObjectNameEXT(VkDevice device,VkObjectType objectType,uint64_t objectHandle,const std::string& objectName)
+{
+	VkDebugUtilsObjectNameInfoEXT debugUtilsObjectNameInfoEXT{};
+	debugUtilsObjectNameInfoEXT.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+	debugUtilsObjectNameInfoEXT.pNext = nullptr;
+	debugUtilsObjectNameInfoEXT.objectType = objectType;
+	debugUtilsObjectNameInfoEXT.objectHandle = objectHandle;
+	debugUtilsObjectNameInfoEXT.pObjectName = objectName.c_str();
+	if (!s_extensionAPI.vkSetDebugUtilsObjectNameEXT)
+	{
+		s_extensionAPI.vkSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)DeviceFuncLoader(device, "vkSetDebugUtilsObjectNameEXT");
+		ASSERT(s_extensionAPI.vkSetDebugUtilsObjectNameEXT);
+		
+	}
+	if (objectHandle)
+	{
+		s_extensionAPI.vkSetDebugUtilsObjectNameEXT(device, &debugUtilsObjectNameInfoEXT);
+	}
+
+
 }

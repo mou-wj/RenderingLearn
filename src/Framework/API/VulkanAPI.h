@@ -20,6 +20,9 @@ namespace VulkanAPI {
 	VkDebugUtilsMessengerEXT CreateDebugInfoMessager(VkInstance instance);
 	void DestroyDebugInfoMessager(VkInstance instance, VkDebugUtilsMessengerEXT debugMessager);
 
+	
+
+
 	std::vector<VkPhysicalDevice> EnumeratePhysicalDevice(VkInstance instance);
 	std::vector<VkPhysicalDeviceProperties> EnumeratePhysicalDeviceProperties(VkInstance instance);
 	std::vector<VkQueueFamilyProperties> GetQueueFamilyProperties(VkPhysicalDevice physicalDevice);
@@ -45,6 +48,8 @@ namespace VulkanAPI {
 	void* DeviceFuncLoader(VkDevice device, const char* funcName);
 	//加载扩展的API,让该文件封装的扩展API可以使用
 	void LoadExtensionAPIs(VkDevice device);
+
+	void SetDebugUtilsObjectNameEXT(VkDevice device, VkObjectType objectType, uint64_t objectHandle, const std::string& objectName);
 
 	//surface
 	VkSurfaceKHR CreateWin32Surface(VkInstance instance, GLFWwindow* window);

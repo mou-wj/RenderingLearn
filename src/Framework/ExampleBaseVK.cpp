@@ -246,7 +246,7 @@ void ExampleBaseVK::InitContex()
 				numSatisfiedExtensions++;
 			}
 		}
-
+		
 
 	}
 	if (numSatisfiedExtensions != wantExtensions.size())
@@ -435,6 +435,13 @@ void ExampleBaseVK::InitRenderPasses()
 			BindInputAttachment(renderPassInfos[i]);
 		}
 
+		//设置当前render pass info的debug name
+		std::string renderPassName = "RenderPass" + std::to_string(i);
+		SetRenderPassInfoDebugName(renderPassInfos[i], renderPassName.c_str());
+		
+
+		
+
 	}
 
 	
@@ -594,6 +601,8 @@ void ExampleBaseVK::PickValidPhysicalDevice()
 				if (physicalDeviceMeshShaderFeaturesEXT.meshShader != VK_TRUE || physicalDeviceMeshShaderFeaturesEXT.taskShader != VK_TRUE) {
 					continue;//检查是否支持mesh着色器以及task着色器
 				}
+				physicalDeviceMeshShaderFeaturesEXT.multiviewMeshShader = VK_FALSE;//关闭
+				physicalDeviceMeshShaderFeaturesEXT.primitiveFragmentShadingRateMeshShader = VK_FALSE;//关闭
 				if (physicalDeviceFeatures2.features.geometryShader != VK_TRUE || physicalDeviceFeatures2.features.tessellationShader != VK_TRUE) {
 					continue;	//检查是否支持几何着色器以及细分着色器
 				}
@@ -698,12 +707,12 @@ int32_t ExampleBaseVK::GetMemoryTypeIndex(uint32_t  wantMemoryTypeBits, VkMemory
 Image ExampleBaseVK::CreateImage(VkImageType imageType,VkImageViewType viewType,VkFormat format,uint32_t width,uint32_t height, uint32_t depth,uint32_t numMip,uint32_t numLayer,VkImageUsageFlags usage, VkImageAspectFlags aspect, VkMemoryPropertyFlags memoryProperies, VkComponentMapping viewMapping, VkImageTiling tiling,VkSampleCountFlagBits sample, VkImageLayout layout)
 {
 	Image image;
-	image.currentLayout = layout;
 	image.sample = sample;
 	image.extent = VkExtent3D{ .width = width,.height = height,.depth = depth };
 	image.aspect = aspect;
 	image.numLayer = numLayer;
 	image.numMip = numMip;
+	image.SetLayerMipLayout(-1, -1, layout, VK_ACCESS_NONE);
 	image.tiling = tiling;
 	image.format = format;
 	VkImageCreateFlags imageCreatFlags = 0;
@@ -739,7 +748,7 @@ void ExampleBaseVK::FillImageFromDataSource(Image& image, TextureBindInfo& textu
 	uint32_t texdelByteSize = VkFormatToInfo[image.format].totalBytesPerPixel;
 	if (textureBindInfo.viewType == VK_IMAGE_VIEW_TYPE_3D)
 	{
-		auto& sublayout = image.layerMipLayouts[0][0];
+		auto& sublayout = image.layerMipLayouts[0][0].memoryLayout;
 		uint32_t depth = textureBindInfo.textureDataSources.size();
 		for (uint32_t d = 0; d < depth; d++)
 		{
@@ -768,7 +777,7 @@ void ExampleBaseVK::FillImageFromDataSource(Image& image, TextureBindInfo& textu
 
 		for (uint32_t l = 0; l < layer; l++)
 		{
-			auto& sublayout = image.layerMipLayouts[l][0];
+			auto& sublayout = image.layerMipLayouts[l][0].memoryLayout;
 			uint32_t width = textureBindInfo.textureDataSources[l].width;
 			uint32_t height = textureBindInfo.textureDataSources[l].height;
 			uint32_t rowOffset = 0;
@@ -842,9 +851,12 @@ void ExampleBaseVK::CreateFrame(RenderPassInfo& renderPassInfo, uint32_t frameId
 			}
 			colorImage = CreateImage(VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D, colorAttachment.format, attanchWeight, attanchHeight, 1, 1, 1, colorAttachmentImageUsages, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VkComponentMapping{}, VK_IMAGE_TILING_OPTIMAL);
 			TransferWholeImageLayout(colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+			SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)colorImage.image, "colorAttachment" + colorAttachId);
 		}
 		else {
 			colorImage = colorAttachmentImages[colorAttachId];
+			SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)colorImage.image, "swapchainColorAttachment" + colorAttachId);
+
 			//colorImage.currentLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 		}
 		
@@ -872,6 +884,8 @@ void ExampleBaseVK::CreateFrame(RenderPassInfo& renderPassInfo, uint32_t frameId
 	attachmentsImagViews.push_back(depthImage.imageView);
 	frame.frameBuffer = CreateFrameBuffer(device, 0, renderPassInfo.renderPass, attachmentsImagViews, width, height, 1);
 
+	//设置frame debug name
+	SetFrameDebugName(frame, "frameBuffer" + frameId);
 }
 
 void ExampleBaseVK::DestroyFrame(RenderPassInfo& renderPassInfo, uint32_t frameId)
@@ -882,8 +896,8 @@ void ExampleBaseVK::DestroyFrame(RenderPassInfo& renderPassInfo, uint32_t frameI
 		DestroyImage(frame.colorAttachmentTextures[i].image);
 		DestroySampler(device, frame.colorAttachmentTextures[i].sampler);
 	}
-	//DestroyImage(frame.depthAttachmentImage);
-	//VulkanAPI::DestroyFrameBuffer(device, frame.frameBuffer);
+	DestroyImage(frame.depthAttachmentImage);
+	VulkanAPI::DestroyFrameBuffer(device, frame.frameBuffer);
 	//frame.frameBuffer = nullptr;
 	//frame.depthAttachmentImage.imageView = nullptr;
 	//frame.depthAttachmentImage.image = nullptr;
@@ -944,10 +958,10 @@ Texture ExampleBaseVK::CreateTexture(TextureBindInfo& textureBindInfo)
 
 	}
 	
-
+	static int num = 0;
 	texture.image = CreateImage(imageType, textureBindInfo.viewType, textureBindInfo.format, x, y, depth, texture.image.numMip, numLayer, textureBindInfo.usage, VK_IMAGE_ASPECT_COLOR_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VkComponentMapping{}, VK_IMAGE_TILING_LINEAR);
 	texture.sampler = CreateDefaultSampler(device, 1);
-	
+	//SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)texture.image.image, "texture" + num);
 	
 	//获取每个layer以及mipmap的内存布局
 	for (uint32_t layer = 0; layer < texture.image.numLayer; layer++) {
@@ -959,7 +973,7 @@ Texture ExampleBaseVK::CreateTexture(TextureBindInfo& textureBindInfo)
 			subresource.mipLevel = mip;
 			subresource.arrayLayer = layer;
 			auto sublayout = GetImageSubresourceLayout(device, texture.image.image, subresource);
-			texture.image.layerMipLayouts[layer][mip] = sublayout;
+			texture.image.layerMipLayouts[layer][mip].memoryLayout = sublayout;
 		}
 
 	}
@@ -1423,10 +1437,11 @@ void ExampleBaseVK::ClearTexture(const std::string& textureName, VkClearColorVal
 
 	std::vector<VkClearColorValue> clearVs = { clearValue };
 
-	//构建加速结构
+	VkImageLayout  currentLayout = image.GetWholeLayout();
+	
 	CmdListWaitFinish(oneSubmitCommandList);
 	CmdListRecordBegin(oneSubmitCommandList);
-	CmdClearColorImage(oneSubmitCommandList.commandBuffer, image.image, image.currentLayout, clearVs, imageRanges);
+	CmdClearColorImage(oneSubmitCommandList.commandBuffer, image.image, currentLayout, clearVs, imageRanges);
 	CmdListRecordEnd(oneSubmitCommandList);
 	SubmitSynchronizationInfo info;
 	CmdListSubmit(oneSubmitCommandList, info);
@@ -1460,8 +1475,6 @@ void ExampleBaseVK::CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, 
 {
 	auto imageBarrier = barrier.ImageBarrier(image, dstAccess, dstImageLayout,layer,mip);
 	CmdMemoryBarrier(cmdList.commandBuffer, srcStageMask, dstStageMask, 0, {}, {}, { imageBarrier });
-	image.currentLayout = dstImageLayout;
-	image.access = dstAccess;
 }
 
 void ExampleBaseVK::CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex, std::array<uint32_t, 3> groupSize)
@@ -1527,7 +1540,7 @@ void ExampleBaseVK::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image& srcI
 	{
 		Log("copy : two image are not compatible ! ", 0);
 	}
-	VkImageLayout srcOldLayout = srcImage.currentLayout, dstOldLayout = dstImage.currentLayout;
+	VkImageLayout srcOldLayout = srcImage.GetWholeLayout(), dstOldLayout = dstImage.GetWholeLayout();
 	//转换image layout
 	//CmdOpsImageMemoryBarrer(cmdList, srcImage, VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 	//CmdOpsImageMemoryBarrer(cmdList, dstImage, VK_ACCESS_MEMORY_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1547,11 +1560,11 @@ void ExampleBaseVK::CmdOpsCopyWholeImageToImage(CommandList& cmdList,Image& srcI
 		copyRegion.dstSubresource = copyRegion.srcSubresource;
 		copyRegions.push_back(copyRegion);
 	}
-	if (srcImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL || dstImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL || dstOldLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 	{
 		ASSERT(0);
 	}
-	CmdCopyImageToImage(cmdList.commandBuffer, srcImage.image, srcImage.currentLayout, dstImage.image, dstImage.currentLayout, copyRegions);
+	CmdCopyImageToImage(cmdList.commandBuffer, srcImage.image, srcOldLayout, dstImage.image, dstOldLayout, copyRegions);
 
 
 	////转换回去image layout
@@ -1587,7 +1600,11 @@ void ExampleBaseVK::CmdOpsCopyImageToImage(CommandList& cmdList, Image& srcImage
 														  .layerCount = 1 };
 	std::vector<VkImageCopy> copyRegions;
 	copyRegions.push_back(copyRegion);
-	CmdCopyImageToImage(cmdList.commandBuffer, srcImage.image, srcImage.currentLayout, dstImage.image, dstImage.currentLayout, copyRegions);
+	VkImageLayout srcLayoutMipLayout = srcImage.layerMipLayouts[srcLayer][srcMip].layout;
+	VkImageLayout dstLayoutMipLayout = dstImage.layerMipLayouts[dstLayer][dstMip].layout;
+
+
+	CmdCopyImageToImage(cmdList.commandBuffer, srcImage.image, srcLayoutMipLayout, dstImage.image, dstLayoutMipLayout, copyRegions);
 
 }
 
@@ -1597,6 +1614,8 @@ void ExampleBaseVK::CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image& src
 	blitRegion.srcOffsets[0] = VkOffset3D{ 0,0,0 };
 
 	blitRegion.dstOffsets[0] = VkOffset3D{ 0,0,0 };
+	VkImageLayout srcOldLayout = srcImage.GetWholeLayout(), dstOldLayout = dstImage.GetWholeLayout();
+
 	//拷贝
 	std::vector<VkImageBlit> blitRegions;
 	for (uint32_t i = 0; i < srcImage.numMip; i++)
@@ -1612,11 +1631,11 @@ void ExampleBaseVK::CmdOpsBlitWholeImageToImage(CommandList& cmdList, Image& src
 		blitRegion.dstSubresource = blitRegion.srcSubresource;
 		blitRegions.push_back(blitRegion);
 	}
-	if (srcImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL || dstImage.currentLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL || dstOldLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 	{
 		ASSERT(0);
 	}
-	CmdBlitImageToImage(cmdList.commandBuffer, srcImage.image, srcImage.currentLayout, dstImage.image, dstImage.currentLayout, blitRegions);
+	CmdBlitImageToImage(cmdList.commandBuffer, srcImage.image, srcOldLayout, dstImage.image, dstOldLayout, blitRegions);
 
 }
 
@@ -1630,12 +1649,12 @@ void ExampleBaseVK::CmdOpsClearWholeColorImage(CommandList& cmdList, Image& imag
 	wholeRange.baseMipLevel = 0;
 	wholeRange.levelCount = image.numMip;
 
-
+	VkImageLayout oldLayout = image.GetWholeLayout();
 
 	clearRanges.push_back(wholeRange);
 	std::vector<VkClearColorValue> clearColorValues;
 	clearColorValues.push_back(clearValue);
-	CmdClearColorImage(cmdList.commandBuffer, image.image, image.currentLayout, clearColorValues, clearRanges);
+	CmdClearColorImage(cmdList.commandBuffer, image.image, oldLayout, clearColorValues, clearRanges);
 
 
 }
@@ -1793,7 +1812,7 @@ void ExampleBaseVK::PresentPassResult(VkSemaphore passDrawFinished,uint32_t rend
 {
 	auto& passActiveFrame = renderPassInfos[renderPassIndex].renderTargets.activeFrame;
 	auto& passResultTexture = renderPassInfos[renderPassIndex].renderTargets.frames[passActiveFrame].colorAttachmentTextures[colorAttachmentId];
-	VkImageLayout oldLayout = passResultTexture.image.currentLayout;
+	VkImageLayout oldLayout = passResultTexture.image.GetLayoutMipLayout(0,0);
 	TransferWholeImageLayout(passResultTexture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	presentPassInfo.BindPassResultTexture(passResultTexture);
 	presentPassInfo.Present(passDrawFinished);
@@ -1816,8 +1835,8 @@ void ExampleBaseVK::TransferWholeImageLayout(Image& image, VkImageLayout dstImag
 {
 	CmdListWaitFinish(oneSubmitCommandList);
 	CmdListRecordBegin(oneSubmitCommandList);
-	VkAccessFlags oldAccess = image.access;
-	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, oldAccess, dstImageLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+	VkAccessFlags oldAccess = image.GetWholeAccess();
+	CmdOpsImageMemoryBarrer(oneSubmitCommandList, image, oldAccess, dstImageLayout, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 	CmdListRecordEnd(oneSubmitCommandList);
 	
 	SubmitSynchronizationInfo info;
@@ -1828,7 +1847,7 @@ void ExampleBaseVK::TransferWholeImageLayout(Image& image, VkImageLayout dstImag
 
 void ExampleBaseVK::GenerateMipmap(Image& image)
 {
-	auto oldlayout = image.currentLayout;
+	auto oldlayout = image.GetWholeLayout();
 	if (oldlayout == VK_IMAGE_LAYOUT_UNDEFINED) {
 		ASSERT(0);//如果旧的layout未知这里就先直接报错
 	}
@@ -2015,11 +2034,12 @@ void ExampleBaseVK::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 		
 		VkPipelineVertexInputStateCreateInfo* vertexInputState = &pipelineStates.vertexInputState;
 		VkPipelineInputAssemblyStateCreateInfo* inputAssemblyState = &pipelineStates.inputAssemblyState;
-		if (enableMeshShaderEXT)
+		if (renderPassInfo.isMeshSubpass[pipeID])
 		{
 			vertexInputState = nullptr;
 			inputAssemblyState = nullptr;
 		}
+
 
 		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, vertexInputState, inputAssemblyState, &pipelineStates.tessellationState, &pipelineStates.viewportState,
 			&pipelineStates.rasterizationState, &pipelineStates.multisampleState, &pipelineStates.depthStencilState, &pipelineStates.colorBlendState, &pipelineStates.dynamicState, pipelineLayout,
@@ -2313,6 +2333,7 @@ void ExampleBaseVK::InitTextureResources()
 		Texture texture;
 		texture = CreateTexture(textureInfo.second);
 		textures[textureInfo.first] = texture;
+		SetTextureDebugName(textures[textureInfo.first], textureInfo.first);
 		
 	}
 
@@ -2996,6 +3017,85 @@ Buffer ExampleBaseVK::CreateBuffer(VkBufferUsageFlags usage, const char* buf, Vk
 	return buffer;
 }
 
+void ExampleBaseVK::SetImageDebugName(Image& image, const std::string& name)
+{
+	std::string imageName = name + "_image";
+	std::string imageViewName = name + "_imageview";
+	std::string imageMemoryName = name + "_memory";
+	SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)image.image, name);
+	SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)image.imageView, imageViewName);
+	SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)image.memory, imageMemoryName);
+}
+
+void ExampleBaseVK::SetBufferDebugName(Buffer& buffer, const std::string& name)
+{
+	std::string bufferName = name + "_buffer";
+	std::string bufferMemoryName = name + "_memory";
+	SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_BUFFER, (uint64_t)buffer.buffer, name);
+	SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)buffer.memory, bufferMemoryName);
+
+}
+
+void ExampleBaseVK::SetTextureDebugName(Texture& texture, const std::string& name)
+{
+
+	std::string samplerName = name + "_sampler";
+	SetImageDebugName(texture.image, name);
+	SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_SAMPLER, (uint64_t)texture.sampler, samplerName);
+
+}
+
+void ExampleBaseVK::SetFrameDebugName(Frame& frame, const std::string& name)
+{
+
+
+
+}
+
+void ExampleBaseVK::SetRenderPassInfoDebugName(RenderPassInfo& renderPassInfo, const std::string& name)
+{
+	//设置管线和描述符的debug name
+	for (uint32_t i = 0; i < renderPassInfo.graphcisPipelineInfos.size(); i++)
+	{
+		auto& graphicPipelienInfo = renderPassInfo.graphcisPipelineInfos[i];
+		SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t)graphicPipelienInfo.pipeline, name + "_pipeline_" + std::to_string(i));
+		SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)graphicPipelienInfo.pipelineLayout, name + "_pipelineLayout_" + std::to_string(i));
+		SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t)graphicPipelienInfo.descriptorPool, name + "_descriptorPool_" + std::to_string(i));
+
+		for (uint32_t j = 0; j < graphicPipelienInfo.descriptorSetInfos.size(); j++)
+		{
+			auto& descriptorSetInfo = graphicPipelienInfo.descriptorSetInfos[j];
+			SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)descriptorSetInfo.descriptorSet, name + "_descriptorSet_" + std::to_string(i) + "_" + std::to_string(j));
+			SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)descriptorSetInfo.setLayout, name + "_descriptorSetLayout_" + std::to_string(i) + "_" + std::to_string(j));
+		}
+
+
+	}
+
+
+	//设置render target中frame的debug name
+	for (uint32_t i = 0; i < renderPassInfo.renderTargets.frames.size(); i++)
+	{
+		auto& frame = renderPassInfo.renderTargets.frames[i];
+		std::string frameName = name + "_frame_" + std::to_string(i);
+
+		std::string frameBufferName = frameName + "_frameBuffer";
+		SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)frame.frameBuffer, frameBufferName);
+		for (uint32_t i = 0; i < frame.colorAttachmentTextures.size(); i++)
+		{
+			SetTextureDebugName(frame.colorAttachmentTextures[i], frameName + "_colorAttachment" + std::to_string(i));
+		}
+		SetImageDebugName(frame.depthAttachmentImage, frameName + "_depthAttachment");
+	}
+
+	//设置render pass的debug name
+	SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)renderPassInfo.renderPass, name + "_renderPass");
+
+
+}
+
+
+
 
 
 void ExampleBaseVK::ActiveFrame(RenderPassInfo& renderPassInfo, uint32_t frameIndex)
@@ -3039,11 +3139,12 @@ VkDescriptorType ExampleBaseVK::GetDescriptorType(DescriptorSetInfo& descriptorS
 	return VkDescriptorType();
 }
 
-void ExampleBaseVK::BindTexture(const Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType)
+void ExampleBaseVK::BindTexture(Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType)
 {
+	
 	VkDescriptorImageInfo descriptorImageInfo{};
 	descriptorImageInfo.sampler = texture.sampler;
-	descriptorImageInfo.imageLayout = texture.image.currentLayout;
+	descriptorImageInfo.imageLayout = texture.image.GetWholeLayout();
 	descriptorImageInfo.imageView = texture.image.imageView;
 	
 	UpdateDescriptorSetBindingResources(device, set, binding, elemenId, 1, descriptorType, { descriptorImageInfo }, {}, {});
@@ -3051,7 +3152,7 @@ void ExampleBaseVK::BindTexture(const Texture& texture, VkDescriptorSet set, uin
 
 }
 
-void ExampleBaseVK::BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType)
+void ExampleBaseVK::BindBuffer(Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType)
 {
 	VkDescriptorBufferInfo descriptorBufferInfo{};
 	descriptorBufferInfo.buffer = uniformBuffer.buffer;
@@ -3372,7 +3473,6 @@ void ExampleBaseVK::PresentDrawPassInfo::InitSwapchain()
 		swapchainImages[i].hostOwner = false;
 		swapchainImages[i].image = swapImages[i];
 		swapchainImages[i].aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-		swapchainImages[i].currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		swapchainImages[i].numLayer = 1;
 		swapchainImages[i].numMip = 1;
 		swapchainImages[i].extent = VkExtent3D{ .width = (uint32_t)w ,.height = (uint32_t)h,.depth = 1 };
@@ -3425,6 +3525,8 @@ void ExampleBaseVK::PresentDrawPassInfo::InitPresentRenderPassInfo()
 	
 	InitFrameBuffers();
 	context->InitGraphicPipelines(presentRenderPassInfo);
+	context->SetRenderPassInfoDebugName(presentRenderPassInfo, "PresentPass");
+
 }
 
 void ExampleBaseVK::PresentDrawPassInfo::InitGeometryResource()

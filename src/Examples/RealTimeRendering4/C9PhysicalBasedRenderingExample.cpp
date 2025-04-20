@@ -129,8 +129,8 @@ void C9PhysicalBasedRenderingExample::Loop()
 	CmdOpsDrawGeom(graphicCommandList);
 	auto& colorTargetImage = renderPassInfos[0].renderTargets.frames[0].colorAttachmentTextures[0].image;
 
-	auto colorOldLayout = colorTargetImage.currentLayout;
-	auto precomputeTextureOldLayout = textures["PreComputeMultiReflect"].image.currentLayout;
+	auto colorOldLayout = colorTargetImage.GetWholeLayout();
+	auto precomputeTextureOldLayout = textures["PreComputeMultiReflect"].image.GetWholeLayout();
 
 	CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);
 	CmdOpsImageMemoryBarrer(graphicCommandList, textures["PreComputeMultiReflect"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0);

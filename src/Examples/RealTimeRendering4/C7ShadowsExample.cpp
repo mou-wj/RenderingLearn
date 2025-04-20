@@ -68,7 +68,7 @@ void C7ShadowsExample::InitResourceInfos()
 	textureBindInfos["pointShadowMap"].viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 	textureBindInfos["pointShadowMap"].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	textureBindInfos["pointShadowMap"].passId = 1;
-
+	textureBindInfos["pointShadowMap"].usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
 	textureBindInfos["pointShadowArrayMap"].textureDataSources.push_back(emptyDataSource);
@@ -136,13 +136,6 @@ void C7ShadowsExample::Loop()
 
 
 
-	auto drawFinished = semaphores[0];
-	auto finishCopyTargetToSwapchain = semaphores[1];
-	SubmitSynchronizationInfo submitSyncInfo;
-	submitSyncInfo.waitSemaphores = {  };
-	submitSyncInfo.waitStages = {  };
-	submitSyncInfo.sigSemaphores = { drawFinished };
-
 
 	//°ó¶¨uniform buffer
 	BindBuffer("SimpleSceenExampleBuffer");
@@ -171,6 +164,7 @@ void C7ShadowsExample::Loop()
 
 	};
 
+	SubmitSynchronizationInfo depthPassSubmitSyncInfo;
 	glm::vec3 lightPos = glm::vec3(-3,-6,0);
 	//glm::vec3 lightPos = glm::vec3(0, 0, 0);
 	//glm::vec3 lightPos = glm::vec3(0, 0, 0);
@@ -194,8 +188,8 @@ void C7ShadowsExample::Loop()
 		CmdOpsDrawGeom(graphicCommandList);
 		auto& colorTargetImage = renderPassInfos[0].renderTargets.frames[0].colorAttachmentTextures[0].image;
 
-		auto colorOldLayout = colorTargetImage.currentLayout;
-		auto depthTextureOldLayout = textures["pointShadowMap"].image.currentLayout;
+		auto colorOldLayout = colorTargetImage.GetWholeLayout();
+		auto depthTextureOldLayout = textures["pointShadowMap"].image.GetWholeLayout();
 
 		CmdOpsImageMemoryBarrer(graphicCommandList, colorTargetImage, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,0,0);
 		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, i, 0);
@@ -207,7 +201,7 @@ void C7ShadowsExample::Loop()
 		CmdOpsImageMemoryBarrer(graphicCommandList, textures["pointShadowMap"].image, VK_ACCESS_NONE, depthTextureOldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,i,0);
 	
 		CmdListRecordEnd(graphicCommandList);
-		CmdListSubmit(graphicCommandList, submitSyncInfo);
+		CmdListSubmit(graphicCommandList, depthPassSubmitSyncInfo);
 		CaptureEndMacro
 
 	}
@@ -243,6 +237,14 @@ void C7ShadowsExample::Loop()
 
 	FillBuffer(buffers["SceenInfo"], 0, sizeof(glm::vec3), (const char*)&lightPos);
 	FillBuffer(buffers["SceenInfo"], 16, sizeof(glm::vec3), (const char*)&camera.GetPos());
+
+	auto drawFinished = semaphores[0];
+	auto finishCopyTargetToSwapchain = semaphores[1];
+	SubmitSynchronizationInfo submitSyncInfo;
+	submitSyncInfo.waitSemaphores = {  };
+	submitSyncInfo.waitStages = {  };
+	submitSyncInfo.sigSemaphores = { drawFinished };
+
 	while (!WindowEventHandler::WindowShouldClose())
 	{
 		i++;

@@ -90,16 +90,102 @@ struct Image {
 	VkImageView imageView = VK_NULL_HANDLE;
 	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 	uint64_t totalMemorySize = 0;
-	VkDeviceMemory memory;
-	VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	VkAccessFlags access = VK_ACCESS_NONE;
+	VkDeviceMemory memory = VK_NULL_HANDLE;
 	uint32_t numLayer = 1, numMip = 1;
 	VkImageTiling tiling = VK_IMAGE_TILING_LINEAR;
-	VkExtent3D extent;
+	VkExtent3D extent{};
 	VkSampleCountFlagBits sample = VK_SAMPLE_COUNT_1_BIT;
 	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-	std::map<uint32_t, std::map<uint32_t, VkSubresourceLayout>> layerMipLayouts;
+	struct ImageLayoutInfo {
+		VkSubresourceLayout memoryLayout;
+		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		VkAccessFlags access = VK_ACCESS_NONE;
+	};
+	std::map<uint32_t, std::map<uint32_t, ImageLayoutInfo>> layerMipLayouts;
+
+
 	void* hostMapPointer = nullptr;
+
+	VkImageLayout GetWholeLayout()
+	{
+		VkImageLayout layout00 = layerMipLayouts[0][0].layout;
+		//变量所有的layout，判断是否一致
+		for (uint32_t i = 0; i < numLayer; i++)
+		{
+			for (uint32_t j = 0; j < numMip; j++)
+			{
+				if (layerMipLayouts[i][j].layout != layout00)
+				{
+					ASSERT(0);
+				}
+			}
+		}
+		return layout00;
+	}
+	VkAccessFlags GetWholeAccess()
+	{
+		VkAccessFlags access00 = layerMipLayouts[0][0].access;
+		//变量所有的acess，判断是否一致
+		for (uint32_t i = 0; i < numLayer; i++)
+		{
+			for (uint32_t j = 0; j < numMip; j++)
+			{
+				if (layerMipLayouts[i][j].access != access00)
+				{
+					ASSERT(0);
+				}
+			}
+		}
+		return access00;
+	}
+
+	VkImageLayout GetLayoutMipLayout(uint32_t layer, uint32_t mip)
+	{
+		return layerMipLayouts[layer][mip].layout;
+	}
+	VkAccessFlags GetLayoutMipAccess(uint32_t layer, uint32_t mip)
+	{
+		return layerMipLayouts[layer][mip].access;
+	}
+
+	void SetLayerMipLayout(int layer,int mip,VkImageLayout layout,VkAccessFlags access)
+	{
+		uint32_t baselayer = 0, layerCount = 1, basemip = 0, mipCount = 1;
+		if (layer == -1)
+		{
+			baselayer = 0;
+			layerCount = numLayer;
+		}
+		else {
+			baselayer = layer;
+			layerCount = 1;
+		}
+
+		if (mip == -1)
+		{
+			basemip = 0;
+			mipCount = numMip;
+		}
+		else {
+			basemip = mip;
+			mipCount = 1;
+		}
+
+		//然后改变image的layer mip的layout和access,这个必须确保barrier被正确提交执行
+		for (uint32_t i = 0; i < layerCount; i++)
+		{
+			for (uint32_t j = 0; j < mipCount; j++)
+			{
+				auto curLayer = baselayer + i;
+				auto curMip = basemip + j;
+				layerMipLayouts[curLayer][curMip].layout = layout;
+				layerMipLayouts[curLayer][curMip].access = access;
+			}
+		}
+
+	}
+
+
 	VkFormatInfo GetFormatInfo() {
 		return VkFormatToInfo[format];
 	
@@ -111,12 +197,12 @@ struct Image {
 	void CopyToOther(Image& dstImage, uint32_t layer, uint32_t mip)
 	{
 		//检查格式和长宽是否匹配
-		auto dstSubLayout = dstImage.layerMipLayouts[layer][mip];
+		auto dstSubLayout = dstImage.layerMipLayouts[layer][mip].memoryLayout;
 		auto dstTexelByteSize = VkFormatToInfo[dstImage.format].totalBytesPerPixel;
 		auto dstSubW = dstSubLayout.rowPitch / dstTexelByteSize;
 		auto dstSubH = dstSubLayout.size / dstSubLayout.rowPitch;
 
-		auto srcSubLayout = layerMipLayouts[layer][mip];
+		auto srcSubLayout = layerMipLayouts[layer][mip].memoryLayout;
 		auto srcTexelByteSize = VkFormatToInfo[format].totalBytesPerPixel;
 		auto srcSubW = srcSubLayout.rowPitch / srcTexelByteSize;
 		auto srcSubH = srcSubLayout.size / srcSubLayout.rowPitch;
@@ -153,7 +239,7 @@ struct Image {
 	}
 	void FlipY(uint32_t layer, uint32_t mip)
 	{
-		auto layout = layerMipLayouts[layer][mip];
+		auto layout = layerMipLayouts[layer][mip].memoryLayout;
 		auto texelByteSize = VkFormatToInfo[format].totalBytesPerPixel;
 		if (memory)
 		{
@@ -218,7 +304,7 @@ struct Image {
 			Log("未知格式",0);
 		}
 		uint32_t texelByteWidth = numBytesPerChannel* numChannels;
-		auto layout = layerMipLayouts[layer][mip];
+		auto layout = layerMipLayouts[layer][mip].memoryLayout;
 		uint32_t w = layout.rowPitch / texelByteWidth;
 		uint32_t h = layout.size / layout.rowPitch;
 
@@ -232,7 +318,7 @@ struct Image {
 			Log("未知格式", 0);
 		}
 		uint32_t texelByteWidth = numBytesPerChannel * numChannels;
-		auto layout = layerMipLayouts[layer][mip];
+		auto layout = layerMipLayouts[layer][mip].memoryLayout;
 		uint32_t w = layout.rowPitch / texelByteWidth;
 		uint32_t h = layout.size / layout.rowPitch;
 
@@ -240,6 +326,9 @@ struct Image {
 	}
 
 };
+
+using ImageRef = std::shared_ptr<Image>;
+
 
 struct Barrier {
 	VkImageMemoryBarrier imageMemoryBarrier;
@@ -276,9 +365,51 @@ struct Barrier {
 	{
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		imageMemoryBarrier.pNext = nullptr;
-		imageMemoryBarrier.srcAccessMask = image.access;
+		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.image = image.image;
+		imageMemoryBarrier.subresourceRange.aspectMask = image.aspect;
+		uint32_t baselayer = 0,layerCount = 1, basemip = 0,mipCount = 1;
+		if (layer == -1)
+		{
+			baselayer = 0;
+			layerCount = image.numLayer;
+		}
+		else {
+			baselayer = layer;
+			layerCount = 1;
+		}
+
+		if (mip == -1)
+		{
+			basemip = 0;
+			mipCount = image.numMip;
+		}
+		else {
+			basemip = mip;
+			mipCount = 1;
+		}
+		imageMemoryBarrier.subresourceRange.baseArrayLayer = baselayer;
+		imageMemoryBarrier.subresourceRange.layerCount = layerCount;
+		imageMemoryBarrier.subresourceRange.baseMipLevel = basemip;
+		imageMemoryBarrier.subresourceRange.levelCount = mipCount;
+		imageMemoryBarrier.srcAccessMask = image.layerMipLayouts[baselayer][basemip].access;
 		imageMemoryBarrier.dstAccessMask = dstAccess;
-		imageMemoryBarrier.oldLayout = image.currentLayout;
+		imageMemoryBarrier.oldLayout = image.layerMipLayouts[baselayer][basemip].layout;
+		imageMemoryBarrier.newLayout = dstImageLayout;
+
+		//然后改变image的layer mip的layout和access,这个必须确保barrier被正确提交执行
+		image.SetLayerMipLayout(layer, mip, dstImageLayout, dstAccess);
+		return imageMemoryBarrier;
+	}
+
+	const VkImageMemoryBarrier& ImageBarrier(Image& image, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout, int layer = -1/*-1表示所有，否则表示指定的所有layer*/, int mip = -1/*-1表示所有，否则表示指定的所有miplevel*/)
+	{
+		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		imageMemoryBarrier.pNext = nullptr;
+		imageMemoryBarrier.srcAccessMask = srcAccess;
+		imageMemoryBarrier.dstAccessMask = dstAccess;
+		imageMemoryBarrier.oldLayout = srcImageLayout;
 		imageMemoryBarrier.newLayout = dstImageLayout;
 		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -304,8 +435,6 @@ struct Barrier {
 		}
 		return imageMemoryBarrier;
 	}
-
-
 };
 
 struct GraphicsPipelineStates {
@@ -432,8 +561,8 @@ struct GraphicsPipelineStates {
 
 };
 struct DescriptorSetInfo {
-	VkDescriptorSetLayout setLayout;
-	VkDescriptorSet descriptorSet;
+	VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
+	VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
 	std::vector<VkDescriptorSetLayoutBinding> bindings;
 };
 struct GraphicPipelineInfos {
@@ -442,8 +571,8 @@ struct GraphicPipelineInfos {
 
 	VkDescriptorPool descriptorPool;
 	std::map<uint32_t, DescriptorSetInfo> descriptorSetInfos;
-	VkPipelineLayout pipelineLayout;
-	VkPipeline pipeline;
+	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+	VkPipeline pipeline = VK_NULL_HANDLE;
 
 	//input attachment 绑定信息，表示某个set中某个binding上对应的附件索引
 	std::map<uint32_t, std::map<uint32_t, uint32_t>> setBindingAttachmentIds;
@@ -903,7 +1032,7 @@ struct SubmitSynchronizationInfo {
 	std::vector<VkSemaphore> waitSemaphores;//指明要等待的信号量
 	std::vector<VkPipelineStageFlags> waitStages;//指明在哪个阶段进行等待信号量
 	std::vector<VkSemaphore> sigSemaphores;//指明要触发的信号量
-
+	SubmitSynchronizationInfo() = default;
 };
 
 
@@ -1073,6 +1202,7 @@ protected:
 	void CmdListRecordBegin(CommandList& cmdList);
 	void CmdListRecordEnd(CommandList& cmdList);
 	void CmdOpsImageMemoryBarrer(CommandList& cmdList, Image& image, VkAccessFlags dstAccess, VkImageLayout dstImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask,int layer = -1,int mip = -1);
+	
 	//compute
 	void CmdOpsDispatch(CommandList& cmdList, uint32_t computePassIndex = 0, std::array<uint32_t, 3> groupSize = {1,1,1});
 	
@@ -1226,8 +1356,8 @@ private:
 
 	//descriptor
 	VkDescriptorType GetDescriptorType(DescriptorSetInfo& descriptorSetInfo,uint32_t binding);
-	void BindTexture(const Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId ,VkDescriptorType descriptorType);
-	void BindBuffer(const Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType);
+	void BindTexture(Texture& texture, VkDescriptorSet set, uint32_t binding, uint32_t elemenId ,VkDescriptorType descriptorType);
+	void BindBuffer(Buffer& uniformBuffer, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType);
 	void BindAccelerationStructure(uint32_t geometryIndex, VkDescriptorSet set, uint32_t binding, uint32_t elemenId, VkDescriptorType descriptorType);
 
 	void BindInputAttachment(RenderPassInfo& renderPassInfo);
@@ -1271,21 +1401,16 @@ private:
 	//utils
 	Buffer CreateBuffer(VkBufferUsageFlags usage,const char* buf, VkDeviceSize size,VkMemoryPropertyFlags memoryPropties);
 
-	
-
-
+	//debug object name
+	void SetImageDebugName(Image& image, const std::string& name);
+	void SetBufferDebugName(Buffer& buffer, const std::string& name);
+	void SetTextureDebugName(Texture& texture, const std::string& name);
+	void SetFrameDebugName(Frame& frame, const std::string& name);
+	void SetRenderPassInfoDebugName(RenderPassInfo& renderPassInfo,const std::string& name);
 
 private:
 
 	bool initFlag = false;
-	//struct DeviceRequirement
-	//{
-	//	VkQueueFlags queueType = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT;
-	//	uint32_t numQueue = 3;
-	//	const bool needPresent = true;
-
-
-	//};
 
 
 

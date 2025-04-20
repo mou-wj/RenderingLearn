@@ -163,6 +163,7 @@ void C6TexturingExample::InitResourceInfos()
 	textureBindInfos["bw"].textureDataSources.push_back(dataSource);
 	textureBindInfos["bw"].binding = 1;
 	textureBindInfos["bw"].buildMipmap = true;
+	textureBindInfos["bw"].usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
 	TextureDataSource satDataSource;
 	satDataSource.height = 512;
@@ -174,7 +175,7 @@ void C6TexturingExample::InitResourceInfos()
 	textureBindInfos["satbw"].binding = 2;
 	textureBindInfos["satbw"].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	textureBindInfos["satbw"].formatComponentByteSize = sizeof(float);
-	
+	textureBindInfos["satbw"].usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 
 	//一个alpha贴图
 	TextureDataSource alphaDataSource;
@@ -185,8 +186,8 @@ void C6TexturingExample::InitResourceInfos()
 	//一个法线贴图
 	TextureDataSource normalDataSource;
 	normalDataSource.picturePath = std::string(PROJECT_DIR) + "/resources/material/AsphaltDamageSet001_1K-JPG/AsphaltDamageSet001_1K-JPG_NormalGL.jpg";
-	textureBindInfos["alphaT"].textureDataSources.push_back(normalDataSource);
-	textureBindInfos["alphaT"].binding = 5;
+	textureBindInfos["normal"].textureDataSources.push_back(normalDataSource);
+	textureBindInfos["normal"].binding = 5;
 	
 
 	//一个纹理albedo贴图
@@ -261,6 +262,7 @@ void C6TexturingExample::Loop()
 	BindTexture("satbw");
 	BindTexture("alphaT");
 	BindTexture("albedo");
+	BindTexture("normal");
 
 	textures["satbw"].image.WriteToJpg("satbw.jpg",0,0);
 	float delta = 0.5;

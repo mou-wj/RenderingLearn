@@ -73,7 +73,7 @@ extern int ImGuiVulkanTest();
 int main()
 {
 	//ImGuiOpenGLTest();
-	ImGuiVulkanTest();
+	//ImGuiVulkanTest();
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
@@ -82,7 +82,7 @@ int main()
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
-	SkyBoxExample example;
+	//SkyBoxExample example;
 	//TranslucentBlendExample example;
 	//SimpleSceenExample example;
 	//SimpleTessellationExample example;
@@ -96,7 +96,7 @@ int main()
 	//GeometryShaderExample example;
 	//VolumeScatteringExample example;
 	//C5ShadingBasicsExample example;
-	//C6TexturingExample example;
+	C6TexturingExample example;
 	//C7ShadowsExample example;
 	//C9PhysicalBasedRenderingExample example;
 	//C10LocalIlluminationExample example;
