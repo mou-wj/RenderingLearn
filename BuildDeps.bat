@@ -1,8 +1,10 @@
-
-mkdir deps
+if not exist "./deps" (
+	mkdir deps
+)
 cd deps
+
 if not exist "SPIRV-Cross" (
-	git clone --branch main https://github.com/KhronosGroup/SPIRV-Cross.git
+	git clone --branch main git@github.com:KhronosGroup/SPIRV-Cross.git
 )
 if not exist "./install/SPIRV-Cross" (
 	cmake -S ./SPIRV-Cross -B ./build -DCMAKE_INSTALL_PREFIX=./install/SPIRV-Cross/Debug
@@ -15,8 +17,8 @@ if not exist "./install/SPIRV-Cross" (
 
 
 if not exist "SPIRV-Tools" (
-	git clone --branch main https://github.com/KhronosGroup/SPIRV-Tools.git
-	git clone --branch main https://github.com/KhronosGroup/SPIRV-Headers.git ./SPIRV-Tools/external/spirv-headers
+	git clone --branch main git@github.com:KhronosGroup/SPIRV-Tools.git
+	git clone --branch main git@github.com:KhronosGroup/SPIRV-Headers.git ./SPIRV-Tools/external/spirv-headers
 )
 
 if not exist "./install/SPIRV-Tools" (
@@ -31,7 +33,7 @@ if not exist "./install/SPIRV-Tools" (
 
 
 if not exist "glslang" (
-	git clone --branch main https://github.com/KhronosGroup/glslang.git
+	git clone --branch main git@github.com:KhronosGroup/glslang.git
 )
 
 if not exist "./install/glslang" (
@@ -45,7 +47,7 @@ if not exist "./install/glslang" (
 
 
 if not exist "glfw" (
-	git clone --branch master https://github.com/glfw/glfw.git
+	git clone --branch master git@github.com:glfw/glfw.git
 )
 
 if not exist "./install/glfw" (
@@ -59,7 +61,7 @@ if not exist "./install/glfw" (
 
 
 if not exist "tinygltf" (
-	git clone --branch release https://github.com/syoyo/tinygltf.git
+	git clone --branch release git@github.com:syoyo/tinygltf.git
 )
 
 if not exist "./install/tinygltf" (
