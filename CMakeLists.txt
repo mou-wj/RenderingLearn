@@ -14,11 +14,13 @@ set(IncludeDir3rd)
 set(Libs3rd)
 
 
-find_package(Vulkan)
+find_package(Vulkan REQUIRED)
 if(Vulkan_FOUND)
     list(APPEND Libs3rd ${Vulkan_LIBRARIES})
 	list(APPEND IncludeDir3rd "${Vulkan_INCLUDE_DIRS}")
-	
+	if(NOT EXISTS ${Vulkan_INCLUDE_DIRS}/glm)
+		message(FATAL_ERROR "install vulkan with glm headers")
+	endif()
 else()
 	message(FATAL_ERROR "vulkan is not found")
 endif()
