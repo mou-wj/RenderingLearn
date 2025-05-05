@@ -87,8 +87,9 @@ void RenderDocTool::Init()
 {
     // 在需要捕获的地方调用这个函数
     //RENDERDOC_API_1_1_2* rdoc_api = nullptr;
-    std::string renderdocDll = std::string(Renderdoc_INSTALL_DIR) + "/renderdoc.dll";
+    
 #ifdef ENABLE_RENDERDOC_CAPTURE
+    std::string renderdocDll = std::string(Renderdoc_INSTALL_DIR) + "/renderdoc.dll";
     HMODULE renderdoc_module = LoadLibraryA(renderdocDll.c_str()); // 替换为RenderDoc的实际DLL名称
     if (renderdoc_module != nullptr)
     {

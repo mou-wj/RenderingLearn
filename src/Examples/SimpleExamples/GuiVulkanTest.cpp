@@ -13,9 +13,9 @@
 //   the backend itself (imgui_impl_vulkan.cpp), but should PROBABLY NOT be used by your own engine/app code.
 // Read comments in imgui_impl_vulkan.h.
 
-#include "../GUI/imgui.h"
-#include "../GUI/imgui_impl_glfw.h"
-#include "../GUI/imgui_impl_vulkan.h"
+#include "./GUI/imgui.h"
+#include "./GUI/imgui_impl_glfw.h"
+#include "./GUI/imgui_impl_vulkan.h"
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
 #define GLFW_INCLUDE_NONE
@@ -349,7 +349,7 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd)
 }
 
 // Main code
-int ImGuiVKTest()
+int ImGuiVulkanTest()
 {
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())

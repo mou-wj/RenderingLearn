@@ -10,18 +10,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(TargetName RenderingLearn)
 project(${TargetName})
 
-set(IncludeDir3rd)
+set(IncludeDir3rd ${CMAKE_SOURCE_DIR}/src)
 set(Libs3rd)
 
 
-find_package(Vulkan)
-if(Vulkan_FOUND)
-    list(APPEND Libs3rd ${Vulkan_LIBRARIES})
-	list(APPEND IncludeDir3rd "${Vulkan_INCLUDE_DIRS}")
-	
-else()
-	message(FATAL_ERROR "vulkan is not found")
+find_package(Vulkan REQUIRED)
+
+list(APPEND Libs3rd ${Vulkan_LIBRARIES})
+list(APPEND IncludeDir3rd "${Vulkan_INCLUDE_DIRS}")
+if(NOT EXISTS ${Vulkan_INCLUDE_DIRS}/glm)
+	message(FATAL_ERROR "安装vulkan时需要安装glm headers")
 endif()
+	
 
 	
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")

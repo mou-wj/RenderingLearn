@@ -324,16 +324,11 @@ std::vector<VkImage> VulkanAPI::GetSwapchainImages(VkDevice device, VkSwapchainK
 	return images;
 }
 
-uint32_t VulkanAPI::GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain, VkSemaphore  semaphore, VkFence  fence)
+VkResult VulkanAPI::GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain, VkSemaphore  semaphore, VkFence  fence, uint32_t& outImageIndex)
 {
-	uint32_t imageIndex = 0;
-	auto res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, fence, &imageIndex);
-	if (res != VK_SUCCESS)
-	{
-		ASSERT(0);
-	}
-	
-	return imageIndex;
+	auto res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, fence, &outImageIndex);
+	Log("vkAcquireNextImageKHR result is not VK_SUCCESS",res != VK_SUCCESS);
+	return res;
 }
 
 VkDeviceMemory VulkanAPI::AllocateMemory(VkDevice device, VkDeviceSize allocationSize, uint32_t memoryTypeIndex, VkMemoryAllocateFlags allocationFlags)
@@ -1278,10 +1273,7 @@ void VulkanAPI::CmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDe
 
 
 
-
-
-
-void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitDstStageMask, const std::vector<VkCommandBuffer>& commandBuffers, const std::vector<VkSemaphore>& signalSemaphores, VkFence allCommandFinishedFence)
+VkResult VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores, const std::vector<VkPipelineStageFlags>& waitDstStageMask, const std::vector<VkCommandBuffer>& commandBuffers, const std::vector<VkSemaphore>& signalSemaphores, VkFence allCommandFinishedFence)
 {
 	ASSERT(waitDstStageMask.size() == waitSemaphores.size());
 	VkSubmitInfo submitInfo{};
@@ -1295,20 +1287,18 @@ void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>& wa
 	submitInfo.signalSemaphoreCount = signalSemaphores.size();
 	submitInfo.pSignalSemaphores = signalSemaphores.empty() ? VK_NULL_HANDLE : signalSemaphores.data();
 
-	SubmitCommands(queue, { submitInfo }, allCommandFinishedFence);
+	return SubmitCommands(queue, { submitInfo }, allCommandFinishedFence);
 
 }
 
-void VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence)
+VkResult VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence)
 {
 	auto result = vkQueueSubmit(queue, submitInfos.size(), submitInfos.data(), allCommandFinishedFence);
-	if (result != VK_SUCCESS)
-	{
-		assert(0);
-	}
+	Log("result is not VK_SUCCESS", result != VK_SUCCESS);
+	return result;
 }
 
-void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores , const std::vector<VkSwapchainKHR>& swapchains, const std::vector<uint32_t>& swapchainImageIndices, std::vector<VkResult>& outResults)
+VkResult VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemaphores , const std::vector<VkSwapchainKHR>& swapchains, const std::vector<uint32_t>& swapchainImageIndices, std::vector<VkResult>& outResults)
 {
 	ASSERT(swapchains.size() <= swapchainImageIndices.size());
 	outResults.resize(swapchains.size());
@@ -1321,7 +1311,7 @@ void VulkanAPI::Present(VkQueue queue, const std::vector<VkSemaphore>& waitSemap
 	presentInfo.pSwapchains = swapchains.empty() ? VK_NULL_HANDLE : swapchains.data();
 	presentInfo.pImageIndices = swapchainImageIndices.data();
 	presentInfo.pResults = outResults.empty() ? VK_NULL_HANDLE : outResults.data();
-	vkQueuePresentKHR(queue, &presentInfo);
+	return vkQueuePresentKHR(queue, &presentInfo);
 }
 
 void VulkanAPI::WaitQueueIdle(VkQueue queue)

@@ -5,6 +5,7 @@
 #include "Examples/SimpleExamples/TranslucentBlendExample.h"
 #include "Examples/SimpleExamples/SimpleTessellationExample.h"
 #include "Examples/SimpleExamples/SimpleMeshShaderExample.h"
+#include "Examples/SimpleExamples/VkImguiExample.h"
 #include "Examples/PBRT4/SamplePointsExample.h"
 #include "Examples/PBRT4/ReflectionModelsExample.h"
 #include "Examples/PBRT4/DisturbutionLobeExample.h"
@@ -69,11 +70,11 @@ vulkanµƒNDC£¨”“ ÷œµ
 void TransformTest();
 void AutoTest();
 extern int ImGuiOpenGLTest();
-extern int ImGuiVulkanTest();
+extern int ImGuiVKTest();
 int main()
 {
 	//ImGuiOpenGLTest();
-	//ImGuiVulkanTest();
+	//ImGuiVKTest();
 	//extern void GLSL2SPIRV();
 	//GLSL2SPIRV();
 	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
@@ -82,6 +83,7 @@ int main()
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
+	VkImguiExample example;
 	//SkyBoxExample example;
 	//TranslucentBlendExample example;
 	//SimpleSceenExample example;
@@ -96,7 +98,7 @@ int main()
 	//GeometryShaderExample example;
 	//VolumeScatteringExample example;
 	//C5ShadingBasicsExample example;
-	C6TexturingExample example;
+	//C6TexturingExample example;
 	//C7ShadowsExample example;
 	//C9PhysicalBasedRenderingExample example;
 	//C10LocalIlluminationExample example;

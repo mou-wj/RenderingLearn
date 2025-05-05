@@ -346,42 +346,42 @@ void ExampleBaseVK::InitContex()
 
 }
 
-void ExampleBaseVK::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
-{
-	//设置颜色附件的附件描述
-	ASSERT(renderPassInfo.renderTargets.colorAttachments.size() >= 1);
-	for (uint32_t i = 0;i < renderPassInfo.renderTargets.colorAttachments.size();i++)
-	{
-
-		auto& colorAttachment = renderPassInfo.renderTargets.colorAttachments[i].attachmentDesc;
-		
-
-		colorAttachment.flags = 0;
-		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-
-	}
-
-
-
-
-	//设置深度附件的附件描述
-	auto& depthAttachment = renderPassInfo.renderTargets.depthAttachment.attachmentDesc;
-	depthAttachment.flags = 0;
-	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-}
+//void ExampleBaseVK::InitAttanchmentDesc(RenderPassInfo& renderPassInfo)
+//{
+//	//设置颜色附件的附件描述
+//	ASSERT(renderPassInfo.renderTargets.colorAttachments.size() >= 1);
+//	for (uint32_t i = 0;i < renderPassInfo.renderTargets.colorAttachments.size();i++)
+//	{
+//
+//		auto& colorAttachment = renderPassInfo.renderTargets.colorAttachments[i].attachmentDesc;
+//		
+//
+//		colorAttachment.flags = 0;
+//		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+//		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+//		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+//		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+//		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+//		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+//		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+//
+//
+//	}
+//
+//
+//
+//
+//	//设置深度附件的附件描述
+//	auto& depthAttachment = renderPassInfo.renderTargets.depthAttachment.attachmentDesc;
+//	depthAttachment.flags = 0;
+//	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+//	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+//	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+//	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+//	depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+//	depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+//	depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+//}
 
 void ExampleBaseVK::InitFrameBuffers(RenderPassInfo& renderPassInfo)
 {
@@ -425,7 +425,7 @@ void ExampleBaseVK::InitRenderPasses()
 	for (uint32_t i = 0; i < renderPassInfos.size(); i++)
 	{
 		ParseShaderFiles(renderPassInfos[i]);
-		InitAttanchmentDesc(renderPassInfos[i]);
+		//InitAttanchmentDesc(renderPassInfos[i]);
 		InitRenderPass(renderPassInfos[i]);
 		InitFrameBuffers(renderPassInfos[i]);
 		InitGraphicPipelines(renderPassInfos[i]);
@@ -1795,9 +1795,9 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 }
 
 //如果一次提交执行的时间较长会导致vulkan报错，这个可能和显卡的关于执行长度管理的驱动具体实现相关
-void ExampleBaseVK::CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info)
+VkResult ExampleBaseVK::CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info)
 {
-	SubmitCommands(graphicQueue, info.waitSemaphores, info.waitStages, { cmdList.commandBuffer }, info.sigSemaphores, cmdList.commandFinishFence);
+	return SubmitCommands(graphicQueue, info.waitSemaphores, info.waitStages, { cmdList.commandBuffer }, info.sigSemaphores, cmdList.commandFinishFence);
 }
 
 void ExampleBaseVK::CmdListWaitFinish(CommandList& cmdList)
@@ -3367,6 +3367,9 @@ void ExampleBaseVK::PresentDrawPassInfo::Init()
 	InitCommandList();
 	InitPresentRenderPassInfo();
 	InitGeometryResource();
+	InitGuiDescritptorPool();
+	InitGui();
+
 
 }
 
@@ -3377,11 +3380,20 @@ void ExampleBaseVK::PresentDrawPassInfo::Clear()
 	ClearCommandList();
 	ClearSwapchain();
 	ClearGeometryResource();
+	ClearGui();
+	ClearGuiDescriptorPool();
 }
 
 uint32_t ExampleBaseVK::PresentDrawPassInfo::GetNextPresentImageIndex()
 {
-	uint32_t nextImageIndex = VulkanAPI::GetNextValidSwapchainImageIndex(context->device, swapchain, swapchainValidSemaphore, nullptr);
+	uint32_t nextImageIndex = 0;
+	auto res = VulkanAPI::GetNextValidSwapchainImageIndex(context->device, swapchain, swapchainValidSemaphore, nullptr, nextImageIndex);
+	if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		Resize();
+		res = VulkanAPI::GetNextValidSwapchainImageIndex(context->device, swapchain, swapchainValidSemaphore, nullptr, nextImageIndex);
+	}
+	ASSERT(res == VK_SUCCESS);
 	return nextImageIndex;
 }
 
@@ -3415,6 +3427,15 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	context->ActiveFrame(presentRenderPassInfo,nexIndex);
 	auto& colorAttachment = presentRenderPassInfo.renderTargets.frames[nexIndex].colorAttachmentTextures[0];
 	context->CmdListReset(presenCommandList);
+	
+	//绘制生成GUI数据
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	//调用派生的绘制gui的接口
+	context->DrawImGui();
+	ImGui::Render();  // 这一步生成 drawData，必须！
 	CaptureBeginMacro
 	context->CmdListRecordBegin(presenCommandList);
 	//context->CmdOpsImageMemoryBarrer(presenCommandList, swapchainImages[nexIndex],  VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -3434,6 +3455,8 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	uint32_t numIndex = geom.shapeIndices[0].size();
 	CmdDrawIndex(presenCommandList.commandBuffer, numIndex, 1, 0, 0, 0);
 	
+	//在这里插入 ImGui 渲染
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), presenCommandList.commandBuffer);
 	CmdEndRenderPass(presenCommandList.commandBuffer);
 	//context->CmdOpsImageMemoryBarrer(presenCommandList, swapchainImages[nexIndex], VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 	context->CmdListRecordEnd(presenCommandList);
@@ -3446,6 +3469,11 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	VulkanAPI::Present(context->graphicQueue, { presenDrawFinishSemaphore }, { swapchain }, { nexIndex }, res);
 	VkResult returnRes;
 	returnRes = res[0];
+	if (returnRes == VK_SUBOPTIMAL_KHR || returnRes == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		Resize();
+		returnRes = VK_SUCCESS;
+	}
 	if (returnRes != VK_SUCCESS)
 	{
 		ASSERT(0);
@@ -3453,6 +3481,46 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	
 }
 
+static void CheckVkResult(VkResult res)
+{
+	ASSERT(res == VK_SUCCESS);
+}
+void ExampleBaseVK::PresentDrawPassInfo::InitGui()
+{
+
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
+	//ImGui::StyleColorsLight();
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplGlfw_InitForVulkan(context->window, true);
+	ImGui_ImplVulkan_InitInfo init_info = {};
+	//init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your value of VkApplicationInfo::apiVersion, otherwise will default to header version.
+	init_info.Instance = context->instance;
+	init_info.PhysicalDevice = context->physicalDevice;
+	init_info.Device = context->device;
+	init_info.QueueFamily = context->queueFamilyIndex;
+	init_info.Queue = context->graphicQueue;
+	init_info.PipelineCache = VK_NULL_HANDLE;
+	init_info.DescriptorPool = guiDescriptorPool;
+	init_info.RenderPass = presentRenderPassInfo.renderPass;
+	init_info.Subpass = 0;
+	init_info.MinImageCount = 2;
+	init_info.ImageCount = 2;
+	init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+	init_info.Allocator = VK_NULL_HANDLE;
+	init_info.CheckVkResultFn = CheckVkResult;
+	ImGui_ImplVulkan_Init(&init_info);
+
+
+}
 
 void ExampleBaseVK::PresentDrawPassInfo::InitSwapchain()
 {
@@ -3519,7 +3587,7 @@ void ExampleBaseVK::PresentDrawPassInfo::InitPresentRenderPassInfo()
 	presentRenderPassInfo.InitDefaultRenderPassInfo(shaderCodePath, w, h);
 
 	context->ParseShaderFiles(presentRenderPassInfo);
-	context->InitAttanchmentDesc(presentRenderPassInfo);
+	//context->InitAttanchmentDesc(presentRenderPassInfo);
 	presentRenderPassInfo.renderTargets.colorAttachments[0].attachmentDesc.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	context->InitRenderPass(presentRenderPassInfo);
 	
@@ -3546,6 +3614,25 @@ void ExampleBaseVK::PresentDrawPassInfo::InitFrameBuffers()
 	{
 		context->CreateFrame(presentRenderPassInfo, i, { swapchainImages[i] });
 	}
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::InitGuiDescritptorPool()
+{
+	VkDescriptorPoolSize pool_sizes[] =
+	{
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE },
+	};
+	VkDescriptorPoolCreateInfo pool_info = {};
+	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	pool_info.maxSets = 0;
+	for (VkDescriptorPoolSize& pool_size : pool_sizes)
+		pool_info.maxSets += pool_size.descriptorCount;
+	pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
+	pool_info.pPoolSizes = pool_sizes;
+	auto res = vkCreateDescriptorPool(context->device, &pool_info, nullptr, &guiDescriptorPool);
+	ASSERT(res == VK_SUCCESS);
+
 }
 
 void ExampleBaseVK::PresentDrawPassInfo::ClearFrameBuffers()
@@ -3593,5 +3680,42 @@ void ExampleBaseVK::PresentDrawPassInfo::ClearSwapchain()
 void ExampleBaseVK::PresentDrawPassInfo::ClearGeometryResource()
 {
 	context->DestroyGeomtry(screenFillRect);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearGui()
+{
+	ImGui_ImplVulkan_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::ClearGuiDescriptorPool()
+{
+	DestroyDescriptorPool(context->device,guiDescriptorPool);
+}
+
+void ExampleBaseVK::PresentDrawPassInfo::Resize()
+{
+	context->WaitIdle();
+	int fb_width, fb_height;
+	glfwGetFramebufferSize(context->window, &fb_width, &fb_height);
+	w = fb_width;
+	h = fb_height;
+	//设置attanchment描述的长和宽
+	auto& renderTargets = presentRenderPassInfo.renderTargets;
+	renderTargets.InitRenderTarget(1, w, h);
+	ClearFrameBuffers();
+	ClearSwapchain();
+	InitSwapchain();
+	InitFrameBuffers();
+
+
+
+
+
+
+
+
 }
 

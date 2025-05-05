@@ -15,6 +15,9 @@ public:
 	virtual void Init() = 0;
 	virtual void Loop() = 0;//渲染循环
 
+	//绘制imgui接口，需要GUI的实例来派生，默认什么为空，什么都不画
+	virtual void DrawImGui() {}
+
 	
 	static void Run(ExampleBase* example);
 

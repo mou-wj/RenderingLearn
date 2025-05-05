@@ -64,7 +64,7 @@ namespace VulkanAPI {
 	VkSwapchainKHR CreateSwapchain(VkDevice device, VkSurfaceKHR surface, VkFormat format,VkColorSpaceKHR colorSpace, VkExtent2D extent,uint32_t numLayers,uint32_t numMips, uint32_t imageCount, VkImageUsageFlags imageUsage, VkSharingMode sharingMode, std::vector<uint32_t> queueFamilyIndices,VkPresentModeKHR presentMode);
 	void DestroySwapchain(VkDevice device, VkSwapchainKHR swapchain);
 	std::vector<VkImage> GetSwapchainImages(VkDevice device, VkSwapchainKHR swapchain);
-	uint32_t GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain ,VkSemaphore  semaphore,VkFence  fence);
+	VkResult GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain ,VkSemaphore  semaphore,VkFence  fence,uint32_t& outImageIndex);
 
 	
 	//image
@@ -403,15 +403,15 @@ namespace VulkanAPI {
 	
 	//-------------------------------------------------------------------------------------
 	//submit and present
-	void SubmitCommands(VkQueue  queue,
+	VkResult SubmitCommands(VkQueue  queue,
 						const std::vector<VkSemaphore>& waitSemaphores,
 						const std::vector<VkPipelineStageFlags>& waitDstStageMask,
 						const std::vector<VkCommandBuffer>& commandBuffers,
 						const std::vector<VkSemaphore>& signalSemaphores,
 						VkFence allCommandFinishedFence);
-	void SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence);
+	VkResult SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence);
 
-	void Present(VkQueue queue,
+	VkResult Present(VkQueue queue,
 				const std::vector<VkSemaphore>& waitSemaphores,
 				const std::vector<VkSwapchainKHR>& swapchains,
 				const std::vector<uint32_t>& swapchainImageIndices,

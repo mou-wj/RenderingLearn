@@ -19,6 +19,11 @@
 
 #include <regex>
 
+//gui
+#include "./GUI/imgui.h"
+#include "./GUI/imgui_impl_glfw.h"
+#include "./GUI/imgui_impl_vulkan.h"
+
 enum VertexAttributeType {
 	VAT_Position_float32 = 0,//x,y,z float
 	VAT_Normal_float32 = 1,//nx,ny,nz
@@ -963,6 +968,17 @@ struct RenderTargets {
 		for (uint32_t i = 0; i < colorAttachments.size(); i++)
 		{
 			colorAttachments[i].attachmentDesc.format = colorFormat;//默认颜色附件格式，可以在创建附件前修改
+			colorAttachments[i].attachmentDesc.flags = 0;
+			colorAttachments[i].attachmentDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+			colorAttachments[i].attachmentDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			colorAttachments[i].attachmentDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			colorAttachments[i].attachmentDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			colorAttachments[i].attachmentDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			colorAttachments[i].attachmentDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			colorAttachments[i].attachmentDesc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
+
 			//colorAttachments[i].attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认颜色附件尺寸，可以在创建附件前修改
 			colorAttachments[i].clearValue = VkClearValue{ 0,0,0,1 };//默认颜色附件清除值，可以在创建附件前修改
 			inputAttachmentRefs[i].attachment = i;
@@ -972,6 +988,16 @@ struct RenderTargets {
 		}
 
 		depthAttachment.attachmentDesc.format = depthFormat;//默认深度附件格式，可以在创建附件前修改
+		depthAttachment.attachmentDesc.flags = 0;
+		depthAttachment.attachmentDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+		depthAttachment.attachmentDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.attachmentDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		depthAttachment.attachmentDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.attachmentDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.attachmentDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.attachmentDesc.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+
 		depthAttachment.clearValue = VkClearValue{ 1.0,0 };//默认颜色附件清除值，可以在创建附件前修改
 		//depthAttachment.attachmentImage.extent = VkExtent3D{ .width = rtWidth,.height = rtHeight,.depth = 1 };//默认深度附件尺寸，可以在创建附件前修改
 		depthRef.attachment = numColorAttachments;
@@ -1221,7 +1247,7 @@ protected:
 	//graphic
 	void CmdOpsDrawGeom(CommandList& cmdList,uint32_t renderPassIndex = 0);
 	//execute
-	void CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info);
+	VkResult CmdListSubmit(CommandList& cmdList, SubmitSynchronizationInfo& info);
 	void CmdListWaitFinish(CommandList& cmdList);
 	void PresentPassResult(VkSemaphore passDrawFinished,uint32_t renderPassIndex = 0,uint32_t colorAttachmentId = 0);
 private:
@@ -1284,7 +1310,7 @@ private:
 	//graphic
 	void InitPlatformSurface();
 	virtual void InitContex();
-	virtual void InitAttanchmentDesc(RenderPassInfo& renderPassInfo);
+	//virtual void InitAttanchmentDesc(RenderPassInfo& renderPassInfo);
 	virtual void InitFrameBuffers(RenderPassInfo& renderPassInfo);
 	void InitRenderPass(RenderPassInfo& renderPassInfo);
 	
@@ -1501,6 +1527,7 @@ private:
 		Geometry screenFillRect;
 		VkSemaphore swapchainValidSemaphore = VK_NULL_HANDLE;
 		VkSemaphore presenDrawFinishSemaphore = VK_NULL_HANDLE;
+		VkDescriptorPool guiDescriptorPool = VK_NULL_HANDLE;
 		int w = 512, h = 512;
 		void BindPassResultTexture(Texture& texture);
 		void Init();
@@ -1508,19 +1535,25 @@ private:
 		uint32_t GetNextPresentImageIndex();
 		void Present(VkSemaphore drawFinishSemaphore);
 	private:
-
+		void InitGui();
 		void InitSwapchain();
 		void InitSemaphores();
 		void InitCommandList();
 		void InitPresentRenderPassInfo();
 		void InitGeometryResource();
 		void InitFrameBuffers();
+		void InitGuiDescritptorPool();
 		void ClearFrameBuffers();
 		void ClearCommandList();
 		void ClearPresentRenderPass();
 		void ClearSemaphores();
 		void ClearSwapchain();
 		void ClearGeometryResource();
+		void ClearGui();
+		void ClearGuiDescriptorPool();
+
+		//resize ,窗口大小变动后就调用
+		void Resize();
 		
 		 
 
