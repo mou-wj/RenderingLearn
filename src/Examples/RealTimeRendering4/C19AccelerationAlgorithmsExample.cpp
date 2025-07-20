@@ -184,7 +184,7 @@ void C19AccelerationAlgorithmsExample::Loop()
 
 		//这里控制Lod切换程序
 		//三个模型的中心都一样，所以使用0号位的中心来计算距离,且几何模型没有进行世界坐标变换，所以模型中心就是在世界空间中的中心
-		float d = glm::distance(camera.GetPos(), geoms[0].AABBcenter);
+		float d = glm::distance(camera.GetPos(), geoms[0].svb.center);
 		//d = 4.7;
 		if (d <= 4)
 		{
@@ -298,14 +298,14 @@ void C19AccelerationAlgorithmsExample::BuildBSPTree(TreeNode* curNode, Geometry:
 	//遍历几何，看是否有和当前边界盒相交的shape
 	for (uint32_t geoId = 0; geoId < geoms.size(); geoId++)
 	{
-		for (uint32_t i = 0; i < geoms[0].shadeAABBs.size(); i++)
+		for (uint32_t i = 0; i < geoms[0].subGeomtries.size(); i++)
 		{
-			if (AABB::IsContained(geoms[0].shadeAABBs[i], curAABB))
+			if (AABB::IsContained(geoms[0].subGeomtries[i].aabb, curAABB))
 			{
 				numContainedAABBs++;
 				curIntersectGeoShapeIndexs[geoId].push_back(i);
 
-			}else if (AABB::CheckAABBsIntersect(curAABB, geoms[0].shadeAABBs[i])) {
+			}else if (AABB::CheckAABBsIntersect(curAABB, geoms[0].subGeomtries[i].aabb)) {
 				numIntersectAABBs++;
 				curIntersectGeoShapeIndexs[geoId].push_back(i);
 			}

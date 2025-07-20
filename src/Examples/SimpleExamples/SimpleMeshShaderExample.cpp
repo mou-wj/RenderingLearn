@@ -18,7 +18,7 @@ void SimpleMeshShaderExample::InitResourceInfos()
 	geoms.resize(1);
 	auto& geom = geoms[0];
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
-	geom.vertexAttributesDatas = {
+	std::vector<float> vertexs = {
 		-0.8,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0.8,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0.8,-0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -28,7 +28,9 @@ void SimpleMeshShaderExample::InitResourceInfos()
 
 
 	};
-	geom.shapeIndices = { {0,1,2,3,4,5} };
+	std::vector<uint32_t> indicies = { 0,1,2,3,4,5 };
+	geom.subGeomtries.resize(1);
+	geom.subGeomtries[0].Init(vertexs, indicies);
 
 	renderPassInfos[0].subpassDrawMeshGroupInfos[0] = std::array<uint32_t, 3>{1, 1, 1};//设置mesh subpass的绘制参数
 

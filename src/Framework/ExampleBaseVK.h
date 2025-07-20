@@ -24,30 +24,6 @@
 #include "./GUI/imgui_impl_glfw.h"
 #include "./GUI/imgui_impl_vulkan.h"
 
-enum VertexAttributeType {
-	VAT_Position_float32 = 0,//x,y,z float
-	VAT_Normal_float32 = 1,//nx,ny,nz
-	VAT_Color_float32 = 2,//r,g,b
-	VAT_TextureCoordinates_float32 = 3,//u,v,w
-	VAT_AUX1_float32 = 4,//��������1,x,y,z
-	VAT_AUX2_float32 = 5//��������2,x,y,z
-};
-
-const std::array<VertexAttributeType, 6> vertexAttributes = {
-	VAT_Position_float32,//location 0
-	VAT_Normal_float32,//location 1
-	VAT_Color_float32,//location 2
-	VAT_TextureCoordinates_float32,//location 3
-	VAT_AUX1_float32,//location 4
-	VAT_AUX2_float32//location 5
-};//
-
-
-
-constexpr uint32_t vertexAttributeInputStride = 3 * vertexAttributes.size() * sizeof(float);
-constexpr uint32_t vertexAttributeInputFloatStride = 3 * vertexAttributes.size();
-
-
 struct DescriptorBinding {
 	std::string name = "";
 	uint32_t binding;
@@ -683,188 +659,75 @@ struct Texture {
 	VkSampler sampler;
 
 };
-enum class GeometryDataSourceType {
-	OBJ_FILE = 0,
-	GLB_FILE = 1,
-	CUSTOM_DEFINE = 2
+
+enum EAttributeType
+{
+	EAT_POSITION_FLOAT3 = 0,
+	EAT_NORMAL_FLOAT3,
+	EAT_COLOR_FLOAT3,
+	EAT_TEXCOORDS_FLOAT3,
+	EAT_AUX1_FLOAT3,
+	EAT_AUX2_FLOAT3
 };
 
-struct DataSource {
-	GeometryDataSourceType dataSourceType;
-};
-
-struct ObjFileDataSource:public DataSource {
-	tinyobj::attrib_t vertexAttrib;
-	std::vector<tinyobj::shape_t> shapes;
-	std::vector<tinyobj::material_t> materials;
-
-};
-
-
+uint32_t inline GetAttributeTypeSize(EAttributeType type)
+{ 
+	switch (type)
+	{
+	case EAT_POSITION_FLOAT3:
+	case EAT_NORMAL_FLOAT3:
+	case EAT_COLOR_FLOAT3:
+	case EAT_TEXCOORDS_FLOAT3:
+	case EAT_AUX1_FLOAT3:
+	case EAT_AUX2_FLOAT3:
+		return 3 * sizeof(float);
+	default:
+		ASSERT(0);
+		return 0;
+	}
+}
 
 struct Geometry
 {
-	std::string geoPath = "";
-	//顶点缓冲区中的数据按照以下方式排列
-	//	VAT_Position_float32,//location 0
-	//	VAT_Normal_float32,//location 1
-	//	VAT_Color_float32,//location 2
-	//	VAT_TextureCoordinates_float32,//location 3
-	//	VAT_AUX1_float32,//location 4
-	//	VAT_AUX2_float32//location 5
-	using Vertex = std::array<float, 18>;
-	void AddVertex(Vertex& vertex) {
-		for (uint32_t i = 0; i < 18; i++)
-		{
-			vertexAttributesDatas.push_back(vertex[i]);
-		}
-	}
-	void AddShapeVertex(Vertex& vertex,uint32_t shapeId) {
-		ASSERT(shapeId < shapeVertexAttributesBuffers.size());
-		for (uint32_t i = 0; i < 18; i++)
-		{
-			shapeVertexAttributesBuffers[shapeId].push_back(vertex[i]);
-		}
-	}
+	//默认顶点缓冲区中的数据按照以下方式排列
+    //	Position3_float32,//location 0
+    //	Normal3_float32,//location 1
+    //	Color3_float32,//location 2
+    //	TextureCoordinates3_float32,//location 3
+    //	AUX1_3_float32,//location 4
+    //	AUX2_3_float32//location 5
 
-	void CalculateAABBInfos() {
+	//几何信息
+	uint32_t numSubmeshes = 0;//子网格的数量
+	bool useIndexBuffers = true;//是否使用索引缓冲区绘制
+	std::string geoPath = "";//几何体的路径
 
-		auto UpdateAABB = [](glm::vec3& curVertex, AABB& curAABB) {
-				if (curVertex.x < curAABB.minX)
-				{
-					curAABB.minX = curVertex.x;
-				}
-				if (curVertex.x > curAABB.maxX)
-				{
-					curAABB.maxX = curVertex.x;
-				}
-				if (curVertex.y < curAABB.minY)
-				{
-					curAABB.minY = curVertex.y;
-				}
-				if (curVertex.y > curAABB.maxY)
-				{
-					curAABB.maxY = curVertex.y;
-				}
-				if (curVertex.z < curAABB.minZ)
-				{
-					curAABB.minZ = curVertex.z;
-				}
-				if (curVertex.z > curAABB.maxZ)
-				{
-					curAABB.maxZ = curVertex.z;
-				}
-
-			};
-
-		//更新每个shape的AABB
-		if (useIndexBuffers)
-		{
-			ASSERT(!vertexAttributesDatas.empty())
-			AABBs.minX = AABBs.maxX = vertexAttributesDatas[0];
-			AABBs.minY = AABBs.maxY = vertexAttributesDatas[1];
-			AABBs.minZ = AABBs.maxZ = vertexAttributesDatas[2];
-			shadeAABBs.resize(shapeIndices.size());
-			for (uint32_t zoneId = 0; zoneId < shadeAABBs.size(); zoneId++)
-			{
-				const auto& firsetVertexIndex = shapeIndices[zoneId][0];
-				glm::vec3 curVertex = glm::vec3(vertexAttributesDatas[firsetVertexIndex * vertexAttributeInputFloatStride], vertexAttributesDatas[firsetVertexIndex * vertexAttributeInputFloatStride + 1], vertexAttributesDatas[firsetVertexIndex * vertexAttributeInputFloatStride + 2]);
-				Geometry::AABB& curAABB = shadeAABBs[zoneId];
-
-				curAABB.minX = curAABB.maxX = curVertex.x;
-				curAABB.minY = curAABB.maxY = curVertex.y;
-				curAABB.minZ = curAABB.maxZ = curVertex.z;
-
-				//当前shape的所有片元的点数
-				for (uint32_t i = 0; i < shapeIndices[zoneId].size(); i++)
-				{
-					const auto& vertexIndex = shapeIndices[zoneId][i];//��Ŷ�������
-
-					curVertex = glm::vec3(vertexAttributesDatas[vertexIndex * vertexAttributeInputFloatStride], vertexAttributesDatas[vertexIndex * vertexAttributeInputFloatStride + 1], vertexAttributesDatas[vertexIndex * vertexAttributeInputFloatStride + 2]);
-					UpdateAABB(curVertex, curAABB);
-					
-				}
-
+	struct GeomAttributeInfo {
+		uint32_t vertexStride = 72;//顶点缓冲区的步长 3 * 6 * 4
+		std::vector<EAttributeType> vertexAttributes = {
+			EAT_POSITION_FLOAT3,
+			EAT_NORMAL_FLOAT3,
+			EAT_COLOR_FLOAT3,
+			EAT_TEXCOORDS_FLOAT3,
+			EAT_AUX1_FLOAT3,
+			EAT_AUX2_FLOAT3
+		};//
+		void Init(const std::vector<EAttributeType>& attributes) {
+			vertexAttributes = attributes;
+			vertexStride = 0;
+			for (uint32_t i = 0; i < attributes.size(); i++) {
+				vertexStride += GetAttributeTypeSize(attributes[i]);
 			}
-
-
 		}
-		else {
-			ASSERT(shapeVertexAttributesBuffers.size());
-			ASSERT(shapeVertexAttributesBuffers[0].size());
-			AABBs.minX = AABBs.maxX = shapeVertexAttributesBuffers[0][0];
-			AABBs.minY = AABBs.maxY = shapeVertexAttributesBuffers[0][1];
-			AABBs.minZ = AABBs.maxZ = shapeVertexAttributesBuffers[0][2];
-			shadeAABBs.resize(shapeVertexAttributesBuffers.size());
-			for (uint32_t zoneId = 0; zoneId < shadeAABBs.size(); zoneId++)
-			{
-				
-				glm::vec3 curVertex = glm::vec3(shapeVertexAttributesBuffers[zoneId][0], shapeVertexAttributesBuffers[zoneId][1], shapeVertexAttributesBuffers[zoneId][2]);
-				Geometry::AABB& curAABB = shadeAABBs[zoneId];
+	};
 
-				curAABB.minX = curAABB.maxX = curVertex.x;
-				curAABB.minY = curAABB.maxY = curVertex.y;
-				curAABB.minZ = curAABB.maxZ = curVertex.z;
+	//球形包围盒
+	struct SVB {
+		glm::vec3 center{};
+		float radius = 0;
+	};
 
-				uint32_t numVertex = shapeVertexAttributesBuffers[zoneId].size() / vertexAttributeInputFloatStride;
-				//当前shape的所有片元的点数
-				for (uint32_t i = 0; i < numVertex; i++)
-				{
-					const auto& vertexIndex = i;//��Ŷ�������
-
-					curVertex = glm::vec3(shapeVertexAttributesBuffers[zoneId][vertexIndex * vertexAttributeInputFloatStride], shapeVertexAttributesBuffers[zoneId][vertexIndex * vertexAttributeInputFloatStride + 1], shapeVertexAttributesBuffers[zoneId][vertexIndex * vertexAttributeInputFloatStride + 2]);
-					UpdateAABB(curVertex, curAABB);
-				}
-
-			}
-		
-		
-		
-		}
-		glm::vec3 pmin,pmax;
-
-		//更新整个geo的AABB
-		for (uint32_t i = 0; i < shadeAABBs.size(); i++)
-		{
-			pmin = glm::vec3(shadeAABBs[i].minX, shadeAABBs[i].minY, shadeAABBs[i].minZ);
-			pmax = glm::vec3(shadeAABBs[i].maxX, shadeAABBs[i].maxY, shadeAABBs[i].maxZ);
-			UpdateAABB(pmin, AABBs);
-			UpdateAABB(pmax, AABBs);
-		}
-		pmin = glm::vec3(AABBs.minX, AABBs.minY, AABBs.minZ);
-		pmax = glm::vec3(AABBs.maxX, AABBs.maxY, AABBs.maxZ);
-
-		float d = glm::distance(pmin, pmax);
-		BVSphereRadius = d / 2;
-	
-
-		AABBcenter[0] = (AABBs.minX + AABBs.maxX) / 2;
-		AABBcenter[1] = (AABBs.minY + AABBs.maxY) / 2;
-		AABBcenter[2] = (AABBs.minZ + AABBs.maxZ) / 2;
-	
-	}
-
-	std::vector<float> vertexAttributesDatas;
-	std::vector<std::vector<uint32_t>> shapeIndices;
-
-
-
-	bool useIndexBuffers = true;
-
-	//顶点缓冲索引缓冲
-	Buffer vertexBuffer;
-	std::vector<Buffer> indexBuffers;//һ��indexbuffer ����ģ���е�һ������
-	uint32_t numVertex = 0;
-
-
-	//只使用顶点缓冲
-	std::vector<std::vector<float>> shapeVertexAttributesBuffers;
-	std::vector<Buffer> shapeVertexBuffers;
-
-
-	VkAccelerationStructureKHR accelerationStructureKHR{};
-	Buffer accelerationStructureKHRBuffer{}, accelerationStructureScratchBuffer{};
-
+	//AABB包围盒
 	struct AABB {
 		float minX = 0, maxX = 0;
 		float minY = 0, maxY = 0;
@@ -874,7 +737,7 @@ struct Geometry
 			return (aabb1.minX <= aabb2.maxX && aabb1.maxX >= aabb2.minX &&
 				aabb1.minY <= aabb2.maxY && aabb1.maxY >= aabb2.minY &&
 				aabb1.minZ <= aabb2.maxZ && aabb1.maxZ >= aabb2.minZ);
-		
+
 		}
 		// 判断AABB a是否完全包含在AABB b中
 		static bool IsContained(Geometry::AABB& a, Geometry::AABB& b) {
@@ -882,37 +745,162 @@ struct Geometry
 				a.minY >= b.minY && a.maxY <= b.maxY &&
 				a.minZ >= b.minZ && a.maxZ <= b.maxZ);
 		}
+	};
 
+
+	//每个子几何有独立的顶点和索引数据
+	struct SubGeometry {
+		GeomAttributeInfo attributeInfo{};
+		uint32_t numVertex = 0;
+		uint32_t numIndices = 0;
+		std::vector<float> vertexAttributesDatas;//顶点属性数据缓冲区
+		std::vector<uint32_t> indices;//索引数据
+		
+		VkPrimitiveTopology primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;//子几何体的图元拓扑类型
+		uint32_t numPrimitive = 0;//子几何体的图元数量
+
+		void Init(const std::vector<float>& vertexs,const std::vector<uint32_t>& indices, VkPrimitiveTopology primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			GeomAttributeInfo attributeInfo = GeomAttributeInfo()) {
+			this->attributeInfo = attributeInfo;
+			this->vertexAttributesDatas = vertexs;
+			this->indices = indices;
+			this->numVertex = vertexs.size() * sizeof(float)  / attributeInfo.vertexStride;
+			this->numIndices = indices.size();
+			this->primitiveTopology = primitiveTopology;
+			switch (primitiveTopology)
+			{
+			case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:
+				numPrimitive = numIndices;
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
+				numPrimitive = numIndices / 2;
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+				numPrimitive = numIndices - 1;
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+				numPrimitive = numIndices / 3;//假设每个图元都是三角形
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+				numPrimitive = numIndices - 2;//假设每个图元都是三角形
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
+				numPrimitive = numIndices - 2;//假设每个图元都是三角形
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+				ASSERT(0);
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:
+				ASSERT(0);
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+				ASSERT(0);
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:
+				ASSERT(0);
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
+				ASSERT(0);
+				break;
+			case VK_PRIMITIVE_TOPOLOGY_MAX_ENUM:
+			default:
+				ASSERT(0);
+				break;
+			}
+		}
+
+		void* GetAttributeVoidPtr(uint32_t vertexIndex, EAttributeType attributeType) {
+			if (vertexIndex >= numVertex) {
+				Log("GetAttributePtr vertexIndex out of range", 0);
+				return nullptr;
+			}
+			uint32_t offset = vertexIndex * attributeInfo.vertexStride;
+			switch (attributeType)
+			{
+			case EAT_POSITION_FLOAT3:
+				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float));
+			case EAT_NORMAL_FLOAT3:
+				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 3);
+			case EAT_COLOR_FLOAT3:
+				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 6);
+			case EAT_TEXCOORDS_FLOAT3:
+				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 9);
+			case EAT_AUX1_FLOAT3:
+				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 12);
+			case EAT_AUX2_FLOAT3:
+				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 15);
+			default:
+				ASSERT(0);
+				return nullptr;
+			}
+		}
+		//获取顶点属性数据的字节大小
+		uint32_t GetVertexAttributesBytesSize() {
+			return numVertex * attributeInfo.vertexStride;
+		}
+		//获取顶点索引数据的字节大小
+		uint32_t GetIndicesBytesSize() {
+			return numIndices * sizeof(uint32_t);
+		}
+
+		AABB aabb;//子几何体的包围盒
+		SVB svb;//子几何体的球形包围盒
+		
+		//rhi资源
+		Buffer vertexBuffer;//顶点缓冲区
+		Buffer indexBuffer;//索引缓冲区
 
 	};
 
-	AABB AABBs;//简单的边界包围盒
-	glm::vec3 AABBcenter;
+	//几何数据
+	std::vector<SubGeometry> subGeomtries;//每个子几何体的顶点和索引数据
+	AABB aabb;//几何体的包围盒，包含所有子几何体的包围盒
+	SVB svb;//几何体的球形包围盒，包含所有子几何体的球形包围盒
 
-	std::vector<AABB> shadeAABBs;
-
-	float BVSphereRadius = 0;
-
-	bool CloserThanOther(Geometry& other, glm::vec3 viewPos) {
-		float dist = glm::distance(viewPos, glm::vec3(AABBcenter[0], AABBcenter[1], AABBcenter[2]));
-		float distOther = glm::distance(viewPos, glm::vec3(other.AABBcenter[0], other.AABBcenter[1], other.AABBcenter[2]));
-		return dist < distOther;
-	
-	}
+	//加速结构
+	VkAccelerationStructureKHR accelerationStructureKHR{};
+	Buffer accelerationStructureKHRBuffer{}, accelerationStructureScratchBuffer{};
 
 	void InitAsScreenFillRect() {
-		
-		vertexAttributesDatas = {
+		numSubmeshes = 1;
+		subGeomtries.resize(numSubmeshes);
+
+		std::vector<float> vertexs = {
 		-1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 		};
-
-		shapeIndices = { {0,1,2,0,2,3} };
+		std::vector<uint32_t> indicies = { 0,1,2,0,2,3 };
+		subGeomtries[0].Init(vertexs, indicies);
 	}
 
+	void CalculateBoundingBox() {
+		aabb.minX = std::numeric_limits<float>::max();
+		aabb.maxX = std::numeric_limits<float>::lowest();
+		aabb.minY = std::numeric_limits<float>::max();
+		aabb.maxY = std::numeric_limits<float>::lowest();
+		aabb.minZ = std::numeric_limits<float>::max();
+		aabb.maxZ = std::numeric_limits<float>::lowest();
+		svb.center = glm::vec3(0.0f, 0.0f, 0.0f);
+		svb.radius = 0.0f;
+		for (auto& subGeom : subGeomtries) {
+			for (uint32_t v = 0; v < subGeom.numVertex; v++) {
+				float* vertex = (float*)subGeom.GetAttributeVoidPtr(v, EAT_POSITION_FLOAT3);
+				if (vertex[0] < aabb.minX) aabb.minX = vertex[0];
+				if (vertex[0] > aabb.maxX) aabb.maxX = vertex[0];
+				if (vertex[1] < aabb.minY) aabb.minY = vertex[1];
+				if (vertex[1] > aabb.maxY) aabb.maxY = vertex[1];
+				if (vertex[2] < aabb.minZ) aabb.minZ = vertex[2];
+				if (vertex[2] > aabb.maxZ) aabb.maxZ = vertex[2];
+			}
+			svb.center += glm::vec3((aabb.minX + aabb.maxX) / 2.0f, (aabb.minY + aabb.maxY) / 2.0f, (aabb.minZ + aabb.maxZ) / 2.0f);
+			svb.radius += glm::length(glm::vec3(aabb.maxX - aabb.minX, aabb.maxY - aabb.minY, aabb.maxZ - aabb.minZ)) / 2.0f;
+		}
+		svb.center /= static_cast<float>(subGeomtries.size());
+		svb.radius /= static_cast<float>(subGeomtries.size());
 
+	}
 };
 
 
@@ -962,6 +950,8 @@ struct RenderTargets {
 
 	void InitRenderTarget(uint32_t numColorAttachments,uint32_t rtWidth , uint32_t rtHeight) {
 		ASSERT(numColorAttachments >= 1);
+		width = rtWidth;
+		height = rtHeight;
 		colorAttachments.resize(numColorAttachments);
 		colorRefs.resize(numColorAttachments);
 		inputAttachmentRefs.resize(numColorAttachments);
@@ -1189,10 +1179,6 @@ struct RenderPassInfo {
 
 			subpassDepend.dstSubpass = subpassId;
 			subpassDepend.dependencyFlags = 0;
-
-
-
-
 			}
 		}
 	
@@ -1253,13 +1239,6 @@ protected:
 private:
 	void ActiveFrame(RenderPassInfo& renderPassInfo, uint32_t frameIndex);
 protected:
-	//根据和相机的距离来排序要绘制的geo，小序
-	void SortGeosFollowCloseDistance(glm::vec3 cameraPos);
-
-	//存放从文件中读取的缓存数据
-	std::map<std::string, ObjFileDataSource> objDataSourceCache;
-
-
 
 	//runtime
 	std::vector<Geometry> geoms;
@@ -1418,7 +1397,7 @@ private:
 	void ReadGLSLShaderFile(const std::string& shaderPath, std::vector<char>& shaderCode);
 	bool CompileGLSLToSPIRV(VkShaderStageFlagBits shaderStage, const std::vector<char>& srcCode, std::vector<uint32_t>& outSpirvCode);
 	void TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLSLFile, std::vector<uint32_t>& outSpirvCode);
-	void ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo);
+	uint32_t ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo);
 	void ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spirvCode, ShaderResourceInfo& dstCacheShaderResource);
 	void ParseShaderFiles(RenderPassInfo& renderPassInfo);
 

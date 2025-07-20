@@ -31,22 +31,26 @@ void TranslucentBlendExample::InitResourceInfos()
 	auto& geom0 = geoms[0];
 	auto& geom1 = geoms[1];
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0,1 };
-	geom0.vertexAttributesDatas = {
+	std::vector<float> vertexs1 = {
 	   -1,1,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
 		1,1,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
 		1,0,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
 	   -1,0,0.1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0
 	
 	};
-	geom1.vertexAttributesDatas = {
+	std::vector<float> vertexs2 = {
 		0,1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,
 		1,1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,
 	   1,-1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,
 	   0,-1,0.1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0
 
 	};
-	geom0.shapeIndices = { {0,1,2} };
-	geom1.shapeIndices = { {0,2,3} };
+	std::vector<uint32_t> indicies1 = { 0,1,2 };
+	std::vector<uint32_t> indicies2 = { 0,2,3 };
+	geom0.subGeomtries.resize(1);
+	geom0.subGeomtries[0].Init(vertexs1, indicies1);
+	geom1.subGeomtries.resize(1);
+	geom1.subGeomtries[0].Init(vertexs2, indicies2);
 
 	bufferBindInfos["Buffer"].size = sizeof(glm::vec4);
 

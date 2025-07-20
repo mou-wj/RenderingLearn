@@ -27,7 +27,7 @@
 #include "Examples/RealTimeRendering4/C26RealTimeRayTracingExample.h"
 #include "Examples/Artifacts/PBRArtifactExample.h"
 #include "Examples/Artifacts/SceenArtifactExample.h"
-
+#include "Examples/Artifacts/HairArtifactExample.h"
 
 
 #include "Framework/Utils/powitacq_rgb.h"
@@ -83,7 +83,7 @@ int main()
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;
-	VkImguiExample example;
+	//VkImguiExample example;
 	//SkyBoxExample example;
 	//TranslucentBlendExample example;
 	//SimpleSceenExample example;
@@ -113,6 +113,7 @@ int main()
 	//C26RealTimeRayTracingExample example;
 	//PBRArtifactExample example;
 	//SceenArtifactExample example;
+	HairArtifactExample example;
 	ExampleBase::Run(&example);
 
 

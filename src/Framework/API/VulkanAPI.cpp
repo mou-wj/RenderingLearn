@@ -327,7 +327,7 @@ std::vector<VkImage> VulkanAPI::GetSwapchainImages(VkDevice device, VkSwapchainK
 VkResult VulkanAPI::GetNextValidSwapchainImageIndex(VkDevice device, VkSwapchainKHR swapchain, VkSemaphore  semaphore, VkFence  fence, uint32_t& outImageIndex)
 {
 	auto res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, fence, &outImageIndex);
-	Log("vkAcquireNextImageKHR result is not VK_SUCCESS",res != VK_SUCCESS);
+	ASSERT(res == VK_SUCCESS);
 	return res;
 }
 
@@ -1175,6 +1175,11 @@ void VulkanAPI::CmdDynamicSetViewPorts(VkCommandBuffer commandBuffer, uint32_t f
 	vkCmdSetViewport(commandBuffer, firstViewport, viewports.size(), viewports.data());
 }
 
+void VulkanAPI::CmdDynamicSetScissors(VkCommandBuffer commandBuffer, uint32_t firstScissor, const std::vector<VkRect2D>& scissors)
+{
+	vkCmdSetScissor(commandBuffer, firstScissor, scissors.size(), scissors.data());
+}
+
 void VulkanAPI::CmdClearAttachments(VkCommandBuffer commandBuffer, const std::vector<VkClearAttachment>& clearAttachments, const std::vector<VkClearRect>& clearRegions)
 {
 
@@ -1294,7 +1299,8 @@ VkResult VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSemaphore>
 VkResult VulkanAPI::SubmitCommands(VkQueue queue, const std::vector<VkSubmitInfo>& submitInfos, VkFence allCommandFinishedFence)
 {
 	auto result = vkQueueSubmit(queue, submitInfos.size(), submitInfos.data(), allCommandFinishedFence);
-	Log("result is not VK_SUCCESS", result != VK_SUCCESS);
+	//Log("result is not VK_SUCCESS", result != VK_SUCCESS);
+	ASSERT(result == VK_SUCCESS);
 	return result;
 }
 

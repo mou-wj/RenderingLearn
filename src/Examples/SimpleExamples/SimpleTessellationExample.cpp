@@ -21,7 +21,8 @@ void SimpleTessellationExample::InitResourceInfos()
 	geoms.resize(1);
 	auto& geom = geoms[0];
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
-	geom.vertexAttributesDatas = {
+	geoms[0].subGeomtries.resize(1);
+	std::vector<float> vertexs = {
 		-0.8,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		 0.8,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0.8,-0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -30,8 +31,8 @@ void SimpleTessellationExample::InitResourceInfos()
 		-1,-1,   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	
 	};
-	geom.shapeIndices = { {0,1,2,3,4,5} };
-
+	std::vector<uint32_t> indicies = { 0,1,2,3,4,5 };
+	geoms[0].subGeomtries[0].Init(vertexs, indicies);
 
 
 }

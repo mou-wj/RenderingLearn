@@ -17,16 +17,18 @@ void DrawSimpleTriangleSample::InitResourceInfos()
 	geoms.resize(1);
 	auto& geom = geoms[0];
 	renderPassInfos[0].subpassDrawGeoInfos[0] = { 0 };
-	geom.vertexAttributesDatas = {
+	geom.subGeomtries.resize(1);
+	std::vector<float> vertexs = {
 		-1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		 1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	   -1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	};
-	geom.shapeIndices = { {0,1,2} };
-
-
-
+	std::vector<uint32_t> indices = {
+		0,1,2
+	};
+	geom.subGeomtries[0].Init(vertexs, indices);
+	
 }
 
 void DrawSimpleTriangleSample::Loop()

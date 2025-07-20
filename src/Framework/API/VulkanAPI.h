@@ -333,6 +333,7 @@ namespace VulkanAPI {
 						uint32_t firstSet, const std::vector<VkDescriptorSet> descriptorSets, const std::vector<uint32_t> dynamicOffsets);
 	//dynamic state
 	void CmdDynamicSetViewPorts(VkCommandBuffer commandBuffer, uint32_t firstViewport, const std::vector<VkViewport>& viewports);
+	void CmdDynamicSetScissors(VkCommandBuffer commandBuffer, uint32_t firstScissor, const std::vector<VkRect2D>& scissors);
 	void CmdClearAttachments(VkCommandBuffer commandBuffer, const std::vector<VkClearAttachment>& clearAttachments, const std::vector<VkClearRect>& clearRegions);
 	void CmdClearDepthImage(VkCommandBuffer commandBuffer, VkImage depthImage, VkImageLayout imageLayout, const VkClearDepthStencilValue& clearValue, const std::vector<VkImageSubresourceRange>& clearRegions);
 	void CmdDrawVertex(VkCommandBuffer  commandBuffer,

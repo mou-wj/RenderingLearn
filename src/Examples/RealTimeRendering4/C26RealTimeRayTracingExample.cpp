@@ -29,9 +29,7 @@ void C26RealTimeRayTracingExample::InitResourceInfos()
 	geoms.resize(1);
 	auto& geom = geoms[0];
 	geom.InitAsScreenFillRect();
-	geom.shapeIndices = { {0,1,2} };
-
-
+	
 
 	TextureDataSource emptyDataSource; 
 	emptyDataSource.width = windowWidth;

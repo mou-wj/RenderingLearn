@@ -88,24 +88,12 @@ void ExampleBaseVK::ReInitGeometryResources(Geometry& geo)
 		DestroyAccelerationStructureKHR(device,geo.accelerationStructureKHR);
 	}
 
-
-	DestroyBuffer(geo.vertexBuffer);
-	for (uint32_t zoneId = 0; zoneId < geo.indexBuffers.size(); zoneId++)
-	{
-		DestroyBuffer(geo.indexBuffers[zoneId]);
+	for (auto& subGeo : geo.subGeomtries) {
+		DestroyBuffer(subGeo.vertexBuffer);
+		DestroyBuffer(subGeo.indexBuffer);
 	}
-	for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
-	{
-		DestroyBuffer(geo.shapeVertexBuffers[zoneId]);
-	}
-	//for (uint32_t zoneId = 0; zoneId < geo.shapeDynamicVertexBuffers.size(); zoneId++)
-	//{
-	//	DestroyBuffer(geo.shapeDynamicVertexBuffers[zoneId]);
-	//}
 
 	InitGeometryResources(geo);
-
-
 }
 
 void ExampleBaseVK::ResizeBuffer(Buffer& buffer, VkDeviceSize newByteSize)
@@ -180,7 +168,7 @@ void ExampleBaseVK::ParseShaderFiles(RenderPassInfo& renderPassInfo)
 		pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].shaderFilePath = shaderPaths.vertexShaderPath;
 		TransferGLSLFileToSPIRVFileAndRead(shaderPaths.vertexShaderPath, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode);
 		
-		ParseSPIRVShaderInputAttribute(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.inputAttributesInfo);
+		pipelineShaderResourceInfo.vertexIputStride = ParseSPIRVShaderInputAttribute(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.inputAttributesInfo);
 		ParseSPIRVShaderResourceInfo(pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage].spirvCode, pipelineShaderResourceInfo.shaderResourceInfos[curShaderStage]);
 
 		//tessellation control
@@ -514,7 +502,7 @@ void ExampleBaseVK::PickValidPhysicalDevice()
 	auto physicalDevices = EnumeratePhysicalDevice(instance);
 	auto physicalDeviceProperties = EnumeratePhysicalDeviceProperties(instance);
 
-	for (uint32_t i = 0; i < physicalDevices.size(); i++)
+	for (uint32_t i = 1; i < physicalDevices.size(); i++)
 	{
 		auto familyIndex = GetSuitableQueueFamilyIndex(physicalDevices[i], VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |VK_QUEUE_TRANSFER_BIT, true, 1);;
 		auto surfaceCapabilities = GetSurfaceCapabilities(physicalDevices[i], surface);
@@ -1017,15 +1005,11 @@ Texture ExampleBaseVK::CreateTexture(TextureBindInfo& textureBindInfo)
 void ExampleBaseVK::DestroyGeomtry(Geometry& geo)
 {
 	//清除geometry
-	DestroyBuffer(geo.vertexBuffer);
-	for (uint32_t zoneId = 0; zoneId < geo.indexBuffers.size(); zoneId++)
-	{
-		DestroyBuffer(geo.indexBuffers[zoneId]);
+	for (auto& subGeo : geo.subGeomtries) {
+		DestroyBuffer(subGeo.vertexBuffer);
+		DestroyBuffer(subGeo.indexBuffer);
 	}
-	for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
-	{
-		DestroyBuffer(geo.shapeVertexBuffers[zoneId]);
-	}
+	
 	if (rayTracingPipelinsDesc.valid)
 	{
 		DestroyAccelerationStructureKHR(device, geo.accelerationStructureKHR);
@@ -1036,195 +1020,51 @@ void ExampleBaseVK::DestroyGeomtry(Geometry& geo)
 	
 }
 
-
+#include "Framework/Utils/ModelFileTool.h"
 void ExampleBaseVK::LoadObj(const std::string& objFilePath, Geometry& geo)
 {
-	//inner data
-	geo.geoPath = objFilePath;
-	auto& objDataSource =  objDataSourceCache[objFilePath];
-	std::string warn, err;
-	if (!tinyobj::LoadObj(&objDataSource.vertexAttrib, &objDataSource.shapes, &objDataSource.materials, &warn, &err, objFilePath.c_str()))
-	{
-		LogFunc(0);
-	}
+	//加载obj文件
+	RenderScene renderScene;
+	LoadRenderScene(objFilePath, renderScene);
 
-	auto& vertexAttibute = objDataSource.vertexAttrib;
-	auto& shapes = objDataSource.shapes;
-
-
-	//填充geometry的顶点缓冲数据以及索引数据
-	uint32_t numVertex = vertexAttibute.vertices.size() / 3;
-	geo.numVertex = numVertex;
-	if (numVertex == 0)
-	{
-		return;
-	}
-	
-
-	auto FillVertexBuffer = [&](uint32_t vertexIndex, uint32_t component, float* srcAttibuteData, std::vector<float>& dstVertexDatas) {
-		std::memcpy(dstVertexDatas.data() + vertexIndex * vertexAttributeInputFloatStride + component * 3, srcAttibuteData, sizeof(float) * 3);
-
+	std::vector<float> vertexs;
+	std::vector<uint32_t> indices;
+	auto pushBackAttribute = [](std::vector<float>& dst, glm::vec3 v) {
+		dst.push_back(v.x);
+		dst.push_back(v.y);
+		dst.push_back(v.z);
 		};
 
-	if (geo.useIndexBuffers)
+	for (auto& mesh : renderScene.meshes) {
+		for (auto& subMesh : mesh.primitives) {
+			Geometry::SubGeometry subGeomtry;
+			geo.subGeomtries.push_back(subGeomtry);
+			vertexs.reserve(subMesh.vertices.size() * subGeomtry.attributeInfo.vertexStride);
+			glm::vec3 pos, normal, color, texc3, aux1{}, aux2{};
+			for (uint32_t v = 0; v < subMesh.vertices.size(); v++) {
+				pos = subMesh.vertices[v].position;
+				normal = subMesh.vertices[v].normal;
+				texc3 = glm::vec3(subMesh.vertices[v].texcoord,0);
+				color = subMesh.vertices[v].color;
+				pushBackAttribute(vertexs, pos);
+				pushBackAttribute(vertexs, normal);
+				pushBackAttribute(vertexs, color);
+				pushBackAttribute(vertexs, texc3);
+				pushBackAttribute(vertexs, aux1);
+				pushBackAttribute(vertexs, aux2);
+			}
+			ASSERT(subMesh.mode == 4);
+			indices = subMesh.indices;
+			geo.subGeomtries.back().Init(vertexs, indices);			
+		}
+	}
+	geo.numSubmeshes = uint32_t(geo.subGeomtries.size());
+	geo.CalculateBoundingBox();
+	if (rayTracingPipelinsDesc.valid)
 	{
-
-		geo.vertexAttributesDatas.resize(numVertex * vertexAttributeInputFloatStride);
-		Geometry& geometry = geo;
-
-		//����vertex buffer
-
-		for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
-		{
-			//��䶥��λ������
-			//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride, 3 * sizeof(float), (const char*)(geo.vertexAttrib.vertices.data() + vertexId * 3));
-			FillVertexBuffer(vertexId, VAT_Position_float32, vertexAttibute.vertices.data() + vertexId * 3, geo.vertexAttributesDatas);
-
-
-		}
-
-		//填充颜色
-		if (!vertexAttibute.colors.empty())
-		{
-			for (uint32_t vertexId = 0; vertexId < numVertex; vertexId++)
-			{
-				//��䶥��λ������
-				//FillBuffer(geometry.vertexBuffer, vertexId * vertexAttributeInputStride + sizeof(float) * 3 * 2, 3 * sizeof(float), (const char*)(geo.vertexAttrib.colors.data() + vertexId * 3));
-				FillVertexBuffer(vertexId, VAT_Color_float32, vertexAttibute.colors.data() + vertexId * 3, geo.vertexAttributesDatas);
-			}
-
-
-		}
-
-		geo.shapeIndices.resize(shapes.size());
-
-		geometry.indexBuffers.resize(shapes.size());
-
-		//手动计算法线
-		std::vector<glm::vec3> vertexNormals(numVertex, glm::vec3(0));
-		std::map<uint32_t, std::set<uint32_t>> vertexNormalIds;
-
-		//纹理坐标数据待定
-
-		for (uint32_t zoneId = 0; zoneId < geometry.indexBuffers.size(); zoneId++)
-		{
-
-			for (uint32_t cellId = 0; cellId < shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
-			{
-				if (shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
-				{
-					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
-				}
-			}
-			auto& indicesData = geo.shapeIndices[zoneId];
-			indicesData.resize(shapes[zoneId].mesh.num_face_vertices.size() * 3);
-			std::map<uint32_t, uint32_t> vertexIdToTexId;
-			for (uint32_t i = 0; i < shapes[zoneId].mesh.indices.size(); i++)
-			{
-				indicesData[i] = shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
-				const auto& normalIndex = shapes[zoneId].mesh.indices[i].normal_index;
-				//�����������
-				//填充法线
-				if (!vertexAttibute.normals.empty())
-				{
-					glm::vec3 curNormal = glm::vec3(vertexAttibute.normals[normalIndex * 3], vertexAttibute.normals[normalIndex * 3 + 1], vertexAttibute.normals[normalIndex * 3 + 2]);
-					curNormal = glm::normalize(curNormal);
-					if (!vertexNormalIds[indicesData[i]].contains(normalIndex))//如果这是一个新的法线则加入计算
-					{
-						vertexNormalIds[indicesData[i]].insert(normalIndex);
-						vertexNormals[indicesData[i]] += curNormal;
-					}
-				}
-
-				//const auto& texCoordIndex = geo.shapes[zoneId].mesh.indices[i].texcoord_index;
-				//auto vertexId = indicesData[i];
-				////填充纹理坐标，这里假定所有顶点的纹理坐标都相同，否则报错
-				//if (!geo.vertexAttrib.texcoords.empty())
-				//{
-				//	glm::vec3 curTexCoord = glm::vec3(geo.vertexAttrib.texcoords[texCoordIndex * 2], geo.vertexAttrib.texcoords[texCoordIndex * 2 + 1],1);
-				//	if (vertexIdToTexId[vertexId] != 0 && vertexIdToTexId[vertexId]!= texCoordIndex)
-				//	{
-				//		ASSERT(0);//报错
-				//	}
-				//	vertexIdToTexId[vertexId] = texCoordIndex;
-				//
-				//	FillVertexBuffer(vertexId, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.vertexAttributesDatas);
-				//}
-
-			}
-
-
-		}
-
-
-		for (uint32_t v = 0; v < numVertex; v++)
-		{
-			glm::vec3 curV = vertexNormals[v];
-			//归一化
-			curV = glm::normalize(curV);
-			//填充法向量
-			//FillBuffer(geometry.vertexBuffer, v * vertexAttributeInputStride + 3 * sizeof(float), 3 * sizeof(float), (const char*)(&curV));
-			FillVertexBuffer(v, VAT_Normal_float32, (float*)&curV, geo.vertexAttributesDatas);
-		}
-	}
-	else {
-		geo.shapeVertexAttributesBuffers.resize(shapes.size());
-		geo.shapeVertexBuffers.resize(shapes.size());
-
-		for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
-		{
-			std::vector<float>& curVertexData = geo.shapeVertexAttributesBuffers[zoneId];
-			for (uint32_t cellId = 0; cellId < shapes[zoneId].mesh.num_face_vertices.size(); cellId++)
-			{
-				if (shapes[zoneId].mesh.num_face_vertices[cellId] != 3)
-				{
-					LogFunc(0);//������������ε�ģ�;�ֱ�ӱ���
-				}
-			}
-			//当前shape的所有片元的点数据
-			curVertexData.resize(shapes[zoneId].mesh.indices.size() * vertexAttributeInputFloatStride);
-			for (uint32_t i = 0; i < shapes[zoneId].mesh.indices.size(); i++)
-			{
-				const auto& vertexIndex = shapes[zoneId].mesh.indices[i].vertex_index;//��Ŷ�������
-				const auto& normalIndex = shapes[zoneId].mesh.indices[i].normal_index;
-				const auto& texCoordIndex = shapes[zoneId].mesh.indices[i].texcoord_index;
-				//�����������
-				//填充顶点位置
-				if (!vertexAttibute.vertices.empty())
-				{
-					FillVertexBuffer(i, VAT_Position_float32, vertexAttibute.vertices.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
-				}
-
-				//填充颜色
-				if (!vertexAttibute.colors.empty())
-				{
-					FillVertexBuffer(i, VAT_Color_float32, vertexAttibute.colors.data() + vertexIndex * 3, geo.shapeVertexAttributesBuffers[zoneId]);
-				}
-
-				//填充法线
-				if (!vertexAttibute.normals.empty())
-				{
-					glm::vec3 curNormal = glm::vec3(vertexAttibute.normals[normalIndex * 3], vertexAttibute.normals[normalIndex * 3 + 1], vertexAttibute.normals[normalIndex * 3 + 2]);
-					curNormal = glm::normalize(curNormal);
-					FillVertexBuffer(i, VAT_Normal_float32, (float*)&curNormal, geo.shapeVertexAttributesBuffers[zoneId]);
-
-				}
-				//填充纹理坐标
-				if (!vertexAttibute.texcoords.empty())
-				{
-					glm::vec3 curTexCoord = glm::vec3(vertexAttibute.texcoords[texCoordIndex * 2], vertexAttibute.texcoords[texCoordIndex * 2 + 1], 1);
-					//curTexCoord.y = 1-curTexCoord.y;//翻转一下y
-
-					FillVertexBuffer(i, VAT_TextureCoordinates_float32, (float*)&curTexCoord, geo.shapeVertexAttributesBuffers[zoneId]);
-				}
-			}
-
-		}
-
+		BuildAccelerationStructure(geo);
 	}
 
-
-	geo.CalculateAABBInfos();
 }
 
 
@@ -1245,44 +1085,48 @@ Buffer ExampleBaseVK::CreateShaderAccessBuffer(const char* buf, VkDeviceSize siz
 
 void ExampleBaseVK::BuildAccelerationStructure(Geometry& geo)
 {
+	return;
 	std::vector<VkAccelerationStructureGeometryKHR> accelerationStructureGeometryKHRs;
 	std::vector<VkAccelerationStructureBuildRangeInfoKHR>  accelerationStructureBuildRangeInfoKHRs{};
 
 
 	std::vector<char> acceleratBuffer;
 	VkDeviceSize bufferTotalSize = 0;
-	VkDeviceSize indexDataOffset = 0;
 	uint32_t numVertex = 0;
-	if (geo.useIndexBuffers)
-	{
-		accelerationStructureBuildRangeInfoKHRs.resize(1);
-		uint32_t numTriangles = 0;
-		for (uint32_t i = 0; i < geo.shapeIndices.size(); i++)
+	accelerationStructureGeometryKHRs.resize(geo.numSubmeshes);
+	accelerationStructureBuildRangeInfoKHRs.resize(geo.numSubmeshes);
+	for (uint32_t subGeoId = 0; subGeoId < geo.numSubmeshes; subGeoId++) {
+		auto& geometryKHR = accelerationStructureGeometryKHRs[subGeoId];
+		geometryKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;;
+		geometryKHR.pNext = nullptr;
+		geometryKHR.flags = 0;
+		geometryKHR.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;//描述了该加速结构引用的类型
+		VkAccelerationStructureGeometryDataKHR geometryDataKHR{};
 		{
-			numTriangles += geo.shapeIndices[i].size() / 3;
+			VkAccelerationStructureGeometryTrianglesDataKHR trianglesKHR{};
+			{
+				//
+				trianglesKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+				trianglesKHR.pNext = VK_NULL_HANDLE;
+				trianglesKHR.vertexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };
+				trianglesKHR.vertexStride = geo.subGeomtries[subGeoId].attributeInfo.vertexStride;//为每个顶点间的字节步长大小
+				trianglesKHR.maxVertex = geo.subGeomtries[subGeoId].numVertex -1;//为vertexData 中的顶点数量减去1
+				trianglesKHR.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;//为顶点元素的数据VkFormat格式
+				trianglesKHR.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };//为包含索引数据的device 或者host端的地址
+				trianglesKHR.indexType = VK_INDEX_TYPE_UINT32;//为索引元素的数据类型 VkIndexType			
+				trianglesKHR.transformData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };//为包含可选的VkTransformMatrixKHR 数据的device 或者host端的地址，描述从geometry的顶点所在的空间到加速结构定义所在的空间的变换
+			}
+			geometryDataKHR.triangles = trianglesKHR;// VkAccelerationStructureGeometryTrianglesDataKHR 值 
+			geometryKHR.geometry = geometryDataKHR;
 		}
-		numVertex = geo.vertexAttributesDatas.size() / vertexAttributeInputFloatStride;
-
-		VkDeviceSize vertexAttributeDataSize = geo.vertexAttributesDatas.size() * sizeof(float);
-		bufferTotalSize = vertexAttributeDataSize;
-		indexDataOffset = vertexAttributeDataSize;
-		auto& accelerationStructureBuildRangeInfoKHR = accelerationStructureBuildRangeInfoKHRs[0];
-		accelerationStructureBuildRangeInfoKHR.firstVertex = geo.shapeIndices[0][0];//为geometry的三角形图元的第一个顶点的索引
-		accelerationStructureBuildRangeInfoKHR.primitiveCount = numTriangles;//定义对应加速结构中geometry的图元数量
-		accelerationStructureBuildRangeInfoKHR.primitiveOffset = 0;//指定图元数据在内存中的起始字节偏移量
-		accelerationStructureBuildRangeInfoKHR.transformOffset = 0;//指定变换矩阵数据在内存中的起始字节偏移量
-		bufferTotalSize += numTriangles * 3 * sizeof(uint32_t);
-
-	
-	}
-	else {
-		for (uint32_t i = 0; i < geo.shapeVertexAttributesBuffers.size(); i++)
-		{
-			bufferTotalSize += geo.shapeVertexAttributesBuffers[i].size() * sizeof(float);
-			numVertex += geo.shapeVertexAttributesBuffers[i].size() / vertexAttributeInputFloatStride;
-		}
+		auto& rangeInfo = accelerationStructureBuildRangeInfoKHRs[subGeoId];
+		rangeInfo.primitiveCount = geo.subGeomtries[subGeoId].numPrimitive;//为geometry中三角形的数量
+		rangeInfo.primitiveOffset = 0;//为geometry中三角形的索引数据的偏移量
+		rangeInfo.firstVertex = 0;//为geometry中三角形的顶点数据的偏移量
+		rangeInfo.transformOffset = 0;//为geometry中三角形的变换数据的偏移量
 
 	}
+
 	
 	//查询scratch 数据的最小字节对齐
 	VkPhysicalDeviceAccelerationStructurePropertiesKHR physicalDeviceAccelerationStructurePropertiesKHR{};
@@ -1290,43 +1134,7 @@ void ExampleBaseVK::BuildAccelerationStructure(Geometry& geo)
 	physicalDeviceAccelerationStructurePropertiesKHR.pNext = nullptr;
 	auto physicalDeviceProperties = GetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceAccelerationStructurePropertiesKHR);
 
-
-
-
-
-
-
-
-	accelerationStructureGeometryKHRs.resize(1);
-
-	auto& geometryKHR = accelerationStructureGeometryKHRs[0];
-	geometryKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;;
-	geometryKHR.pNext = nullptr;
-	geometryKHR.flags = 0;
-	geometryKHR.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;//描述了该加速结构引用的类型
-	VkAccelerationStructureGeometryDataKHR geometryDataKHR{};
-	{
-		VkAccelerationStructureGeometryTrianglesDataKHR trianglesKHR{};
-		{
-			//
-			trianglesKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-			trianglesKHR.pNext = VK_NULL_HANDLE;
-			trianglesKHR.vertexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };
-			trianglesKHR.vertexStride = vertexAttributeInputStride;//为每个顶点间的字节步长大小
-			trianglesKHR.maxVertex = numVertex - 1;//为vertexData 中的顶点数量减去1
-			trianglesKHR.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;//为顶点元素的数据VkFormat格式
-			trianglesKHR.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };//为包含索引数据的device 或者host端的地址
-			trianglesKHR.indexType = VK_INDEX_TYPE_UINT32;//为索引元素的数据类型 VkIndexType			
-			trianglesKHR.transformData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0};//为包含可选的VkTransformMatrixKHR 数据的device 或者host端的地址，描述从geometry的顶点所在的空间到加速结构定义所在的空间的变换
-		}
-		geometryDataKHR.triangles = trianglesKHR;// VkAccelerationStructureGeometryTrianglesDataKHR 值 
-		geometryKHR.geometry = geometryDataKHR;
-	}
-
 	//查询构建加速结构的大小信息
-
-
-
 	VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfoKHR{};
 	accelerationStructureBuildGeometryInfoKHR.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	accelerationStructureBuildGeometryInfoKHR.pNext = nullptr;
@@ -1339,8 +1147,8 @@ void ExampleBaseVK::BuildAccelerationStructure(Geometry& geo)
 	accelerationStructureBuildGeometryInfoKHR.scratchData = scratchData;
 	accelerationStructureBuildGeometryInfoKHR.srcAccelerationStructure = VK_NULL_HANDLE;
 	accelerationStructureBuildGeometryInfoKHR.dstAccelerationStructure = VK_NULL_HANDLE;
-	accelerationStructureBuildGeometryInfoKHR.geometryCount = 1;
-	accelerationStructureBuildGeometryInfoKHR.pGeometries = &geometryKHR;
+	accelerationStructureBuildGeometryInfoKHR.geometryCount = accelerationStructureGeometryKHRs.size();
+	accelerationStructureBuildGeometryInfoKHR.pGeometries = accelerationStructureGeometryKHRs.data();
 	accelerationStructureBuildGeometryInfoKHR.ppGeometries = VK_NULL_HANDLE;
 	accelerationStructureBuildGeometryInfoKHR.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	accelerationStructureBuildGeometryInfoKHR.flags = 0;
@@ -1348,29 +1156,19 @@ void ExampleBaseVK::BuildAccelerationStructure(Geometry& geo)
 
 	auto buildSize = GetAccelerationStructureBuildSizesKHR(device, accelerationStructureBuildGeometryInfoKHR);
 
-	bufferTotalSize = std::max(bufferTotalSize, buildSize.accelerationStructureSize);
+	bufferTotalSize = buildSize.accelerationStructureSize;
 
 	//填充buffer
 	acceleratBuffer.resize(bufferTotalSize);
-	if (geo.useIndexBuffers)
-	{
-
-		//填充buffer	
-		std::memcpy(acceleratBuffer.data(), geo.vertexAttributesDatas.data(), geo.vertexAttributesDatas.size() * sizeof(float));
-		VkDeviceSize offset = 0;
-		for (uint32_t i = 0; i < geo.shapeIndices.size(); i++)
-		{
-			std::memcpy(acceleratBuffer.data() + indexDataOffset + offset, geo.shapeIndices[i].data(), geo.shapeIndices[i].size() * sizeof(uint32_t));
-			offset += geo.shapeIndices[i].size() * sizeof(uint32_t);
-		}
-
-	}
-	else {
-		//填充buffer
-		for (uint32_t i = 0; i < geo.shapeVertexAttributesBuffers.size(); i++)
-		{
-			std::memcpy(acceleratBuffer.data(), geo.shapeVertexAttributesBuffers[i].data(), geo.shapeVertexAttributesBuffers[i].size() * sizeof(float));
-		}
+	uint32_t curOffset = 0;
+	for (uint32_t subGeoId = 0; subGeoId < geo.numSubmeshes; subGeoId++) {
+		auto& subGeo = geo.subGeomtries[subGeoId];
+		uint32_t vertexDataSize = subGeo.GetVertexAttributesBytesSize();
+		std::memcpy(acceleratBuffer.data() + curOffset, subGeo.vertexAttributesDatas.data(), vertexDataSize);
+		curOffset += vertexDataSize;
+		uint32_t indexDataSize = subGeo.GetIndicesBytesSize();
+		std::memcpy(acceleratBuffer.data() + curOffset, subGeo.indices.data(), indexDataSize);
+		curOffset += indexDataSize;
 	}
 
 
@@ -1389,19 +1187,21 @@ void ExampleBaseVK::BuildAccelerationStructure(Geometry& geo)
 
 
 	//设置加速结构构建顶点索引数据buffer地址信息
+	curOffset = 0;
+	for (uint32_t subGeoId = 0; subGeoId < geo.numSubmeshes; subGeoId++) {
+		auto& subGeo = geo.subGeomtries[subGeoId];
+		uint32_t vertexDataSize = subGeo.GetVertexAttributesBytesSize();
+		auto& geoInfo = accelerationStructureGeometryKHRs[subGeoId];
+		geoInfo.geometry.triangles.vertexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress = bufferAddress + curOffset };
 
-	if (geo.useIndexBuffers)
-	{
-		geometryKHR.geometry.triangles.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = bufferAddress + indexDataOffset };//为包含索引数据的device 或者host端的地址
-		geometryKHR.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;//为索引元素的数据类型 VkIndexType
+		curOffset += vertexDataSize;
+		uint32_t indexDataSize = subGeo.GetIndicesBytesSize();
+		if (indexDataSize != 0)
+		{
+			geoInfo.geometry.triangles.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress = bufferAddress + curOffset };
+			curOffset += indexDataSize;
+		}
 	}
-	else {
-
-		geometryKHR.geometry.triangles.indexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = 0 };//为包含索引数据的device 或者host端的地址
-		geometryKHR.geometry.triangles.indexType = VK_INDEX_TYPE_MAX_ENUM;//为索引元素的数据类型 VkIndexType
-	}
-
-	geometryKHR.geometry.triangles.vertexData = VkDeviceOrHostAddressConstKHR{ .deviceAddress/*通过vkGetBufferDeviceAddressKHR返回*/ = bufferAddress };
 
 	VkDeviceOrHostAddressKHR scratchAddress = VkDeviceOrHostAddressKHR{ .deviceAddress = scratchDeviceAddress };
 
@@ -1713,66 +1513,41 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 			{
 				auto geoIndex = subpassDrawGeoInfos[curSubpassIndex][i];
 				const auto& geom = geoms[geoIndex];
+				bool drawAllSubGeom = subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].empty();
+				if (!drawAllSubGeom) {
 
-
-				if (geom.useIndexBuffers)
-				{
-					CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
-					if (subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].empty())
-					{
-						for (uint32_t i = 0; i < geom.indexBuffers.size(); i++)
+					for (auto subGeoId : subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex]) {
+						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.subGeomtries[subGeoId].vertexBuffer.buffer }, { 0 });
+						if (geom.useIndexBuffers)
 						{
-							uint32_t numIndex = geom.shapeIndices[i].size();
-							CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[i].buffer, 0, VK_INDEX_TYPE_UINT32);
+							uint32_t numIndex = geom.subGeomtries[i].numIndices;
+							CmdBindIndexBuffer(cmdList.commandBuffer, geom.subGeomtries[subGeoId].indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 							CmdDrawIndex(cmdList.commandBuffer, numIndex, 1, 0, 0, 0);
+
+						}
+						else {
+							uint32_t numVertex = geom.subGeomtries[i].numVertex;
+							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
 					}
-					else {
-						for (uint32_t i = 0; i < subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].size(); i++)
-						{
-							uint32_t numIndex = geom.shapeIndices[i].size();
-							auto shadpIndex = subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex][i];
-							CmdBindIndexBuffer(cmdList.commandBuffer, geom.indexBuffers[shadpIndex].buffer, 0, VK_INDEX_TYPE_UINT32);
-							CmdDrawIndex(cmdList.commandBuffer, numIndex, 1, 0, 0, 0);
-						}
-					}
-
 				}
 				else {
-
-					if (subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].empty())
-					{
-
-						for (uint32_t i = 0; i < geom.shapeVertexBuffers.size(); i++)
+					for (auto& subMesh : geom.subGeomtries) {
+						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { subMesh.vertexBuffer.buffer }, { 0 });
+						if (geom.useIndexBuffers)
 						{
-							uint32_t numVertex = geom.shapeVertexAttributesBuffers[i].size() / vertexAttributeInputFloatStride;
-							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[i].buffer }, { 0 });
+							uint32_t numIndex = geom.subGeomtries[i].numIndices;
+							CmdBindIndexBuffer(cmdList.commandBuffer, subMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+							CmdDrawIndex(cmdList.commandBuffer, numIndex, 1, 0, 0, 0);
+
+						}
+						else {
+							uint32_t numVertex = geom.subGeomtries[i].numVertex;
 							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
-
 					}
-					else {
-						for (uint32_t i = 0; i < subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex].size(); i++)
-						{
-							uint32_t numVertex = geom.shapeVertexAttributesBuffers[i].size() / vertexAttributeInputFloatStride;
-							auto shadpIndex = subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex][i];
-							CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.shapeVertexBuffers[shadpIndex].buffer }, { 0 });
-							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
-						}
-
-					}
-
 				}
-
-
-
-
-
-
 			}
-
-
-
 		}
 		if (renderPassInfo.truncateNextSubpassDraw && curSubpassIndex == renderPassInfo.truncatedNextSubpassIndex - 1 && renderPassInfo.truncatedNextSubpassIndex != 0)
 		{
@@ -1922,17 +1697,18 @@ void ExampleBaseVK::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 		std::vector<VkVertexInputAttributeDescription> attributeDescs;
 		VkVertexInputBindingDescription inputBindingDesc;
 		//创建input state
+		auto& inputAttributeInfo = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.inputAttributesInfo;
 		auto& inputState = graphcisPipelineInfos[pipeID].pipelineStates.vertexInputState;
-		attributeDescs.resize(vertexAttributes.size());
-		for (uint32_t attriId = 0; attriId < vertexAttributes.size(); attriId++)
+		attributeDescs.resize(inputAttributeInfo.size());
+		for (uint32_t attriId = 0; attriId < inputAttributeInfo.size(); attriId++)
 		{
 			attributeDescs[attriId].binding = 0;//Ĭ��ʹ�ð󶨵�0����Ӧ�󶨵�0��λ�Ķ��㻺��
-			attributeDescs[attriId].format = VK_FORMAT_R32G32B32_SFLOAT;
-			attributeDescs[attriId].location = attriId;
-			attributeDescs[attriId].offset = attriId * 3 * sizeof(float);
+			attributeDescs[attriId].format = inputAttributeInfo[attriId].format;
+			attributeDescs[attriId].location = inputAttributeInfo[attriId].location;
+			attributeDescs[attriId].offset = inputAttributeInfo[attriId].offset;
 		}
-		//inputBindingDesc.stride = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.vertexIputStride;
-		inputBindingDesc.stride = vertexAttributeInputStride;
+
+		inputBindingDesc.stride = graphcisPipelineInfos[pipeID].pipelineShaderResourceInfo.vertexIputStride;
 		inputBindingDesc.binding = 0;//ֻ����һ���󶨵�Ϊ0�İ���Ϣ
 		inputBindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;//�Ȳ�ʹ��instance����
 		inputState.vertexAttributeDescriptionCount = attributeDescs.size();
@@ -1945,13 +1721,9 @@ void ExampleBaseVK::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 		{
 			if (kv.second.spirvCode.size() != 0)
 			{
-
-
-
+				
 				//����spirv code����shader module
 				auto shaderModule = CreateShaderModule(device, 0, kv.second.spirvCode);
-
-
 
 				//��ʼ��shader state ��Ϣ
 				VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo{ };
@@ -2040,8 +1812,18 @@ void ExampleBaseVK::InitGraphicPipelines(RenderPassInfo& renderPassInfo)
 			inputAssemblyState = nullptr;
 		}
 
-
-		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, vertexInputState, inputAssemblyState, &pipelineStates.tessellationState, &pipelineStates.viewportState,
+		VkPipelineViewportStateCreateInfo* viewportState = &pipelineStates.viewportState;
+		for (uint32_t i = 0; i < pipelineStates.dynamicState.dynamicStateCount; i++) {
+			if (pipelineStates.dynamicState.pDynamicStates[i] == VK_DYNAMIC_STATE_VIEWPORT) {
+				viewportState->scissorCount = 1;
+				viewportState->viewportCount = 1;
+				viewportState->pScissors = nullptr;
+				viewportState->pViewports = nullptr;
+				break;
+			}
+		}
+		
+		auto pipeline = CreateGraphicsPipeline(device, 0, pipelineStates.shaderStages, vertexInputState, inputAssemblyState, &pipelineStates.tessellationState, viewportState,
 			&pipelineStates.rasterizationState, &pipelineStates.multisampleState, &pipelineStates.depthStencilState, &pipelineStates.colorBlendState, &pipelineStates.dynamicState, pipelineLayout,
 			renderPass, pipeID);
 		graphcisPipelineInfos[pipeID].pipeline = pipeline;
@@ -2238,9 +2020,6 @@ void ExampleBaseVK::ClearComputePipeline()
 			DestroyDescriptorPool(device, computePipelineInfos.descriptorPool);
 
 		}
-
-
-
 	}
 
 }
@@ -2280,43 +2059,15 @@ void ExampleBaseVK::InitGeometryResources(Geometry& geo)
 	{
 		LogFunc(0);
 	}
-
-
-	if (geo.useIndexBuffers)
-	{
-
-		geo.indexBuffers.resize(geo.shapeIndices.size());
-
-		for (uint32_t zoneId = 0; zoneId < geo.shapeIndices.size(); zoneId++)
+	for (auto& subGeo : geo.subGeomtries) {
+		subGeo.vertexBuffer = CreateVertexBuffer((const char*)subGeo.vertexAttributesDatas.data(), subGeo.vertexAttributesDatas.size() * sizeof(float));
+		if (geo.useIndexBuffers)
 		{
-
-			auto& indicesData = geo.shapeIndices[zoneId];
-			geo.indexBuffers[zoneId] = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
-
+			auto& indicesData = subGeo.indices;
+			subGeo.indexBuffer = CreateIndexBuffer((const char*)indicesData.data(), indicesData.size() * sizeof(uint32_t));
 		}
-		if (geo.vertexAttributesDatas.empty())
-		{
-			return;
-		}
-		geo.vertexBuffer = CreateVertexBuffer((const char*)geo.vertexAttributesDatas.data(), geo.vertexAttributesDatas.size() * sizeof(float));
-
-
-
 
 	}
-	else {
-		geo.shapeVertexBuffers.resize(geo.shapeVertexAttributesBuffers.size());
-		
-		for (uint32_t zoneId = 0; zoneId < geo.shapeVertexBuffers.size(); zoneId++)
-		{
-			std::vector<float>& curVertexData = geo.shapeVertexAttributesBuffers[zoneId];
-			geo.shapeVertexBuffers[zoneId] = CreateVertexBuffer((const char*)curVertexData.data(), curVertexData.size() * sizeof(float));
-			
-
-		}
-	}
-
-
 
 	if (rayTracingPipelinsDesc.valid)
 	{
@@ -2769,11 +2520,12 @@ void ExampleBaseVK::TransferGLSLFileToSPIRVFileAndRead(const std::string& srcGLS
 	outSpirvCode = spirvCode32;
 }
 
-void ExampleBaseVK::ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo)
+uint32_t ExampleBaseVK::ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& spirvCode, std::vector<ShaderInputAttributeInfo>& dstCacheShaderInputAttributeInfo)
 {
+	uint32_t vertexStride = 0;
 	if (spirvCode.empty())
 	{
-		return;
+		return 0;
 	}
 	spirv_cross::CompilerGLSL shaderCompiler(spirvCode);
 
@@ -2788,6 +2540,7 @@ void ExampleBaseVK::ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& 
 		auto& shaderVertexAttributeInfo = resources.stage_inputs[attributeIndex];
 		vertexAttributeInfo.name = shaderVertexAttributeInfo.name;
 		vertexAttributeInfo.location = shaderCompiler.get_decoration(shaderVertexAttributeInfo.id, spv::DecorationLocation);
+
 		auto type = shaderCompiler.get_type(shaderVertexAttributeInfo.base_type_id);
 		//inputAttri.columns = type.columns;
 		std::string vertexAttributeFormatStr = "";
@@ -2825,13 +2578,22 @@ void ExampleBaseVK::ParseSPIRVShaderInputAttribute(const std::vector<uint32_t>& 
 			LogFunc(0);
 			break;
 		}
+		uint32_t formatSize = VkFormatToInfo[vertexAttributeInfo.format].totalBytesPerPixel;
+		if (shaderCompiler.has_decoration(shaderVertexAttributeInfo.id, spv::DecorationOffset)) {
+			vertexAttributeInfo.offset = shaderCompiler.get_decoration(shaderVertexAttributeInfo.id, spv::DecorationOffset);
+			vertexStride = std::max(vertexStride, vertexAttributeInfo.offset + formatSize);
+		}
+		else {
+			vertexAttributeInfo.offset = vertexStride;
+			vertexStride += formatSize;
+		}
+
+		
 		Log("vertex shader input attribute data : " << "location =  " << vertexAttributeInfo.location << ", name :  " <<
 			vertexAttributeInfo.name << ", type : " << vertexAttributeFormatStr, vertexAttributeFormatStr == std::string("VK_FORMAT_R32G32B32_SFLOAT"));
-
-
 	}
-
-
+	
+	return vertexStride;
 }
 
 void ExampleBaseVK::ParseSPIRVShaderResourceInfo(const std::vector<uint32_t>& spirvCode, ShaderResourceInfo& dstCacheShaderResource)
@@ -3109,20 +2871,6 @@ void ExampleBaseVK::ActiveFrame(RenderPassInfo& renderPassInfo, uint32_t frameIn
 
 }
 
-
-void ExampleBaseVK::SortGeosFollowCloseDistance(glm::vec3 cameraPos)
-{
-	for (uint32_t passId = 0; passId < renderPassInfos.size(); passId++)
-	{
-		for (uint32_t subpassId = 0; subpassId < renderPassInfos[passId].subpassDrawGeoInfos.size(); subpassId++)
-		{
-			std::sort(renderPassInfos[passId].subpassDrawGeoInfos[subpassId].begin(), renderPassInfos[passId].subpassDrawGeoInfos[subpassId].end(), [&](uint32_t geo1, uint32_t geo2) {
-				return geoms[geo1].CloserThanOther(geoms[geo2], cameraPos);
-				});
-		}
-	}
-
-}
 
 VkDescriptorType ExampleBaseVK::GetDescriptorType(DescriptorSetInfo& descriptorSetInfo, uint32_t binding)
 {
@@ -3420,6 +3168,15 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	attachmentClearValues.push_back(renderTargets.depthAttachment.clearValue);
 	uint32_t width = renderTargets.width;
 	uint32_t height = renderTargets.height;
+	VkViewport curViewport{};
+	curViewport.width = width;
+	curViewport.height = height;
+	curViewport.maxDepth = 1;
+
+	VkRect2D curScissor{};
+	curScissor.extent.width = width;
+	curScissor.extent.height = height;
+	
 
 	//绘制
 	context->CmdListWaitFinish(presenCommandList);
@@ -3438,6 +3195,8 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	ImGui::Render();  // 这一步生成 drawData，必须！
 	CaptureBeginMacro
 	context->CmdListRecordBegin(presenCommandList);
+	CmdDynamicSetViewPorts(presenCommandList.commandBuffer, 0, { curViewport});
+	CmdDynamicSetScissors(presenCommandList.commandBuffer, 0, { curScissor });
 	//context->CmdOpsImageMemoryBarrer(presenCommandList, swapchainImages[nexIndex],  VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 	CmdBeginRenderPass(presenCommandList.commandBuffer, renderPass, frameBuffer, VkRect2D{ .offset = VkOffset2D{.x = 0 ,.y = 0},.extent = VkExtent2D{.width = width,.height = height} }, attachmentClearValues, VK_SUBPASS_CONTENTS_INLINE);
 	//绘制
@@ -3449,10 +3208,10 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 		CmdBindDescriptorSet(presenCommandList.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphcisPipelineInfos[0].pipelineLayout, setInfo.first, { setInfo.second.descriptorSet }, {});
 	}
 
-	CmdBindVertexBuffers(presenCommandList.commandBuffer, 0, { geom.vertexBuffer.buffer }, { 0 });
+	CmdBindVertexBuffers(presenCommandList.commandBuffer, 0, { geom.subGeomtries[0].vertexBuffer.buffer}, {0});
 
-	CmdBindIndexBuffer(presenCommandList.commandBuffer, geom.indexBuffers[0].buffer, 0, VK_INDEX_TYPE_UINT32);
-	uint32_t numIndex = geom.shapeIndices[0].size();
+	CmdBindIndexBuffer(presenCommandList.commandBuffer, geom.subGeomtries[0].indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	uint32_t numIndex = geom.subGeomtries[0].numIndices;
 	CmdDrawIndex(presenCommandList.commandBuffer, numIndex, 1, 0, 0, 0);
 	
 	//在这里插入 ImGui 渲染
@@ -3585,14 +3344,21 @@ void ExampleBaseVK::PresentDrawPassInfo::InitPresentRenderPassInfo()
 	shaderCodePath.fragmentShaderPath = std::string(PROJECT_DIR) + "/src/Framework/PresentPass.frag";
 
 	presentRenderPassInfo.InitDefaultRenderPassInfo(shaderCodePath, w, h);
+	presentRenderPassInfo.subpassInfo.subpassDescs[0].subpassPipelineStates.dynamicState.dynamicStateCount = 2;
+	std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR };
+	presentRenderPassInfo.subpassInfo.subpassDescs[0].subpassPipelineStates.dynamicState.pDynamicStates = dynamicStates.data();
 
 	context->ParseShaderFiles(presentRenderPassInfo);
+
 	//context->InitAttanchmentDesc(presentRenderPassInfo);
 	presentRenderPassInfo.renderTargets.colorAttachments[0].attachmentDesc.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	context->InitRenderPass(presentRenderPassInfo);
 	
 	InitFrameBuffers();
+
+
 	context->InitGraphicPipelines(presentRenderPassInfo);
+
 	context->SetRenderPassInfoDebugName(presentRenderPassInfo, "PresentPass");
 
 }
@@ -3707,6 +3473,8 @@ void ExampleBaseVK::PresentDrawPassInfo::Resize()
 	renderTargets.InitRenderTarget(1, w, h);
 	ClearFrameBuffers();
 	ClearSwapchain();
+	DestroySurface(context->instance, context->surface);
+	context->surface = CreateWin32Surface(context->instance, context->window);
 	InitSwapchain();
 	InitFrameBuffers();
 
