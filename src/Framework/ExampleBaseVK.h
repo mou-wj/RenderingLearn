@@ -9,6 +9,7 @@
 #include "Common/GlmShowTool.hpp"
 #include "Utils/ImageFileTool.h"
 #include "Utils/Camera.h"
+#include "Utils/ModelFileTool.h"
 #include <map>
 #include <set>
 #include <string>
@@ -660,42 +661,34 @@ struct Texture {
 
 };
 
-enum EAttributeType
-{
-	EAT_POSITION_FLOAT3 = 0,
-	EAT_NORMAL_FLOAT3,
-	EAT_COLOR_FLOAT3,
-	EAT_TEXCOORDS_FLOAT3,
-	EAT_AUX1_FLOAT3,
-	EAT_AUX2_FLOAT3
-};
 
-uint32_t inline GetAttributeTypeSize(EAttributeType type)
-{ 
-	switch (type)
-	{
-	case EAT_POSITION_FLOAT3:
-	case EAT_NORMAL_FLOAT3:
-	case EAT_COLOR_FLOAT3:
-	case EAT_TEXCOORDS_FLOAT3:
-	case EAT_AUX1_FLOAT3:
-	case EAT_AUX2_FLOAT3:
-		return 3 * sizeof(float);
-	default:
-		ASSERT(0);
-		return 0;
-	}
-}
 
 struct Geometry
 {
+	enum EAttributeType {
+		EAT_POSITION,
+		EAT_NORMAL,
+		EAT_COLOR,
+		EAT_TEXTURE_COORDINATES,
+		EAT_AUX,
+		EAT_TANGENT
+	};
+
+	struct Attribute {
+		EAttributeType type = EAT_POSITION;//顶点属性的类型
+		VkFormat format = VK_FORMAT_R32G32B32_SFLOAT;//顶点属性的格式
+	};
+
+
+
+
 	//默认顶点缓冲区中的数据按照以下方式排列
-    //	Position3_float32,//location 0
-    //	Normal3_float32,//location 1
-    //	Color3_float32,//location 2
-    //	TextureCoordinates3_float32,//location 3
-    //	AUX1_3_float32,//location 4
-    //	AUX2_3_float32//location 5
+    //	Position,//location 0 ， 3分量float
+    //	Normal,//location 1 ， 3分量float
+    //	Color,//location 2 ， 3分量float
+    //	TextureCoordinates,//location 3 ， 3分量float
+    //	AUX,//location 4 ， 3分量float
+    //	AUX//location 5 ， 3分量float
 
 	//几何信息
 	uint32_t numSubmeshes = 0;//子网格的数量
@@ -704,19 +697,19 @@ struct Geometry
 
 	struct GeomAttributeInfo {
 		uint32_t vertexStride = 72;//顶点缓冲区的步长 3 * 6 * 4
-		std::vector<EAttributeType> vertexAttributes = {
-			EAT_POSITION_FLOAT3,
-			EAT_NORMAL_FLOAT3,
-			EAT_COLOR_FLOAT3,
-			EAT_TEXCOORDS_FLOAT3,
-			EAT_AUX1_FLOAT3,
-			EAT_AUX2_FLOAT3
+		std::vector<Attribute> vertexAttributes = {
+			{EAT_POSITION},
+			{EAT_NORMAL},
+			{EAT_COLOR},
+			{EAT_TEXTURE_COORDINATES},
+			{EAT_AUX},
+			{EAT_AUX}
 		};//
-		void Init(const std::vector<EAttributeType>& attributes) {
+		void Init(const std::vector<Attribute>& attributes) {
 			vertexAttributes = attributes;
 			vertexStride = 0;
 			for (uint32_t i = 0; i < attributes.size(); i++) {
-				vertexStride += GetAttributeTypeSize(attributes[i]);
+				vertexStride += VkFormatToInfo[attributes[i].format].totalBytesPerPixel;
 			}
 		}
 	};
@@ -809,30 +802,24 @@ struct Geometry
 			}
 		}
 
-		void* GetAttributeVoidPtr(uint32_t vertexIndex, EAttributeType attributeType) {
+		void* GetAttributeVoidPtr(uint32_t vertexIndex, uint32_t attributeSlot) {
 			if (vertexIndex >= numVertex) {
 				Log("GetAttributePtr vertexIndex out of range", 0);
 				return nullptr;
 			}
-			uint32_t offset = vertexIndex * attributeInfo.vertexStride;
-			switch (attributeType)
-			{
-			case EAT_POSITION_FLOAT3:
-				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float));
-			case EAT_NORMAL_FLOAT3:
-				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 3);
-			case EAT_COLOR_FLOAT3:
-				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 6);
-			case EAT_TEXCOORDS_FLOAT3:
-				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 9);
-			case EAT_AUX1_FLOAT3:
-				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 12);
-			case EAT_AUX2_FLOAT3:
-				return (void*)(vertexAttributesDatas.data() + offset / sizeof(float) + 15);
-			default:
-				ASSERT(0);
-				return nullptr;
+			uint32_t offset = vertexIndex * attributeInfo.vertexStride / sizeof(float);
+			for (uint32_t i = 0; i < attributeSlot; i++) {
+				if (i >= attributeInfo.vertexAttributes.size()) {
+					Log("GetAttributePtr attributeSlot out of range", 0);
+					return nullptr;
+				}
+				offset += VkFormatToInfo[attributeInfo.vertexAttributes[i].format].totalBytesPerPixel;
 			}
+			//if (offset >= vertexAttributesDatas.size()) {
+			//	ASSERT(0);
+			//}
+			return (void*)(vertexAttributesDatas.data() + offset);
+			
 		}
 		//获取顶点属性数据的字节大小
 		uint32_t GetVertexAttributesBytesSize() {
@@ -861,6 +848,80 @@ struct Geometry
 	VkAccelerationStructureKHR accelerationStructureKHR{};
 	Buffer accelerationStructureKHRBuffer{}, accelerationStructureScratchBuffer{};
 
+	void InitFromRenderScene(const RenderScene& renderScene, const std::vector<Attribute>& attributes) {
+		// 初始化几何体信息
+		numSubmeshes = 0;
+		useIndexBuffers = true;
+		geoPath = ""; // 可以根据需要设置路径
+
+		// 清空子几何体向量
+		subGeomtries.clear();
+
+		// 遍历每个网格
+		for (const auto& meshData : renderScene.meshes) {
+			// 遍历每个子网格
+			for (const auto& subMesh : meshData.primitives) {
+				Geometry::SubGeometry subGeom;
+
+				// 初始化顶点属性信息
+				Geometry::GeomAttributeInfo attributeInfo;
+				attributeInfo.Init(attributes);
+
+				// 转换顶点数据
+				std::vector<float> vertexAttributesDatas;
+				vertexAttributesDatas.reserve(subMesh.vertices.size() * attributeInfo.vertexStride / sizeof(float));
+
+				for (const auto& vertex : subMesh.vertices) {
+					for (const auto& attr : attributes) {
+						switch (attr.type) {
+						case EAttributeType::EAT_POSITION:
+							ASSERT(attr.format == VK_FORMAT_R32G32B32_SFLOAT);
+							vertexAttributesDatas.insert(vertexAttributesDatas.end(), { vertex.position.x, -vertex.position.y, -vertex.position.z });
+							break;
+						case EAttributeType::EAT_NORMAL:
+							ASSERT(attr.format == VK_FORMAT_R32G32B32_SFLOAT);
+							vertexAttributesDatas.insert(vertexAttributesDatas.end(), { vertex.normal.x, -vertex.normal.y, -vertex.normal.z });
+							break;
+						case EAttributeType::EAT_COLOR:
+							ASSERT(attr.format == VK_FORMAT_R32G32B32A32_SFLOAT);
+							vertexAttributesDatas.insert(vertexAttributesDatas.end(), { vertex.color.x, vertex.color.y, vertex.color.z, vertex.color.w });
+							break;
+						case EAttributeType::EAT_TEXTURE_COORDINATES:
+							ASSERT(attr.format == VK_FORMAT_R32G32_SFLOAT);
+							vertexAttributesDatas.insert(vertexAttributesDatas.end(), { vertex.texcoord.x, vertex.texcoord.y});
+
+							break;
+						case EAttributeType::EAT_AUX:
+							// 假设 AUX1 和 AUX2 是相同类型的属性
+							vertexAttributesDatas.insert(vertexAttributesDatas.end(), { vertex.joint.x, vertex.joint.y, vertex.joint.z });
+							break;
+						case EAttributeType::EAT_TANGENT:
+							ASSERT(attr.format == VK_FORMAT_R32G32B32A32_SFLOAT);
+							vertexAttributesDatas.insert(vertexAttributesDatas.end(), { vertex.tangent.x, -vertex.tangent.y, -vertex.tangent.z, vertex.tangent.w });
+							break;
+						default:
+							Log("Unknown attribute type", 0);
+							break;
+						}
+					}
+				}
+
+				// 转换索引数据
+				std::vector<uint32_t> indices = subMesh.indices;
+
+				// 初始化子几何体
+				subGeom.Init(vertexAttributesDatas, indices, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, attributeInfo);
+
+				// 将子几何体添加到几何体中
+				subGeomtries.push_back(subGeom);
+				numSubmeshes++;
+			}
+		}
+
+		// 计算几何体的包围盒
+		CalculateBoundingBox();
+	}
+
 	void InitAsScreenFillRect() {
 		numSubmeshes = 1;
 		subGeomtries.resize(numSubmeshes);
@@ -886,7 +947,7 @@ struct Geometry
 		svb.radius = 0.0f;
 		for (auto& subGeom : subGeomtries) {
 			for (uint32_t v = 0; v < subGeom.numVertex; v++) {
-				float* vertex = (float*)subGeom.GetAttributeVoidPtr(v, EAT_POSITION_FLOAT3);
+				float* vertex = (float*)subGeom.GetAttributeVoidPtr(v, 0);
 				if (vertex[0] < aabb.minX) aabb.minX = vertex[0];
 				if (vertex[0] > aabb.maxX) aabb.maxX = vertex[0];
 				if (vertex[1] < aabb.minY) aabb.minY = vertex[1];

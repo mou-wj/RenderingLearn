@@ -79,7 +79,7 @@ int main()
 	//GLSL2SPIRV();
 	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
 	//CaptureNum(4);
-	//AutoTest();
+	AutoTest();
 	//TransformTest();
 	//DrawSimpleTriangleSample example;
 	//UniformExample example;

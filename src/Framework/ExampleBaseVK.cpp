@@ -1046,8 +1046,8 @@ void ExampleBaseVK::LoadObj(const std::string& objFilePath, Geometry& geo)
 				normal = subMesh.vertices[v].normal;
 				texc3 = glm::vec3(subMesh.vertices[v].texcoord,0);
 				color = subMesh.vertices[v].color;
-				pushBackAttribute(vertexs, pos);
-				pushBackAttribute(vertexs, normal);
+				pushBackAttribute(vertexs, pos * glm::vec3(1,-1,-1));
+				pushBackAttribute(vertexs, normal * glm::vec3(1, -1, -1));
 				pushBackAttribute(vertexs, color);
 				pushBackAttribute(vertexs, texc3);
 				pushBackAttribute(vertexs, aux1);
@@ -1517,16 +1517,17 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 				if (!drawAllSubGeom) {
 
 					for (auto subGeoId : subpassDrawGeoShapeInfos[curSubpassIndex][geoIndex]) {
-						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { geom.subGeomtries[subGeoId].vertexBuffer.buffer }, { 0 });
+						auto& subMesh = geom.subGeomtries[subGeoId];
+						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { subMesh.vertexBuffer.buffer }, { 0 });
 						if (geom.useIndexBuffers)
 						{
-							uint32_t numIndex = geom.subGeomtries[i].numIndices;
-							CmdBindIndexBuffer(cmdList.commandBuffer, geom.subGeomtries[subGeoId].indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+							uint32_t numIndex = subMesh.numIndices;
+							CmdBindIndexBuffer(cmdList.commandBuffer, subMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 							CmdDrawIndex(cmdList.commandBuffer, numIndex, 1, 0, 0, 0);
 
 						}
 						else {
-							uint32_t numVertex = geom.subGeomtries[i].numVertex;
+							uint32_t numVertex = subMesh.numVertex;
 							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
 					}
@@ -1536,13 +1537,13 @@ void ExampleBaseVK::CmdOpsDrawGeom(CommandList& cmdList, uint32_t renderPassInde
 						CmdBindVertexBuffers(cmdList.commandBuffer, 0, { subMesh.vertexBuffer.buffer }, { 0 });
 						if (geom.useIndexBuffers)
 						{
-							uint32_t numIndex = geom.subGeomtries[i].numIndices;
+							uint32_t numIndex = subMesh.numIndices;
 							CmdBindIndexBuffer(cmdList.commandBuffer, subMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 							CmdDrawIndex(cmdList.commandBuffer, numIndex, 1, 0, 0, 0);
 
 						}
 						else {
-							uint32_t numVertex = geom.subGeomtries[i].numVertex;
+							uint32_t numVertex = subMesh.numVertex;
 							CmdDrawVertex(cmdList.commandBuffer, numVertex, 1, 0, 0);
 						}
 					}
@@ -3184,7 +3185,7 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	context->ActiveFrame(presentRenderPassInfo,nexIndex);
 	auto& colorAttachment = presentRenderPassInfo.renderTargets.frames[nexIndex].colorAttachmentTextures[0];
 	context->CmdListReset(presenCommandList);
-	
+	//CaptureBeginMacro
 	//绘制生成GUI数据
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -3193,7 +3194,7 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	//调用派生的绘制gui的接口
 	context->DrawImGui();
 	ImGui::Render();  // 这一步生成 drawData，必须！
-	CaptureBeginMacro
+	
 	context->CmdListRecordBegin(presenCommandList);
 	CmdDynamicSetViewPorts(presenCommandList.commandBuffer, 0, { curViewport});
 	CmdDynamicSetScissors(presenCommandList.commandBuffer, 0, { curScissor });
@@ -3221,11 +3222,12 @@ void ExampleBaseVK::PresentDrawPassInfo::Present(VkSemaphore drawFinishSemaphore
 	context->CmdListRecordEnd(presenCommandList);
 	
 	context->CmdListSubmit(presenCommandList, submitSyncInfo);
-	CaptureEndMacro
+	
 
 	//显示
 	std::vector<VkResult> res;
 	VulkanAPI::Present(context->graphicQueue, { presenDrawFinishSemaphore }, { swapchain }, { nexIndex }, res);
+	//CaptureEndMacro
 	VkResult returnRes;
 	returnRes = res[0];
 	if (returnRes == VK_SUBOPTIMAL_KHR || returnRes == VK_ERROR_OUT_OF_DATE_KHR)
