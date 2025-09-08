@@ -277,7 +277,7 @@ void ExampleBaseVK::InitContex()
 	//ASSERT(physicalDeviceMeshShaderFeaturesEXT.meshShader == VK_TRUE);//检查是否支持mesh着色器
 	
 	std::vector<const char*> enableExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-
+	std::vector<const char*> enableLayers = { "VK_LAYER_KHRONOS_validation"};
 	void* extendInfoP = nullptr;
 	VkPhysicalDeviceFeatures* enableFeature = &physicalDeviceFeatures;
 	if (enableMeshShaderEXT)
@@ -314,10 +314,11 @@ void ExampleBaseVK::InitContex()
 	}
 
 	ASSERT(CheckExtensionSupport(physicalDevice, enableExtensions));
-
+	ASSERT(CheckLayerSupport(physicalDevice, enableLayers));
 	
-	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, {}, enableExtensions, enableFeature, extendInfoP);//device之开启了swapchain拓展
+	device = CreateDevice(physicalDevice, { {queueFamilyIndex,{1}} }, enableLayers, enableExtensions, enableFeature, extendInfoP);//device之开启了swapchain拓展
 	graphicQueue = GetQueue(device, queueFamilyIndex, 0);
+	
 
 	if (enableMeshShaderEXT || rayTracingPipelinsDesc.valid)
 	{
@@ -504,6 +505,7 @@ void ExampleBaseVK::PickValidPhysicalDevice()
 
 	for (uint32_t i = 1; i < physicalDevices.size(); i++)
 	{
+		
 		auto familyIndex = GetSuitableQueueFamilyIndex(physicalDevices[i], VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |VK_QUEUE_TRANSFER_BIT, true, 1);;
 		auto surfaceCapabilities = GetSurfaceCapabilities(physicalDevices[i], surface);
 		
@@ -3096,6 +3098,28 @@ bool ExampleBaseVK::CheckExtensionSupport(VkPhysicalDevice curPhysicalDevive, co
 	
 	}
 	if (numSurpportedExtension == entensions.size())
+	{
+		return true;
+	}
+	return false;
+}
+
+bool ExampleBaseVK::CheckLayerSupport(VkPhysicalDevice curPhysicalDevive, const std::vector<const char*> layers)
+{
+	auto supportedLayers = EnumerateDeviceLayerProperties(curPhysicalDevive);
+
+	uint32_t numSurpportedLayer = 0;
+	for (auto& wantLayerName : layers) {
+		for (auto& layerProp : supportedLayers) {
+			if (std::strcmp(layerProp.layerName , wantLayerName) == 0) {
+
+				numSurpportedLayer++;
+			}
+
+		}
+
+	}
+	if (numSurpportedLayer == layers.size())
 	{
 		return true;
 	}

@@ -1451,6 +1451,7 @@ private:
 	void FindFormat(VkPhysicalDevice curPhysicalDevive, VkFormatFeatureFlags features);
 
 	bool CheckExtensionSupport(VkPhysicalDevice curPhysicalDevive, const std::vector<const char*> entensions);
+	bool CheckLayerSupport(VkPhysicalDevice curPhysicalDevive, const std::vector<const char*> layers);
 
 private:
 	
