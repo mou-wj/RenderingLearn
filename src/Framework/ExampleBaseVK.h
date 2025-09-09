@@ -964,6 +964,12 @@ struct Geometry
 	}
 };
 
+struct DrawParam {
+	int passId = -1,subpassId = -1,geomId = -1;
+	std::vector<int> subGeoIds;
+
+	
+};
 
 
 struct Attachment {

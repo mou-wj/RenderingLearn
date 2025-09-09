@@ -1,32 +1,3 @@
-#include "Examples/SimpleExamples/DrawSimpleTriangleSample.h"
-#include "Examples/SimpleExamples/UniformExample.h"
-#include "Examples/SimpleExamples/SkyBoxExample.h"
-#include "Examples/SimpleExamples/SimpleSceenExample.h"
-#include "Examples/SimpleExamples/TranslucentBlendExample.h"
-#include "Examples/SimpleExamples/SimpleTessellationExample.h"
-#include "Examples/SimpleExamples/SimpleMeshShaderExample.h"
-#include "Examples/SimpleExamples/VkImguiExample.h"
-#include "Examples/PBRT4/SamplePointsExample.h"
-#include "Examples/PBRT4/ReflectionModelsExample.h"
-#include "Examples/PBRT4/DisturbutionLobeExample.h"
-#include "Examples/SimpleExamples/GeometryShaderExample.h"
-#include "Examples/PBRT4/VolumeScatteringExample.h"
-#include "Examples/RealTimeRendering4/C5ShadingBasicsExample.h"
-#include "Examples/RealTimeRendering4/C6TexturingExample.h"
-#include "Examples/RealTimeRendering4/C7ShadowsExample.h"
-#include "Examples/RealTimeRendering4/C9PhysicalBasedRenderingExample.h"
-#include "Examples/RealTimeRendering4/C10LocalIlluminationExample.h"
-#include "Examples/RealTimeRendering4/C11GlobalIlluminationExample.h"
-#include "Examples/RealTimeRendering4/C12ImageSpaceEffectesExample.h"
-#include "Examples/RealTimeRendering4/C14VolumetricandTranslucencyRenderingExample.h"
-#include "Examples/RealTimeRendering4/C15NonPhotorealisticRenderingExample.h"
-#include "Examples/RealTimeRendering4/C17CurvesAndCurvedSurfacesExample.h"
-#include "Examples/RealTimeRendering4/C19AccelerationAlgorithmsExample.h"
-#include "Examples/RealTimeRendering4/C20EfficientShadingExample.h"
-#include "Examples/RealTimeRendering4/C22IntersectionTestMethodsExample.h"
-#include "Examples/RealTimeRendering4/C26RealTimeRayTracingExample.h"
-#include "Examples/Artifacts/PBRArtifactExample.h"
-#include "Examples/Artifacts/SceenArtifactExample.h"
 #include "Examples/Artifacts/HairArtifactExample.h"
 
 
@@ -73,46 +44,9 @@ extern int ImGuiOpenGLTest();
 extern int ImGuiVKTest();
 int main()
 {
-	//ImGuiOpenGLTest();
-	//ImGuiVKTest();
-	//extern void GLSL2SPIRV();
-	//GLSL2SPIRV();
-	//CaptureOutPathSetMacro(std::string(PROJECT_DIR) + "/test.rdc");
-	//CaptureNum(4);
-	AutoTest();
-	//TransformTest();
-	//DrawSimpleTriangleSample example;
-	//UniformExample example;
-	//VkImguiExample example;
-	//SkyBoxExample example;
-	//TranslucentBlendExample example;
-	//SimpleSceenExample example;
-	//SimpleTessellationExample example;
-	//SimpleMeshShaderExample example;
-	//SamplePointsExample example;
-	//powitacq_rgb::BRDF brdf(std::string(PROJECT_DIR) + "/resources/mesured_bsdf/aniso_brushed_aluminium_1_rgb.bsdf");
-	
 
-	//ReflectionModelsExample example;
-	//DisturbutionLobeExample example;
-	//GeometryShaderExample example;
-	//VolumeScatteringExample example;
-	//C5ShadingBasicsExample example;
-	//C6TexturingExample example;
-	//C7ShadowsExample example;
-	//C9PhysicalBasedRenderingExample example;
-	//C10LocalIlluminationExample example;
-	//C11GlobalIlluminationExample example;
-	//C12ImageSpaceEffectesExample example;
-	//C14VolumetricandTranslucencyRenderingExample example;
-	//C15NonPhotorealisticRenderingExample example;
-	//C17CurvesAndCurvedSurfacesExample example;
-	//C19AccelerationAlgorithmsExample example;
-	//C20EfficientShadingExample example;
-	//C22IntersectionTestMethodsExample example;
-	//C26RealTimeRayTracingExample example;
-	//PBRArtifactExample example;
-	//SceenArtifactExample example;
+	//AutoTest();
+
 	HairArtifactExample example;
 	ExampleBase::Run(&example);
 
@@ -121,119 +55,8 @@ int main()
 }
 
 void AutoTest() {
-	{
-		DrawSimpleTriangleSample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		UniformExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		SkyBoxExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		TranslucentBlendExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		SimpleSceenExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		SimpleTessellationExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		SimpleMeshShaderExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		SamplePointsExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		ReflectionModelsExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		DisturbutionLobeExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		GeometryShaderExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		VolumeScatteringExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C5ShadingBasicsExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C6TexturingExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C7ShadowsExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C9PhysicalBasedRenderingExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C10LocalIlluminationExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C11GlobalIlluminationExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C12ImageSpaceEffectesExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C14VolumetricandTranslucencyRenderingExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C15NonPhotorealisticRenderingExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C17CurvesAndCurvedSurfacesExample example;
-		ExampleBase::Run(&example);
-	}
-
-	{
-		C19AccelerationAlgorithmsExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C20EfficientShadingExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		C22IntersectionTestMethodsExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		//C26RealTimeRayTracingExample example;
-		//ExampleBase::Run(&example);
-	}
-	{
-		PBRArtifactExample example;
-		ExampleBase::Run(&example);
-	}
-	{
-		SceenArtifactExample example;
-		ExampleBase::Run(&example);
-	}
+	HairArtifactExample example;
+	ExampleBase::Run(&example);
 }
 
 
