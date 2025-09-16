@@ -1,0 +1,204 @@
+#include "VulkanSwapchain.h"
+#include "VulkanDevice.h"
+#include "VulkanPlatformSurport.h"
+#include "VulkanRHIApi.h"
+#include "VulkanQueue.h"
+
+namespace RHIVulkan {
+
+    VulkanSwapchain::VulkanSwapchain(VulkanDevice* device, const SwapchainDesc& desc)
+        : device_(device)
+    {
+        VulkanRHIApi* api = device_->GetRhiApi();
+        VkInstance instance = const_cast<VkInstance>(api->GetInstance());
+
+        // Create surface from window handle
+        if (!VulkanPlatformSupport::CreateVulkanSurface(instance, desc.windowHandle, &surface_))
+        {
+            return;
+        }
+
+
+        VkPhysicalDevice physicalDevice = device_->GetPhysicalDevice();
+
+        // 1. 获取表面支持细节
+        SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(physicalDevice);
+
+        // 2. 选择最佳表面格式和颜色空间
+        VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.formats);
+
+        // 3. 选择最佳呈现模式
+        VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
+
+        // 4. 选择交换链范围
+        VkExtent2D extent = ChooseSwapExtent(swapChainSupport.capabilities, desc.width, desc.height, desc.windowHandle);
+
+        // 5. 确定要使用的图像数量
+        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+        if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+            imageCount = swapChainSupport.capabilities.maxImageCount;
+        }
+
+        // 6. 填充交换链创建信息结构体
+        VkSwapchainCreateInfoKHR createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        createInfo.surface = surface_; // Use the created surface
+        createInfo.minImageCount = imageCount;
+        createInfo.imageFormat = surfaceFormat.format;
+        createInfo.imageColorSpace = surfaceFormat.colorSpace;
+        createInfo.imageExtent = extent;
+        createInfo.imageArrayLayers = 1;
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        device_->InitPresentQueue(surface_); // Initialize the present queue
+
+        uint32_t presentQueueFamilyIndex = device_->GetPresentQueueFamilyIndex();
+        uint32_t queueFamilyIndices[] = { presentQueueFamilyIndex };
+
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.queueFamilyIndexCount = 1;
+        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+
+
+        createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        createInfo.presentMode = presentMode;
+        createInfo.clipped = VK_TRUE;
+        createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+        // 7. 创建交换链
+        VkDevice deviceHandle = device_->GetDevice();
+        if (vkCreateSwapchainKHR(deviceHandle, &createInfo, nullptr, &swapchain_) != VK_SUCCESS) {
+            return;
+        }
+
+        // 8. 检索交换链图像句柄
+        vkGetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, nullptr);
+        images_.resize(imageCount);
+        vkGetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, images_.data());
+
+        // 9. 保存图像格式和范围
+        imageFormat_ = surfaceFormat.format;
+        extent_ = extent;
+    }
+
+    VulkanSwapchain::~VulkanSwapchain()
+    {
+        Cleanup();
+    }
+
+    void VulkanSwapchain::Cleanup()
+    {
+        VkDevice deviceHandle = device_->GetDevice();
+
+        if (swapchain_ != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(deviceHandle, swapchain_, nullptr);
+            swapchain_ = VK_NULL_HANDLE;
+        }
+
+        // Destroy the surface
+        if (surface_ != VK_NULL_HANDLE) {
+            vkDestroySurfaceKHR(device_->GetInstance(), surface_, nullptr);
+            surface_ = VK_NULL_HANDLE;
+        }
+    }
+
+    bool VulkanSwapchain::Present(uint32_t imageIndex, VkSemaphore waitSemaphore)
+    {
+		VulkanQueue* queue = device_->GetPresentQueue();
+		if (queue == nullptr) {
+			return false;
+		}
+		VkQueue queueHandle = queue->GetHandle();
+        VkPresentInfoKHR presentInfo{};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &waitSemaphore;
+
+        VkSwapchainKHR swapChains[] = { swapchain_ };
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapChains;
+
+        presentInfo.pImageIndices = &imageIndex;
+
+        VkResult result = vkQueuePresentKHR(queueHandle, &presentInfo);
+
+        if (result != VK_SUCCESS) {
+            return false;
+        }
+
+        return true;
+    }
+
+    SwapChainSupportDetails VulkanSwapchain::QuerySwapChainSupport(VkPhysicalDevice device) {
+        SwapChainSupportDetails details;
+
+        // Surface capabilities
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_, &details.capabilities);
+
+        // Surface formats
+        uint32_t formatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, nullptr);
+
+        if (formatCount != 0) {
+            details.formats.resize(formatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, details.formats.data());
+        }
+
+        // Present modes
+        uint32_t presentModeCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, nullptr);
+
+        if (presentModeCount != 0) {
+            details.presentModes.resize(presentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, details.presentModes.data());
+        }
+
+        return details;
+    }
+
+    VkSurfaceFormatKHR VulkanSwapchain::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+        for (const auto& availableFormat : availableFormats) {
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                return availableFormat;
+            }
+        }
+
+        return availableFormats[0];
+    }
+
+    VkPresentModeKHR VulkanSwapchain::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+        for (const auto& availablePresentMode : availablePresentModes) {
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+                return availablePresentMode;
+            }
+        }
+
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkExtent2D VulkanSwapchain::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height, void* windowHandle) {
+        if (capabilities.currentExtent.width != UINT32_MAX) {
+            return capabilities.currentExtent;
+        }
+        else {
+            int windowWidth, windowHeight;
+#ifdef _WIN32
+            glfwGetFramebufferSize((GLFWwindow*)windowHandle, &windowWidth, &windowHeight);
+#else
+            glfwGetFramebufferSize((GLFWwindow*)windowHandle, &windowWidth, &windowHeight);
+#endif
+
+            VkExtent2D actualExtent = {
+                static_cast<uint32_t>(windowWidth),
+                static_cast<uint32_t>(windowHeight)
+            };
+
+            actualExtent.width = ::std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            actualExtent.height = ::std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+            return actualExtent;
+        }
+    }
+
+}

@@ -10,7 +10,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(TargetName RenderingLearn)
 project(${TargetName})
 
-set(IncludeDir3rd ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/Framework/RHI/PublicHeader)
+set(IncludeDir3rd
+	${CMAKE_SOURCE_DIR}/src 
+	${CMAKE_SOURCE_DIR}/src/Framework/Common
+	${CMAKE_SOURCE_DIR}/src/Framework/RHI/PublicHeader
+	${CMAKE_SOURCE_DIR}/src/Framework/RHIVulkan/PublicHeader
+	${CMAKE_SOURCE_DIR}/src/Framework/RenderCore/PublicHeader
+)
 set(Libs3rd)
 
 
