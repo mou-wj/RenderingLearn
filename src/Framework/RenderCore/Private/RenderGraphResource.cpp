@@ -70,4 +70,77 @@ void RenderGraphBuffer::Create(RenderGraphBuilder& builder)
     }
 }
 
+RenderGraphUAV::RenderGraphUAV(const std::string& name) : RenderGraphView(name)
+{
+}
+RenderGraphUAV::~RenderGraphUAV()
+{
+}
+
+RenderGraphSRV::RenderGraphSRV(const std::string& name) : RenderGraphView(name)
+{
+}
+RenderGraphSRV::~RenderGraphSRV()
+{
+}
+
+RenderGraphView::RenderGraphView(const std::string& name) : Name(name)
+{
+}
+RenderGraphView::~RenderGraphView()
+{
+}
+
+
+RenderGraphTextureSRV::RenderGraphTextureSRV(const std::string& name, const RenderGraphTextureSRVDesc& desc)   
+    : RenderGraphSRV(name), Desc(desc)
+{   
+}
+
+RenderGraphTextureSRV::~RenderGraphTextureSRV()
+{
+    // Cleanup if necessary
+}
+
+RenderGraphTextureUAV::RenderGraphTextureUAV(const std::string& name, const RenderGraphTextureUAVDesc& desc)
+    : RenderGraphUAV(name), Desc(desc)
+{   
+    // TODO: Implement
+}
+
+RenderGraphTextureUAV::~RenderGraphTextureUAV()
+{
+    // Cleanup if necessary
+
+}
+
+RenderGraphBufferSRV::RenderGraphBufferSRV(const std::string& name, const RenderGraphBufferSRVDesc& desc)
+    : RenderGraphSRV(name), Desc(desc)
+{   
+    // TODO: Implement
+}
+
+RenderGraphBufferSRV::~RenderGraphBufferSRV()
+{
+    // Cleanup if necessary
+}
+
+RenderGraphBufferUAV::RenderGraphBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc)
+    : RenderGraphUAV(name), Desc(desc)
+{
+    // TODO: Implement
+}
+RenderGraphBufferUAV::~RenderGraphBufferUAV()
+{
+    // Cleanup if necessary
+}
+
+
+
+
+
+
+
+
+
 } // namespace WR::RenderCore

@@ -131,5 +131,156 @@ using RenderGraphResourceSP = std::shared_ptr<RenderGraphResource>;
 using RenderGraphTextureSP = std::shared_ptr<RenderGraphTexture>;
 using RenderGraphBufferSP = std::shared_ptr<RenderGraphBuffer>;
 
+// 新增：资源视图类型
+enum class RenderGraphViewType
+{
+    TextureSRV,
+    TextureUAV,
+    BufferSRV,
+    BufferUAV
+};
+struct RenderGraphViewDesc
+{
+    RenderGraphViewType ViewType;
+    // 视图格式
+    ERHIFormat Format = ERHIFormat::Unknown;
+    // mip/slice等可选参数
+    uint32_t MipLevel = 0;
+    uint32_t ArraySlice = 0;
+};
+
+
+class RenderGraphView
+{
+public:
+    RenderGraphView(const std::string& name);
+    virtual ~RenderGraphView();
+
+    // 改为获取对应资源的SP
+    virtual RenderGraphResourceSP GetResource() const = 0;
+
+protected:
+    std::string Name;
+};
+
+class RenderGraphSRV : public RenderGraphView{
+public:
+    RenderGraphSRV(const std::string& name);
+    ~RenderGraphSRV() override;
+    RHIShaderResourceView* GetRHIShaderResourceView() const { return RHIShaderResourceView; }
+
+protected:
+    RHIShaderResourceView* RHIShaderResourceView = nullptr;
+
+};
+
+class RenderGraphUAV : public RenderGraphView{
+public:
+    RenderGraphUAV(const std::string& name);
+    ~RenderGraphUAV() override;
+    RHIUnorderedAccessView* GetRHIUnorderedAccessView() const { return RHIUnorderedAccessView; }
+
+protected:
+    RHIUnorderedAccessView* RHIUnorderedAccessView = nullptr;  
+
+};
+
+
+// -------------------------------------------------------------------------------------------------
+//  Texture SRV
+// -------------------------------------------------------------------------------------------------
+struct RenderGraphTextureSRVDesc : public RenderGraphViewDesc
+{
+    RenderGraphTextureSRVDesc() { ViewType = RenderGraphViewType::TextureSRV; }
+    RenderGraphTextureSP Texture; // 关联的纹理资源
+};
+
+class RenderGraphTextureSRV : public RenderGraphSRV
+{
+public:
+    RenderGraphTextureSRV(const std::string& name,const RenderGraphTextureSRVDesc& desc);
+    ~RenderGraphTextureSRV() override;
+
+    RenderGraphResourceSP GetResource() const override { return Desc.Texture; }
+    const RenderGraphTextureSRVDesc& GetDesc() const { return Desc; }
+private:
+    RenderGraphTextureSRVDesc Desc;
+};
+
+// -------------------------------------------------------------------------------------------------
+//  Texture UAV
+// -------------------------------------------------------------------------------------------------
+struct RenderGraphTextureUAVDesc : public RenderGraphViewDesc
+{
+    RenderGraphTextureUAVDesc() { ViewType = RenderGraphViewType::TextureUAV; }
+    RenderGraphTextureSP Texture; // 关联的纹理资源
+};
+
+class RenderGraphTextureUAV : public RenderGraphUAV
+{
+public:
+    RenderGraphTextureUAV(const std::string& name, const RenderGraphTextureUAVDesc& desc);
+    ~RenderGraphTextureUAV() override;
+
+    RenderGraphResourceSP GetResource() const override { return Desc.Texture; }
+    const RenderGraphTextureUAVDesc& GetDesc() const { return Desc; }
+private:
+    RenderGraphTextureUAVDesc Desc;
+};
+
+// -------------------------------------------------------------------------------------------------
+//  Buffer SRV
+// -------------------------------------------------------------------------------------------------
+struct RenderGraphBufferSRVDesc : public RenderGraphViewDesc
+{
+    RenderGraphBufferSRVDesc() { ViewType = RenderGraphViewType::BufferSRV; }
+    RenderGraphBufferSP Buffer; // 关联的缓冲区资源
+
+};
+
+class RenderGraphBufferSRV : public RenderGraphSRV
+{
+public:
+    RenderGraphBufferSRV(const std::string& name, const RenderGraphBufferSRVDesc& desc);
+    ~RenderGraphBufferSRV() override;
+
+    RenderGraphResourceSP GetResource() const override { return Desc.Buffer; }
+    const RenderGraphBufferSRVDesc& GetDesc() const { return Desc; }
+private:
+    RenderGraphBufferSRVDesc Desc;
+};
+
+// -------------------------------------------------------------------------------------------------
+//  Buffer UAV
+// -------------------------------------------------------------------------------------------------
+struct RenderGraphBufferUAVDesc : public RenderGraphViewDesc
+{
+    RenderGraphBufferUAVDesc() { ViewType = RenderGraphViewType::BufferUAV; }
+    RenderGraphBufferSP Buffer; // 关联的缓冲区资源
+};
+
+class RenderGraphBufferUAV : public RenderGraphUAV
+{
+public:
+    RenderGraphBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc);
+    ~RenderGraphBufferUAV() override;
+
+    RenderGraphResourceSP GetResource() const override { return Desc.Buffer; }
+    const RenderGraphBufferUAVDesc& GetDesc() const { return Desc; }
+private:
+    RenderGraphBufferUAVDesc Desc;
+
+};
+
+// 资源智能指针
+using RenderGraphResourceSP = std::shared_ptr<RenderGraphResource>;
+using RenderGraphTextureSP = std::shared_ptr<RenderGraphTexture>;
+using RenderGraphBufferSP = std::shared_ptr<RenderGraphBuffer>;
+using RenderGraphViewSP = std::shared_ptr<RenderGraphView>;
+using RenderGraphTextureSRVSP = std::shared_ptr<RenderGraphTextureSRV>;
+using RenderGraphTextureUAVSP = std::shared_ptr<RenderGraphTextureUAV>;
+using RenderGraphBufferSRVSP = std::shared_ptr<RenderGraphBufferSRV>;
+using RenderGraphBufferUAVSP = std::shared_ptr<RenderGraphBufferUAV>;
+
 
 } // namespace WR::RenderCore

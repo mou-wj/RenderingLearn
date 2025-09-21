@@ -7,6 +7,7 @@
 #include <functional> // For std::function
 #include "RHIRenderTargetInfo.h"
 #include "RHICommandList.h"
+#include "ShaderParameter.h"
 
 namespace RenderCore {
     // Forward Declarations
@@ -73,14 +74,11 @@ struct RenderGraphPassInfo
 {
     std::string Name;                              // Pass name
     ERHIPipelineType PipelineType;                 // Pipeline type (e.g., Graphics, Compute)
-    std::vector<RenderGraphResourceSP> Inputs;      // Input resources
-    std::vector<RenderGraphResourceSP> Outputs;     // Output resources
+    std::vector<ShaderMetaData> ShaderMetaDatas;      // shader metadata (for binding slots, etc.)
     RenderGraphRenderTargetsInfo RenderTargets; // Render target info (if applicable)
     RenderGraphPassInfo(const std::string& name = "", ERHIPipelineType pipelineType = ERHIPipelineType::Graphics)
         : Name(name), PipelineType(pipelineType) {}
 
-    void AddInput(RenderGraphResourceSP resource) { Inputs.push_back(resource); }
-    void AddOutput(RenderGraphResourceSP resource) { Outputs.push_back(resource); }
 };
 
 // -------------------------------------------------------------------------------------------------
@@ -90,10 +88,7 @@ class RenderGraphPass
 {
 public:
     // Construction/Destruction
-    RenderGraphPass(const std::string& name, ERHIPipelineType pipeType = ERHIPipelineType::Graphics) : Name(name) {
-		PassInfo.Name = name + "PassInfo"; // Initialize PassInfo with the pass name
-		PassInfo.PipelineType = pipeType; // Default to Graphics pipeline type
-    }
+    RenderGraphPass(const std::string& name,  const RenderGraphPassInfo& info) : Name(name), PassInfo(info) {}
     virtual ~RenderGraphPass() = default;
 
     // Accessors
@@ -106,12 +101,7 @@ public:
     virtual ERHIPipelineType GetPipelineType() const { return PassInfo.PipelineType; }
 
     // Pass Info
-    RenderGraphPassInfo& GetPassInfo() { return PassInfo; }
-
-	void SetPassInfo(const RenderGraphPassInfo& info) {
-		PassInfo = info;
-	}
-
+    const RenderGraphPassInfo& GetPassInfo() const { return PassInfo; }
 
 protected:
     // Pass Name (for debugging and identification)
@@ -123,14 +113,15 @@ protected:
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Lambda Pass (For simple passes defined inline)
 // -------------------------------------------------------------------------------------------------
+template<typename LambdaType>
 class RenderGraphLambdaPass : public RenderGraphPass
 {
 public:
-    RenderGraphLambdaPass(const std::string& name) : RenderGraphPass(name){}
+    RenderGraphLambdaPass(const std::string& name,  const RenderGraphPassInfo& info, LambdaType&& lambda) : RenderGraphPass(name, info), ExecuteFunction(std::forward<LambdaType>(lambda)) {}
     ~RenderGraphLambdaPass() override {}
 
     void Execute(RHICommandList& commandList) override {
-
+        ExecuteFunction(commandList);
     }
 
 private:

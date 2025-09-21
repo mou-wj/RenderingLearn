@@ -4,6 +4,7 @@
 
 
 
+
 namespace RHIVulkan{
     using namespace RHI;
 class VulkanDevice;
@@ -17,6 +18,8 @@ public:
     bool Init() override;
     void Shutdown() override;
     VkInstance GetInstance() const { return Instance; }
+
+    RHIShaderLibrarySP CreateShaderLibrary(const std::string& name, ERHIShaderPlatform platform) override;
 
     RHITextureSP CreateTexture(const RHITextureDesc& desc) override;
     RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) override;

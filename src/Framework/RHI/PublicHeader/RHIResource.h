@@ -51,6 +51,29 @@ protected:
 };
 
 
+class RHIResourceView {
+public:
+    explicit RHIResourceView(RHIResource* Resource,ERHIResourceAccess access) : Resource(Resource),Access(access) {}
+private:
+    ERHIResourceAccess Access = ERHIResourceAccess::Unknown;
+    RHIResource* Resource = nullptr;
+};
+
+class RHIShaderResourceView : public RHIResourceView,public RHIResource  {
+public:
+    explicit RHIShaderResourceView(RHIResource* Resource, ERHIResourceAccess access = ERHIResourceAccess::Read)
+        : RHIResourceView(Resource, access),RHIResource(ERHIResourceType::ShaderResourceView) {}
+};
+
+class RHIUnorderedAccessView : public RHIResourceView,public RHIResource  {
+public:
+    explicit RHIUnorderedAccessView(RHIResource* Resource, ERHIResourceAccess access = ERHIResourceAccess::ReadWrite)
+        : RHIResourceView(Resource, access),RHIResource(ERHIResourceType::UnorderedAccessView) {}
+};
+
+
+
+
 // Shader基类
 class RHIShader : public RHIResource
 {

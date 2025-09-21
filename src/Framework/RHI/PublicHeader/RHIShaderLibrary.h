@@ -10,21 +10,19 @@
 
 namespace RHI {
 
-// 着色器类型枚举（可用RHIResource.h里的ERHIShaderType）
-using ShaderType = ERHIShaderType;
+    using ShaderType = ERHIShaderType;
 
-// 着色器唯一键
-struct ShaderKey {
-    std::string Name;
-    ShaderType Type;
+    struct ShaderKey {
+        std::string Name;
+        ShaderType Type;
 
-    bool operator==(const ShaderKey& other) const {
-        return Name == other.Name && Type == other.Type;
-    }
-};
+        bool operator==(const ShaderKey& other) const {
+            return Name == other.Name && Type == other.Type;
+        }
+    };
 
-// Hash算法
-} // namespace RHI
+}
+
 
 namespace std {
     template <>
@@ -38,8 +36,6 @@ namespace std {
 }
 
 namespace RHI {
-
-// 着色器二进制描述
 struct ShaderBinary {
     std::string Name;
     ShaderType Type;
@@ -47,34 +43,24 @@ struct ShaderBinary {
     std::vector<uint8_t> BinaryCode;
     std::string SourceCode;
 };
-
-// ShaderLibrary
 class RHIShaderLibrary {
 public:
-    RHIShaderLibrary() = default;
-    ~RHIShaderLibrary() = default;
+    RHIShaderLibrary(const std::string& name, ERHIShaderPlatform platform);
+    virtual ~RHIShaderLibrary() = default;
+    virtual ShaderKey AddShaderBinary(const ShaderBinary& binary);
+    virtual const ShaderBinary* FindShaderBinary(ShaderKey key) const;
 
-    // 读取shader源码并缓存
-    static bool LoadShaderSource(const std::string& FilePath, ShaderType Type, const std::string& EntryPoint);
+    virtual RHIShaderSP CreateShader(ShaderKey key) = 0;
 
-    // 编译shader源码为二进制并缓存
-    static bool CompileShader(const std::string& Name, ShaderType Type);
+    ERHIShaderPlatform GetPlatform() const { return Platform; }
 
-    // 查找已缓存的二进制shader
-    static const ShaderBinary* FindShaderBinary(const std::string& Name, ShaderType Type);
+    const std::string& GetName() const { return Name; }
+protected:
+    std::string Name;
+    ERHIShaderPlatform Platform;
+    mutable std::mutex ShaderCacheMutex;
+    std::unordered_map<ShaderKey, std::unique_ptr<ShaderBinary>> ShaderCache;
 
-    // 通过RHI创建各种类型的RHIShader实例
-    static RHIShaderSP CreateShader(const std::string& Name, ShaderType Type);
-    static RHIVertexShaderSP CreateVertexShader(const std::string& Name);
-    static RHIFragmentShaderSP CreateFragmentShader(const std::string& Name);
-    static RHIComputeShaderSP CreateComputeShader(const std::string& Name);
-    static RHIGeometryShaderSP CreateGeometryShader(const std::string& Name);
-    static RHITessControlShaderSP CreateTessControlShader(const std::string& Name);
-    static RHITessEvalShaderSP CreateTessEvalShader(const std::string& Name);
-
-private:
-    static std::unordered_map<ShaderKey, std::unique_ptr<ShaderBinary>> ShaderCache;
-    static std::mutex ShaderCacheMutex;
 };
 
-} //
+} // namespace RHI

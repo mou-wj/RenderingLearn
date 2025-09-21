@@ -3,6 +3,7 @@
 #include "RHIResource.h"
 #include "RHICommandList.h"
 #include "RHICommandContex.h"
+#include "RHIShaderLibrary.h"
 #include <map>
 #include <string>
 
@@ -48,20 +49,26 @@ public:
 
 #define REGISTER_RHI_API_CREATOR(apiName, apiCreator) \
     static RHIApiCreatorRegister<apiCreator> g_RHIApiCreatorRegister##apiCreator(apiName);
+class RHIShaderLibrary;
+using RHIShaderLibrarySP = std::shared_ptr<RHIShaderLibrary>;
 
 class RHIApi
 {
 public:
+
     virtual ~RHIApi() = default;
 	virtual bool Init() = 0;
 	virtual void Shutdown() = 0;
+
+
+    virtual RHIShaderLibrarySP CreateShaderLibrary(const std::string& name, ERHIShaderPlatform platform) = 0;
 
     virtual RHITextureSP CreateTexture(const RHITextureDesc& desc) = 0;
     virtual RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) = 0;
     virtual void UpdateTexture(RHITextureSP texture, const void* data,const RHITextureRegion& size) = 0;
     virtual void UpdateBuffer(RHIBufferSP buffer, const void* data, uint64_t size) = 0;
 
-
+    
 
     virtual RHIGraphicsPipelineStateSP CreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) = 0;
     virtual RHIComputePipelineStateSP CreateComputePipelineState(const RHIComputePipelineStateDesc& desc) = 0;

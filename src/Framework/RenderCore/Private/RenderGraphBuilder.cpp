@@ -1,6 +1,6 @@
 #include "RenderGraphBuilder.h"
 #include "RHIApi.h"
-
+#include "RenderGraphResource.h"
 #include <unordered_set>
 
 namespace RenderCore {
@@ -24,10 +24,6 @@ namespace RenderCore {
         Passes.push_back(pass);
     }
 
-    void RenderGraphBuilder::AddPassDependency(RenderGraphPass* dependentPass, RenderGraphPass* dependencyPass)
-    {
-        PassDependencies[dependentPass].push_back(dependencyPass);
-    }
 
     RenderGraphTextureSP RenderGraphBuilder::CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc)
     {
@@ -59,6 +55,81 @@ namespace RenderCore {
         buffer->Create(*this);
         BufferCache[name] = buffer;
         return buffer;
+    }
+    
+    RenderGraphTextureSRVSP RenderGraphBuilder::CreateTextureSRV(const std::string& name, RenderGraphResourceSP resource)
+    {
+        auto textureResource = std::dynamic_pointer_cast<RenderGraphTexture>(resource);
+        if (!textureResource)
+        {
+            
+        }
+
+        RenderGraphTextureSRVDesc desc;
+        desc.Texture = textureResource;
+
+        return std::make_shared<RenderGraphTextureSRV>(name, desc);
+    }
+
+    RenderGraphBufferSRVSP RenderGraphBuilder::CreateBufferSRV(const std::string& name, RenderGraphResourceSP resource)
+    {
+        auto bufferResource = std::dynamic_pointer_cast<RenderGraphBuffer>(resource);
+        if (!bufferResource)
+        {
+
+        }
+
+        RenderGraphBufferSRVDesc desc;
+        desc.Buffer = bufferResource;
+
+
+        return std::make_shared<RenderGraphBufferSRV>(name,desc);
+    }
+
+    RenderGraphTextureUAVSP RenderGraphBuilder::CreateTextureUAV(const std::string& name, RenderGraphResourceSP resource)
+    {
+        auto textureResource = std::dynamic_pointer_cast<RenderGraphTexture>(resource);
+        if (!textureResource)
+        {
+
+        }
+
+        RenderGraphTextureUAVDesc desc;
+        desc.Texture = textureResource;
+
+        return std::make_shared<RenderGraphTextureUAV>(name,desc);
+    }
+
+    RenderGraphBufferUAVSP RenderGraphBuilder::CreateBufferUAV(const std::string& name, RenderGraphResourceSP resource)
+    {
+        auto bufferResource = std::dynamic_pointer_cast<RenderGraphBuffer>(resource);
+        if (!bufferResource)
+        {
+            
+        }
+
+        RenderGraphBufferUAVDesc desc;
+        desc.Buffer = bufferResource;
+
+        return std::make_shared<RenderGraphBufferUAV>(name, desc);
+    }
+    RHITextureSP RenderGraphBuilder::GetTexture(RenderGraphResourceSP resource)
+    {
+        auto textureResource = std::dynamic_pointer_cast<RenderGraphTexture>(resource);
+        if (!textureResource)
+        {
+        }
+        return textureResource->GetRHITexture();
+    }
+
+    RHIBufferSP RenderGraphBuilder::GetBuffer(RenderGraphResourceSP resource)
+    {
+        auto bufferResource = std::dynamic_pointer_cast<RenderGraphBuffer>(resource);
+        if (!bufferResource)
+        {
+
+        }
+        return bufferResource->GetRHIBuffer();
     }
 
     void RenderGraphBuilder::Execute()

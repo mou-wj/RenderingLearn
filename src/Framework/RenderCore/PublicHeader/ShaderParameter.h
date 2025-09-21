@@ -14,7 +14,7 @@ namespace RenderCore {
     using namespace Common;
 
 
-    // ²ÎÊýÀàÐÍÃ¶¾Ù
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¶ï¿½ï¿½
     enum class EShaderParamType {
         Float,
         Float2,
@@ -23,7 +23,7 @@ namespace RenderCore {
         Matrix4x4,
         Texture2D,
         Sampler,
-        Struct,   // Ç¶Ì×½á¹¹Ìå
+        Struct,   // Ç¶ï¿½×½á¹¹ï¿½ï¿½
         Unknown
     };
 
@@ -38,26 +38,26 @@ namespace RenderCore {
         return EShaderParamType::Unknown;
     }
 
-    // ¶ÔÆë¹æÔò£¨¼ò»¯£¬UE Êµ¼ÊÓÐ¸ü¸´ÔÓµÄ D3D/Vulkan ¹æÔò£©
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ò£¨¼ò»¯£ï¿½UE Êµï¿½ï¿½ï¿½Ð¸ï¿½ï¿½ï¿½ï¿½Óµï¿½ D3D/Vulkan ï¿½ï¿½ï¿½ï¿½
     inline size_t GetAlignment(EShaderParamType type) {
         switch (type) {
         case EShaderParamType::Float:    return 4;
         case EShaderParamType::Float2:   return 8;
-        case EShaderParamType::Float3:   return 16; // std140 ·ç¸ñ¶ÔÆë
+        case EShaderParamType::Float3:   return 16; // std140 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         case EShaderParamType::Float4:   return 16;
         case EShaderParamType::Matrix4x4:return 16;
         default: return 16;
         }
     }
 
-    // µ¥¸ö²ÎÊýµÄÔªÐÅÏ¢
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½Ï¢
     struct ShaderMetaData {
         std::string Name;
         EShaderParamType Type;
-        int BindSlot = -1;    // ¶ÔÓÚ CBV/SRV/UAV/Texture/Sampler ÓÐÐ§
-        size_t Offset = 0;    // ÔÚ³£Á¿»º³åÖÐµÄÆ«ÒÆ
-        size_t Size = 0;      // Õ¼ÓÃ´óÐ¡
-        std::vector<ShaderMetaData> Nested; // Ç¶Ì×½á¹¹Ìå
+        int BindSlot = -1;    // ï¿½ï¿½ï¿½ï¿½ CBV/SRV/UAV/Texture/Sampler ï¿½ï¿½Ð§
+        size_t Offset = 0;    // ï¿½Ú³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ðµï¿½Æ«ï¿½ï¿½
+        size_t Size = 0;      // Õ¼ï¿½Ã´ï¿½Ð¡
+        std::vector<ShaderMetaData> Nested; // Ç¶ï¿½×½á¹¹ï¿½ï¿½
     };
 
 
@@ -93,30 +93,47 @@ struct TypedShaderParameter : public ShaderParameter
 };
 
 
-TypedShaderParameter<float> FloatParameter;
-
-
-
 // -------------------------------------------------------------------------------------------------
 //  Resource Shader Parameters (Texture and Buffer)
 // -------------------------------------------------------------------------------------------------
-class TextureParameter : public ShaderParameter
+class TextureSRVParameter : public ShaderParameter
 {
 public:
-    explicit TextureParameter(const std::string& name = "", RenderGraphTexture* textureResource = nullptr)
+    explicit TextureSRVParameter(const std::string& name = "", RenderGraphTextureSRVSP textureResource = nullptr)
         : ShaderParameter(name), Value(textureResource) {}
 
-    RenderGraphTexture* Value;
+    RenderGraphTextureSRVSP Value;
     static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
 };
 
-class UniformBufferParameter : public ShaderParameter
+class TextureUAVParameter : public ShaderParameter
 {
 public:
-    explicit UniformBufferParameter(const std::string& name = "", RenderGraphBuffer* bufferResource = nullptr)
+    explicit TextureUAVParameter(const std::string& name = "", RenderGraphTextureUAVSP textureResource = nullptr)
+        : ShaderParameter(name), Value(textureResource) {}
+
+    RenderGraphTextureUAVSP Value;
+    static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
+};
+
+
+class UniformBufferSRVParameter : public ShaderParameter
+{
+public:
+    explicit UniformBufferSRVParameter(const std::string& name = "", RenderGraphBufferSRVSP bufferResource = nullptr)
         : ShaderParameter(name), Value(bufferResource) {}
 
-    RenderGraphBuffer* Value; // Pointer to the RenderGraphBuffer resource
+    RenderGraphBufferSRVSP Value; // Pointer to the RenderGraphBuffer resource
+    static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
+};
+
+class UniformBufferUAVParameter : public ShaderParameter
+{
+public:
+    explicit UniformBufferUAVParameter(const std::string& name = "", RenderGraphBufferUAVSP bufferResource = nullptr)
+        : ShaderParameter(name), Value(bufferResource) {}
+
+    RenderGraphBufferUAVSP Value; // Pointer to the RenderGraphBuffer resource
     static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
 };
 
@@ -172,37 +189,48 @@ TypedShaderParameter<ClassType> Name;\
 SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,ClassType,Name,TypedShaderParameter<ClassType>)
 
 // Define a texture parameter
-#define SHADER_PARAMETER_TEXTURE(Name) \
+#define SHADER_PARAMETER_TEXTURE_SRV(Name) \
  PrevType##Name;\
-TextureParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Name,TextureParameter)
+TextureSRVParameter Name;\
+SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Name,TextureSRVParameter)
+
+#define SHADER_PARAMETER_TEXTURE_UAV(Name) \
+ PrevType##Name;\
+TextureUAVParameter Name;\
+SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Name,TextureUAVParameter)
+
 
 // Define a uniform parameter
-#define SHADER_PARAMETER_UNIFORM_BUFFER(Name) \
+#define SHADER_PARAMETER_UNIFORM_BUFFER_SRV(Name) \
  PrevType##Name;\
-UniformBufferParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferParameter)
+UniformBufferSRVParameter Name;\
+SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferSRVParameter)
+
+#define SHADER_PARAMETER_UNIFORM_BUFFER_UAV(Name) \
+ PrevType##Name;\
+UniformBufferUAVParameter Name;\
+SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferUAVParameter)
 
 BEGIN_SHADER_PARAMETER_STRUCT(A)
     SHADER_PARAMETER(float,T1)
     SHADER_PARAMETER(float,T2)
-    SHADER_PARAMETER_TEXTURE(T3)
-    SHADER_PARAMETER_UNIFORM_BUFFER(B1)
+    SHADER_PARAMETER_TEXTURE_SRV(T3)
+    SHADER_PARAMETER_UNIFORM_BUFFER_SRV(B1)
 END_SHADER_PARAMETER_STRUCT();
 
-class ss {
-public:
-    ss() {
-		auto a = A().GetMetaDatas();
-        for (int i = 0; i < a.size(); i++) {
-            printf("%s\n", a[i].Name.c_str());
-        }
-
-    }
-
-
-};
-ss s;
+//class ss {
+//public:
+//    ss() {
+//		auto a = A().GetMetaDatas();
+//        for (int i = 0; i < a.size(); i++) {
+//            printf("%s\n", a[i].Name.c_str());
+//        }
+//
+//    }
+//
+//
+//};
+//ss s;
 using ShaderParameterSP = std::shared_ptr<ShaderParameter>;
 
 

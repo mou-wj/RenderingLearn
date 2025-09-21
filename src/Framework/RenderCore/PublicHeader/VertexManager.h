@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <unordered_map>
 #include "RHIResource.h"
-
 namespace RenderCore {
+	using namespace RHI;
 
 // 顶点属性描述
 struct VertexElement

@@ -1,4 +1,4 @@
-#include "VertexFactory.h"
+#include "VertexManager.h"
 
 namespace RenderCore {
 
