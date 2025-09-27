@@ -16,6 +16,7 @@ set(IncludeDir3rd
 	${CMAKE_SOURCE_DIR}/src/Framework/RHI/PublicHeader
 	${CMAKE_SOURCE_DIR}/src/Framework/RHIVulkan/PublicHeader
 	${CMAKE_SOURCE_DIR}/src/Framework/RenderCore/PublicHeader
+	${CMAKE_SOURCE_DIR}/src/Framework/Renderer/PublicHeader
 )
 set(Libs3rd)
 

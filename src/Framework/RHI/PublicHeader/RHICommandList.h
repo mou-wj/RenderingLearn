@@ -82,7 +82,7 @@ namespace RHI {
         // Graphics ½Ó¿Ú
         // -----------------
         void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets);
-        void SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset);
+        void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset);
         void SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState);
         void ViewportPresent(const RHIVIewportSP& viewport, const RHITextureSP& presentRenderTarget);
         void SetViewPortRect(const RHIIntRect& viewport);

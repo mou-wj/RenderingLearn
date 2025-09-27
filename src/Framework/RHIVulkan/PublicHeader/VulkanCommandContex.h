@@ -34,7 +34,7 @@ public:
 
     virtual void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets) override {}
 
-    virtual void SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset) override;
+    virtual void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) override;
 
     // Graphics接口
     void SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState) override;

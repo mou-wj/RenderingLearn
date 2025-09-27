@@ -88,7 +88,7 @@ void RHICommandList::SetRenderTarget(const RHIRenderTargetsInfo& renderTargets)
         CommandContex->SetRenderTarget(renderTargets);
 }
 
-void RHICommandList::SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset)
+void RHICommandList::SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset)
 {
     if (CommandContex)
         CommandContex->SetStreamSource(streamIndex, VertexBuffer, Offset);

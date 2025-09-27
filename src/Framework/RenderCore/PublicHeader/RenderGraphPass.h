@@ -113,11 +113,11 @@ protected:
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Lambda Pass (For simple passes defined inline)
 // -------------------------------------------------------------------------------------------------
-template<typename LambdaType>
+
 class RenderGraphLambdaPass : public RenderGraphPass
 {
 public:
-    RenderGraphLambdaPass(const std::string& name,  const RenderGraphPassInfo& info, LambdaType&& lambda) : RenderGraphPass(name, info), ExecuteFunction(std::forward<LambdaType>(lambda)) {}
+    RenderGraphLambdaPass(const std::string& name,  const RenderGraphPassInfo& info, std::function<void(RHICommandList&)>&& lambda) : RenderGraphPass(name, info), ExecuteFunction(std::forward<std::function<void(RHICommandList&)>>(lambda)) {}
     ~RenderGraphLambdaPass() override {}
 
     void Execute(RHICommandList& commandList) override {

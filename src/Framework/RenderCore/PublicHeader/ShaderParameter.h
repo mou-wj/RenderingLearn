@@ -96,6 +96,18 @@ struct TypedShaderParameter : public ShaderParameter
 // -------------------------------------------------------------------------------------------------
 //  Resource Shader Parameters (Texture and Buffer)
 // -------------------------------------------------------------------------------------------------
+
+class TextureParameter : public ShaderParameter
+{
+public:
+    explicit TextureParameter(const std::string& name = "")
+        : ShaderParameter(name) {
+    }
+
+    RenderGraphTextureSP Value;
+    static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
+};
+
 class TextureSRVParameter : public ShaderParameter
 {
 public:
@@ -116,6 +128,16 @@ public:
     static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
 };
 
+class UniformBufferParameter : public ShaderParameter
+{
+public:
+    explicit UniformBufferParameter(const std::string& name = "")
+        : ShaderParameter(name) {
+    }
+
+    RenderGraphBufferSP Value; // Pointer to the RenderGraphBuffer resource
+    static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
+};
 
 class UniformBufferSRVParameter : public ShaderParameter
 {
@@ -134,6 +156,19 @@ public:
         : ShaderParameter(name), Value(bufferResource) {}
 
     RenderGraphBufferUAVSP Value; // Pointer to the RenderGraphBuffer resource
+    static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
+};
+
+struct RenderTargetBinding {
+    RenderGraphTextureSP Texture;
+    int mipLevel = 0;
+    int arraySlice = 0;
+};
+struct RenderTargetBindingParameter 
+{
+public:
+    std::array<RenderTargetBinding, 8> ColorTargets;
+    RenderGraphTextureSP DepthStencilTarget;
     static std::vector<ShaderMetaData> GetMetaDatas() { return {}; }
 };
 
@@ -189,6 +224,11 @@ TypedShaderParameter<ClassType> Name;\
 SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,ClassType,Name,TypedShaderParameter<ClassType>)
 
 // Define a texture parameter
+#define SHADER_PARAMETER_TEXTURE(Name) \
+ PrevType##Name;\
+TextureParameter Name;\
+SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Name,TextureParameter)
+
 #define SHADER_PARAMETER_TEXTURE_SRV(Name) \
  PrevType##Name;\
 TextureSRVParameter Name;\
@@ -201,6 +241,11 @@ SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Nam
 
 
 // Define a uniform parameter
+#define SHADER_PARAMETER_UNIFORM_BUFFER(Name) \
+ PrevType##Name;\
+UniformBufferParameter Name;\
+SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferParameter)
+
 #define SHADER_PARAMETER_UNIFORM_BUFFER_SRV(Name) \
  PrevType##Name;\
 UniformBufferSRVParameter Name;\
@@ -211,11 +256,19 @@ SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name
 UniformBufferUAVParameter Name;\
 SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferUAVParameter)
 
+#define SHADER_PARAMETER_RENDER_TARGETS() \
+ PrevType##RenderTargets;\
+RenderTargetBindingParameter RenderTargets;\
+SHADER_PARAMETER_INTERNAL( CurMember##RenderTargets,PrevType##RenderTargets,RenderTargetBindingParameter,RenderTargets,RenderTargetBindingParameter)
+
+
+
 BEGIN_SHADER_PARAMETER_STRUCT(A)
     SHADER_PARAMETER(float,T1)
     SHADER_PARAMETER(float,T2)
     SHADER_PARAMETER_TEXTURE_SRV(T3)
     SHADER_PARAMETER_UNIFORM_BUFFER_SRV(B1)
+    SHADER_PARAMETER_RENDER_TARGETS()
 END_SHADER_PARAMETER_STRUCT();
 
 //class ss {

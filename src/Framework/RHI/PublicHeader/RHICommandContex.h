@@ -27,7 +27,7 @@ namespace RHI
         // Graphics ½Ó¿Ú
         // ========================
         virtual void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets) = 0;
-        virtual void SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset) = 0;
+        virtual void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) = 0;
         virtual void SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState) = 0;
         virtual void ViewportPresent(const RHIVIewportSP& viewport, const RHITextureSP& presentRenderTarget) = 0;
         virtual void SetViewPortRect(const RHIIntRect& viewport) = 0;
