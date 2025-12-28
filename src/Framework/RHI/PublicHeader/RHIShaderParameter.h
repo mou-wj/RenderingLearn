@@ -19,7 +19,7 @@ enum class ERHIShaderParameterType
 };
 
 // 着色器参数描述
-struct RHIShaderParameterDesc
+struct RHI_API RHIShaderParameterDesc
 {
     std::string Name;                    // 参数名
     ERHIShaderParameterType Type = ERHIShaderParameterType::Unknown;
@@ -30,7 +30,7 @@ struct RHIShaderParameterDesc
 };
 
 // 着色器参数基类
-class RHIShaderParameter
+class RHI_API RHIShaderParameter
 {
 public:
     RHIShaderParameter(const RHIShaderParameterDesc& desc)
@@ -46,10 +46,9 @@ protected:
     RHIShaderParameterDesc Desc;
 };
 
-using RHIShaderParameterSP = std::shared_ptr<RHIShaderParameter>;
 
-struct RHIBatchedShaderParameter{
-    std::vector<RHIShaderParameterSP> Parameters; // 批量参数列表
+struct RHI_API RHIBatchedShaderParameters{
+    std::vector<RHIShaderParameter> Parameters; // 批量参数列表
 };
 
 

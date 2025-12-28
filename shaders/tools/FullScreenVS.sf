@@ -1,0 +1,30 @@
+
+// FullScreenVS - 生成全屏三角（无需外部顶点缓冲）
+// 输出 UV 到像素着色器，使用三角覆盖整个屏幕（兼容所有顶点ID：0,1,2）
+
+struct FVertexOutput
+{
+    float4 Position : SV_Position;
+    float2 UV       : TEXCOORD0;
+};
+
+// 使用三顶点覆盖全屏（避免索引/顶点缓冲）
+// VertexId: 0,1,2
+FVertexOutput MainVS(uint VertexId : SV_VertexID)
+{
+    // 全屏三角顶点位置（裁剪空间）
+    static const float2 Positions[3] = {
+        float2(-1.0f, -1.0f), // left-bottom
+        float2( 3.0f, -1.0f), // far right-bottom
+        float2(-1.0f,  3.0f)  // left-top far
+    };
+
+    float2 pos = Positions[VertexId];
+
+    FVertexOutput Out;
+    Out.Position = float4(pos.xy, 0.0f, 1.0f);
+
+    // 将裁剪空间 XY 映射到 [0,1] 作为 UV
+    Out.UV = pos * 0.5f + 0.5f;
+    return Out;
+}

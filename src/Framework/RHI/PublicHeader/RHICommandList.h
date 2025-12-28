@@ -3,6 +3,7 @@
 #include <memory>
 #include <list>
 #include "RHIRenderTargetInfo.h"
+#include "RHIShaderParameter.h"
 
 namespace RHI {
 
@@ -12,7 +13,7 @@ namespace RHI {
     // -----------------------------
     // 命令基类
     // -----------------------------
-    struct RHICommandBase
+    struct RHI_API RHICommandBase
     {
         virtual ~RHICommandBase() = default;
         virtual void Execute(RHICommandList& cmdList) = 0;
@@ -21,21 +22,21 @@ namespace RHI {
     // -----------------------------
     // 具体命令
     // -----------------------------
-    struct RHICommandDispatch : public RHICommandBase
+    struct RHI_API RHICommandDispatch : public RHICommandBase
     {
         uint32_t X, Y, Z;
         RHICommandDispatch(uint32_t x, uint32_t y, uint32_t z);
         void Execute(RHICommandList& cmdList) override;
     };
 
-    struct RHICommandDraw : public RHICommandBase
+    struct RHI_API RHICommandDraw : public RHICommandBase
     {
         uint32_t VertexCount, InstanceCount, FirstVertex, FirstInstance;
         RHICommandDraw(uint32_t v, uint32_t i, uint32_t fv, uint32_t fi);
         void Execute(RHICommandList& cmdList) override;
     };
 
-    struct RHICommandTraceRays : public RHICommandBase
+    struct RHI_API RHICommandTraceRays : public RHICommandBase
     {
         uint32_t Width, Height, Depth;
         RHICommandTraceRays(uint32_t w, uint32_t h, uint32_t d);
@@ -45,7 +46,7 @@ namespace RHI {
     // -----------------------------
     // 统一的命令列表
     // -----------------------------
-    class RHICommandList
+    class RHI_API RHICommandList
     {
     public:
         explicit RHICommandList(RHICommandContex* context);
@@ -73,6 +74,7 @@ namespace RHI {
         void SetImmediate(bool bImmediate);
         bool IsImmediate() const;
 
+        void SetBatchedShaderParameters(const RHIShaderSP& shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
         // -----------------
         // Compute 接口
         // -----------------
@@ -84,6 +86,7 @@ namespace RHI {
         void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets);
         void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset);
         void SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState);
+
         void ViewportPresent(const RHIVIewportSP& viewport, const RHITextureSP& presentRenderTarget);
         void SetViewPortRect(const RHIIntRect& viewport);
         void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,

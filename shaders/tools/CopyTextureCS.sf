@@ -1,0 +1,32 @@
+// CopyTexture.usf - UE 风格
+// 绑定名示例：InputTexture (t0), InputSampler (s0), OutputTexture (u0)
+// 常量缓冲区使用 b0 传入尺寸等
+
+Texture2D<float4> InputTexture      : register(t0);
+SamplerState      InputTextureSampler : register(s0);
+RWTexture2D<float4> OutputTexture   : register(u0);
+
+cbuffer CopyCB : register(b0)
+{
+    int2 TextureSize;   // width, height
+    int   SrcMip;       // 0 默认，若用 Load
+    int   _pad;
+}
+
+[numthreads(8, 8, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    uint2 pix = DispatchThreadID.xy;
+
+    if (pix.x >= (uint)TextureSize.x || pix.y >= (uint)TextureSize.y)
+        return;
+
+    // --------- Option A: 精确 texel copy（推荐用于逐像素拷贝） ----------
+    float4 c = InputTexture.Load(int3(int2(pix), SrcMip));
+    OutputTexture[int2(pix)] = c;
+
+    // --------- Option B: 采样方式（用于需要过滤或缩放到不同尺寸时） ----------
+    // float2 uv = (float2(pix) + 0.5) / TextureSize; // centers texel
+    // float4 c = InputTexture.SampleLevel(InputTextureSampler, uv, 0.0);
+    // OutputTexture[int2(pix)] = c;
+}

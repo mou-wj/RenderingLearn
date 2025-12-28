@@ -20,16 +20,14 @@ class VulkanCommandBufferManager;
 // -------------------------------------------------------------------------------------------------
 // Vulkan Graphics Context
 // -------------------------------------------------------------------------------------------------
-class VulkanCommandContext : public RHICommandContex
+class RHIVULKAN_API VulkanCommandContext : public RHICommandContex
 {
 public:
     VulkanCommandContext(VulkanDevice* device, VulkanQueue* queue);
     virtual ~VulkanCommandContext();
-
     // Compute接口
     void SetComputePipelineState(const RHIComputePipelineStateSP& pipelineState) override;
-    void SetShaderParameter(RHIShader* shader, const RHIShaderParameterSP& parameter) override;
-    virtual void SetShaderBatchedShaderParameter(RHIShader* shader, const RHIBatchedShaderParameter& parameter) override;
+    virtual void SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter) override;
     void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
 
     virtual void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets) override {}

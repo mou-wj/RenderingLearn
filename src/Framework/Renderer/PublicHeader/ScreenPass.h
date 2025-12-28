@@ -8,9 +8,9 @@ namespace Renderer {
     BEGIN_SHADER_PARAMETER_STRUCT(ScenePassShaderParameter)
         SHADER_PARAMETER_TEXTURE(InText)
         SHADER_PARAMETER_RENDER_TARGETS()
-    END_SHADER_PARAMETER_STRUCT();
+    END_SHADER_PARAMETER_STRUCT(ScenePassShaderParameter);
 
-	void addScreenPass(RenderGraphBuilder& builder, RenderGraphTextureSP inTexture,RenderGraphTextureSP renderTargetTexture);
+	RENDERER_API void addScreenPass(RenderGraphBuilder& builder, RenderGraphTextureSP inTexture);
 
 
 }

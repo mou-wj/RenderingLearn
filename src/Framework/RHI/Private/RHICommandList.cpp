@@ -105,6 +105,10 @@ void RHICommandList::ViewportPresent(const RHIVIewportSP& viewport, const RHITex
     if (CommandContex)
         CommandContex->ViewportPresent(viewport, presentRenderTarget);
 }
+void RHICommandList::SetBatchedShaderParameters(const RHIShaderSP& shader, const RHIBatchedShaderParameters& bacthedShaderParameter) {
+    if (CommandContex)
+        CommandContex->SetBatchedShaderParameters(shader, bacthedShaderParameter);
+}
 
 void RHICommandList::SetViewPortRect(const RHIIntRect& viewport)
 {

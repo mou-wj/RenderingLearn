@@ -11,7 +11,7 @@
 namespace RenderCore {
 
 // 渲染命令结构体，包含名称和执行lambda
-struct RenderCommand
+struct RENDERCORE_API RenderCommand
 {
     std::string Name;
     std::function<void()> Execute;
@@ -21,7 +21,7 @@ struct RenderCommand
 };
 
 // 简化版渲染线程管理类
-class RenderThread
+class RENDERCORE_API RenderThread
 {
 public:
     RenderThread();

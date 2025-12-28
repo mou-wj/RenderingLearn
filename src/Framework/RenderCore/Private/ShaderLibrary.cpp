@@ -2,7 +2,7 @@
 #include <cassert>
 
 namespace RenderCore {
-
+RHI::ERHIShaderPlatform CurrentShaderPlatform;
 std::unordered_map<RHI::ERHIShaderPlatform, RHI::RHIShaderLibrarySP> ShaderLibrary::PlatformLibraryMap;
 std::mutex ShaderLibrary::PlatformLibraryMutex;
 
@@ -23,35 +23,33 @@ RHI::RHIShaderLibrarySP ShaderLibrary::GetOrCreateLibrary(RHI::ERHIShaderPlatfor
     return lib;
 }
 
-RHI::RHIShaderSP ShaderLibrary::CreateShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKey& key) {
+RHI::RHIShaderSP ShaderLibrary::CreateShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKeyHash& key) {
     auto lib = GetOrCreateLibrary(platform);
     if (!lib) return nullptr;
-    const RHI::ShaderBinary* binary = lib->FindShaderBinary(key);
-    if (!binary) return nullptr;
     return lib->CreateShader(key);
 }
 
-RHI::RHIVertexShaderSP ShaderLibrary::CreateVertexShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKey& key) {
+RHI::RHIVertexShaderSP ShaderLibrary::CreateVertexShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKeyHash& key) {
     return std::static_pointer_cast<RHI::RHIVertexShader>(CreateShader(platform, key));
 }
 
-RHI::RHIFragmentShaderSP ShaderLibrary::CreateFragmentShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKey& key) {
+RHI::RHIFragmentShaderSP ShaderLibrary::CreateFragmentShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKeyHash& key) {
     return std::static_pointer_cast<RHI::RHIFragmentShader>(CreateShader(platform, key));
 }
 
-RHI::RHIComputeShaderSP ShaderLibrary::CreateComputeShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKey& key) {
+RHI::RHIComputeShaderSP ShaderLibrary::CreateComputeShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKeyHash& key) {
     return std::static_pointer_cast<RHI::RHIComputeShader>(CreateShader(platform, key));
 }
 
-RHI::RHIGeometryShaderSP ShaderLibrary::CreateGeometryShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKey& key) {
+RHI::RHIGeometryShaderSP ShaderLibrary::CreateGeometryShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKeyHash& key) {
     return std::static_pointer_cast<RHI::RHIGeometryShader>(CreateShader(platform, key));
 }
 
-RHI::RHITessControlShaderSP ShaderLibrary::CreateTessControlShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKey& key) {
+RHI::RHITessControlShaderSP ShaderLibrary::CreateTessControlShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKeyHash& key) {
     return std::static_pointer_cast<RHI::RHITessControlShader>(CreateShader(platform, key));
 }
 
-RHI::RHITessEvalShaderSP ShaderLibrary::CreateTessEvalShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKey& key) {
+RHI::RHITessEvalShaderSP ShaderLibrary::CreateTessEvalShader(RHI::ERHIShaderPlatform platform, const RHI::ShaderKeyHash& key) {
     return std::static_pointer_cast<RHI::RHITessEvalShader>(CreateShader(platform, key));
 }
 

@@ -10,7 +10,7 @@ namespace RHI {
  * 渲染目标绑定信息结构体
  * 描述颜色/深度/模板附件绑定的资源及其参数
  */
-struct RHIRenderTargetInfo
+struct RHI_API RHIRenderTargetInfo
 {
     /** 绑定的纹理资源 */
     RHITextureSP Texture = nullptr;
@@ -86,7 +86,7 @@ struct RHIRenderTargetInfo
 /**
  * 渲染目标集合，包含所有颜色附件和深度/模板附件
  */
-struct RHIRenderTargetsInfo
+struct RHI_API RHIRenderTargetsInfo
 {
     // 最大颜色附件数量
     static constexpr int32_t MaxColorRenderTargets = 8;

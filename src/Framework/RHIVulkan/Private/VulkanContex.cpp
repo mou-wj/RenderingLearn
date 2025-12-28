@@ -14,6 +14,7 @@ VulkanCommandContext::~VulkanCommandContext() {
 
 }
 
+
 void VulkanCommandContext::SetComputePipelineState(const RHIComputePipelineStateSP& pipelineState) {
 
 
@@ -22,10 +23,8 @@ void VulkanCommandContext::SetComputePipelineState(const RHIComputePipelineState
 
 }
 
-void VulkanCommandContext::SetShaderParameter(RHIShader* shader, const RHIShaderParameterSP& parameter) {
-    // Placeholder: Implement shader parameter binding logic
-}
-void VulkanCommandContext::SetShaderBatchedShaderParameter(RHIShader* shader, const RHIBatchedShaderParameter& parameter) {
+
+void VulkanCommandContext::SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter) {
 
 }
 

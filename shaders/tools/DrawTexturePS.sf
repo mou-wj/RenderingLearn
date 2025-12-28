@@ -1,0 +1,27 @@
+// 输入结构（VS → PS）
+struct FPixelShaderInput
+{
+    float2 UV : TEXCOORD0;
+};
+
+//======================
+// 绑定的资源
+//======================
+
+// 输入纹理
+Texture2D InputTexture;
+
+// 对应采样器
+SamplerState InputTextureSampler;
+
+//======================
+// 采样函数
+//======================
+
+float4 MainPS(FPixelShaderInput Input) : SV_Target
+{
+    // 从 InputTexture 使用 UV 采样
+    float4 Color = InputTexture.Sample(InputTextureSampler, Input.UV);
+
+    return Color;
+}

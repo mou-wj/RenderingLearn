@@ -10,7 +10,7 @@ namespace RHIVulkan{
 class VulkanDevice;
 
 
-class VulkanRHIApi : public RHIApi
+class RHIVULKAN_API VulkanRHIApi : public RHIApi
 {
 public:
     ~VulkanRHIApi() override;

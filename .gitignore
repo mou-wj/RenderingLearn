@@ -1,4 +1,6 @@
 .vs
+.vscode
 out
 *.rdc
 deps
+cmake/Find3rdsGenerated.cmake

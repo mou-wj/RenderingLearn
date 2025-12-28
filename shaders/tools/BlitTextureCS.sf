@@ -1,0 +1,31 @@
+
+Texture2D<float4> SrcTexture : register(t0);
+SamplerState LinearSampler  : register(s0);
+RWTexture2D<float4> DstTexture : register(u0);
+
+cbuffer BlitParams : register(b0)
+{
+    float2 SrcSize;   // 输入纹理大小
+    float2 DstSize;   // 输出纹理大小
+}
+
+// 8x8 或 16x16 都行
+[numthreads(8, 8, 1)]
+void MainCS(uint3 DTid : SV_DispatchThreadID)
+{
+    // 用目标纹理坐标判断越界
+    if (DTid.x >= DstSize.x || DTid.y >= DstSize.y)
+        return;
+
+    // 将像素坐标转换为标准化 UV
+    float2 uv = (float2(DTid.xy) + 0.5) / DstSize;
+
+    // 按比例映射到源纹理（如果大小不同）
+    float2 srcUV = uv;
+
+    // 双线性采样
+    float4 color = SrcTexture.SampleLevel(LinearSampler, srcUV, 0);
+
+    // 写入目标纹理
+    DstTexture[DTid.xy] = color;
+}

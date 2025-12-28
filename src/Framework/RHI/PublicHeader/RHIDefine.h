@@ -4,6 +4,27 @@
 namespace RHI
 {
 
+    enum class EShaderUniformBaseType {
+        Unknown = 0,
+        Float32,
+        Int32,
+        UInt32,
+        Bool,
+        // 可根据需要扩展更多类型
+        Texture,
+        Texture_SRV,
+        Texture_UAV,
+        Buffer,
+        Buffer_SRV,
+        Buffer_UAV,
+        Sampler,
+        ColorBindings,
+        //
+        Struct//结构体类型，内部可以含有其他类型数据
+    };
+
+// 常
+
 // 常用的图形格式
 enum class ERHIFormat
 {
@@ -133,11 +154,11 @@ enum class ERHIShaderType
     };
 
     //定义color结构体
-    struct RHIColor{
+    struct RHI_API RHIColor{
         float r, g, b, a;
     };
 
-    struct RHIIntRect
+    struct RHI_API RHIIntRect
     {
         int32_t X, Y, Width, Height;
 
@@ -171,7 +192,7 @@ enum class ERHIShaderType
     };
 
     // 纹理描述结构体
-    struct RHITextureDesc
+    struct RHI_API RHITextureDesc
     {
         uint32_t Width = 1;                  // 纹理宽度
         uint32_t Height = 1;                 // 纹理高度
@@ -190,7 +211,7 @@ enum class ERHIShaderType
     };
 
     // 纹理视图描述
-    struct RHITextureViewDesc
+    struct RHI_API RHITextureViewDesc
     {
         ERHIFormat Format = ERHIFormat::Unknown; // 视图格式
         uint32_t MipLevel = 0;               // 起始Mip级别
@@ -227,7 +248,7 @@ enum class ERHIShaderType
     };
 
     // 缓冲区描述结构体
-    struct RHIBufferDesc
+    struct RHI_API RHIBufferDesc
     {
         uint64_t Size = 0;                   // 缓冲区大小（字节）
         uint32_t Stride = 0;                 // 结构化缓冲区的元素大小
@@ -239,7 +260,7 @@ enum class ERHIShaderType
     };
 
     // 缓冲区视图描述
-    struct RHIBufferViewDesc
+    struct RHI_API RHIBufferViewDesc
     {
         uint64_t Offset = 0;                 // 视图起始偏移
         uint64_t Size = 0;                   // 视图大小
@@ -248,7 +269,7 @@ enum class ERHIShaderType
 
 
     //采样器相关描述
-    struct RHISamplerDesc
+    struct RHI_API RHISamplerDesc
     {
         ERHIFilter magFilter = ERHIFilter::Linear;
         ERHIFilter minFilter = ERHIFilter::Linear;
@@ -268,21 +289,21 @@ enum class ERHIShaderType
     //管线状态描述
     enum class ERHIInputRate { PerVertex, PerInstance };
 
-    struct RHIVertexBindingDesc
+    struct RHI_API RHIVertexBindingDesc
     {
         uint32_t binding = 0;
         uint32_t stride = 0;
         ERHIInputRate inputRate = ERHIInputRate::PerVertex;
     };
 
-    struct RHIVertexAttributeDesc
+    struct RHI_API RHIVertexAttributeDesc
     {
         uint32_t location = 0;
         uint32_t offset = 0;
         ERHIFormat format = ERHIFormat::Unknown; // 可用ERHIFormat或自定义格式
     };
 
-    struct RHIVertexDescStateDesc
+    struct RHI_API RHIVertexDescStateDesc
     {
         std::vector<RHIVertexBindingDesc> bindings;
         std::vector<RHIVertexAttributeDesc> attributes;
@@ -292,7 +313,7 @@ enum class ERHIShaderType
     enum class ERHICullMode { None, Front, Back, FrontAndBack };
     enum class ERHIFrontFace { CounterClockwise, Clockwise };
 
-    struct RHIRasterizerStateDesc
+    struct RHI_API RHIRasterizerStateDesc
     {
         bool depthClampEnable = false;
         bool rasterizerDiscardEnable = false;
@@ -307,14 +328,14 @@ enum class ERHIShaderType
     };
 
 
-    struct RHIColorBlendAttachmentDesc
+    struct RHI_API RHIColorBlendAttachmentDesc
     {
         bool blendEnable = false;
         uint32_t colorWriteMask = 0xF; // RGBA
         // 可扩展BlendFactor/BlendOp等
     };
 
-    struct RHIColorBlendStateDesc
+    struct RHI_API RHIColorBlendStateDesc
     {
         bool logicOpEnable = false;
         std::vector<RHIColorBlendAttachmentDesc> attachments;
@@ -325,7 +346,7 @@ enum class ERHIShaderType
     enum class ERHICompareOp { Never, Less, Equal, LessOrEqual, Greater, NotEqual, GreaterOrEqual, Always };
 
 
-    struct RHIDepthStencilStateDesc
+    struct RHI_API RHIDepthStencilStateDesc
     {
         bool depthTestEnable = false;
         bool depthWriteEnable = false;
@@ -349,7 +370,7 @@ enum class ERHIShaderType
 
 
 
-    struct RHIViewportDesc
+    struct RHI_API RHIViewportDesc
     {
 		float x = 0.0f; // 左上角X坐标
 		float y = 0.0f; // 左上角Y坐标
@@ -361,17 +382,28 @@ enum class ERHIShaderType
         // 可扩展像素格式、VSync等
     };
 
-    struct RHITextureRegion{
+    struct RHI_API RHITextureRegion{
         uint32_t mipLevel = 0; // Mip级别
         uint32_t arraySlice = 0; // 数组切片
+        uint32_t numMipLevels = 1; // 更新区域Mip级别数量
+        uint32_t numArraySlices = 1; // 更新区域数组切片数量
         uint32_t xOffset = 0; // X偏移
         uint32_t yOffset = 0; // Y偏移
         uint32_t zOffset = 0; // Z偏移
         uint32_t width = 0; // 更新区域宽度
         uint32_t height = 0; // 更新区域高度
         uint32_t depth = 1; // 更新区域深度（3D纹理）
+        bool IsIntersect(const RHITextureRegion& other) const {
+            return true; // 实现相交判断逻辑
+        }
     };
-
+    struct RHI_API RHIBufferRegion {
+        uint32_t offset = 0; // 偏移
+        uint32_t size = 0; // 大小
+        bool IsIntersect(const RHITextureRegion& other) const {
+            return true; // 实现相交判断逻辑
+        }
+    };
 
     enum class EVerdorId
     {
@@ -385,4 +417,5 @@ enum class ERHIShaderType
         Microsoft = 0x1414
 
 	};
+
 }

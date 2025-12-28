@@ -5,7 +5,7 @@
 namespace RHI {
 
 // TransientResource基类
-class RHITransientResource
+class RHI_API RHITransientResource
 {
 public:
     explicit RHITransientResource(const RHIResourceSP& resource)
@@ -19,7 +19,7 @@ protected:
 };
 
 // TransientTexture
-class RHITransientTexture : public RHITransientResource
+class RHI_API RHITransientTexture : public RHITransientResource
 {
 public:
     explicit RHITransientTexture(const RHITextureSP& texture)
@@ -30,7 +30,7 @@ public:
 };
 
 // TransientBuffer
-class RHITransientBuffer : public RHITransientResource
+class RHI_API RHITransientBuffer : public RHITransientResource
 {
 public:
     explicit RHITransientBuffer(const RHIBufferSP& buffer)
@@ -44,17 +44,48 @@ using RHITransientTextureSP = std::shared_ptr<RHITransientTexture>;
 using RHITransientBufferSP = std::shared_ptr<RHITransientBuffer>;
 
 
-// TransientResourceManager基类
-class RHITransientResourceManager
-{
-public:
-    virtual ~RHITransientResourceManager() = default;
+struct RHI_API RHITransientInfo {
 
-    // 创建TransientTexture（纯虚函数）
-    virtual RHITransientTextureSP CreateTransientTexture(const RHITextureDesc& desc) = 0;
+    union
+    {
+        class RHIResource* Resource = nullptr;
+        class RHITexture* Texture;
+        class RHIBuffer* Buffer;
+        class RHIUnorderedAccessView* UAV;
+    };
 
-    // 创建TransientBuffer（纯虚函数）
-    virtual RHITransientBufferSP CreateTransientBuffer(const RHIBufferDesc& desc) = 0;
+    enum class EType 
+    {
+        Unknown,
+        Texture,
+        Buffer,
+        UAV
+    } Type = EType::Unknown;
+
+    ERHIResourceAccess AccessBefore = ERHIResourceAccess::Unknown;
+    ERHIResourceAccess AccessAfter = ERHIResourceAccess::Unknown;
+
+    // 范围信息：纹理、缓冲区、UAV 各自的子范围描述
+    struct TextureRange
+    {
+        uint32_t MipLevel = 0;     // 起始mip级
+        uint32_t MipCount = 1;     // mip级数量
+        uint32_t ArraySlice = 0;   // 起始数组切片
+        uint32_t ArraySize = 1;    // 切片数量
+        uint32_t PlaneSlice = 0;   // 平面索引（若适用）
+    } TextureRangeInfo;
+
+    struct BufferRange
+    {
+        uint64_t Offset = 0;       // 字节偏移
+        uint64_t Size = 0;         // 字节大小（0 表示整个缓冲区）
+    } BufferRangeInfo;
+
+    struct UAVRange
+    {
+        uint64_t FirstElement = 0; // 起始元素索引
+        uint64_t NumElements = 0;  // 元素数量（0 表示到结尾或未指定）
+    } UAVRangeInfo;
+
 };
-
 } //

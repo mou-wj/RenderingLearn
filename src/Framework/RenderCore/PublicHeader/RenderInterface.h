@@ -2,19 +2,19 @@
 
 #include <string>
 #include <vector>
-
+#include "Module.h"
+#include "FrameContext.h"
+#include "SceneView.h"
 
 namespace RenderCore {
 
-class RenderInterface
+class RenderInterface : public Core::Module
 {
-    public:
-        virtual ~RenderInterface() = default;
-        virtual void Init() = 0;
-        virtual void Resize(uint32_t width, uint32_t height) = 0;
-        virtual void Render() = 0;
-        virtual void Update() = 0;
-        virtual void Destroy() = 0;
+public:
+    virtual ~RenderInterface() = default;
+    virtual void BeginRender(const FrameContext& context,const Engine::SceneViewCollection& sceneViewCollection) = 0;
+private:
+
 
 };
 

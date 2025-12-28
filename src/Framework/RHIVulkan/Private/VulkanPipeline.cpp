@@ -39,18 +39,7 @@ void VulkanPipelineBase::CreateLayout(const std::vector<RHIShaderStageDesc>& sha
     
     for (auto& shader : shaderStages)
     {
-        auto vulkanShaderSP = std::reinterpret_pointer_cast<VulkanRHIShader>(shader.shader);
-		const auto& descSetLayouts = vulkanShaderSP->GetDescriptorSetLayouts();
-        
-        for (const auto& setBindings : descSetLayouts)
-        {
-            auto setId = setBindings.first;
-            auto& bindings = setBindings.second.Bindings;
-            layoutMap[setId].insert(layoutMap[setId].end(), bindings.begin(), bindings.end());
-        }
-
-
-        
+        auto vulkanShaderSP = std::reinterpret_pointer_cast<VulkanRHIShader>(shader.shader);      
 
     }
 

@@ -1,0 +1,29 @@
+// Minimal Vertex Factory – simplified UE-style example
+
+// 顶点工厂输入结构（提供给 VS）
+struct FVertexInput
+{
+    float3 Position : ATTRIBUTE0;
+    float2 UV       : ATTRIBUTE1;
+};
+
+// 用于读取 Position（UE 中是 C++ 注入的 Attribute 读取函数）
+float3 VertexFactoryGetPosition(uint VertexId)
+{
+    return VertexFetch_Position(VertexId);
+}
+
+// 用于读取 UV
+float2 VertexFactoryGetUV(uint VertexId)
+{
+    return VertexFetch_UV(VertexId);
+}
+
+// VS 用这个函数从顶点工厂获取输入
+FVertexInput GetVertexFactoryInput(uint VertexId)
+{
+    FVertexInput V;
+    V.Position = VertexFactoryGetPosition(VertexId);
+    V.UV       = VertexFactoryGetUV(VertexId);
+    return V;
+}

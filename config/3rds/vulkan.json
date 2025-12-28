@@ -1,0 +1,16 @@
+{
+  "name": "VulkanSDK",
+  "need_pull": false,
+  "note": "Vulkan SDK (LunarG) is NOT pulled by BuildDeps. Install manually or via package manager. CMake expects find_package(Vulkan) to succeed.",
+  "website": "https://vulkan.lunarg.com/sdk/home",
+
+ "need_compile": false,
+  "type":"shared",
+  "dependencies": [],
+
+
+  "cmake": {
+    "find_via": "find_package(Vulkan REQUIRED)",
+    "notes": "No build steps; set VULKAN_SDK environment variable or add include/lib to CMake include/link dirs."
+  }
+}

@@ -9,7 +9,7 @@
 
 namespace RHI{
 class RHIApi;
-class RHIApiCreator{
+class RHI_API RHIApiCreator{
     public:
     RHIApiCreator() = default;
     virtual ~RHIApiCreator() = default;
@@ -17,7 +17,7 @@ class RHIApiCreator{
 };
 
 
-class RHIApiInitHelper{
+class RHI_API RHIApiInitHelper{
 public:
     static RHIApiInitHelper& Instance();
     bool InitGRHIApi(const ::std::string& apiName);
@@ -32,8 +32,8 @@ private:
 
 extern ERHIShaderPlatform GRHIShaderPlatform;
 
-bool InitGRHIApi(const ::std::string& apiName);
-RHIApi* GetGlobalRHIApi();
+RHI_API bool InitGRHIApi(const ::std::string& apiName);
+RHI_API RHIApi* GetGlobalRHIApi();
 
 
 template<class RHIApiCreatorDerived>
@@ -52,7 +52,7 @@ public:
 class RHIShaderLibrary;
 using RHIShaderLibrarySP = std::shared_ptr<RHIShaderLibrary>;
 
-class RHIApi
+class RHI_API RHIApi
 {
 public:
 

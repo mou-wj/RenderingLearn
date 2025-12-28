@@ -44,16 +44,12 @@ public:
     bool Initialize(const std::vector<char>& spirvCode);
     void Cleanup();
 
-    // 新增：描述符布局信息
-    const std::map<uint32_t, VulkanDescriptorSetLayoutInfo>& GetDescriptorSetLayouts() const { return DescriptorSetLayouts; }
 	VkShaderModule  GetShaderModule() const { return shaderModule; }
 	const std::string GetEntryPoint() const { return EntryPoint; }
     VkShaderStageFlagBits GetShaderStage() const { return ShaderStage; }
 protected:
-    void ParseShaderDescriptorLayout(const std::vector<char>& spirvCode);
     VkShaderModule shaderModule = VK_NULL_HANDLE;
     VulkanDevice* Device = nullptr;
-    std::map<uint32_t,VulkanDescriptorSetLayoutInfo> DescriptorSetLayouts;
     std::string EntryPoint;
     VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
 };

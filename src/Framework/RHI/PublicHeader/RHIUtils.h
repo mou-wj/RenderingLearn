@@ -3,11 +3,11 @@
 
 namespace RHI {
 
-	size_t GetFormatSize(ERHIFormat format);
+	RHI_API size_t GetFormatSize(ERHIFormat format);
 
-	EVerdorId GetVendorIdFromUint32(uint32_t vendorId);
+	RHI_API EVerdorId GetVendorIdFromUint32(uint32_t vendorId);
 	
-	EVerdorId GetPreferredVendorId();
+	RHI_API EVerdorId GetPreferredVendorId();
 
 
 }

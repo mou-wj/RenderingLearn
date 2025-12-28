@@ -5,20 +5,50 @@
 #include <string>
 #include <vector>
 #include <functional> // For std::function
+#include <list>
 #include "RHIRenderTargetInfo.h"
 #include "RHICommandList.h"
 #include "ShaderParameter.h"
+#include "RHITransientResource.h"
 
 namespace RenderCore {
     // Forward Declarations
 class RenderGraph;
 class RenderGraphBuilder;
 
+class RENDERCORE_API BarrierBatchBegin {
+public:
+    void AddTransition(const RHITransientInfo& transientInfo) {
+        transitions.push_back(transientInfo);
+    }
+
+    void Execute(RHICommandList& commandList);
+
+    const std::vector<RHITransientInfo>& GetTransitions() const { return transitions; }
+
+private:
+    std::vector<RHITransientInfo> transitions;
+};
+
+class RENDERCORE_API BarrierBatchEnd {
+public:
+    void AddTransition(const RHITransientInfo& transientInfo) {
+        transitions.push_back(transientInfo);
+    }
+
+    void Execute(RHICommandList& commandList);
+
+    const std::vector<RHITransientInfo>& GetTransitions() const { return transitions; }
+
+private:
+    std::vector<RHITransientInfo> transitions;
+};
+
 /**
  * RenderCore版本的渲染目标集合，基于RHIRenderTargetsInfo
  * 提供对RenderCore资源类型的支持
  */
-struct RenderGraphRenderTargetsInfo
+struct RENDERCORE_API RenderGraphRenderTargetsInfo
 {
 private:
 
@@ -69,26 +99,30 @@ public:
     RHIRenderTargetsInfo& GetRHIInfo() { return RHIInfo; }
 };
 
+enum class EPassFlag {
+    None,
+    Graphic,
+    Compute,
+};
 
-struct RenderGraphPassInfo
+
+struct RENDERCORE_API RenderGraphPassInfo
 {
     std::string Name;                              // Pass name
-    ERHIPipelineType PipelineType;                 // Pipeline type (e.g., Graphics, Compute)
-    std::vector<ShaderMetaData> ShaderMetaDatas;      // shader metadata (for binding slots, etc.)
-    RenderGraphRenderTargetsInfo RenderTargets; // Render target info (if applicable)
-    RenderGraphPassInfo(const std::string& name = "", ERHIPipelineType pipelineType = ERHIPipelineType::Graphics)
-        : Name(name), PipelineType(pipelineType) {}
-
+    EPassFlag PassFlag;                         // Pass type
+    ShaderParameterStruct ShaderParmeters;      // shader metadata (for binding slots, etc.)
+    RenderGraphPassInfo(const std::string& name = "")
+        : Name(name){}
 };
 
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Pass Base Class
 // -------------------------------------------------------------------------------------------------
-class RenderGraphPass
+class RENDERCORE_API RenderGraphPass
 {
 public:
     // Construction/Destruction
-    RenderGraphPass(const std::string& name,  const RenderGraphPassInfo& info) : Name(name), PassInfo(info) {}
+    RenderGraphPass(const std::string& name,  const RenderGraphPassInfo& info) ;
     virtual ~RenderGraphPass() = default;
 
     // Accessors
@@ -96,9 +130,6 @@ public:
 
     // Execution
     virtual void Execute(RHICommandList& commandList) = 0;
-
-    // Pipeline Type
-    virtual ERHIPipelineType GetPipelineType() const { return PassInfo.PipelineType; }
 
     // Pass Info
     const RenderGraphPassInfo& GetPassInfo() const { return PassInfo; }
@@ -108,13 +139,25 @@ protected:
     std::string Name;
     // Pass Info (metadata about the pass)
     RenderGraphPassInfo PassInfo;
+    using PassList = std::list<RenderGraphPass*>;
+    PassList PassConsumers;//依赖当前pass的pass集合
+    PassList PassProducers;//当前pass依赖的pass集合
+    BarrierBatchBegin BeginBarrier;//pass开始前的barrier
+    BarrierBatchEnd EndBarrier;//pass结束后的barrier
+    RenderGraphBufferUAVSP ReadWriteBufferCache;//当前pass读写的buffer资源
+    RenderGraphBufferSRVSP ReadOnlyBufferCache;//当前pass只读的buffer资源
+    RenderGraphBufferSP ReadWriteBufferResourceCache;//当前pass读写的buffer资源
+    RenderGraphTextureSP ReadTextureResourceCache;//当前pass读的texture资源
+    RenderGraphTextureSRVSP ReadOnlyTextureCache;//当前pass只读的texture资源
+    RenderGraphTextureUAVSP ReadWriteTextureCache;//当前pass读写的texture资源
+    friend class RenderGraphBuilder;
 };
 
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Lambda Pass (For simple passes defined inline)
 // -------------------------------------------------------------------------------------------------
 
-class RenderGraphLambdaPass : public RenderGraphPass
+class RENDERCORE_API RenderGraphLambdaPass : public RenderGraphPass
 {
 public:
     RenderGraphLambdaPass(const std::string& name,  const RenderGraphPassInfo& info, std::function<void(RHICommandList&)>&& lambda) : RenderGraphPass(name, info), ExecuteFunction(std::forward<std::function<void(RHICommandList&)>>(lambda)) {}
@@ -128,6 +171,7 @@ private:
     std::function<void(RHICommandList&)> ExecuteFunction;
 };
 
+using RenderGraphPassSP = std::shared_ptr<RenderGraphPass>;
 
 
 } // namespace WR::RenderCore

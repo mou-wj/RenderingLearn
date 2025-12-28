@@ -84,11 +84,15 @@ RenderGraphSRV::~RenderGraphSRV()
 {
 }
 
-RenderGraphView::RenderGraphView(const std::string& name) : Name(name)
+RenderGraphView::RenderGraphView(const std::string& name) : RenderGraphResource(name) ,Name(name)
 {
 }
 RenderGraphView::~RenderGraphView()
 {
+}
+RenderGraphResourceSP RenderGraphView::GetResource() const
+{
+	return Resource;
 }
 
 

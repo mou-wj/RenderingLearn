@@ -7,7 +7,7 @@ namespace RHI
 {
 
 // 资源基类
-class RHIResource
+class RHI_API RHIResource
 {
 public:
     explicit RHIResource(ERHIResourceType type = ERHIResourceType::Unknown)
@@ -21,7 +21,7 @@ protected:
 };
 
 // 纹理资源
-class RHITexture : public RHIResource
+class RHI_API RHITexture : public RHIResource
 {
 public:
 
@@ -36,7 +36,7 @@ protected:
 };
 
 // 缓冲区资源
-class RHIBuffer : public RHIResource
+class RHI_API RHIBuffer : public RHIResource
 {
 public:
 
@@ -51,7 +51,7 @@ protected:
 };
 
 
-class RHIResourceView {
+class RHI_API RHIResourceView {
 public:
     explicit RHIResourceView(RHIResource* Resource,ERHIResourceAccess access) : Resource(Resource),Access(access) {}
 private:
@@ -59,13 +59,13 @@ private:
     RHIResource* Resource = nullptr;
 };
 
-class RHIShaderResourceView : public RHIResourceView,public RHIResource  {
+class RHI_API RHIShaderResourceView : public RHIResourceView,public RHIResource  {
 public:
     explicit RHIShaderResourceView(RHIResource* Resource, ERHIResourceAccess access = ERHIResourceAccess::Read)
         : RHIResourceView(Resource, access),RHIResource(ERHIResourceType::ShaderResourceView) {}
 };
 
-class RHIUnorderedAccessView : public RHIResourceView,public RHIResource  {
+class RHI_API RHIUnorderedAccessView : public RHIResourceView,public RHIResource  {
 public:
     explicit RHIUnorderedAccessView(RHIResource* Resource, ERHIResourceAccess access = ERHIResourceAccess::ReadWrite)
         : RHIResourceView(Resource, access),RHIResource(ERHIResourceType::UnorderedAccessView) {}
@@ -75,7 +75,7 @@ public:
 
 
 // Shader基类
-class RHIShader : public RHIResource
+class RHI_API RHIShader : public RHIResource
 {
 public:
     RHIShader() : RHIResource(ERHIResourceType::Shader) {}
@@ -87,7 +87,7 @@ protected:
 };
 
 // 顶点着色器
-class RHIVertexShader : public RHIShader
+class RHI_API RHIVertexShader : public RHIShader
 {
 public:
     RHIVertexShader() {
@@ -98,7 +98,7 @@ public:
 };
 
 // 片元/像素着色器
-class RHIFragmentShader : public RHIShader
+class RHI_API RHIFragmentShader : public RHIShader
 {
 public:
     RHIFragmentShader() {
@@ -109,7 +109,7 @@ public:
 };
 
 // 几何着色器
-class RHIGeometryShader : public RHIShader
+class RHI_API RHIGeometryShader : public RHIShader
 {
 public:
     RHIGeometryShader() {
@@ -120,7 +120,7 @@ public:
 };
 
 // 计算着色器
-class RHIComputeShader : public RHIShader
+class RHI_API RHIComputeShader : public RHIShader
 {
 public:
     RHIComputeShader() {
@@ -131,7 +131,7 @@ public:
 };
 
 // 细分控制着色器
-class RHITessControlShader : public RHIShader
+class RHI_API RHITessControlShader : public RHIShader
 {
 public:
     RHITessControlShader() {
@@ -142,7 +142,7 @@ public:
 };
 
 // 细分评估着色器
-class RHITessEvalShader : public RHIShader
+class RHI_API RHITessEvalShader : public RHIShader
 {
 public:
     RHITessEvalShader() {
@@ -153,7 +153,7 @@ public:
 };
 
 // Mesh Shader
-class RHIMeshShader : public RHIShader
+class RHI_API RHIMeshShader : public RHIShader
 {
 public:
     RHIMeshShader() {
@@ -164,7 +164,7 @@ public:
 };
 
 // Task Shader
-class RHITaskShader : public RHIShader
+class RHI_API RHITaskShader : public RHIShader
 {
 public:
     RHITaskShader() {
@@ -175,7 +175,7 @@ public:
 };
 
 // 光线追踪管线着色器
-class RHIRayGenShader : public RHIShader
+class RHI_API RHIRayGenShader : public RHIShader
 {
 public:
     RHIRayGenShader() {
@@ -185,7 +185,7 @@ public:
     virtual ~RHIRayGenShader() = default;
 };
 
-class RHICloseHitShader : public RHIShader
+class RHI_API RHICloseHitShader : public RHIShader
 {
 public:
     RHICloseHitShader() {
@@ -195,7 +195,7 @@ public:
     virtual ~RHICloseHitShader() = default;
 };
 
-class RHIMissShader : public RHIShader
+class RHI_API RHIMissShader : public RHIShader
 {
 public:
     RHIMissShader() {
@@ -205,7 +205,7 @@ public:
     virtual ~RHIMissShader() = default;
 };
 
-class RHIAnyHitShader : public RHIShader
+class RHI_API RHIAnyHitShader : public RHIShader
 {
 public:
     RHIAnyHitShader() {
@@ -215,7 +215,7 @@ public:
     virtual ~RHIAnyHitShader() = default;
 };
 
-class RHIIntersectionShader : public RHIShader
+class RHI_API RHIIntersectionShader : public RHIShader
 {
 public:
     RHIIntersectionShader() {
@@ -225,7 +225,7 @@ public:
     virtual ~RHIIntersectionShader() = default;
 };
 
-class RHICallableShader : public RHIShader
+class RHI_API RHICallableShader : public RHIShader
 {
 public:
     RHICallableShader() {
@@ -236,7 +236,7 @@ public:
 };
 
 // 顶点描述状态
-class RHIVertexDescState : public RHIResource
+class RHI_API RHIVertexDescState : public RHIResource
 {
 public:
 
@@ -249,7 +249,7 @@ private:
 };
 
 // 光栅化状态
-class RHIRasterizerState : public RHIResource
+class RHI_API RHIRasterizerState : public RHIResource
 {
 public:
 
@@ -263,7 +263,7 @@ private:
 };
 
 // 颜色混合状态
-class RHIColorBlendState : public RHIResource
+class RHI_API RHIColorBlendState : public RHIResource
 {
 public:
 
@@ -276,7 +276,7 @@ private:
 };
 
 // 深度测试和模板状态
-class  RHIDepthStencilState : public RHIResource
+class RHI_API RHIDepthStencilState : public RHIResource
 {
 public:
 
@@ -289,7 +289,7 @@ private:
 };
 
 // Fence资源
-class RHIFence : public RHIResource
+class RHI_API RHIFence : public RHIResource
 {
 public:
     RHIFence() : RHIResource(ERHIResourceType::Fence) {}
@@ -297,7 +297,7 @@ public:
 };
 
 // 视口/交换链资源
-class RHIVIewport : public RHIResource
+class RHI_API RHIVIewport : public RHIResource
 {
 public:
 
@@ -312,7 +312,7 @@ private:
 };
 
 // 采样器资源
-class RHISampler : public RHIResource
+class RHI_API RHISampler : public RHIResource
 {
 public:
     RHISampler(const RHISamplerDesc& desc) : RHIResource(ERHIResourceType::Sampler), desc(desc) {}
@@ -362,14 +362,14 @@ using RHIDepthStencilStateSP = std::shared_ptr<RHIDepthStencilState>;
 
 
 // Shader Stage
-struct RHIShaderStageDesc
+struct RHI_API RHIShaderStageDesc
 {
     RHIShaderSP shader = nullptr; // 指向对应阶段的shader对象
     // 可扩展entry point等
 };
 
 // Graphics Pipeline
-struct RHIGraphicsPipelineStateDesc
+struct RHI_API RHIGraphicsPipelineStateDesc
 {
     std::vector<RHIShaderStageDesc> shaderStages;
     // 可扩展其它管线相关状态引用，如顶点描述、光栅化、混合、深度模板等
@@ -381,7 +381,7 @@ struct RHIGraphicsPipelineStateDesc
 };
 
 // 管线状态资源
-class RHIGraphicsPipelineState : public RHIResource
+class RHI_API RHIGraphicsPipelineState : public RHIResource
 {
 public:
     RHIGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) : RHIResource(ERHIResourceType::GraphicPipelineState), desc(desc) {}
@@ -393,13 +393,13 @@ protected:
 };
 
 // Compute Pipeline
-struct RHIComputePipelineStateDesc
+struct RHI_API RHIComputePipelineStateDesc
 {
     RHIShaderStageDesc shaderDesc;// 指向Compute Shader
     // 可扩展Compute管线特有参数
 };
 
-class RHIComputePipelineState : public RHIResource
+class RHI_API RHIComputePipelineState : public RHIResource
 {
 public:
     RHIComputePipelineState(const RHIComputePipelineStateDesc& desc) : RHIResource(ERHIResourceType::ComputePipelineState), desc(desc) {}
@@ -411,12 +411,12 @@ protected:
 };
 
 // RayTracing Pipeline
-struct RHIRayTracingPipelineStateDesc
+struct RHI_API RHIRayTracingPipelineStateDesc
 {
     // 可扩展RayTracing管线特有参数
 };
 
-class RHIRayTracingPipelineState : public RHIResource
+class RHI_API RHIRayTracingPipelineState : public RHIResource
 {
 public:
     RHIRayTracingPipelineState(const RHIRayTracingPipelineStateDesc& desc) : RHIResource(ERHIResourceType::RayTracingPipelineState), desc(desc) {}

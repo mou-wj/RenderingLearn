@@ -9,18 +9,16 @@ namespace RHI
 {
 
     // 统一的 RHIContext，整合 Compute / Graphics / RayTracing 接口
-    class RHICommandContex
+    class RHI_API RHICommandContex
     {
     public:
         RHICommandContex();
         virtual ~RHICommandContex() = default;
-
         // ========================
         // Compute 接口
         // ========================
         virtual void SetComputePipelineState(const RHIComputePipelineStateSP& pipelineState) = 0;
-        virtual void SetShaderParameter(RHIShader* shader, const RHIShaderParameterSP& parameter) = 0;
-        virtual void SetShaderBatchedShaderParameter(RHIShader* shader, const RHIBatchedShaderParameter& parameter) = 0;
+        virtual void SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter) = 0;
         virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
 
         // ========================
@@ -28,6 +26,7 @@ namespace RHI
         // ========================
         virtual void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets) = 0;
         virtual void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) = 0;
+
         virtual void SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState) = 0;
         virtual void ViewportPresent(const RHIVIewportSP& viewport, const RHITextureSP& presentRenderTarget) = 0;
         virtual void SetViewPortRect(const RHIIntRect& viewport) = 0;

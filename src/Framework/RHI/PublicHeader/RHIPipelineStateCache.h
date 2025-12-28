@@ -7,7 +7,7 @@
 
 namespace RHI {
     
-class RHIPipelineStateCache {
+class RHI_API RHIPipelineStateCache {
 public:
 
     static RHIGraphicsPipelineStateSP GetGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc);

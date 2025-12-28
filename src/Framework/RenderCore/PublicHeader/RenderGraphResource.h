@@ -25,7 +25,7 @@ class RenderGraphBuilder;
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Resource Base Class
 // -------------------------------------------------------------------------------------------------
-class RenderGraphResource
+class RENDERCORE_API RenderGraphResource
 {
 public:
     // Construction/Destruction
@@ -46,7 +46,7 @@ public:
     virtual void SetRHIResource(RHIResourceSP resource);
 
     // Virtual method to allow the render graph to create the underlying RHI resource
-    virtual void Create(RenderGraphBuilder& builder) = 0;
+    virtual void Create(RenderGraphBuilder& builder) {};
 
 protected:
     // Resource Name (for debugging and identification)
@@ -62,7 +62,7 @@ protected:
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Texture
 // -------------------------------------------------------------------------------------------------
-struct RenderGraphTextureDesc {
+struct RENDERCORE_API RenderGraphTextureDesc {
 	std::string Name;          // Texture name
 	uint32_t Width = 0;        // Texture width
 	uint32_t Height = 0;       // Texture height
@@ -77,7 +77,7 @@ struct RenderGraphTextureDesc {
 };
 
 
-class RenderGraphTexture : public RenderGraphResource
+class RENDERCORE_API RenderGraphTexture : public RenderGraphResource
 {
 public:
     RenderGraphTexture(const std::string& name, const RenderGraphTextureDesc& desc);
@@ -98,14 +98,14 @@ private:
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Buffer
 // -------------------------------------------------------------------------------------------------
-struct RenderGraphBufferDesc {
+struct RENDERCORE_API RenderGraphBufferDesc {
     std::string Name;          // Buffer name
     uint32_t Size = 0;         // Size of the buffer in bytes
     ERHIBufferFlags Flags = ERHIBufferFlags::None; // Buffer flags (e.g., vertex, index, constant)
     ERHIBufferType Type = ERHIBufferType::Vertex; // Buffer type (e.g., vertex, index, constant)
 };
 
-class RenderGraphBuffer : public RenderGraphResource
+class RENDERCORE_API RenderGraphBuffer : public RenderGraphResource
 {
 public:
     RenderGraphBuffer(const std::string& name, const RenderGraphBufferDesc& desc);
@@ -139,7 +139,7 @@ enum class RenderGraphViewType
     BufferSRV,
     BufferUAV
 };
-struct RenderGraphViewDesc
+struct RENDERCORE_API RenderGraphViewDesc
 {
     RenderGraphViewType ViewType;
     // 视图格式
@@ -150,20 +150,21 @@ struct RenderGraphViewDesc
 };
 
 
-class RenderGraphView
+class RENDERCORE_API RenderGraphView: public RenderGraphResource
 {
 public:
     RenderGraphView(const std::string& name);
     virtual ~RenderGraphView();
 
     // 改为获取对应资源的SP
-    virtual RenderGraphResourceSP GetResource() const = 0;
+    virtual RenderGraphResourceSP GetResource() const ;
 
 protected:
     std::string Name;
+    RenderGraphResourceSP  Resource;//关联的资源
 };
 
-class RenderGraphSRV : public RenderGraphView{
+class RENDERCORE_API RenderGraphSRV : public RenderGraphView{
 public:
     RenderGraphSRV(const std::string& name);
     ~RenderGraphSRV() override;
@@ -174,7 +175,7 @@ protected:
 
 };
 
-class RenderGraphUAV : public RenderGraphView{
+class RENDERCORE_API RenderGraphUAV : public RenderGraphView{
 public:
     RenderGraphUAV(const std::string& name);
     ~RenderGraphUAV() override;
@@ -189,13 +190,17 @@ protected:
 // -------------------------------------------------------------------------------------------------
 //  Texture SRV
 // -------------------------------------------------------------------------------------------------
-struct RenderGraphTextureSRVDesc : public RenderGraphViewDesc
+struct RENDERCORE_API RenderGraphTextureSRVDesc : public RenderGraphViewDesc
 {
     RenderGraphTextureSRVDesc() { ViewType = RenderGraphViewType::TextureSRV; }
     RenderGraphTextureSP Texture; // 关联的纹理资源
+    uint32_t MipLevel = 0; // 关联的mip层
+    uint32_t ArraySlice = 0; // 关联的数组切片
+    uint32_t NumMipLevels = 1; // 关联的mip层数
+    uint32_t NumArraySlices = 1; // 关联的数组切片数
 };
 
-class RenderGraphTextureSRV : public RenderGraphSRV
+class RENDERCORE_API RenderGraphTextureSRV : public RenderGraphSRV
 {
 public:
     RenderGraphTextureSRV(const std::string& name,const RenderGraphTextureSRVDesc& desc);
@@ -210,13 +215,18 @@ private:
 // -------------------------------------------------------------------------------------------------
 //  Texture UAV
 // -------------------------------------------------------------------------------------------------
-struct RenderGraphTextureUAVDesc : public RenderGraphViewDesc
+struct RENDERCORE_API RenderGraphTextureUAVDesc : public RenderGraphViewDesc
 {
     RenderGraphTextureUAVDesc() { ViewType = RenderGraphViewType::TextureUAV; }
     RenderGraphTextureSP Texture; // 关联的纹理资源
+    uint32_t MipLevel = 0; // 关联的mip层
+    uint32_t ArraySlice = 0; // 关联的数组切片
+    uint32_t NumMipLevels = 1; // 关联的mip层数
+    uint32_t NumArraySlices = 1; // 关联的数组切片数
+    
 };
 
-class RenderGraphTextureUAV : public RenderGraphUAV
+class RENDERCORE_API RenderGraphTextureUAV : public RenderGraphUAV
 {
 public:
     RenderGraphTextureUAV(const std::string& name, const RenderGraphTextureUAVDesc& desc);
@@ -231,14 +241,14 @@ private:
 // -------------------------------------------------------------------------------------------------
 //  Buffer SRV
 // -------------------------------------------------------------------------------------------------
-struct RenderGraphBufferSRVDesc : public RenderGraphViewDesc
+struct RENDERCORE_API RenderGraphBufferSRVDesc : public RenderGraphViewDesc
 {
     RenderGraphBufferSRVDesc() { ViewType = RenderGraphViewType::BufferSRV; }
     RenderGraphBufferSP Buffer; // 关联的缓冲区资源
-
+    RHIBufferRegion Region; // 缓冲区区域
 };
 
-class RenderGraphBufferSRV : public RenderGraphSRV
+class RENDERCORE_API RenderGraphBufferSRV : public RenderGraphSRV
 {
 public:
     RenderGraphBufferSRV(const std::string& name, const RenderGraphBufferSRVDesc& desc);
@@ -253,13 +263,14 @@ private:
 // -------------------------------------------------------------------------------------------------
 //  Buffer UAV
 // -------------------------------------------------------------------------------------------------
-struct RenderGraphBufferUAVDesc : public RenderGraphViewDesc
+struct RENDERCORE_API RenderGraphBufferUAVDesc : public RenderGraphViewDesc
 {
     RenderGraphBufferUAVDesc() { ViewType = RenderGraphViewType::BufferUAV; }
     RenderGraphBufferSP Buffer; // 关联的缓冲区资源
+    RHIBufferRegion Region; // 缓冲区区域
 };
 
-class RenderGraphBufferUAV : public RenderGraphUAV
+class RENDERCORE_API RenderGraphBufferUAV : public RenderGraphUAV
 {
 public:
     RenderGraphBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc);

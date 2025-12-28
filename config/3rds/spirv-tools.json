@@ -1,0 +1,53 @@
+{
+  "name": "SPIRV-Tools",
+  "need_pull": true,
+  "git": "https://github.com/KhronosGroup/SPIRV-Tools.git",
+  "branch": "main",
+
+  "compiler": {
+    "windows": {
+      "preferred": "msvc",
+      "cmake_generator": "Visual Studio 17 2022",
+      "cmake_toolset": ""
+    },
+    "linux": {
+      "preferred": "gcc",
+      "cmake_generator": "Unix Makefiles",
+      "cmake_toolset": ""
+    },
+    "macos": {
+      "preferred": "clang",
+      "cmake_generator": "Unix Makefiles",
+      "cmake_toolset": ""
+    }
+  },
+  "need_compile": true,
+  "type":"shared",
+  "dependencies": ["SPIRV-Headers"],
+
+  "pre_clone": {
+    "extra_repos": [
+      {
+        "path": "external/spirv-headers",
+        "git": "https://github.com/KhronosGroup/SPIRV-Headers.git",
+        "branch": "main"
+      }
+    ]
+  },
+
+  "cmake": {
+    "configure_args": [
+      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/${CONFIG}"
+    ],
+    "build_targets": ["install"],
+    "build_configs": ["Debug","Release"]
+  },
+
+  "install_layout": {
+    "include": "${INSTALL_DIR}/${CONFIG}/include/spirv_tools",
+    "lib": "${INSTALL_DIR}/${CONFIG}/lib",
+    "bin": "${INSTALL_DIR}/${CONFIG}/bin"
+  },
+
+  "notes": "SPIRV-Tools needs spirv-headers present in external/spirv-headers or provided via CMake option."
+}
