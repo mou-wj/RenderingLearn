@@ -37,7 +37,7 @@ target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
 )
-target_compile_definitions(${TARGET_NAME} PRIVATE -DPROJECT_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(${TARGET_NAME} PRIVATE -DPROJECT_DIR="${CMAKE_SOURCE_DIR}" -DEXECUTABLE_DIR="${BINARY_DIR}")
 
 # Position independent code for shared libs
 set_target_properties(${TARGET_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)

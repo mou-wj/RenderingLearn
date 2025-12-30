@@ -5,6 +5,7 @@
 #include "PrimitiveComponent.h"
 #include <memory>
 #include "EngineExport.h"
+#include "Material.h"
 namespace Engine {
 class StaticMesh;
 
@@ -31,5 +32,6 @@ public:
 private:
     std::shared_ptr<StaticMesh> Mesh; // asset pointer (not owning GPU resources)
     int32_t ForcedLOD;                // -1 = auto
+    std::vector<MaterialInterfaceSP> Materials; // material interface pointers (not owning GPU resources)
 };
 } // namespace Engine

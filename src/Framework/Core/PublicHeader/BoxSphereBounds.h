@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <limits>
 
+#define CORE_MIN(a,b) ((a) < (b) ? (a) : (b))
+#define CORE_MAX(a,b) ((a) > (b) ? (a) : (b))
+
 namespace Core {
 
 // Axis-aligned bounding box (AABB)
@@ -35,16 +38,16 @@ struct CORE_API AABB {
 		if (IsEmpty()) {
 			Min = Point; Max = Point; return;
 		}
-		Min = Float3(std::min(Min.x, Point.x), std::min(Min.y, Point.y), std::min(Min.z, Point.z));
-		Max = Float3(std::max(Max.x, Point.x), std::max(Max.y, Point.y), std::max(Max.z, Point.z));
+		Min = Float3(CORE_MIN(Min.x, Point.x), CORE_MIN(Min.y, Point.y), CORE_MIN(Min.z, Point.z));
+		Max = Float3(CORE_MAX(Max.x, Point.x), CORE_MAX(Max.y, Point.y), CORE_MAX(Max.z, Point.z));
 	}
 
 	// Expand to include another AABB
 	void Merge(const AABB& Other) {
 		if (Other.IsEmpty()) return;
 		if (IsEmpty()) { *this = Other; return; }
-		Min = Float3(std::min(Min.x, Other.Min.x), std::min(Min.y, Other.Min.y), std::min(Min.z, Other.Min.z));
-		Max = Float3(std::max(Max.x, Other.Max.x), std::max(Max.y, Other.Max.y), std::max(Max.z, Other.Max.z));
+		Min = Float3(CORE_MIN(Min.x, Other.Min.x), CORE_MIN(Min.y, Other.Min.y), CORE_MIN(Min.z, Other.Min.z));
+		Max = Float3(CORE_MAX(Max.x, Other.Max.x), CORE_MAX(Max.y, Other.Max.y), CORE_MAX(Max.z, Other.Max.z));
 	}
 
 	// Center and extent

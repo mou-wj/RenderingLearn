@@ -4,6 +4,12 @@
 #include <memory>
 #include <unordered_map>
 #include <mutex>
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+#include "PathInfo.h"
 
 namespace Core {
 
@@ -41,6 +47,17 @@ public:
     {
         static ModuleManager Instance;
         return Instance;
+    }
+
+    //加载模块
+    void LoadModule(const std::string& name) {
+        #if defined(_WIN32)
+            std::string path = GetExecutableDir() + "/" + name + ".dll";
+            ::LoadLibraryA(path.c_str());
+        #else
+            std::string path = GetExecutableDir() + "/" + name + ".so";
+            return dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+        #endif
     }
 
     // 注册模块实例（通常在模块创建时调用）

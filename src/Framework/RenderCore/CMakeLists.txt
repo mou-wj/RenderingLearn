@@ -41,6 +41,8 @@ target_include_directories(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME} PUBLIC Core RHI glslang_all)
 
+_3rds_copy_runtime_deps(${TARGET_NAME} "${BINARY_DIR}")
+
 string(TOUPPER "${TARGET_NAME}" TARGET_NAME_UPPER)
 if (WIN32)
   target_compile_definitions(${TARGET_NAME}

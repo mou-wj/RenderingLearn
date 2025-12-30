@@ -7,6 +7,8 @@ namespace Core {
 	{
 		return PROJECT_DIR;
 	}
-
+	CORE_API std::string GetExecutableDir() {
+        return EXECUTABLE_DIR;
+	}
 
 }

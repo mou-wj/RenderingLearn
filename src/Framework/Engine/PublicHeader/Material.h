@@ -4,6 +4,56 @@
 #include <vector>
 #include <memory>
 #include "EngineExport.h"
+#include "Math.hpp"
+
+namespace Engine {
+    // MaterialShaderKey
+    struct MaterialShaderKey
+    {
+        uint8_t ShadingModel;
+        uint8_t BlendMode;
+
+        uint64_t StaticSwitchMask;   // <= 64 个 switch
+        uint64_t FeatureLevelMask;   // 可扩展
+
+        bool operator==(const MaterialShaderKey& rhs) const {
+            return ShadingModel == rhs.ShadingModel &&
+                BlendMode == rhs.BlendMode &&
+                StaticSwitchMask == rhs.StaticSwitchMask &&
+                FeatureLevelMask == rhs.FeatureLevelMask;
+        }
+    };
+
+
+}
+
+namespace std
+{
+    template<>
+    struct hash<Engine::MaterialShaderKey>
+    {
+        size_t operator()(const Engine::MaterialShaderKey& key) const noexcept
+        {
+            // 64-bit hash accumulator
+            size_t h = 0;
+
+            // helper lambda
+            auto hash_combine = [&h](size_t v)
+                {
+                    // 64-bit version of boost::hash_combine
+                    h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+                };
+
+            hash_combine(static_cast<size_t>(key.ShadingModel));
+            hash_combine(static_cast<size_t>(key.BlendMode));
+            hash_combine(static_cast<size_t>(key.StaticSwitchMask));
+            hash_combine(static_cast<size_t>(key.FeatureLevelMask));
+
+            return h;
+        }
+    };
+}
+
 namespace Engine {
 
     // 前置声明
@@ -14,74 +64,68 @@ namespace Engine {
     enum class EShadingModel { DefaultLit, Unlit, Subsurface };
     enum class EBlendMode { Opaque, Masked, Translucent };
     enum class EMaterialParamType { Scalar, Vector, Texture, StaticSwitch };
-
-    // Material
-    class ENGINE_API Material
+    struct MaterialStaticParameters
     {
-    public:
-        Material()
-            : ShadingModel(EShadingModel::DefaultLit), BlendMode(EBlendMode::Opaque), bTwoSided(false),
-            BaseColor{ 1,1,1,1 }, Roughness(1.f), Metallic(0.f), Specular(0.f), Emissive{ 0,0,0,0 },
-            BaseColorTex(nullptr), NormalTex(nullptr), RoughnessTex(nullptr), MetallicTex(nullptr) {
-        }
-
-        EShadingModel ShadingModel;
-        EBlendMode BlendMode;
-        bool bTwoSided;
-
-        // 基础参数
-        struct Vec4 { float x, y, z, w; };
-        Vec4 BaseColor;
-        float Roughness;
-        float Metallic;
-        float Specular;
-        Vec4 Emissive;
-
-        // 贴图
-        Texture* BaseColorTex;
-        Texture* NormalTex;
-        Texture* RoughnessTex;
-        Texture* MetallicTex;
-
-        // 静态开关参数
         std::unordered_map<std::string, bool> StaticSwitches;
     };
 
-    // MaterialParameter
-    class ENGINE_API MaterialParameter
+    struct MaterialRuntimeParameters
     {
-    public:
-        std::string Name;
-        EMaterialParamType Type;
-
-        union Value
-        {
-            float ScalarValue;
-            Material::Vec4 VectorValue;
-            Texture* TextureValue;
-            bool SwitchValue;
-
-            Value() : ScalarValue(0.f) {}
-        } ParamValue;
+        std::unordered_map<std::string, float> Scalars;
+        std::unordered_map<std::string, Core::Float4> Vectors;
+        std::unordered_map<std::string, Texture*> Textures;
     };
 
-    // MaterialShaderKey
-    class MaterialShaderKey
+
+
+    // MaterialShaderMap
+    class ENGINE_API MaterialShaderMap
+    {
+    public:
+        std::unordered_map<MaterialShaderKey, Shader*> ShaderPermutations;
+    };
+    class ENGINE_API MaterialInterface
+    {
+    public:
+        virtual Shader* GetShader(const MaterialShaderKey&) = 0;
+        virtual const MaterialShaderMap* GetShaderMap() const = 0;
+        virtual void GetStaticParameters(MaterialStaticParameters&) const = 0;
+        virtual void GetRuntimeParameters(MaterialRuntimeParameters&) const = 0;
+    };
+	using MaterialInterfaceSP = std::shared_ptr<MaterialInterface>;
+    class ENGINE_API MaterialInstance : public MaterialInterface
+    {
+    public:
+        MaterialInterface* Parent;
+        // 覆盖参数
+        MaterialRuntimeParameters OverrideRuntimeParams;
+        MaterialStaticParameters  OverrideStaticParams;
+
+        Shader* GetShader(const MaterialShaderKey&) override {
+            return nullptr;
+        }
+    };
+
+    class ENGINE_API Material : public MaterialInterface
     {
     public:
         EShadingModel ShadingModel;
         EBlendMode BlendMode;
-        std::unordered_map<std::string, bool> StaticSwitches;
 
-        bool operator==(const MaterialShaderKey& other) const
-        {
-            return ShadingModel == other.ShadingModel &&
-                BlendMode == other.BlendMode &&
-                StaticSwitches == other.StaticSwitches;
+
+        // 默认参数（母材质定义）
+        MaterialRuntimeParameters DefaultRuntimeParams;
+        MaterialStaticParameters  StaticParams;
+
+        // Shader 规则
+        MaterialShaderMap* ShaderMap;
+
+        Shader* GetShader(const MaterialShaderKey&) override {
+            return nullptr;
         }
     };
 
-    // MaterialShaderPermutation
+    // MaterialShaderPermutation,后续移走
     class ENGINE_API MaterialShaderPermutation
     {
     public:
@@ -90,25 +134,15 @@ namespace Engine {
     };
 
 
-    // MaterialRenderProxy
     class ENGINE_API MaterialRenderProxy
     {
     public:
-        MaterialRenderProxy(Material* parent)
-            : ParentMaterial(parent) {
-        }
-
-        Shader* GetShader(const MaterialShaderKey& key);
-
-        Material* ParentMaterial;
-        std::unordered_map<std::string, MaterialParameter> Parameters;
+        Shader* Shader;
+        MaterialRuntimeParameters Parameters;  // uniform / texture
     };
 
-    // MaterialShaderMap
-    class ENGINE_API MaterialShaderMap
-    {
-    public:
-        std::unordered_map<MaterialShaderKey, Shader*> ShaderPermutations;
-    };
+
+
 
 }
+

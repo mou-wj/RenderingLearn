@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include "BoxSphereBounds.h"
+#include "Material.h"
 namespace Engine {
     // Forward placeholders for shader/texture types. In a real engine, replace
     // these with concrete types or resource handles managed by the RHI/resource system.
@@ -81,14 +82,6 @@ namespace Engine {
         size_t GetNumVertices() const { return VertexDataPtr ? VertexDataPtr->GetNumVertices() : 0; }
     };
 
-    // MaterialProxy: minimal representation of a material for rendering purposes.
-    // Holds references to shader program and textures (opaque pointers/handles).
-    struct ENGINE_API MaterialProxy {
-        ShaderProgram* Shader = nullptr; // shader program used by this material
-        std::vector<Texture*> Textures;  // list of textures used by the material
-
-        // Additional material flags or parameters can be added later.
-    };
 
     // FStaticMeshRenderData: top-level render resource container for a StaticMesh.
     // Contains multiple LODs, a material table, and bounds used for culling.
@@ -100,9 +93,6 @@ namespace Engine {
 
         // LOD resources (LOD0 = highest detail)
         std::vector<LODResource> LODResources;
-
-        // Materials referenced by sections. Material indices in SectionInfo index into this array.
-        std::vector<MaterialProxy> Materials;
 
         // Bounds (AABB) for frustum culling and coarse occlusion
         Core::AABB Bounds;
@@ -118,15 +108,9 @@ namespace Engine {
         // Get bounds for culling
         const Core::AABB& GetBounds() const { return Bounds; }
 
-        // Get material proxy by index
-        const MaterialProxy* GetMaterial(size_t Index) const {
-            if (Index >= Materials.size()) return nullptr;
-            return &Materials[Index];
-        }
 
         // Utilities to append resources (used on GameThread during build/load)
         void AddLOD(LODResource&& LOD) { LODResources.emplace_back(std::move(LOD)); }
-        int32_t AddMaterial(const MaterialProxy& M) { Materials.push_back(M); return (int32_t)Materials.size() - 1; }
 
         // Intended usage: build on GameThread, then the RenderThread may read these
         // structures concurrently (read-only). Do not modify after submitting to the scene.

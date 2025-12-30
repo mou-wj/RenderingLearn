@@ -17,7 +17,6 @@ public:
     // Accessors
     size_t GetLODCount() const { return RenderData ? RenderData->GetLODCount() : 0; }
     const LODResource& GetLODResource(size_t Index) const { return RenderData->GetLODResource(Index); }
-    const MaterialProxy* GetMaterial(size_t Index) const { return RenderData ? RenderData->GetMaterial(Index) : nullptr; }
     const Core::AABB& GetBounds() const { static Core::AABB Empty; return RenderData ? RenderData->GetBounds() : Empty; }
 
     std::shared_ptr<FStaticMeshRenderData> GetRenderData() const { return RenderData; }
