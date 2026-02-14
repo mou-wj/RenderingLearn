@@ -4,98 +4,124 @@
 #include <vulkan/vulkan.h>
 #include <stdexcept>
 #include <map>
+#include <array>
+#define VK_DESCRIPTOR_TYPE_RANGE_SIZE (VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT - VK_DESCRIPTOR_TYPE_SAMPLER + 1)
 
 namespace RHIVulkan {
 
-
-// 描述符集封装
-class VulkanDescriptorSet
-{
-public:
-    VulkanDescriptorSet(VkDescriptorSet* set, VkDescriptorSetLayout layout,const std::vector<VkDescriptorSetLayoutBinding>& bindings);
-    ~VulkanDescriptorSet() = default;
-
-    VkDescriptorSet GetHandle() const { return _set; }
-    VkDescriptorSetLayout GetLayout() const { return _layout; }
-    const std::vector<VkDescriptorSetLayoutBinding>& GetBindings() const { return bindings; }
-private:
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    VkDescriptorSet _set = VK_NULL_HANDLE;
-    VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
-};
-
-using VulkanDescriptorSetLayoutMap = std::map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>>;
-using VulkanDescriptorSets = std::vector<VulkanDescriptorSet*>;
+    //------------------------------------------------------------
+    // Descriptor Set Binding / Layout
+    //------------------------------------------------------------
+    struct DescriptorSetBinding
+    {
+        uint32_t Binding = 0;
+        VkDescriptorType Type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        uint32_t Count = 1;
+        VkShaderStageFlags StageFlags = 0;
+    };
 
 
-// 描述符池封装
-class VulkanDescriptorPool
-{
-public:
-    VulkanDescriptorPool(VulkanDevice* device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets);
-    ~VulkanDescriptorPool();
+    //------------------------------------------------------------
+    // Layout 描述信息（Hash + Bindings）
+    //------------------------------------------------------------
+    struct DescriptorSetLayoutInfo
+    {
+        std::vector<DescriptorSetBinding> Bindings;
+        uint64_t Hash = 0;
 
-    VkDescriptorPool GetHandle() const { return _pool; }
+        uint64_t CalculateHash();
+        void AddBinding(uint32_t binding, VkDescriptorType type, uint32_t count, VkShaderStageFlags stageFlags);
+    };
 
-    // 分配描述符集
-    VulkanDescriptorSets AllocateDescriptorSet(const VulkanDescriptorSetLayoutMap& map);
+    //------------------------------------------------------------
+    // Layout 句柄 + Info
+    //------------------------------------------------------------
+    struct DescriptorSetLayoutHandle
+    {
+        VkDescriptorSetLayout Layout = VK_NULL_HANDLE;
+        DescriptorSetLayoutInfo Info;
+    };
 
-    // 重置池
-    void Reset();
+    //------------------------------------------------------------
+    // Vulkan Descriptor Pool 封装
+    //------------------------------------------------------------
+    class VulkanDescriptorPool
+    {
+    public:
+        VulkanDescriptorPool(VulkanDevice* device, uint32_t maxSets, const std::array<uint32_t, VK_DESCRIPTOR_TYPE_RANGE_SIZE>& poolSizes);
+        ~VulkanDescriptorPool();
 
-    bool CanAllocate(const std::map<VkDescriptorType, uint32_t>& want) const;
+        bool AllocateDescriptorSet(VkDescriptorSetLayout layout, VkDescriptorSet& outSet);
+        void Reset();
 
-private:
-    VkDescriptorSetLayout CreateLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings);
-    VulkanDevice* _device = nullptr;
-    VkDescriptorPool _pool = VK_NULL_HANDLE;
-    std::vector<VulkanDescriptorSet*> _allocatedSets; // 已分配的描述符集
-    std::map<VkDescriptorType, uint32_t> _validPoolSizes; // 有效的池大小
-    std::map<VkDescriptorType, uint32_t> _usedPoolSizes; // 使用的池大小
-};
+    private:
+        void CreatePool();
 
-// 描述符池管理器
-class VulkanDescriptorPoolManager
-{
-public:
-    VulkanDescriptorPoolManager(VulkanDevice* device);
-    ~VulkanDescriptorPoolManager();
+    private:
+        VulkanDevice* Device;
+        uint32_t MaxDescriptorSets;
+        std::array<float, VK_DESCRIPTOR_TYPE_RANGE_SIZE> PoolSizes{};
+        VkDescriptorPool Pool = VK_NULL_HANDLE;
+        uint32_t AllocatedCount = 0;
+    };
 
-    
-    // 分配描述符集
-    VulkanDescriptorSets AllocateDescriptorSet(const VulkanDescriptorSetLayoutMap& map);
+    class TypedDescriptorPool
+    {
+    public:
+        TypedDescriptorPool(
+            VulkanDevice* device,
+            VkDescriptorSetLayout layout,
+            const DescriptorSetLayoutInfo& layoutInfo,
+            uint32_t maxSetsPerPool);
 
-    
+        VkDescriptorSet Allocate();
 
-    // 释放所有池
-    void Destroy();
+    private:
+        VulkanDevice* Device;
+        VkDescriptorSetLayout Layout;
+        DescriptorSetLayoutInfo LayoutInfo;
+        uint32_t MaxSetsPerPool;
 
-private:
-    VulkanDevice* _device = nullptr;
-    std::vector<VulkanDescriptorPool*> _pools;
+        std::vector<std::unique_ptr<VulkanDescriptorPool>> Pools;
+    };
+ 
 
-    // 查找合适的描述符池
-    VulkanDescriptorPool* FindSuitablePool(const VulkanDescriptorSetLayoutMap& map);
+    //------------------------------------------------------------
+    // Layout Cache 管理 VkDescriptorSetLayout
+    //------------------------------------------------------------
+    class VulkanDescriptorSetLayoutManager
+    {
+    public:
+        VulkanDescriptorSetLayoutManager(VulkanDevice* device);
+        VkDescriptorSetLayout GetOrCreateLayout(const DescriptorSetLayoutInfo& info);
 
-    // 创建一个新的描述符池
-    VulkanDescriptorPool* CreatePool(const VulkanDescriptorSetLayoutMap& map);
-};
+    private:
+        VulkanDevice* Device;
+        std::unordered_map<uint64_t, VkDescriptorSetLayout> LayoutMap;
+    };
 
+    struct DescriptorSetEntry
+    {
+        VkDescriptorSet Set = VK_NULL_HANDLE;
+        uint64_t LayoutHash = 0;
+        // 归属 TypedPool（用于回收）
+        class TypedDescriptorPool* OwnerPool = nullptr;
+    };
 
-// 描述符集写入器（辅助更新）
-class VulkanDescriptorSetWriter
-{
-public:
-    VulkanDescriptorSetWriter();
+    //------------------------------------------------------------
+    // 全局 DescriptorSet Cache 管理器
+    //------------------------------------------------------------
+    class VulkanDescriptorSetManager
+    {
+    public:
+        VulkanDescriptorSetManager(VulkanDevice* device, VulkanDescriptorSetLayoutManager* layoutManager);
 
-    void WriteImage(VulkanDescriptorSet& descriptorSet, uint32_t binding, VkDescriptorImageInfo* imageInfo, VkDescriptorType type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-    void WriteBuffer(VulkanDescriptorSet& descriptorSet, uint32_t binding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorType type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-
-    void Clear() { _writes.clear(); }
-    void Update(VkDevice device);
-
-private:
-    std::vector<VkWriteDescriptorSet> _writes;
-};
+        DescriptorSetEntry GetDescriptorSets(const DescriptorSetLayoutInfo& layoutInfo);
+                
+    private:
+        VulkanDevice* Device;
+        VulkanDescriptorSetLayoutManager* LayoutCache;
+        std::unordered_map<uint64_t, std::unique_ptr<TypedDescriptorPool>> LayoutDescriptorPoolMap;
+    };
 
 } // namespace WR::RHIVulkan

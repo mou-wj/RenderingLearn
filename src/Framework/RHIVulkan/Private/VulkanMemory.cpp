@@ -2,9 +2,12 @@
 #include "VulkanDevice.h"
 #include <stdexcept>
 #include <algorithm>
+#include <memory>
 #include <cstring>
+#include "VulkanCommandBuffer.h"
+#include "VulkanSync.h"
 namespace RHIVulkan{
-    
+   
 constexpr VkDeviceSize DEFAULT_BLOCK_SIZE = 64 * 1024 * 1024; // 64 MB
 
 // VulkanMemoryBlock
@@ -15,18 +18,18 @@ VulkanMemoryBlock::VulkanMemoryBlock(VulkanDevice* device, uint32_t memoryTypeIn
     allocInfo.allocationSize = size_;
     allocInfo.memoryTypeIndex = memoryTypeIndex;
 
-    if (vkAllocateMemory(device_->GetDevice(), &allocInfo, nullptr, &memory_) != VK_SUCCESS)
+    if (vkAllocateMemory(device_->GetHandle(), &allocInfo, nullptr, &memory_) != VK_SUCCESS)
         throw std::runtime_error("Failed to allocate Vulkan memory block");
 
     if (mappable_)
-        vkMapMemory(device_->GetDevice(), memory_, 0, VK_WHOLE_SIZE, 0, &mapped_);
+        vkMapMemory(device_->GetHandle(), memory_, 0, VK_WHOLE_SIZE, 0, &mapped_);
 }
 
 VulkanMemoryBlock::~VulkanMemoryBlock()
 {
     if (mapped_)
-        vkUnmapMemory(device_->GetDevice(), memory_);
-    vkFreeMemory(device_->GetDevice(), memory_, nullptr);
+        vkUnmapMemory(device_->GetHandle(), memory_);
+    vkFreeMemory(device_->GetHandle(), memory_, nullptr);
 }
 
 bool VulkanMemoryBlock::Allocate(VkDeviceSize size, VkDeviceSize alignment, VulkanAllocation& outAlloc)
@@ -91,7 +94,7 @@ bool VulkanMemoryManager::Allocate(const VkMemoryRequirements& memReqs, VkMemory
     }
 
     // Allocate new block
-    auto newBlock = std::make_unique<VulkanMemoryBlock>(device_, typeIndex, std::max(DEFAULT_BLOCK_SIZE, memReqs.size), (props & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0);
+    auto newBlock = std::make_unique<VulkanMemoryBlock>(device_, typeIndex, max(DEFAULT_BLOCK_SIZE, memReqs.size), (props & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0);
     bool success = newBlock->Allocate(memReqs.size, memReqs.alignment, outAlloc);
     if (!success)
         return false;
@@ -122,4 +125,126 @@ bool VulkanMemoryManager::Free( VulkanAllocation& alloc)
     }
     return false;
 }
+
+
+
+VulkanStagingBuffer::VulkanStagingBuffer(VulkanDevice* device, VulkanMemoryManager* memManager, VkDeviceSize size)
+    : RHI::RHIStagingBuffer(size), device_(device), memManager_(memManager), size_(size)
+{
+    // 创建 buffer
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size_;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+
+    vkCreateBuffer(device_->GetHandle(), &bufferInfo, nullptr, &buffer_);
+
+
+    // 查询 memory requirements
+    VkMemoryRequirements memReq;
+    vkGetBufferMemoryRequirements(device_->GetHandle(), buffer_, &memReq);
+
+
+    // 分配 HostVisible 内存
+    memManager_->Allocate(memReq, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, allocation_);
+
+
+    vkBindBufferMemory(device_->GetHandle(), buffer_, allocation_.GetMemory(), allocation_.GetOffset());
+
+
+    // 映射内存
+    mapped_ = allocation_.GetMappedPointer();
+}
+
+
+VulkanStagingBuffer::~VulkanStagingBuffer()
+{
+    if (buffer_)
+    {
+        vkDestroyBuffer(device_->GetHandle(), buffer_, nullptr);
+        buffer_ = VK_NULL_HANDLE;
+    }
+
+
+    // VulkanMemoryManager 可以管理释放 allocation，或者这里不做事
+}
+void* VulkanStagingBuffer::Map(uint32_t Offset, uint32_t NumBytes)
+{
+    return mapped_;
+}
+void VulkanStagingBuffer::Unmap()
+{
+
+}
+VulkanStagingManager::VulkanStagingManager(VulkanDevice* device, VulkanMemoryManager* memManager)
+    : device_(device), memManager_(memManager)
+{
+}
+
+
+VulkanStagingManager::~VulkanStagingManager()
+{
+    freeBuffers_.clear();
+}
+
+
+std::shared_ptr<VulkanStagingBuffer> VulkanStagingManager::Acquire(VkDeviceSize size)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    for (auto it = freeBuffers_.begin(); it != freeBuffers_.end(); ++it)
+    {
+        if ((*it)->GetSize() >= size)
+        {
+            auto buf = *it;
+            freeBuffers_.erase(it);
+            return buf;
+        }
+    }
+
+    return std::make_shared<VulkanStagingBuffer>(device_, memManager_, size);
+}
+
+void VulkanStagingManager::ReleaseToCmdBuffer(
+    VulkanCommandBuffer* cmd,
+    std::shared_ptr<VulkanStagingBuffer> buffer)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto& entry = cmdBufferMap_[cmd];
+    entry.cmd = cmd;
+    entry.pendingBuffers.push_back(buffer);
+}
+
+void VulkanStagingManager::OnCommandBufferSubmitted(VulkanCommandBuffer* cmd)
+{
+    auto it = cmdBufferMap_.find(cmd);
+    if (it == cmdBufferMap_.end())
+        return;
+
+    VulkanFence* fence = cmd->GetFence();
+
+    for (auto& buf : it->second.pendingBuffers)
+    {
+        pendingFree_.push_back({buf, fence});
+    }
+
+    cmdBufferMap_.erase(it);
+}
+
+void VulkanStagingManager::GarbageCollect()
+{
+    while (!pendingFree_.empty())
+    {
+        PendingBuffer& front = pendingFree_.front();
+        if (!front.fence->IsSignaled())
+            break;
+
+        freeBuffers_.push_back(front.buffer);
+        pendingFree_.pop_front();
+    }
+}
+
 }

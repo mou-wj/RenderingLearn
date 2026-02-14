@@ -1,6 +1,7 @@
 add_subdirectory(Core)
 add_subdirectory(RHI)
 add_subdirectory(Slate)
+add_subdirectory(SlateRHIRenderer)
 add_subdirectory(RenderCore)
 add_subdirectory(Engine)
 add_subdirectory(Renderer)

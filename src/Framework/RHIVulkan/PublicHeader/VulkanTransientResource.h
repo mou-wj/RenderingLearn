@@ -4,17 +4,21 @@
 
 namespace RHIVulkan {
 
-class RHIVULKAN_API VulkanTransientResourceManager
+class RHIVULKAN_API VulkanTransientResourceManager : public RHI::RHITransientResourceManager
 {
 public:
     explicit VulkanTransientResourceManager(VulkanDevice* device);
     ~VulkanTransientResourceManager();
 
     // 创建Vulkan TransientTexture
-    RHI::RHITransientTextureSP CreateTransientTexture(const RHI::RHITextureDesc& desc);
+    RHI::RHITransientTextureSP CreateTransientTexture(const RHI::RHITextureDesc& desc) override;
 
     // 创建Vulkan TransientBuffer
-    RHI::RHITransientBufferSP CreateTransientBuffer(const RHI::RHIBufferDesc& desc) ;
+    RHI::RHITransientBufferSP CreateTransientBuffer(const RHI::RHIBufferDesc& desc) override;
+
+    // 回收资源
+    void ReleaseTransientTexture(const RHITransientTextureSP& texture) override;
+    void ReleaseTransientBuffer(const RHITransientBufferSP& buffer) override;
 
 private:
     VulkanDevice* Device;

@@ -1,14 +1,32 @@
 #pragma once
 #include "RenderResource.h"
 #include "EngineExport.h"
+
 namespace Engine {
-    class ENGINE_API Viewport : RenderCore::RenderTarget
+    class ViewportClient;
+    class RenderTarget : public RenderCore::RenderResource {
+	public:
+		RHI::RHITexture* GetRenderTarget() {
+			return RenderTarget.get();
+		}
+
+        RHI::RHITextureSP RenderTarget;
+
+    };
+
+    // Engine/Viewport.h
+    class ENGINE_API Viewport : public RenderTarget
     {
     public:
+        Viewport(ViewportClient* InClient);
         virtual ~Viewport() = default;
 
-        virtual int GetWidth() const = 0;
-        virtual int GetHeight() const = 0;
 
+        // 渲染入口（由 SceneViewport 实现）
+        virtual void Draw() = 0;
+
+    protected:
+        ViewportClient* Client = nullptr;
+        
     };
 }

@@ -30,7 +30,7 @@ add_library(${TARGET_NAME} SHARED
     ${MODULE_SOURCES}
     ${PUBLIC_HEADERS}
     ${PRIVATE_HEADERS}
-)
+ "Private/RenderModule.cpp")
 
 # Expose public headers to consumers
 target_include_directories(${TARGET_NAME}

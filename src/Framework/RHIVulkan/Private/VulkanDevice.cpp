@@ -5,7 +5,12 @@
 #include "VulkanQueue.h"
 #include "VulkanMemory.h"
 #include "VulkanSync.h"
-
+#include "VulkanFuncWrapper.h"
+#include "VulkanCommandContex.h"
+#include "VulkanResource.h"
+#include "VulkanRenderPass.h"
+#include "VulkanDescriptorSets.h"
+#include "VulkanShader.h"
 namespace RHIVulkan{
 
 VulkanDevice::VulkanDevice(VulkanRHIApi* rhiApi,
@@ -24,6 +29,14 @@ VulkanDevice::VulkanDevice(VulkanRHIApi* rhiApi,
       memoryManager_(nullptr)
 {
     memoryManager_ = new VulkanMemoryManager(this);
+	stagingManager_ = new VulkanStagingManager(this, memoryManager_);
+    globalCommandContext_ = new VulkanCommandContext(this, nullptr);
+    fenceManager_ = new VulkanFenceManager(this);
+    renderPassManager_ = new VulkanRenderPassManager(this);
+    descriptorSetLayoutManager_ = new VulkanDescriptorSetLayoutManager(this);
+    descriptorSetManager_ = new VulkanDescriptorSetManager(this, descriptorSetLayoutManager_);
+	shaderManager_ = new VulkanShaderManager(this);
+
 }
 
 VulkanDevice::~VulkanDevice()
@@ -65,7 +78,6 @@ bool VulkanDevice::Init(const std::vector<const char*>& enabledLayers,
 
 void VulkanDevice::SelectQueueFamilies(VkPhysicalDevice physicalDevice)
 {
-    uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
     std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
@@ -82,6 +94,7 @@ void VulkanDevice::SelectQueueFamilies(VkPhysicalDevice physicalDevice)
 
         if ((props.queueFlags & VK_QUEUE_TRANSFER_BIT) && !(props.queueFlags & VK_QUEUE_GRAPHICS_BIT) && !(props.queueFlags & VK_QUEUE_COMPUTE_BIT) && transferQueueFamilyIndex_ == UINT32_MAX)
             transferQueueFamilyIndex_ = i;
+        
     }
 
     // fallback if no dedicated family found
@@ -101,7 +114,6 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
         graphicsQueueFamilyIndex_,
         computeQueueFamilyIndex_,
         transferQueueFamilyIndex_,
-        presentQueueFamilyIndex_
     };
 
     float queuePriority = 1.0f;
@@ -125,17 +137,15 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
     createInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
     createInfo.ppEnabledLayerNames = layers.data();
 
-    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device_) != VK_SUCCESS)
-    {
-        throw std::runtime_error("Failed to create Vulkan logical device!");
-    }
+    CreateDevice(physicalDevice, &createInfo,&device_);
+    
     // 获取队列
     VkQueue graphicsQueue;
-    vkGetDeviceQueue(device_, graphicsQueueFamilyIndex_, 0, &graphicsQueue);
+    GetDeviceQueue(device_, graphicsQueueFamilyIndex_, 0, &graphicsQueue);
     VkQueue computeQueue;
-    vkGetDeviceQueue(device_, computeQueueFamilyIndex_, 0, &computeQueue);
+    GetDeviceQueue(device_, computeQueueFamilyIndex_, 0, &computeQueue);
     VkQueue transferQueue;
-    vkGetDeviceQueue(device_, transferQueueFamilyIndex_, 0, &transferQueue);
+    GetDeviceQueue(device_, transferQueueFamilyIndex_, 0, &transferQueue);
 
     graphicsQueue_ = new VulkanQueue(this,graphicsQueue, graphicsQueueFamilyIndex_);
     computeQueue_ = new VulkanQueue(this,computeQueue, computeQueueFamilyIndex_);
@@ -144,30 +154,19 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
 
 bool VulkanDevice::InitPresentQueue(VkSurfaceKHR Surface)
 {
-    VkPhysicalDevice physicalDevice = GetPhysicalDevice();
-    VkSurfaceKHR surface = Surface;
-
-     uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
-
-     for (uint32_t i = 0; i < queueFamilyCount; ++i)
-    {
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
-        if (presentSupport && presentQueueFamilyIndex_ == UINT32_MAX)
-        {
-            presentQueueFamilyIndex_ = i;
+    auto CheckPresentSupport = [this](VulkanQueue* queue, VkSurfaceKHR surface)  {
+        if (presentQueue_) return;
+        VkBool32 surport = false;
+        GetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, queue->GetFamilyIndex(), surface, &surport);
+        if (surport) {
+            presentQueue_ = queue;
+			presentQueueFamilyIndex_ = queue->GetFamilyIndex();
         }
-    }
-     if (presentQueueFamilyIndex_ == UINT32_MAX)
-    {
-        return false;
-    }
-    VkQueue presentQueue;
-    vkGetDeviceQueue(device_, presentQueueFamilyIndex_, 0, &presentQueue);
-    presentQueue_ = new VulkanQueue(this, presentQueue, presentQueueFamilyIndex_);
+    };
+    CheckPresentSupport(graphicsQueue_, Surface);
+    CheckPresentSupport(computeQueue_, Surface);
+    CheckPresentSupport(transferQueue_, Surface);
+    if (!presentQueue_) return false;
     return true;
 }
 
@@ -181,7 +180,7 @@ void VulkanDevice::Destroy()
 
     if (device_ != VK_NULL_HANDLE)
     {
-        vkDestroyDevice(device_, nullptr);
+        DestroyDevice(device_);
         device_ = VK_NULL_HANDLE;
     }
 }

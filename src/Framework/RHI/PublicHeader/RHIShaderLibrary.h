@@ -14,7 +14,7 @@ namespace RHI {
 
 struct RHI_API ShaderBinary {
     std::string Name;
-    ERHIShaderType Type;
+    ERHIShaderFrequency Type;
     std::string EntryPoint;
     std::vector<uint8_t> BinaryCode;
     std::string SourceCode;

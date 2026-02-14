@@ -154,4 +154,84 @@ public:
     virtual ~VulkanRHICallableShader() = default;
 };
 
+
+// hash函数，直接对 std::vector<char> 做 FNV 或 std::hash
+inline size_t HashShaderCode(const std::vector<char>& code)
+{
+    // 简单 FNV-1a 64位
+    const uint64_t fnvOffsetBasis = 14695981039346656037ULL;
+    const uint64_t fnvPrime = 1099511628211ULL;
+
+    uint64_t hash = fnvOffsetBasis;
+    for (auto c : code)
+    {
+        hash ^= static_cast<uint8_t>(c);
+        hash *= fnvPrime;
+    }
+    return static_cast<size_t>(hash);
+}
+
+class VulkanShaderManager
+{
+public:
+    VulkanShaderManager(VulkanDevice* device) : Device(device) {}
+    ~VulkanShaderManager() { Cleanup(); }
+
+    // -----------------------
+    // 通用模板创建接口
+    // ShaderType = VulkanRHIVertexShader / VulkanRHIFragmentShader ...
+    // -----------------------
+    template<typename ShaderType>
+    std::shared_ptr<ShaderType> GetOrCreateShader(
+        const std::vector<char>& shaderCode)
+    {
+        const size_t hash = HashShaderCode(shaderCode);
+
+        // 先查缓存
+        {
+            std::lock_guard<std::mutex> lg(ShaderMutex);
+            auto it = ShaderCache.find(hash);
+            if (it != ShaderCache.end())
+            {
+                return std::static_pointer_cast<ShaderType>(it->second);
+            }
+        }
+
+        // 创建新的 shader
+        auto shader = std::make_shared<ShaderType>(Device);
+
+        if (!shader->Initialize(shaderCode))
+        {
+            return nullptr;
+        }
+
+        // 加入缓存
+        {
+            std::lock_guard<std::mutex> lg(ShaderMutex);
+            ShaderCache[hash] = shader;
+        }
+
+        return shader;
+    }
+
+    void Cleanup()
+    {
+        std::lock_guard<std::mutex> lg(ShaderMutex);
+        for (auto& kv : ShaderCache)
+        {
+            if (kv.second)
+                kv.second->Cleanup();
+        }
+        ShaderCache.clear();
+    }
+
+private:
+    VulkanDevice* Device = nullptr;
+
+    std::unordered_map<size_t, std::shared_ptr<VulkanRHIShader>> ShaderCache;
+    std::mutex ShaderMutex;
+};
+
+
+
 } // namespace WR::RHIVulkan

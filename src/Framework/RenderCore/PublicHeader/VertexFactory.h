@@ -8,8 +8,9 @@
 #include <functional>
 #include "RHIResource.h"
 #include "ShaderCore.h"
+#include "RHIDefine.h"
 namespace RenderCore {
-	using namespace RHI;
+	
 
 // 顶点属性描述
 struct RENDERCORE_API VertexElement
@@ -18,7 +19,7 @@ struct RENDERCORE_API VertexElement
     uint32_t SemanticIndex = 0;
     uint32_t Offset = 0;
     uint32_t Stride = 0;
-    ERHIFormat Format = ERHIFormat::Unknown;
+    RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown;
 };
 
 // 顶点布局描述
@@ -74,7 +75,7 @@ public:
     void SetDeclaration(const VertexDeclaration& decl) { Declaration = decl; }
     const VertexDeclaration& GetDeclaration() const { return Declaration; }
     
-    RHIVertexDescStateSP GetRHIVertexDescState() const;
+    RHI::RHIVertexDescStateSP GetRHIVertexDescState() const;
 
     void SetType(VertexFactoryType* type) { VFType = type; }
     VertexFactoryType* GetType() const { return VFType; }
@@ -82,7 +83,7 @@ public:
 protected:
     VertexDeclaration Declaration;
     VertexFactoryType* VFType = nullptr; // 指向类型信息
-    RHIVertexDescStateSP RHIVertexDescState;
+    RHI::RHIVertexDescStateSP RHIVertexDescState;
 };
 
 } // namespace RenderCore

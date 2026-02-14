@@ -91,22 +91,22 @@ namespace RenderCore{
             RHI::RHIShaderSP rhiShader;
             switch (st->Frequency)
             {
-            case RHI::ERHIShaderType::Vertex:
+            case RHI::ERHIShaderFrequency::Vertex:
                 rhiShader = ShaderLibrary::CreateVertexShader(platform, rhiHash);
                 break;
-            case RHI::ERHIShaderType::Fragment:
+            case RHI::ERHIShaderFrequency::Fragment:
                 rhiShader = ShaderLibrary::CreateFragmentShader(platform, rhiHash);
                 break;
-            case RHI::ERHIShaderType::Compute:
+            case RHI::ERHIShaderFrequency::Compute:
                 rhiShader = ShaderLibrary::CreateComputeShader(platform, rhiHash);
                 break;
-            case RHI::ERHIShaderType::Geometry:
+            case RHI::ERHIShaderFrequency::Geometry:
                 rhiShader = ShaderLibrary::CreateGeometryShader(platform, rhiHash);
                 break;
-            case RHI::ERHIShaderType::TessControl:
+            case RHI::ERHIShaderFrequency::TessControl:
                 rhiShader = ShaderLibrary::CreateTessControlShader(platform, rhiHash);
                 break;
-            case RHI::ERHIShaderType::TessEvaluation:
+            case RHI::ERHIShaderFrequency::TessEvaluation:
                 rhiShader = ShaderLibrary::CreateTessEvalShader(platform, rhiHash);
                 break;
             default:

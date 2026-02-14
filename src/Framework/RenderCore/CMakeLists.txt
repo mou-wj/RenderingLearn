@@ -39,7 +39,7 @@ target_include_directories(${TARGET_NAME}
         "${CMAKE_CURRENT_SOURCE_DIR}/../Engine/PublicHeader"
 )
 
-target_link_libraries(${TARGET_NAME} PUBLIC Core RHI glslang_all)
+target_link_libraries(${TARGET_NAME} PUBLIC Core RHI glslang_all tinygltf_all)
 
 _3rds_copy_runtime_deps(${TARGET_NAME} "${BINARY_DIR}")
 

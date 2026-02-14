@@ -37,6 +37,7 @@ target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
 )
+target_link_libraries(${TARGET_NAME} PUBLIC Core)
 
 string(TOUPPER "${TARGET_NAME}" TARGET_NAME_UPPER)
 if (WIN32)

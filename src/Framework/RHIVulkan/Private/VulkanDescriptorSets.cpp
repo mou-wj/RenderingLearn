@@ -1,201 +1,205 @@
 #include "VulkanDescriptorSets.h"
 #include <stdexcept>
-
 namespace RHIVulkan {
-
-// VulkanDescriptorSet 实现
-VulkanDescriptorSet::VulkanDescriptorSet(VkDescriptorSet* set, VkDescriptorSetLayout layout, const std::vector<VkDescriptorSetLayoutBinding>& bindings)
-    : bindings(bindings), _set(*set), _layout(layout) {}
-
-// VulkanDescriptorPool 实现
-VulkanDescriptorPool::VulkanDescriptorPool(VulkanDevice* device, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets)
-    : _device(device) {
-    for (const auto& poolsize : poolSizes)
+        //------------------------------------------------------------
+        // DescriptorSetLayoutInfo
+        //------------------------------------------------------------
+    uint64_t DescriptorSetLayoutInfo::CalculateHash()
     {
-		_validPoolSizes[poolsize.type] += poolsize.descriptorCount;
+        if (Hash != 0) return Hash;
+
+        uint64_t h = 14695981039346656037ull;
+        for (auto& b : Bindings)
+        {
+            h ^= b.Binding; h *= 1099511628211ull;
+            h ^= static_cast<uint64_t>(b.Type); h *= 1099511628211ull;
+            h ^= b.Count; h *= 1099511628211ull;
+            h ^= b.StageFlags; h *= 1099511628211ull;
+        }
+        Hash = h;
+        return Hash;
     }
 
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-    poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = maxSets;
-
-    if (vkCreateDescriptorPool(device->GetDevice(), &poolInfo, nullptr, &_pool) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create descriptor pool!");
-    }
-}
-
-VulkanDescriptorPool::~VulkanDescriptorPool() {
-    vkDestroyDescriptorPool(_device->GetDevice(), _pool, nullptr);
-    for (auto& descriptorSet : _allocatedSets) {
-        delete descriptorSet;
-    }
-}
-
-VulkanDescriptorSets VulkanDescriptorPool::AllocateDescriptorSet(const VulkanDescriptorSetLayoutMap& map) {
-    std::vector<VkDescriptorSetLayout> layouts;
-    std::vector<VkDescriptorSet> sets(map.size());
-
-
-    for (const auto& pair : map) {
-        layouts.push_back(CreateLayout(pair.second));
+    void DescriptorSetLayoutInfo::AddBinding(uint32_t binding, VkDescriptorType type, uint32_t count, VkShaderStageFlags stageFlags)
+    {
+        Bindings.push_back({ binding, type, count, stageFlags });
+        Hash = 0; // 重新计算 hash
     }
 
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = _pool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
-    allocInfo.pSetLayouts = layouts.data();
+    //------------------------------------------------------------
+    // VulkanDescriptorPool
+    //------------------------------------------------------------
+    VulkanDescriptorPool::VulkanDescriptorPool(VulkanDevice* device, uint32_t maxSets, const std::array<uint32_t, VK_DESCRIPTOR_TYPE_RANGE_SIZE>& poolSizes)
+        : Device(device), MaxDescriptorSets(maxSets)
+    {
+        for (int i = 0; i < VK_DESCRIPTOR_TYPE_RANGE_SIZE; ++i)
+            PoolSizes[i] = static_cast<float>(poolSizes[i]);
 
-    if (vkAllocateDescriptorSets(_device->GetDevice(), &allocInfo, sets.data()) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate descriptor sets!");
+        CreatePool();
     }
 
-    VulkanDescriptorSets result;
-    for (size_t i = 0; i < sets.size(); ++i) {
-        result.push_back(new VulkanDescriptorSet(&sets[i], layouts[i], map.at(i)));
-    }
-
-    _allocatedSets.insert(_allocatedSets.end(), result.begin(), result.end());
-    return result;
-}
-
-void VulkanDescriptorPool::Reset() {
-    vkResetDescriptorPool(_device->GetDevice(), _pool, 0);
-    for (auto& descriptorSet : _allocatedSets) {
-        delete descriptorSet;
-    }
-    _allocatedSets.clear();
-}
-
-bool VulkanDescriptorPool::CanAllocate(const std::map<VkDescriptorType, uint32_t>& want) const {
-	for (const auto& pair : want) {
-		auto it = _validPoolSizes.find(pair.first);
-		if (it == _validPoolSizes.end() || it->second < pair.second) {
-			return false; // 不足以满足需求
-		}
-	}
-	return true; // 可以满足所有需求
-}
-
-VkDescriptorSetLayout VulkanDescriptorPool::CreateLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings)
-{
-	VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
-	VkDescriptorSetLayoutCreateInfo layoutInfo{};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-	layoutInfo.pBindings = bindings.data();
-	if (vkCreateDescriptorSetLayout(_device->GetDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create descriptor set layout!");
-	}
-
-
-    return _layout;
-}
-
-// VulkanDescriptorPoolManager 实现
-VulkanDescriptorPoolManager::VulkanDescriptorPoolManager(VulkanDevice* device)
-    : _device(device) {}
-
-VulkanDescriptorPoolManager::~VulkanDescriptorPoolManager() {
-    Destroy();
-}
-
-VulkanDescriptorSets VulkanDescriptorPoolManager::AllocateDescriptorSet(const VulkanDescriptorSetLayoutMap& map) {
-    VulkanDescriptorPool* suitablePool = FindSuitablePool(map);
-    if (suitablePool) {
-        return suitablePool->AllocateDescriptorSet(map);
-    } else {
-        VulkanDescriptorPool* newPool = CreatePool(map);
-        _pools.push_back(newPool);
-        return newPool->AllocateDescriptorSet(map);
-    }
-}
-
-void VulkanDescriptorPoolManager::Destroy() {
-    for (auto& pool : _pools) {
-        delete pool;
-    }
-    _pools.clear();
-}
-
-VulkanDescriptorPool* VulkanDescriptorPoolManager::FindSuitablePool(const VulkanDescriptorSetLayoutMap& map) {
-	std::map<VkDescriptorType, uint32_t> totalPoolSizes;
-    // 计算所需的描述符类型和数量
-    for (const auto& pair : map) {
-        for (const auto& binding : pair.second) {
-            totalPoolSizes[binding.descriptorType] += binding.descriptorCount;
+    VulkanDescriptorPool::~VulkanDescriptorPool()
+    {
+        if (Pool != VK_NULL_HANDLE)
+        {
+            vkDestroyDescriptorPool(Device->GetHandle(), Pool, nullptr);
+            Pool = VK_NULL_HANDLE;
         }
     }
-    
-    for (auto& pool : _pools) {
-		// 检查当前池是否包含所需的描述符类型
-        
-        // 这里假设每个池只有一种布局，可以根据需要进行扩展
-        if (pool->CanAllocate(totalPoolSizes)) {
-            return pool;
+
+    void VulkanDescriptorPool::CreatePool()
+    {
+        std::vector<VkDescriptorPoolSize> sizes;
+        for (uint32_t i = 0; i < VK_DESCRIPTOR_TYPE_RANGE_SIZE; ++i)
+        {
+            if (PoolSizes[i] > 0)
+            {
+                VkDescriptorPoolSize s{};
+                s.type = static_cast<VkDescriptorType>(i);
+                s.descriptorCount = static_cast<uint32_t>(PoolSizes[i]);
+                sizes.push_back(s);
+            }
+        }
+
+        VkDescriptorPoolCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        info.poolSizeCount = static_cast<uint32_t>(sizes.size());
+        info.pPoolSizes = sizes.data();
+        info.maxSets = MaxDescriptorSets;
+        info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+
+        if (vkCreateDescriptorPool(Device->GetHandle(), &info, nullptr, &Pool) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create VulkanDescriptorPool");
+        }
+        AllocatedCount = 0;
+    }
+
+    bool VulkanDescriptorPool::AllocateDescriptorSet(VkDescriptorSetLayout layout, VkDescriptorSet& outSet)
+    {
+        if (AllocatedCount >= MaxDescriptorSets)
+            return false;
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = Pool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &layout;
+
+        VkResult res = vkAllocateDescriptorSets(Device->GetHandle(), &allocInfo, &outSet);
+        if (res == VK_SUCCESS)
+        {
+            ++AllocatedCount;
+            return true;
+        }
+        return false;
+    }
+
+    void VulkanDescriptorPool::Reset()
+    {
+        if (Pool != VK_NULL_HANDLE)
+        {
+            vkResetDescriptorPool(Device->GetHandle(), Pool, 0);
+            AllocatedCount = 0;
         }
     }
-    
-    return CreatePool(map); // 如果没有合适的池，则创建一个新的池
-}
 
-VulkanDescriptorPool* VulkanDescriptorPoolManager::CreatePool(const VulkanDescriptorSetLayoutMap& map) {
-	std::map<VkDescriptorType, uint32_t> totalPoolSizes;
-	// 计算所需的描述符类型和数量
-	for (const auto& pair : map) {
-		for (const auto& binding : pair.second) {
-			totalPoolSizes[binding.descriptorType] += binding.descriptorCount;
-		}
-	}
-	// 创建描述符池大小
-    std::vector<VkDescriptorPoolSize> poolSizes;
-	for (const auto& pair : totalPoolSizes) {
-		VkDescriptorPoolSize poolSize{};
-		poolSize.type = pair.first;
-		poolSize.descriptorCount = pair.second;
-		poolSizes.push_back(poolSize);
-	}
-
-    return new VulkanDescriptorPool(_device, poolSizes, 30); // 创建一个包含10个描述符集的池
-}
-
-// VulkanDescriptorSetWriter 实现
-VulkanDescriptorSetWriter::VulkanDescriptorSetWriter() {}
-
-void VulkanDescriptorSetWriter::WriteImage(VulkanDescriptorSet& descriptorSet, uint32_t binding, VkDescriptorImageInfo* imageInfo, VkDescriptorType type) {
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = descriptorSet.GetHandle();
-    descriptorWrite.dstBinding = binding;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = type;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pImageInfo = imageInfo;
-
-    _writes.push_back(descriptorWrite);
-}
-
-void VulkanDescriptorSetWriter::WriteBuffer(VulkanDescriptorSet& descriptorSet, uint32_t binding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorType type) {
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = descriptorSet.GetHandle();
-    descriptorWrite.dstBinding = binding;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = type;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pBufferInfo = bufferInfo;
-
-    _writes.push_back(descriptorWrite);
-}
-
-void VulkanDescriptorSetWriter::Update(VkDevice device) {
-    if (!_writes.empty()) {
-        vkUpdateDescriptorSets(device, static_cast<uint32_t>(_writes.size()), _writes.data(), 0, nullptr);
-        Clear();
+    //------------------------------------------------------------
+    // TypedDescriptorPool
+    //------------------------------------------------------------
+    TypedDescriptorPool::TypedDescriptorPool(VulkanDevice* device, VkDescriptorSetLayout layout, const DescriptorSetLayoutInfo& layoutInfo, uint32_t maxSetsPerPool)
+        : Device(device), Layout(layout), LayoutInfo(layoutInfo), MaxSetsPerPool(maxSetsPerPool)
+    {
     }
-}
+
+    VkDescriptorSet TypedDescriptorPool::Allocate()
+    {
+        for (auto& pool : Pools)
+        {
+            VkDescriptorSet set = VK_NULL_HANDLE;
+            if (pool->AllocateDescriptorSet(Layout, set))
+                return set;
+        }
+
+        // 没有可用 pool，创建新的
+        std::array<uint32_t, VK_DESCRIPTOR_TYPE_RANGE_SIZE> poolSizes{};
+        for (auto& b : LayoutInfo.Bindings)
+        {
+            poolSizes[b.Type] += b.Count;
+        }
+
+        Pools.push_back(std::make_unique<VulkanDescriptorPool>(Device, MaxSetsPerPool, poolSizes));
+
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        if (!Pools.back()->AllocateDescriptorSet(Layout, set))
+            throw std::runtime_error("TypedDescriptorPool failed to allocate descriptor set");
+
+        return set;
+    }
+
+    //------------------------------------------------------------
+    // DescriptorSetLayoutManager
+    //------------------------------------------------------------
+    VulkanDescriptorSetLayoutManager::VulkanDescriptorSetLayoutManager(VulkanDevice* device)
+        : Device(device)
+    {
+    }
+
+    VkDescriptorSetLayout VulkanDescriptorSetLayoutManager::GetOrCreateLayout(const DescriptorSetLayoutInfo& info)
+    {
+		
+        uint64_t hash = info.Hash;
+        auto it = LayoutMap.find(hash);
+        if (it != LayoutMap.end())
+            return it->second;
+
+        std::vector<VkDescriptorSetLayoutBinding> bindings;
+        for (auto& b : info.Bindings)
+        {
+            VkDescriptorSetLayoutBinding binding{};
+            binding.binding = b.Binding;
+            binding.descriptorType = b.Type;
+            binding.descriptorCount = b.Count;
+            binding.stageFlags = b.StageFlags;
+            binding.pImmutableSamplers = nullptr;
+            bindings.push_back(binding);
+        }
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+
+        VkDescriptorSetLayout layout;
+        if (vkCreateDescriptorSetLayout(Device->GetHandle(), &layoutInfo, nullptr, &layout) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create VkDescriptorSetLayout");
+
+        LayoutMap[hash] = layout;
+        return layout;
+    }
+
+    //------------------------------------------------------------
+    // DescriptorSetManager
+    //------------------------------------------------------------
+    VulkanDescriptorSetManager::VulkanDescriptorSetManager(VulkanDevice* device, VulkanDescriptorSetLayoutManager* layoutManager)
+        : Device(device), LayoutCache(layoutManager)
+    {
+    }
+
+    DescriptorSetEntry VulkanDescriptorSetManager::GetDescriptorSets(const DescriptorSetLayoutInfo& layoutInfo)
+    {
+        uint64_t hash = layoutInfo.Hash;
+        auto it = LayoutDescriptorPoolMap.find(hash);
+        if (it == LayoutDescriptorPoolMap.end())
+        {
+            VkDescriptorSetLayout layout = LayoutCache->GetOrCreateLayout(layoutInfo);
+            LayoutDescriptorPoolMap[hash] = std::make_unique<TypedDescriptorPool>(Device, layout, layoutInfo, 256);
+            it = LayoutDescriptorPoolMap.find(hash);
+        }
+
+        VkDescriptorSet set = it->second->Allocate();
+
+        return { set, hash, it->second.get() };
+    }
 
 } // namespace WR::RHIVulkan

@@ -6,6 +6,8 @@
 #include <functional>
 #include "BoxSphereBounds.h"
 #include "EngineExport.h"
+#include "SceneInterface.h"
+#include "Viewport.h"
 namespace Engine {
 
     struct Matrix4x4 { float m[16]; };
@@ -104,7 +106,8 @@ namespace Engine {
 
         // Return indices of views that consider the box visible.
         std::vector<int> FindViewsThatSeeBox(const Core::AABB& box) const;
-
+        SceneInterface* Scene;
+        RenderTarget* RenderTarget;
     private:
         std::vector<SceneView> views;
     };

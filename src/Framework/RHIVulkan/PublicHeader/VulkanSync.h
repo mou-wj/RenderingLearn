@@ -7,15 +7,15 @@
 namespace RHIVulkan{
 
 class VulkanDevice;
-
-class VulkanEvent {
+class VulkanEvent : public std::enable_shared_from_this<VulkanEvent> {
 public:
     VulkanEvent(VulkanDevice* device);
     ~VulkanEvent();
 
     VkEvent GetHandle() const;
-    void Reset() const;
+
     void Set() const;
+    void Reset() const;
     VkResult GetStatus() const;
 
 private:
@@ -23,8 +23,29 @@ private:
     VkEvent event_;
 };
 
+class VulkanEventManager {
+public:
+    VulkanEventManager(VulkanDevice* device);
+    ~VulkanEventManager();
 
-class VulkanSemaphore {
+    std::shared_ptr<VulkanEvent> Acquire();
+    void Release(std::shared_ptr<VulkanEvent> evt);
+
+private:
+    VulkanDevice* device_;
+
+    // 池：空闲可复用对象
+    std::queue<std::shared_ptr<VulkanEvent>> pool_;
+
+    // 管理所有创建的对象（用于析构和调试）
+    std::vector<std::shared_ptr<VulkanEvent>> managedObjects_;
+
+    std::mutex mutex_;
+};
+
+
+
+class VulkanSemaphore : public std::enable_shared_from_this<VulkanSemaphore> {
 public:
     VulkanSemaphore(VulkanDevice* device);
     ~VulkanSemaphore();
@@ -36,34 +57,24 @@ private:
     VkSemaphore semaphore_;
 };
 
-class VulkanEventManager {
-public:
-    VulkanEventManager(VulkanDevice* device);
-    ~VulkanEventManager();
-
-    VkEvent Acquire();
-    void Release(VkEvent evt);
-
-private:
-    VulkanDevice* device_;
-    std::queue<VkEvent> pool_;
-    std::mutex mutex_;
-};
-
-
 class VulkanSemaphoreManager {
 public:
     VulkanSemaphoreManager(VulkanDevice* device);
     ~VulkanSemaphoreManager();
 
-    VkSemaphore Acquire();
-    void Release(VkSemaphore semaphore);
+    VulkanSemaphore* Acquire();
+    void Release(VulkanSemaphore* sem);
 
 private:
     VulkanDevice* device_;
-    std::queue<VkSemaphore> pool_;
+
+    // 池：空闲对象
+    std::queue<VulkanSemaphore*> pool_;
+
+    // 管理所有创建对象
+    std::vector<VulkanSemaphore*> managedObjects_;
+
     std::mutex mutex_;
 };
-
 
 }

@@ -6,7 +6,7 @@
 #include <vector>
 #include <functional> // For std::function
 #include <list>
-#include "RHIRenderTargetInfo.h"
+
 #include "RHICommandList.h"
 #include "ShaderParameter.h"
 #include "RHITransientResource.h"
@@ -44,61 +44,6 @@ private:
     std::vector<RHITransientInfo> transitions;
 };
 
-/**
- * RenderCore版本的渲染目标集合，基于RHIRenderTargetsInfo
- * 提供对RenderCore资源类型的支持
- */
-struct RENDERCORE_API RenderGraphRenderTargetsInfo
-{
-private:
-
-    // 底层RHI渲染目标信息
-    RHIRenderTargetsInfo RHIInfo;
-public:
-    RenderGraphRenderTargetsInfo(){
-
-
-    }
-    ~RenderGraphRenderTargetsInfo() {
-        // 清理颜色附件
-        for (auto& colorTarget : RHIInfo.ColorRenderTargets) {
-            delete colorTarget;
-            colorTarget = nullptr;
-        }
-        // 清理深度/模板附件
-        delete RHIInfo.DepthStencilRenderTarget;
-        RHIInfo.DepthStencilRenderTarget = nullptr;
-    }
-    // 设置颜色附件 (RenderCore资源版本)
-    void SetColorRenderTarget(int32_t Index, RenderGraphTextureSP Texture, 
-                            uint32_t ArraySlice = 0, uint32_t MipLevel = 0,
-                            ERHILoadAction LoadAction = ERHILoadAction::Load,
-                            ERHIStoreAction StoreAction = ERHIStoreAction::Store,
-                            const RHIColor& ClearColor = RHIColor{})
-    {
-        RHIInfo.SetColorRenderTarget(Index, 
-            new RHIRenderTargetInfo(Texture->GetRHITexture(),
-                                  ArraySlice, MipLevel, LoadAction, StoreAction, ClearColor));
-    }
-
-    // 设置深度/模板附件 (RenderCore资源版本)
-    void SetDepthStencilRenderTarget(RenderGraphTextureSP Texture,
-                                   uint32_t ArraySlice = 0, uint32_t MipLevel = 0,
-                                   ERHILoadAction LoadAction = ERHILoadAction::Load,
-                                   ERHIStoreAction StoreAction = ERHIStoreAction::Store,
-                                   float ClearDepth = 1.0f, uint32_t ClearStencil = 0)
-    {
-        RHIInfo.SetDepthStencilRenderTarget(
-            new RHIRenderTargetInfo(Texture->GetRHITexture(),
-                                  ArraySlice, MipLevel, LoadAction, StoreAction,
-                                  ClearDepth, ClearStencil));
-    }
-
-    // 获取底层RHI信息
-    const RHIRenderTargetsInfo& GetRHIInfo() const { return RHIInfo; }
-    RHIRenderTargetsInfo& GetRHIInfo() { return RHIInfo; }
-};
-
 enum class EPassFlag {
     None,
     Graphic,
@@ -110,7 +55,7 @@ struct RENDERCORE_API RenderGraphPassInfo
 {
     std::string Name;                              // Pass name
     EPassFlag PassFlag;                         // Pass type
-    ShaderParameterStruct ShaderParmeters;      // shader metadata (for binding slots, etc.)
+    //ShaderParameterStruct ShaderParmeters;      // shader metadata (for binding slots, etc.)
     RenderGraphPassInfo(const std::string& name = "")
         : Name(name){}
 };
@@ -144,12 +89,12 @@ protected:
     PassList PassProducers;//当前pass依赖的pass集合
     BarrierBatchBegin BeginBarrier;//pass开始前的barrier
     BarrierBatchEnd EndBarrier;//pass结束后的barrier
-    RenderGraphBufferUAVSP ReadWriteBufferCache;//当前pass读写的buffer资源
-    RenderGraphBufferSRVSP ReadOnlyBufferCache;//当前pass只读的buffer资源
-    RenderGraphBufferSP ReadWriteBufferResourceCache;//当前pass读写的buffer资源
-    RenderGraphTextureSP ReadTextureResourceCache;//当前pass读的texture资源
-    RenderGraphTextureSRVSP ReadOnlyTextureCache;//当前pass只读的texture资源
-    RenderGraphTextureUAVSP ReadWriteTextureCache;//当前pass读写的texture资源
+    RenderGraphBufferUAV* ReadWriteBufferCache;//当前pass读写的buffer资源
+    RenderGraphBufferSRV* ReadOnlyBufferCache;//当前pass只读的buffer资源
+    RenderGraphBuffer* ReadWriteBufferResourceCache;//当前pass读写的buffer资源
+    RenderGraphTexture* ReadTextureResourceCache;//当前pass读的texture资源
+    RenderGraphTextureSRV* ReadOnlyTextureCache;//当前pass只读的texture资源
+    RenderGraphTextureUAV* ReadWriteTextureCache;//当前pass读写的texture资源
     friend class RenderGraphBuilder;
 };
 

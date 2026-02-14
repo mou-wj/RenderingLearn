@@ -23,8 +23,23 @@ public:
 
     RHITextureSP CreateTexture(const RHITextureDesc& desc) override;
     RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) override;
-    void UpdateTexture(RHITextureSP texture, const void* data,const RHITextureRegion& size) override;
-    void UpdateBuffer(RHIBufferSP buffer, const void* data, uint64_t size) override;
+    void UpdateTexture(RHICommandList& cmdList, RHITexture* texture, const void* data,const RHITextureRegion& size) override;
+    void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) override;
+
+    RHIShaderResourceViewSP CreateTextureShaderResourceView(
+        RHITexture* Texture, const RHITexSRVCreateInfo& Desc) override;
+
+    RHIUnorderedAccessViewSP CreateTextureUnorderedAccessView(
+        RHITexture* Texture, const RHITexUAVCreateInfo& Desc) override;
+
+    RHIShaderResourceViewSP CreateBufferShaderResourceView(
+        RHIBuffer* Buffer, const RHIBufferSRVCreateInfo& Desc) override;
+
+    RHIUnorderedAccessViewSP CreateBufferUnorderedAccessView(
+        RHIBuffer* Buffer, const RHIBufferUAVCreateInfo& Desc) override;
+
+    // 创建 StagingBuffer
+    RHIStagingBufferSP CreateStagingBuffer(uint32_t size) override;
 
     RHIGraphicsPipelineStateSP CreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) override;
     RHIComputePipelineStateSP CreateComputePipelineState(const RHIComputePipelineStateDesc& desc) override;
@@ -35,7 +50,6 @@ public:
     RHIColorBlendStateSP CreateColorBlendState(const RHIColorBlendStateDesc& desc) override;
     RHIDepthStencilStateSP CreateDepthStencilState(const RHIDepthStencilStateDesc& desc) override;
 
-    RHIShaderSP CreateShader(const std::vector<char>& shaderSourceCode, const ERHIResourceType& shaderType) override;
     RHIVertexShaderSP CreateVertexShader(const std::vector<char>& shaderSourceCode) override;
     RHIFragmentShaderSP CreateFragmentShader(const std::vector<char>& shaderSourceCode) override;
     RHIComputeShaderSP CreateComputeShader(const std::vector<char>& shaderSourceCode) override;
@@ -51,14 +65,13 @@ public:
     RHIIntersectionShaderSP CreateIntersectionShader(const std::vector<char>& shaderSourceCode) override;
     RHICallableShaderSP CreateCallableShader(const std::vector<char>& shaderSourceCode) override;
     RHIFenceSP CreateFence() override;
-    RHIVIewportSP CreateViewport(void* inWindowHandle, uint32_t w, uint32_t h) override;
+    RHIViewportSP CreateViewport(void* inWindowHandle, uint32_t w, uint32_t h, ERHIFormat format) override;
+    RHITextureSP GetViewportBackBuffer(RHIViewport* viewport) override;
     RHISamplerSP CreateSampler(const RHISamplerDesc& desc) override;
 
-    virtual RHICommandContexSP GetGlobalCommandContex() override;
+    virtual RHICommandContex* GetDefualtCommandContex() override;
 
-    virtual RHICommandContexSP CreateCommandContex() override;
-
-
+    virtual RHITransientResourceManagerSP CreateTransientResourceManager() override;
 private:
 	VkPhysicalDevice PickPhysicalDevice();
 
@@ -81,18 +94,23 @@ private:
 };
 
 
-class VulkanRHIApiCreator: public RHIApiCreator
+class RHIVULKAN_API VulkanRHIModule final : public RHI::RHIModule
 {
 public:
-    VulkanRHIApiCreator() = default;
-    ~VulkanRHIApiCreator() override = default;
+    VulkanRHIModule();
+    ~VulkanRHIModule() override;
 
-    RHIApi* CreateRHIApi() override
-    {
-        return new VulkanRHIApi();
-    }
+    // ===== Module 接口 =====
+    void StartupModule() override;
+    void ShutdownModule() override;
+    bool IsLoaded() const override;
 
+    // ===== RHIInterface =====
+    RHIApi* CreateRHIApi() override;
+
+private:
+    bool bLoaded = false;
+    std::string ModuleName = "VulkanRHI";
 };
-
 
 }

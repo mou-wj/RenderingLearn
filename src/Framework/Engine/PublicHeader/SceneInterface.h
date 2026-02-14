@@ -28,6 +28,7 @@ public:
     // Access proxies by id (RenderThread only)
     virtual SceneProxy* GetSceneProxyById(int32_t ProxyId) = 0;
     virtual void ForEachProxyInView(const View& view, std::function<void(SceneProxy*)> visitor) = 0;
+    virtual void ForEachPrimitiveComponent(std::function<void(PrimitiveComponent*)> visitor) = 0;
 
     // Renderer queries
     virtual FrameIndex GetCurrentFrameIndex() const = 0;

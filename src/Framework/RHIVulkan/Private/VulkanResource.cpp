@@ -2,58 +2,108 @@
 #include "VulkanDevice.h"
 #include "VulkanSwapchain.h"
 #include "VulkanPlatformSurport.h"
-
 #include "VulkanRHIUtils.h"
-
+#include "VulkanFuncWrapper.h"
+#include "Log.h"
+#include "VulkanSync.h"
+#include "VulkanCommandContex.h"
+#include "ThreadInfo.h"
+using namespace Core;
 namespace RHIVulkan{
+
+    VkSharingMode DetermineImageSharingMode(ERHITextureCreateFlags flags, VulkanDevice* device, std::vector<uint32_t>& outQueueFamilyIndices)
+    {
+        outQueueFamilyIndices.clear();
+
+        // Graphics 队列总是需要
+        outQueueFamilyIndices.push_back(device->GetGraphicsQueueFamilyIndex());
+
+        // 如果有 Compute 标志，加入 Compute 队列
+        if (EnumHasAnyFlags(flags, ERHITextureCreateFlags::UAV) &&
+            device->GetComputeQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex())
+        {
+            outQueueFamilyIndices.push_back(device->GetComputeQueueFamilyIndex());
+        }
+
+        // 如果有 TransferSrc 或 TransferDst，加入 Transfer 队列
+        if (EnumHasAnyFlags(flags, ERHITextureCreateFlags::CopySrc) || EnumHasAnyFlags(flags, ERHITextureCreateFlags::CopyDest)  &&
+            device->GetTransferQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex() &&
+            (outQueueFamilyIndices.empty() || device->GetTransferQueueFamilyIndex() != outQueueFamilyIndices[0]))
+        {
+            outQueueFamilyIndices.push_back(device->GetTransferQueueFamilyIndex());
+        }
+
+        // 如果有 Present 标志，加入 Present 队列
+        if (EnumHasAnyFlags(flags, ERHITextureCreateFlags::Presentable) &&
+            device->GetPresentQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex() &&
+            (std::find(outQueueFamilyIndices.begin(), outQueueFamilyIndices.end(),
+                device->GetPresentQueueFamilyIndex()) == outQueueFamilyIndices.end()))
+        {
+            outQueueFamilyIndices.push_back(device->GetPresentQueueFamilyIndex());
+        }
+
+        // 根据队列族数量选择 sharing mode
+        if (outQueueFamilyIndices.size() <= 1)
+        {
+            return VK_SHARING_MODE_EXCLUSIVE;
+        }
+        else
+        {
+            return VK_SHARING_MODE_CONCURRENT;
+        }
+    }
+
 
 // Vulkan Texture
 VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     : RHITexture(desc), Device(device) {
-    VkDevice vkDevice = Device->GetDevice();
+    VkDevice vkDevice = Device->GetHandle();
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
-
+    VkFormat format = TransformFormatFrom(desc.Format);
     // Create VkImage
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D; // TODO: Support other image types
-    imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM; // TODO: Support other formats
-    imageInfo.extent.width = Desc.Width;
-    imageInfo.extent.height = Desc.Height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.imageType = TransformImageTypeFrom(desc.Type); // TODO: Support other image types
+    imageInfo.format = format; // TODO: Support other formats
+    imageInfo.extent.width = desc.Width;
+    imageInfo.extent.height = desc.Height;
+    imageInfo.extent.depth = desc.Depth;
+    imageInfo.mipLevels = desc.MipLevels;
+    imageInfo.arrayLayers = desc.ArraySize;
+    imageInfo.samples = TransformSampleCountFrom(desc.SampleCount);
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT; // TODO: Support other usages
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.usage = TransformTextureUsageFlagsFrom(desc.Usage); // TODO: Support other usages
+	std::vector<uint32_t> queueFamilyIndices;
+    imageInfo.sharingMode = DetermineImageSharingMode( desc.Usage, Device, queueFamilyIndices);
+	imageInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
+	imageInfo.pQueueFamilyIndices = queueFamilyIndices.data();
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    if (vkCreateImage(vkDevice, &imageInfo, nullptr, &Image) != VK_SUCCESS) {
-    }
+    CreateImage(vkDevice, &imageInfo, &Image);
 
     // Get memory requirements
     VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(vkDevice, Image, &memRequirements);
+    GetImageMemoryRequirements(vkDevice, Image, &memRequirements);
 
     // Allocate memory
     if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
-        vkDestroyImage(vkDevice, Image, nullptr);
+        DestroyImage(vkDevice, Image);
     }
 
     // Bind memory to image
-    vkBindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
+    BindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
 
     // Create VkImageView
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = Image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; // TODO: Support other view types
-    viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM; // TODO: Support other formats
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.viewType = TransformViewTypeFrom(desc.Type); // TODO: Support other view types
+    viewInfo.format = format; // TODO: Support other formats
+    viewInfo.subresourceRange.aspectMask = GetImageAspectFlags(format);
     viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.levelCount = desc.MipLevels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = desc.ArraySize;
     viewInfo.components = VkComponentMapping{
         VK_COMPONENT_SWIZZLE_R,
         VK_COMPONENT_SWIZZLE_G,
@@ -61,27 +111,44 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
         VK_COMPONENT_SWIZZLE_A
     };
 
-    if (vkCreateImageView(vkDevice, &viewInfo, nullptr, &ImageView) != VK_SUCCESS) {
-        vkDestroyImage(vkDevice, Image, nullptr);
+    if (!CreateImageView(vkDevice, &viewInfo, &ImageView)) {
+        DestroyImage(vkDevice, Image);
         memoryManager->Free(Allocation);
     }
+
+    DefaultLayout = DetermineDefaultLayout(desc.Usage);
+
+    auto vkCommandContex = VulkanCommandContext::CastFrom(device->GetGlobalCommandContext());
+    auto commandList = vkCommandContex->GetCommandList();
+
+    //转换imagelayout
+    if (!Core::IsInRenderThread()) {
+        InitialImageState(vkCommandContex, DefaultLayout);
+    }
+    else {
+        commandList.AddCommand<VulkanCommandInitializeImageState>(this, DefaultLayout,true);
+    }
+
 }
 
 VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, VkImage image)
     : RHITexture(desc), Device(device), Image(image)
 {
-    VkDevice vkDevice = Device->GetDevice();
+    owner = false;
+    VkDevice vkDevice = Device->GetHandle();
 
     // Create VkImageView
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = Image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; // TODO: Support other view types
-    viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM; // TODO: Support other formats
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.viewType = TransformViewTypeFrom(desc.Type); // TODO: Support other view types
+    auto format = TransformFormatFrom(desc.Format);
+    viewInfo.format = format; // TODO: Support other formats
+    viewInfo.subresourceRange.aspectMask = GetImageAspectFlags(format);
     viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.levelCount = desc.MipLevels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = desc.ArraySize;
     viewInfo.components = VkComponentMapping{
         VK_COMPONENT_SWIZZLE_R,
         VK_COMPONENT_SWIZZLE_G,
@@ -89,30 +156,101 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, V
         VK_COMPONENT_SWIZZLE_A
     };
 
-    if (vkCreateImageView(vkDevice, &viewInfo, nullptr, &ImageView) != VK_SUCCESS) {
+    if (CreateImageView(vkDevice, &viewInfo, &ImageView)) {
 
+    }
+    DefaultLayout = DetermineDefaultLayout(desc.Usage);
+    auto vkCommandContex = VulkanCommandContext::CastFrom(device->GetGlobalCommandContext());
+    auto commandList = vkCommandContex->GetCommandList();
+
+    //转换imagelayout
+    if (!Core::IsInRenderThread()) {
+        InitialImageState(vkCommandContex, DefaultLayout);
+    }
+    else {
+        commandList.AddCommand<VulkanCommandInitializeImageState>(this, DefaultLayout, false);
     }
 }
 
 VulkanTexture::~VulkanTexture() {
-    VkDevice device = Device->GetDevice();
+    VkDevice device = Device->GetHandle();
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
 
     if (ImageView != VK_NULL_HANDLE) {
         vkDestroyImageView(device, ImageView, nullptr);
     }
 
-    if (Image != VK_NULL_HANDLE) {
+    if (Image != VK_NULL_HANDLE && owner) {
         vkDestroyImage(device, Image, nullptr);
     }
 
     memoryManager->Free(Allocation);
 }
 
+void VulkanTexture::InitialImageState(VulkanCommandContext* context, VkImageLayout layout)
+{
+    VulkanCommandContext* vulkanContex = context;
+    // 2. 获取一个可用命令缓冲区
+    VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->BeginUploadCommandBuffer();
+    cmdBuffer->Reset();
+    VulkanImageBarrierBuilder barrierBuilder;
+    auto vkFormat = TransformFormatFrom(Desc.Format);
+    auto imageFlags = GetImageAspectFlags(vkFormat);
+    VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(imageFlags,
+        0,
+        Desc.MipLevels, 
+        0,
+        Desc.ArraySize);
+    barrierBuilder.TransitionLayout(
+        Image,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        layout,
+        transientRegion
+    );
+    barrierBuilder.Execute(cmdBuffer);
+    vulkanContex->GetCommandBufferManager()->EndAndSubmitUploadCommandBuffer(cmdBuffer);
+
+}
+
+VkImageLayout VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags)
+{
+    // 1️⃣ 优先考虑 Presentable (swapchain)
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::Presentable))
+    {
+        // Swapchain image 创建后默认 undefined
+        return VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+
+    // 2️⃣ DepthStencil 图像
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::DepthStencil))
+    {
+        return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+
+    // 3️⃣ RenderTarget 图像
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::RenderTarget))
+    {
+        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    // 4️⃣ UAV / CPU 可访问 / CopySrc / CopyDst
+    if (EnumHasAnyFlags(Flags,
+        ERHITextureCreateFlags::UAV |
+        ERHITextureCreateFlags::CPUReadback |
+        ERHITextureCreateFlags::CopySrc |
+        ERHITextureCreateFlags::CopyDest))
+    {
+        return VK_IMAGE_LAYOUT_GENERAL;
+    }
+
+    // 5️⃣ 默认 layout
+    return VK_IMAGE_LAYOUT_UNDEFINED;
+}
+
 // Vulkan Buffer
 VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     : RHIBuffer(desc), Device(device) {
-    VkDevice vkDevice = Device->GetDevice();
+    VkDevice vkDevice = Device->GetHandle();
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
 
     // Create VkBuffer
@@ -139,7 +277,7 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
 }
 
 VulkanBuffer::~VulkanBuffer() {
-    VkDevice device = Device->GetDevice();
+    VkDevice device = Device->GetHandle();
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
 
     if (Buffer != VK_NULL_HANDLE) {
@@ -149,45 +287,263 @@ VulkanBuffer::~VulkanBuffer() {
     memoryManager->Free(Allocation);
 }
 
+
+VulkanShaderResourceView::VulkanShaderResourceView(VulkanDevice* device,
+    RHIViewableResource* Resource,
+    const RHITexSRVCreateInfo& SRVInfo)
+    : RHIShaderResourceView(Resource)
+{
+    ResourcePtr = Resource;
+    Device = device;
+    ResourceType = EResourceType::Texture;
+
+    CreateTextureView(SRVInfo);
+}
+
+VulkanShaderResourceView::VulkanShaderResourceView(
+    VulkanDevice* device,
+    RHIViewableResource* Resource,
+    const RHIBufferSRVCreateInfo& SRVInfo)
+    : RHIShaderResourceView(Resource)
+{
+    ResourcePtr = Resource;
+    Device = device;
+    ResourceType = EResourceType::Buffer;
+
+    CreateBufferView(SRVInfo);
+}
+
+void VulkanShaderResourceView::CreateTextureView(
+    const RHITexSRVCreateInfo& SRVInfo)
+{
+    auto* texture = static_cast<VulkanTexture*>(ResourcePtr);
+
+    Format = (SRVInfo.Format == ERHIFormat::Unknown)
+        ? texture->GetFormat()
+        : TransformFormatFrom(SRVInfo.Format);
+
+    BaseMipLevel = SRVInfo.MostDetailedMip;
+    MipLevelCount = SRVInfo.MipLevelCount;
+    BaseArrayLayer = SRVInfo.FirstArraySlice;
+    LayerCount = SRVInfo.ArraySize;
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = texture->GetImage();
+    viewInfo.viewType =
+        (LayerCount > 1) ?
+        VK_IMAGE_VIEW_TYPE_2D_ARRAY :
+        VK_IMAGE_VIEW_TYPE_2D;
+
+    viewInfo.format = Format;
+
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = BaseMipLevel;
+    viewInfo.subresourceRange.levelCount = MipLevelCount;
+    viewInfo.subresourceRange.baseArrayLayer = BaseArrayLayer;
+    viewInfo.subresourceRange.layerCount = LayerCount;
+
+    vkCreateImageView(
+        Device->GetHandle(),
+        &viewInfo,
+        nullptr,
+        &ImageView);
+
+    DescriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+}
+
+void VulkanShaderResourceView::CreateBufferView(
+    const RHIBufferSRVCreateInfo& SRVInfo)
+{
+    auto* buffer = static_cast<VulkanBuffer*>(ResourcePtr);
+
+    Format = TransformFormatFrom(SRVInfo.Format);
+
+    VkBufferViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+    viewInfo.buffer = buffer->GetBuffer();
+    viewInfo.format = Format;
+    viewInfo.offset = SRVInfo.Offset;
+    viewInfo.range =
+        (SRVInfo.NumElements * SRVInfo.Stride);
+
+    vkCreateBufferView(
+        Device->GetHandle(),
+        &viewInfo,
+        nullptr,
+        &BufferView);
+
+    DescriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+}
+
+VulkanShaderResourceView::~VulkanShaderResourceView()
+{
+    DestroyView();
+}
+
+void VulkanShaderResourceView::DestroyView()
+{
+    if (ImageView != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(
+            Device->GetHandle(),
+            ImageView,
+            nullptr);
+
+        ImageView = VK_NULL_HANDLE;
+    }
+
+    if (BufferView != VK_NULL_HANDLE)
+    {
+        vkDestroyBufferView(
+            Device->GetHandle(),
+            BufferView,
+            nullptr);
+
+        BufferView = VK_NULL_HANDLE;
+    }
+}
+
+VulkanUnorderedAccessView::VulkanUnorderedAccessView(
+    VulkanDevice* device,
+    RHIViewableResource* Resource,
+    const RHITexUAVCreateInfo& UAVInfo)
+    : RHIUnorderedAccessView(Resource)
+{
+    ResourcePtr = Resource;
+    Device = device;
+    ResourceType = EResourceType::Texture;
+
+    CreateTextureView(UAVInfo);
+}
+
+VulkanUnorderedAccessView::VulkanUnorderedAccessView(
+    VulkanDevice* device,
+    RHIViewableResource* Resource,
+    const RHIBufferUAVCreateInfo& UAVInfo)
+    : RHIUnorderedAccessView(Resource)
+{
+    ResourcePtr = Resource;
+    Device = device;
+    ResourceType = EResourceType::Buffer;
+
+    CreateBufferView(UAVInfo);
+}
+
+
+void VulkanUnorderedAccessView::CreateTextureView(
+    const RHITexUAVCreateInfo& UAVInfo)
+{
+    auto* texture = static_cast<VulkanTexture*>(ResourcePtr);
+
+    Format = (UAVInfo.Format == ERHIFormat::Unknown)
+        ? texture->GetFormat()
+        : TransformFormatFrom(UAVInfo.Format);
+
+    BaseMipLevel = UAVInfo.MipSlice;
+    MipLevelCount = 1;
+    BaseArrayLayer = UAVInfo.FirstArraySlice;
+    LayerCount = UAVInfo.ArraySize;
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = texture->GetImage();
+    viewInfo.viewType =
+        (LayerCount > 1) ?
+        VK_IMAGE_VIEW_TYPE_2D_ARRAY :
+        VK_IMAGE_VIEW_TYPE_2D;
+
+    viewInfo.format = Format;
+
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = BaseMipLevel;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = BaseArrayLayer;
+    viewInfo.subresourceRange.layerCount = LayerCount;
+
+    vkCreateImageView(
+        Device->GetHandle(),
+        &viewInfo,
+        nullptr,
+        &ImageView);
+
+    DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+}
+
+void VulkanUnorderedAccessView::CreateBufferView(
+    const RHIBufferUAVCreateInfo& UAVInfo)
+{
+    auto* buffer = static_cast<VulkanBuffer*>(ResourcePtr);
+
+    Format = TransformFormatFrom(UAVInfo.Format);
+
+    VkBufferViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+    viewInfo.buffer = buffer->GetBuffer();
+    viewInfo.format = Format;
+    viewInfo.offset = UAVInfo.Offset;
+    viewInfo.range =
+        (UAVInfo.NumElements * UAVInfo.Stride);
+
+    vkCreateBufferView(
+        Device->GetHandle(),
+        &viewInfo,
+        nullptr,
+        &BufferView);
+
+    DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+}
+
+VulkanUnorderedAccessView::~VulkanUnorderedAccessView()
+{
+    DestroyView();
+}
+
+void VulkanUnorderedAccessView::DestroyView()
+{
+    if (ImageView != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(Device->GetHandle(), ImageView, nullptr);
+        ImageView = VK_NULL_HANDLE;
+    }
+
+    if (BufferView != VK_NULL_HANDLE)
+    {
+        vkDestroyBufferView(Device->GetHandle(), BufferView, nullptr);
+        BufferView = VK_NULL_HANDLE;
+    }
+}
+
+
+
 // Vulkan Viewport (Swapchain)
-VulkanViewport::VulkanViewport(VulkanDevice* device, uint32_t width, uint32_t height, void* windowHandle)
-    : RHIVIewport(), Device(device), WindowHandle(windowHandle) {
+VulkanViewport::VulkanViewport(VulkanDevice* device, uint32_t width, uint32_t height, void* windowHandle, ERHIFormat format)
+    : RHIViewport(), Device(device), WindowHandle(windowHandle),Width(width),Height(height),Format(format) 
+{
 
 
     if (!WindowHandle)
     {
+		LOG_ERROR("VulkanViewport: Invalid window handle");
     }
-
-
-    VulkanSwapchain::SwapchainDesc swapchainDesc = {};
-    swapchainDesc.windowHandle = WindowHandle;
-    swapchainDesc.width = width;
-    swapchainDesc.height = height;
-
-    Swapchain = new VulkanSwapchain(Device, swapchainDesc);
-
+    CreateSwapchain();
+    acquireSemaphore = device->GetSemaphoreManager()->Acquire();
 }
 
 VulkanViewport::~VulkanViewport() {
-    VkDevice device = Device->GetDevice();
+    VkDevice device = Device->GetHandle();
 
-    delete Swapchain;
+    DestroySwapchain();
 
-#ifdef _WIN32
-    glfwDestroyWindow((GLFWwindow*)WindowHandle);
-    glfwTerminate();
-#endif
 }
 
-void VulkanViewport::Present()
+void VulkanViewport::Present(VulkanCommandContext* context, VulkanCommandBuffer* commandBuffer, VulkanQueue* queue, VulkanQueue* presentQueue)
 {
+    assert(queue == presentQueue);//先假定相等
 
-	if (Swapchain) {
-		Swapchain->Present(curPresentImageIndex,VK_NULL_HANDLE);
-	}
-	else {
-		
-	}
+    commandBuffer->AddWaitSemaphores(1, { acquireSemaphore });
+    Swapchain->Present(presentQueue,backBufferRenderDoneSemaphores[currentBackBufferIndex]);
+    currentBackBufferIndex = -1;
 
 }
 
@@ -195,8 +551,54 @@ void VulkanViewport::Tick()
 {
 }
 
+VulkanTextureSP VulkanViewport::GetBackTexture()
+{
+    if (currentBackBufferIndex != -1) {
+        return backBufferTextures[currentBackBufferIndex];
+    }
+    Swapchain->AcquireNextImage(acquireSemaphore ,&currentBackBufferIndex);
+    return nullptr;
+}
 
-VulkanRHIVertexDescState::VulkanRHIVertexDescState(VulkanDevice* device, const RHIVertexDescStateDesc& desc): RHIVertexDescState(desc), Device(device)
+void VulkanViewport::CreateSwapchain()
+{
+    VulkanSwapchain::SwapchainDesc swapchainDesc = {};
+    swapchainDesc.windowHandle = WindowHandle;
+    swapchainDesc.width = Width;
+    swapchainDesc.height = Height;
+    swapchainDesc.preferredFormat = Format;
+    Swapchain = new VulkanSwapchain(Device, swapchainDesc, swapchainImages_);
+
+    RHITextureDesc textureDesc;
+    textureDesc.Width = Width;                  // 纹理宽度
+    textureDesc.Height = Height;                 // 纹理高度
+    textureDesc.Depth = 1;                  // 纹理深度（3D纹理）
+    textureDesc.MipLevels = 1;              // Mip层级数量
+    textureDesc.ArraySize = 1;              // 数组大小
+    textureDesc.Format = Format; // 像素格式
+    ERHITextureType Type = ERHITextureType::Texture2D;   // 纹理类型
+    uint32_t SampleCount = 1;            // 多重采样数量
+    uint32_t SampleQuality = 0;          // 多重采样质量
+    textureDesc.Usage = ERHITextureCreateFlags::RenderTarget | ERHITextureCreateFlags::Presentable; // 纹理用途
+    auto imageCount = swapchainImages_.size();
+    for (int i = 0; i < imageCount; i++) {
+
+        auto texture = std::make_shared<VulkanTexture>(Device, textureDesc, swapchainImages_[i]);
+        backBufferTextures.push_back(texture);
+    }
+
+
+}
+
+void VulkanViewport::DestroySwapchain()
+{
+    delete Swapchain;
+    backBufferTextures.clear();
+
+}
+
+
+VulkanVertexDescState::VulkanVertexDescState(VulkanDevice* device, const RHIVertexDescStateDesc& desc): RHIVertexDescState(desc), Device(device)
 {
     // Initialize vertex input state
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -214,14 +616,14 @@ VulkanRHIVertexDescState::VulkanRHIVertexDescState(VulkanDevice* device, const R
         const auto& attributeDesc = desc.attributes[i];
         attributeDescriptions[i].location = attributeDesc.location;
         //attributeDescriptions[i].binding = attributeDesc.binding;
-        attributeDescriptions[i].format = TransforFormatFrom(attributeDesc.format); // TODO: Support other formats
+        attributeDescriptions[i].format = TransformFormatFrom(attributeDesc.format); // TODO: Support other formats
         attributeDescriptions[i].offset = 0; // TODO: Support other offsets
     }
     vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 }
-VulkanRHIVertexDescState::~VulkanRHIVertexDescState()
+VulkanVertexDescState::~VulkanVertexDescState()
 {
 
 }
@@ -230,9 +632,9 @@ VulkanRHIVertexDescState::~VulkanRHIVertexDescState()
 // ----------------------------
 // 光栅化状态 Vulkan派生
 // ----------------------------
-VulkanRHIRasterizerState::VulkanRHIRasterizerState(VulkanDevice* device, const RHIRasterizerStateDesc& desc) : RHIRasterizerState(desc), Device(device)
+VulkanRasterizerState::VulkanRasterizerState(VulkanDevice* device, const RHIRasterizerStateDesc& desc) : RHIRasterizerState(desc), Device(device)
 {
-    VkDevice vkDevice = Device->GetDevice();
+    VkDevice vkDevice = Device->GetHandle();
     rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizerInfo.depthClampEnable = desc.depthClampEnable;
     rasterizerInfo.rasterizerDiscardEnable = desc.rasterizerDiscardEnable;
@@ -289,16 +691,16 @@ VulkanRHIRasterizerState::VulkanRHIRasterizerState(VulkanDevice* device, const R
     rasterizerInfo.lineWidth = desc.lineWidth;
 }
 
-VulkanRHIRasterizerState::~VulkanRHIRasterizerState()
+VulkanRasterizerState::~VulkanRasterizerState()
 {
 }
 
 // ----------------------------
 // 颜色混合状态 Vulkan派生
 // ----------------------------
-VulkanRHIColorBlendState::VulkanRHIColorBlendState(VulkanDevice* device, const RHIColorBlendStateDesc& desc) : RHIColorBlendState(desc), Device(device)
+VulkanColorBlendState::VulkanColorBlendState(VulkanDevice* device, const RHIColorBlendStateDesc& desc) : RHIColorBlendState(desc), Device(device)
 {
-    VkDevice vkDevice = Device->GetDevice();
+    VkDevice vkDevice = Device->GetHandle();
     colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlendInfo.logicOpEnable = desc.logicOpEnable;
     colorBlendInfo.logicOp = VK_LOGIC_OP_COPY; // TODO: Support other logic ops
@@ -321,16 +723,16 @@ VulkanRHIColorBlendState::VulkanRHIColorBlendState(VulkanDevice* device, const R
     colorBlendInfo.blendConstants[3] = desc.blendConstants[3];
 }
 
-VulkanRHIColorBlendState::~VulkanRHIColorBlendState()
+VulkanColorBlendState::~VulkanColorBlendState()
 {
 }
 
 // ----------------------------
 // 深度模板状态 Vulkan派生
 // ----------------------------
-VulkanRHIDepthStencilState::VulkanRHIDepthStencilState(VulkanDevice* device, const RHIDepthStencilStateDesc& desc) : RHIDepthStencilState(desc), Device(device)
+VulkanDepthStencilState::VulkanDepthStencilState(VulkanDevice* device, const RHIDepthStencilStateDesc& desc) : RHIDepthStencilState(desc), Device(device)
 {
-    VkDevice vkDevice = Device->GetDevice();
+    VkDevice vkDevice = Device->GetHandle();
     depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencilInfo.depthTestEnable = desc.depthTestEnable;
     depthStencilInfo.depthWriteEnable = desc.depthWriteEnable;
@@ -340,7 +742,7 @@ VulkanRHIDepthStencilState::VulkanRHIDepthStencilState(VulkanDevice* device, con
     depthStencilInfo.stencilTestEnable = VK_FALSE;
 }
 
-VulkanRHIDepthStencilState::~VulkanRHIDepthStencilState()
+VulkanDepthStencilState::~VulkanDepthStencilState()
 {
 }
 
@@ -348,7 +750,7 @@ VulkanRHIDepthStencilState::~VulkanRHIDepthStencilState()
 VulkanFence::VulkanFence(VulkanDevice* device)
 {
 	Device = device;
-	VkDevice vkDevice = Device->GetDevice();
+	VkDevice vkDevice = Device->GetHandle();
 	VkFenceCreateInfo fenceInfo{};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // 初始状态为已信号
@@ -363,8 +765,76 @@ VulkanFence::VulkanFence(VulkanDevice* device)
 bool VulkanFence::IsSignaled() const
 {
     if (!Fence || !Device) return false;
-    VkResult result = vkGetFenceStatus(Device->GetDevice(), Fence);
+    VkResult result = vkGetFenceStatus(Device->GetHandle(), Fence);
     return result == VK_SUCCESS;
 }
+
+void VulkanFence::Reset()
+{
+    if (!Fence || !Device) return;
+    ResetFences(Device->GetHandle(), 1, &Fence);
+}
+
+
+VulkanFenceManager::VulkanFenceManager(VulkanDevice* deviceIn)
+    : device(deviceIn)
+{
+}
+
+VulkanFenceManager::~VulkanFenceManager()
+{
+    allFences.clear();
+    availableFences.clear();
+    pendingFences.clear();
+}
+
+VulkanFence* VulkanFenceManager::AcquireFence()
+{
+    // 优先复用空闲 fence
+    if (!availableFences.empty())
+    {
+        VulkanFence* fence = availableFences.front();
+        availableFences.pop_front();
+        return fence;
+    }
+
+    // 没有空闲 fence，创建新的
+    auto newFence = std::make_unique<VulkanFence>(device);
+    VulkanFence* ptr = newFence.get();
+    allFences.push_back(std::move(newFence));
+    return ptr;
+}
+
+// 提交 fence 后标记为 pending
+void VulkanFenceManager::ReleaseFence(VulkanFence* fence)
+{
+    if (fence)
+    {
+        pendingFences.push_back(fence);
+    }
+}
+
+// 检查 fence 是否完成，回收空闲池
+void VulkanFenceManager::GarbageCollect()
+{
+    size_t count = pendingFences.size();
+    for (size_t i = 0; i < count; ++i)
+    {
+        VulkanFence* fence = pendingFences.front();
+        pendingFences.pop_front();
+
+        if (fence->IsSignaled())
+        {
+            // fence 已完成，回收到 available
+            availableFences.push_back(fence);
+        }
+        else
+        {
+            // fence 还没完成，放回 pending
+            pendingFences.push_back(fence);
+        }
+    }
+}
+
 
 }

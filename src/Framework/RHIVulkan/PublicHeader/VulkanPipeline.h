@@ -27,7 +27,7 @@ protected:
     VulkanDevice* device;
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
-    VulkanDescriptorSets boundDescriptorSets; // 绑定的描述符集
+    //VulkanDescriptorSets boundDescriptorSets; // 绑定的描述符集
     VulkanRenderPass* renderPass;
     
     void CreateLayout(const std::vector<RHIShaderStageDesc>& shaderStages);
@@ -35,10 +35,10 @@ protected:
 };
 
 // 图形管线
-class VulkanGraphicsPipeline : public VulkanPipelineBase ,public RHIGraphicsPipelineState {
+class VulkanGraphicsPipelineState : public VulkanPipelineBase ,public RHIGraphicsPipelineState {
 public:
-    VulkanGraphicsPipeline(VulkanDevice* device, const RHIGraphicsPipelineStateDesc& pipelineDesc);
-    ~VulkanGraphicsPipeline();
+    VulkanGraphicsPipelineState(VulkanDevice* device, const RHIGraphicsPipelineStateDesc& pipelineDesc);
+    ~VulkanGraphicsPipelineState();
 
 private:
     VkGraphicsPipelineCreateInfo createInfo; // Vulkan-specific create info
@@ -72,7 +72,7 @@ private:
 };
 
 using VulkanPipelineSP = std::shared_ptr<VulkanPipelineBase>;
-using VulkanGraphicsPipelineSP = std::shared_ptr<VulkanGraphicsPipeline>;
+using VulkanGraphicsPipelineStateSP = std::shared_ptr<VulkanGraphicsPipelineState>;
 using VulkanComputePipelineSP = std::shared_ptr<VulkanComputePipeline>;
 using VulkanRayTracingPipelineSP = std::shared_ptr<VulkanRayTracingPipeline>;
 

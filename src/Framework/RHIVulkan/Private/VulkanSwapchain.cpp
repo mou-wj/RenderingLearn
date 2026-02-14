@@ -3,10 +3,14 @@
 #include "VulkanPlatformSurport.h"
 #include "VulkanRHIApi.h"
 #include "VulkanQueue.h"
+#include "VulkanResource.h"
+#include "Log.h"
+#include "VulkanRHIUtils.h"
+#include "VulkanFuncWrapper.h"
 
 namespace RHIVulkan {
 
-    VulkanSwapchain::VulkanSwapchain(VulkanDevice* device, const SwapchainDesc& desc)
+    VulkanSwapchain::VulkanSwapchain(VulkanDevice* device, const SwapchainDesc& desc, std::vector<VkImage>& outImages)
         : device_(device)
     {
         VulkanRHIApi* api = device_->GetRhiApi();
@@ -24,8 +28,10 @@ namespace RHIVulkan {
         // 1. 获取表面支持细节
         SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(physicalDevice);
 
+        auto preferredFormat = TransformFormatFrom(desc.preferredFormat);
+
         // 2. 选择最佳表面格式和颜色空间
-        VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.formats);
+        VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.formats, preferredFormat);
 
         // 3. 选择最佳呈现模式
         VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
@@ -52,11 +58,20 @@ namespace RHIVulkan {
         device_->InitPresentQueue(surface_); // Initialize the present queue
 
         uint32_t presentQueueFamilyIndex = device_->GetPresentQueueFamilyIndex();
-        uint32_t queueFamilyIndices[] = { presentQueueFamilyIndex };
+        uint32_t computeQueueFamilyIndex = device_->GetComputeQueueFamilyIndex();
+        if (presentQueueFamilyIndex != computeQueueFamilyIndex) {
+			uint32_t queueFamilyIndices[] = { presentQueueFamilyIndex, computeQueueFamilyIndex };
+			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+			createInfo.queueFamilyIndexCount = 2;
+			createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        }
+        else {
+            uint32_t queueFamilyIndices[] = { presentQueueFamilyIndex };
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            createInfo.queueFamilyIndexCount = 1;
+            createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        }
 
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 1;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
 
 
         createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
@@ -66,15 +81,18 @@ namespace RHIVulkan {
         createInfo.oldSwapchain = VK_NULL_HANDLE;
 
         // 7. 创建交换链
-        VkDevice deviceHandle = device_->GetDevice();
+        VkDevice deviceHandle = device_->GetHandle();
         if (vkCreateSwapchainKHR(deviceHandle, &createInfo, nullptr, &swapchain_) != VK_SUCCESS) {
             return;
         }
 
         // 8. 检索交换链图像句柄
         vkGetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, nullptr);
-        images_.resize(imageCount);
-        vkGetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, images_.data());
+        std::vector<VkImage>& images = outImages;
+        images.resize(imageCount);
+        vkGetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, images.data());
+        
+
 
         // 9. 保存图像格式和范围
         imageFormat_ = surfaceFormat.format;
@@ -88,7 +106,7 @@ namespace RHIVulkan {
 
     void VulkanSwapchain::Cleanup()
     {
-        VkDevice deviceHandle = device_->GetDevice();
+        VkDevice deviceHandle = device_->GetHandle();
 
         if (swapchain_ != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(deviceHandle, swapchain_, nullptr);
@@ -102,16 +120,17 @@ namespace RHIVulkan {
         }
     }
 
-    bool VulkanSwapchain::Present(uint32_t imageIndex, VkSemaphore waitSemaphore)
+
+    bool VulkanSwapchain::Present(VulkanQueue* presentQueue, VulkanSemaphore* drawDoneSemaphore)
     {
-		VulkanQueue* queue = device_->GetPresentQueue();
-		if (queue == nullptr) {
-			return false;
-		}
-		VkQueue queueHandle = queue->GetHandle();
+        VulkanQueue* queue = device_->GetPresentQueue();
+        if (queue == nullptr) {
+            return false;
+        }
+        VkQueue queueHandle = presentQueue->GetHandle();
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
+        VkSemaphore waitSemaphore = drawDoneSemaphore->GetHandle();
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = &waitSemaphore;
 
@@ -119,7 +138,7 @@ namespace RHIVulkan {
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
 
-        presentInfo.pImageIndices = &imageIndex;
+        presentInfo.pImageIndices = &currentImageIndex_;
 
         VkResult result = vkQueuePresentKHR(queueHandle, &presentInfo);
 
@@ -129,6 +148,21 @@ namespace RHIVulkan {
 
         return true;
     }
+
+    void VulkanSwapchain::AcquireNextImage(VulkanSemaphore* signalSemaphore, int* imageIndex)
+    {
+        uint32_t imageIndex_ = 0;
+        if (AcquireNextImageKHR(device_->GetHandle(), swapchain_, VK_TIMEOUT, signalSemaphore->GetHandle(), VK_NULL_HANDLE, &imageIndex_)) {
+            *imageIndex = imageIndex_;
+            currentImageIndex_ = imageIndex_;
+        }
+        else {
+            *imageIndex = -1;
+        }
+
+
+    }
+
 
     SwapChainSupportDetails VulkanSwapchain::QuerySwapChainSupport(VkPhysicalDevice device) {
         SwapChainSupportDetails details;
@@ -157,13 +191,14 @@ namespace RHIVulkan {
         return details;
     }
 
-    VkSurfaceFormatKHR VulkanSwapchain::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+    VkSurfaceFormatKHR VulkanSwapchain::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats, VkFormat wantForamt) {
+        //检查是否支持预想的格式
         for (const auto& availableFormat : availableFormats) {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            if (availableFormat.format == wantForamt && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 return availableFormat;
             }
         }
-
+        
         return availableFormats[0];
     }
 
@@ -182,12 +217,8 @@ namespace RHIVulkan {
             return capabilities.currentExtent;
         }
         else {
-            int windowWidth, windowHeight;
-#ifdef _WIN32
-            glfwGetFramebufferSize((GLFWwindow*)windowHandle, &windowWidth, &windowHeight);
-#else
-            glfwGetFramebufferSize((GLFWwindow*)windowHandle, &windowWidth, &windowHeight);
-#endif
+            int windowWidth = 0, windowHeight = 0;
+            VulkanPlatformSupport::GetFramebufferSize(windowHandle, windowWidth, windowHeight);
 
             VkExtent2D actualExtent = {
                 static_cast<uint32_t>(windowWidth),

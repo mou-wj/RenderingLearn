@@ -24,7 +24,7 @@ struct RENDERCORE_API ShaderCompilationResult
     bool Success = false;
     std::string ErrorMessage;
     std::string PreprocessedSource;            // Source after preprocessing
-    ShaderParameterBindingInfo BindingInfo;    // Extracted parameter binding info
+    ShaderParameterMap ParameterMap;    // Extracted parameter binding info
 
     // Platform-specific compilation results
     std::unordered_map<int, ShaderCompilationResultPerPlatform> PlatformResults;
@@ -42,7 +42,7 @@ struct RENDERCORE_API ShaderCompilationResult
 struct RENDERCORE_API ShaderSourceInfo
 {
     std::string SourcePath;
-    RHI::ERHIShaderType ShaderType;
+    RHI::ERHIShaderFrequency ShaderType;
     std::unordered_map<std::string, std::string> MacroDefinitions;
     std::vector<RHI::ERHIShaderPlatform> TargetPlatforms;  // Platforms to compile for
 };
@@ -65,7 +65,7 @@ public:
     // Compile shader for a specific platform
     ShaderCompilationResultPerPlatform CompileShaderForPlatform(
         const std::string& preprocessedSource,
-        RHI::ERHIShaderType shaderType,
+        RHI::ERHIShaderFrequency shaderType,
         RHI::ERHIShaderPlatform platform
     );
 
@@ -79,10 +79,10 @@ public:
     bool PreprocessShader(const std::string& sourcePath, std::string& outPreprocessedSource);
 
     // Extract shader parameter binding info from source
-    bool ExtractParameterBindingInfo(
+    bool ExtractParameterMap(
         const std::string& preprocessedSource,
-        RHI::ERHIShaderType shaderType,
-        ShaderParameterBindingInfo& outBindingInfo
+        RHI::ERHIShaderFrequency shaderType,
+        ShaderParameterMap& outMap
     );
 
 private:
@@ -101,14 +101,14 @@ private:
     // Compile HLSL to SPIR-V (for Vulkan)
     bool CompileHLSLToSPIRV(
         const std::string& preprocessedSource,
-        RHI::ERHIShaderType shaderType,
+        RHI::ERHIShaderFrequency shaderType,
         std::vector<uint8_t>& outBinaryData
     );
 
     // Compile HLSL to DirectX bytecode (D3D11/D3D12)
     bool CompileHLSLToDirectXBytecode(
         const std::string& preprocessedSource,
-        RHI::ERHIShaderType shaderType,
+        RHI::ERHIShaderFrequency shaderType,
         RHI::ERHIShaderPlatform platform,
         std::vector<uint8_t>& outBinaryData
     );
@@ -116,36 +116,36 @@ private:
     // Compile HLSL to Metal bytecode (Metal)
     bool CompileHLSLToMetalBytecode(
         const std::string& preprocessedSource,
-        RHI::ERHIShaderType shaderType,
+        RHI::ERHIShaderFrequency shaderType,
         std::vector<uint8_t>& outBinaryData
     );
 
     // Compile GLSL to OpenGL bytecode
     bool CompileGLSLToOpenGLBytecode(
         const std::string& preprocessedSource,
-        RHI::ERHIShaderType shaderType,
+        RHI::ERHIShaderFrequency shaderType,
         std::vector<uint8_t>& outBinaryData
     );
 
     // Parse HLSL source for cbuffer/resource declarations
     bool ParseHLSLResources(
         const std::string& preprocessedSource,
-        ShaderParameterBindingInfo& outBindingInfo
+        ShaderParameterMap& outMap
     );
 
     // Convert shader type enum to string
-    std::string ShaderTypeToString(RHI::ERHIShaderType shaderType);
+    std::string ShaderTypeToString(RHI::ERHIShaderFrequency shaderType);
 
     // Convert shader type enum to HLSL target string (e.g., "vs_6_0")
-    std::string ShaderTypeToHLSLTarget(RHI::ERHIShaderType shaderType);
+    std::string ShaderTypeToHLSLTarget(RHI::ERHIShaderFrequency shaderType);
 
     // Convert shader type to Metal entry point name
-    std::string ShaderTypeToMetalEntry(RHI::ERHIShaderType shaderType);
+    std::string ShaderTypeToMetalEntry(RHI::ERHIShaderFrequency shaderType);
 
     // Translate HLSL to GLSL if needed
     bool TranslateHLSLToGLSL(
         const std::string& hlslSource,
-        RHI::ERHIShaderType shaderType,
+        RHI::ERHIShaderFrequency shaderType,
         std::string& outGLSLSource
     );
 

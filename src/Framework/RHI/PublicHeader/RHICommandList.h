@@ -2,7 +2,6 @@
 #include <vector>
 #include <memory>
 #include <list>
-#include "RHIRenderTargetInfo.h"
 #include "RHIShaderParameter.h"
 
 namespace RHI {
@@ -43,6 +42,8 @@ namespace RHI {
         void Execute(RHICommandList& cmdList) override;
     };
 
+
+
     // -----------------------------
     // 统一的命令列表
     // -----------------------------
@@ -75,19 +76,20 @@ namespace RHI {
         bool IsImmediate() const;
 
         void SetBatchedShaderParameters(const RHIShaderSP& shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
+        void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size);
         // -----------------
         // Compute 接口
         // -----------------
         void Dispatch(uint32_t x, uint32_t y, uint32_t z);
+        void CopyTexture(RHITexture* src, RHITexture* dst,const RHICopyTextureDesc& copyDesc);
 
         // -----------------
         // Graphics 接口
         // -----------------
-        void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets);
         void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset);
-        void SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState);
+        void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
 
-        void ViewportPresent(const RHIVIewportSP& viewport, const RHITextureSP& presentRenderTarget);
+        
         void SetViewPortRect(const RHIIntRect& viewport);
         void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
             uint32_t firstVertex = 0, uint32_t firstInstance = 0);
@@ -101,6 +103,16 @@ namespace RHI {
         // 获取绑定的 Context
         // -----------------
         RHICommandContex* GetCommandContex() const;
+
+        // -----------------
+        // 域接口
+        // -----------------
+        void BeginDrawingViewport(RHIViewport* Viewport, RHITexture* RenderTargetRHI);
+        void EndDrawingViewport(RHIViewport* Viewport, bool bPresent);
+        void BeginFrame();
+        void EndFrame();
+
+        void Merge(std::shared_ptr<RHICommandList> other);
 
     protected:
         bool immediate = false;

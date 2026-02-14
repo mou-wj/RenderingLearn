@@ -38,7 +38,12 @@ target_include_directories(${TARGET_NAME}
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
 )
 
-target_link_libraries(${TARGET_NAME} PUBLIC RHI VulkanSDK glfw_all)
+target_link_libraries(${TARGET_NAME} PUBLIC RHI VulkanSDK)
+target_compile_definitions(${TARGET_NAME}
+    PRIVATE DEBUG_INFO=1
+  )
+
+_3rds_copy_runtime_deps(${TARGET_NAME} "${BINARY_DIR}")
 
 string(TOUPPER "${TARGET_NAME}" TARGET_NAME_UPPER)
 if (WIN32)

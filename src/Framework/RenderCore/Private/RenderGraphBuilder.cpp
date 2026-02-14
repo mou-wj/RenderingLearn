@@ -2,8 +2,10 @@
 #include "RHIApi.h"
 #include "RenderGraphResource.h"
 #include "TaskPool.h"
+#include "RenderThread.h"
 #include <unordered_set>
 #include <queue>
+
 
 namespace RenderCore {
 
@@ -74,7 +76,7 @@ namespace RenderCore {
         }
 
         RenderGraphTextureSRVDesc desc;
-        desc.Texture = textureResource;
+        desc.Texture = textureResource.get();
 
         return std::make_shared<RenderGraphTextureSRV>(name, desc);
     }
@@ -88,7 +90,7 @@ namespace RenderCore {
         }
 
         RenderGraphBufferSRVDesc desc;
-        desc.Buffer = bufferResource;
+        desc.Buffer = bufferResource.get();
 
 
         return std::make_shared<RenderGraphBufferSRV>(name,desc);
@@ -103,7 +105,7 @@ namespace RenderCore {
         }
 
         RenderGraphTextureUAVDesc desc;
-        desc.Texture = textureResource;
+        desc.Texture = textureResource.get();
 
         return std::make_shared<RenderGraphTextureUAV>(name,desc);
     }
@@ -117,15 +119,29 @@ namespace RenderCore {
         }
 
         RenderGraphBufferUAVDesc desc;
-        desc.Buffer = bufferResource;
+        desc.Buffer = bufferResource.get();
 
         return std::make_shared<RenderGraphBufferUAV>(name, desc);
     }
-    RenderGraphTextureSP RenderGraphBuilder::RegisterExternalTexture(const std::string& name, RHITextureSP texture)
+    RenderGraphTextureSP RenderGraphBuilder::RegisterExternalTexture(const std::string& name, RHITexture* texture)
     {
-        return RenderGraphTextureSP();
+        auto it = ExternalTextureCache.find(name);
+        if (it != ExternalTextureCache.end())
+        {
+            return it->second; // Return the cached texture
+        }
+        RenderGraphTextureDesc desc;
+        (RHI::RHITextureDesc)desc = texture->GetDesc();
+        auto textureResource = std::make_shared<RenderGraphTexture>(name, desc);
+        textureResource->SetRHITexture(texture);
+        ExternalTextureCache[name] = textureResource;
+        return ExternalTextureCache[name];
     }
-    RHITextureSP RenderGraphBuilder::GetTexture(RenderGraphResourceSP resource)
+    RenderGraphTextureSP RenderGraphBuilder::GetExternalTexture(const std::string& name)
+    {
+        return ExternalTextureCache[name];
+    }
+    RHITexture* RenderGraphBuilder::GetTexture(RenderGraphResourceSP resource)
     {
         auto textureResource = std::dynamic_pointer_cast<RenderGraphTexture>(resource);
         if (!textureResource)
@@ -134,7 +150,7 @@ namespace RenderCore {
         return textureResource->GetRHITexture();
     }
 
-    RHIBufferSP RenderGraphBuilder::GetBuffer(RenderGraphResourceSP resource)
+    RHIBuffer* RenderGraphBuilder::GetBuffer(RenderGraphResourceSP resource)
     {
         auto bufferResource = std::dynamic_pointer_cast<RenderGraphBuffer>(resource);
         if (!bufferResource)
@@ -144,15 +160,26 @@ namespace RenderCore {
         return bufferResource->GetRHIBuffer();
     }
 
+    RenderGraphTextureSP RenderGraphBuilder::GetTexture(const std::string& name)
+    {
+        return TextureCache[name];
+    }
+
+    RenderGraphBufferSP RenderGraphBuilder::GetBuffer(const std::string& name)
+    {
+        return BufferCache[name];
+    }
+
     void RenderGraphBuilder::Execute()
     {
-        using namespace RHI;
+
         // use Common::TaskPool from Common/TaskPool.h
         Core::TaskPool taskPool(std::thread::hardware_concurrency());
 
         std::vector<Core::TaskHandle> handles;
         handles.reserve(ParallelPasses.size());
-
+        std::vector<RHI::RHICommandListSP> RecordedCommansLists;
+		RecordedCommansLists.reserve(ParallelPasses.size());
         // For each parallel group, create one task that creates a command context/list
         // and executes each pass in the group sequentially: begin barriers, pass work, end barriers.
         for (const auto& group : ParallelPasses)
@@ -162,16 +189,18 @@ namespace RenderCore {
             groupCopy.reserve(group.size());
             for (auto* p : group) groupCopy.push_back(p);
 
-            auto handle = taskPool.AddTask([groupCopy = std::move(groupCopy)]() {
-                // create a command context from global RHI
-                RHI::RHIApi* api = RHI::GetGlobalRHIApi();
-                if (!api) return;
+            // create a command context from global RHI
+            RHI::RHIApi* api = RHI::GetGlobalRHIApi();
+            if (!api) return;
 
-                RHI::RHICommandContexSP ctx = api->CreateCommandContex();
-                if (!ctx) return;
+            RHI::RHICommandContex* ctx = api->GetDefualtCommandContex();
+            if (!ctx) return;
 
-                RHI::RHICommandListSP cmdListSP = ctx->GetCommandList();
-                if (!cmdListSP) return;
+            RHI::RHICommandListSP cmdListSP = std::make_shared<RHICommandList>(ctx);
+            RecordedCommansLists.push_back(cmdListSP);
+
+            auto handle = taskPool.AddTask([groupCopy = std::move(groupCopy), cmdListSP]() {
+
 
                 RHI::RHICommandList& cmdList = *cmdListSP;
 
@@ -201,6 +230,18 @@ namespace RenderCore {
 
         // wait for all groups to finish
         taskPool.WaitAll(handles);
+
+        // merge commandlist
+
+
+        // enqueue command
+        EnqueueRenderCommand("Execute Render Graph Builder", [RecordedCommansLists](RHI::RHICommandList& commandList) {
+            for (const auto& cmdList : RecordedCommansLists) {
+                if (cmdList) {
+                    commandList.Merge(cmdList);
+                }
+            }
+        });
     }
 
     void RenderGraphBuilder::AnalyzePasses()
@@ -209,12 +250,12 @@ namespace RenderCore {
         struct LocalResState {
             RenderGraphPass* LastVisitor = nullptr;
             ERHIResourceAccess LastAccess = ERHIResourceAccess::Unknown;
-            RenderGraphResourceSP Resource;
+            RenderGraphResource* Resource;
         };
         std::unordered_map<std::string, LocalResState> resStates;
 
         // Helper to register producer/consumer and add barrier on previous visitor
-        auto handleAccess = [&](RenderGraphPass* pass, RenderGraphResourceSP resource, ERHIResourceAccess access) {
+        auto handleAccess = [&](RenderGraphPass* pass, RenderGraphResource* resource, ERHIResourceAccess access) {
             if (!resource) return;
             const std::string& rname = resource->GetName();
             auto& state = resStates[rname];
@@ -224,10 +265,10 @@ namespace RenderCore {
                 // create transient info describing transition
                 RHI::RHITransientInfo transient{};
                 // determine type
-                if (std::dynamic_pointer_cast<RenderGraphTexture>(resource)) {
+                if (dynamic_cast<RenderGraphTexture*>(resource)) {
                     transient.Type = RHI::RHITransientInfo::EType::Texture;
                     // fill texture range defaults already in struct ctor
-                } else if (std::dynamic_pointer_cast<RenderGraphBuffer>(resource)) {
+                } else if (dynamic_cast<RenderGraphBuffer*>(resource)) {
                     transient.Type = RHI::RHITransientInfo::EType::Buffer;
                 } else {
                     transient.Type = RHI::RHITransientInfo::EType::Unknown;
@@ -256,30 +297,30 @@ namespace RenderCore {
             // collect resources accessed by this pass and their access type
             // Textures:
             if (pass->ReadTextureResourceCache) {
-                handleAccess(pass, pass->ReadTextureResourceCache, ERHIResourceAccess::Read);
+                handleAccess(pass, pass->ReadTextureResourceCache, ERHIResourceAccess::SRVGraphics);
             }
             if (pass->ReadOnlyTextureCache) {
                 // SRV -> read
                 auto tex = pass->ReadOnlyTextureCache->GetDesc().Texture;
-                if (tex) handleAccess(pass, tex, ERHIResourceAccess::Read);
+                if (tex) handleAccess(pass, tex, ERHIResourceAccess::SRVGraphics);
             }
             if (pass->ReadWriteTextureCache) {
                 // UAV -> read/write
                 auto tex = pass->ReadWriteTextureCache->GetDesc().Texture;
-                if (tex) handleAccess(pass, tex, ERHIResourceAccess::ReadWrite);
+                if (tex) handleAccess(pass, tex, ERHIResourceAccess::UAVGraphics);
             }
 
             // Buffers:
             if (pass->ReadWriteBufferResourceCache) {
-                handleAccess(pass, pass->ReadWriteBufferResourceCache, ERHIResourceAccess::ReadWrite);
+                handleAccess(pass, pass->ReadWriteBufferResourceCache, ERHIResourceAccess::UAVGraphics);
             }
             if (pass->ReadOnlyBufferCache) {
                 auto buf = pass->ReadOnlyBufferCache->GetDesc().Buffer;
-                if (buf) handleAccess(pass, buf, ERHIResourceAccess::Read);
+                if (buf) handleAccess(pass, buf, ERHIResourceAccess::SRVGraphics);
             }
             if (pass->ReadWriteBufferCache) {
                 auto buf = pass->ReadWriteBufferCache->GetDesc().Buffer;
-                if (buf) handleAccess(pass, buf, ERHIResourceAccess::ReadWrite);
+                if (buf) handleAccess(pass, buf, ERHIResourceAccess::UAVGraphics);
             }
 
             // Render targets / other resources could be handled similarly (omitted for brevity)

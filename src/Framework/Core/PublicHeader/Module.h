@@ -3,9 +3,11 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #if defined(_WIN32)
 #include <windows.h>
+#include <libloaderapi.h>   
 #else
 #include <dlfcn.h>
 #endif
@@ -17,6 +19,7 @@ namespace Core {
 class CORE_API Module
 {
 public:
+
     virtual ~Module() = default;
     // Called when the module is loaded / should start up.
     virtual void StartupModule() = 0;
@@ -32,7 +35,7 @@ public:
 
     // Query functions
     virtual bool IsLoaded() const = 0;
-    virtual const std::string& GetModuleName() const = 0;
+
 };
 
 
@@ -75,6 +78,20 @@ public:
         Modules.erase(name);
     }
 
+    // 新增接口：为已注册模块添加依赖
+    void AddModuleDependency(const std::string& ModuleName, const std::string& DependencyName)
+    {
+        auto it = Modules.find(ModuleName);
+        if (it != Modules.end())
+        {
+            auto& deps = ModuleDependencies[ModuleName];
+            if (std::find(deps.begin(), deps.end(), DependencyName) == deps.end())
+            {
+                deps.push_back(DependencyName);
+            }
+        }
+    }
+
     // 获取已注册模块（未找到返回 nullptr）
     ModulePtr GetModule(const std::string& name)
     {
@@ -87,11 +104,30 @@ public:
     void StartupAll()
     {
         std::lock_guard<std::mutex> lg(Mutex);
+        std::vector<std::string> SortedModules;
+        std::unordered_set<std::string> Visited;
+        std::unordered_set<std::string> Visiting;
+
         for (auto& kv : Modules)
         {
-            if (kv.second && !kv.second->IsLoaded())
-                kv.second->StartupModule();
+            if (Visited.find(kv.first) == Visited.end())
+            {
+                if (!TopologicalSort(kv.first, Visited, Visiting, SortedModules))
+                {
+                    printf("Failed to sort modules due to circular dependency.\n");
+                    return;
+                }
+            }
         }
+
+        // 按拓扑排序顺序启动模块
+        for (const auto& Name : SortedModules)
+        {
+            auto& Mod = Modules[Name];
+            if (Mod && !Mod->IsLoaded())
+                Mod->StartupModule();
+        }
+
     }
 
     // 关闭所有已注册模块
@@ -103,24 +139,59 @@ public:
             if (kv.second && kv.second->IsLoaded())
                 kv.second->ShutdownModule();
         }
+        
     }
 
 private:
     ModuleManager() = default;
     ~ModuleManager() = default;
 
+    // 拓扑排序递归函数
+    bool TopologicalSort(const std::string& Name,
+        std::unordered_set<std::string>& Visited,
+        std::unordered_set<std::string>& Visiting,
+        std::vector<std::string>& SortedModules)
+    {
+        if (Visiting.find(Name) != Visiting.end())
+        {
+            printf("Circular dependency detected at module: %s\n", Name.c_str());
+            return false;
+        }
+
+        if (Visited.find(Name) != Visited.end())
+            return true;
+
+        Visiting.insert(Name);
+
+        auto it = Modules.find(Name);
+        if (it != Modules.end())
+        {
+            for (const auto& DepName : ModuleDependencies[Name])
+            {
+                if (!TopologicalSort(DepName, Visited, Visiting, SortedModules))
+                    return false;
+            }
+        }
+
+        Visiting.erase(Name);
+        Visited.insert(Name);
+        SortedModules.push_back(Name); // 拓扑排序完成后加入
+        return true;
+    }
+
     std::unordered_map<std::string, ModulePtr> Modules;
+    std::unordered_map<std::string, std::vector<std::string>> ModuleDependencies;
     std::mutex Mutex;
 };
 
-// 方便宏：在模块实现文件中快速注册一个静态模块实例
+// 方便宏：在模块实现文件中快速注册一个模块实例
 #define IMPLEMENT_SIMPLE_MODULE(ModuleClass, ModuleName)                         \
     namespace {                                                                  \
         struct ModuleClass##_Registrar                                           \
         {                                                                        \
             ModuleClass##_Registrar()                                            \
             {                                                                    \
-                auto inst = std::make_shared<ModuleClass>(ModuleName);           \
+                auto inst = std::make_shared<ModuleClass>();           \
                 Core::ModuleManager::Get().RegisterModule(ModuleName, inst);     \
                 /* 不自动 Startup，由使用方调用 ModuleManager::StartupAll */  \
             }                                                                    \

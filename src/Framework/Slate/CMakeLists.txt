@@ -30,14 +30,14 @@ add_library(${TARGET_NAME} SHARED
     ${MODULE_SOURCES}
     ${PUBLIC_HEADERS}
     ${PRIVATE_HEADERS}
-)
+ "Private/Window.cpp")
 
 # Expose public headers to consumers
 target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
 )
-
+target_link_libraries(${TARGET_NAME} PUBLIC Core)
 
 # Position independent code for shared libs
 set_target_properties(${TARGET_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)

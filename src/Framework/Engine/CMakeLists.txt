@@ -36,9 +36,11 @@ add_library(${TARGET_NAME} SHARED
 target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
+    PRIVATE 
+        "${CMAKE_CURRENT_SOURCE_DIR}/Private"
 )
 
-target_link_libraries(${TARGET_NAME} PUBLIC Core RHI RenderCore Slate)
+target_link_libraries(${TARGET_NAME} PUBLIC Core RenderCore Slate)
 
 target_compile_definitions(${TARGET_NAME}
   PRIVATE ENGINE_EXPORTS

@@ -66,7 +66,7 @@ RENDERCORE_API GlobalShaderMap& GetGlobalShaderMap();
 public: \
     static RenderCore::ShaderType& StaticShaderTypeInstance() { \
         /* function-local static guarantees single instance without needing out-of-class definition */ \
-        static RenderCore::ShaderType s_Instance( (ShaderName), (Frequency), (ShaderPath), (EntryPoint),(&ClassType::ModifyShaderCompilerEnvironment),(&ClassType::ShouldCompilePermutation) ); \
+        static RenderCore::ShaderType s_Instance( (ShaderName), (ShaderPath), (EntryPoint),(Frequency), (&ClassType::ModifyShaderCompilerEnvironment),(&ClassType::ShouldCompilePermutation),(ClassType::GetShaderParameterBindingInfo()) ); \
         return s_Instance; \
     } \
 private: \
@@ -74,14 +74,15 @@ private: \
     inline static bool s_##ClassType##_GlobalShaderType_Registered = (RenderCore::GlobalShader::RegisterTypeInstance(#ClassType, &ClassType::StaticShaderTypeInstance()), true); \
 public:
 
+//这个宏有问题，先暂时搁置，能弄清楚UE这套机制后再调整
 // convenience shortcuts
 #define DECLARE_GLOBAL_VERTEX_SHADER(ClassType, ShaderPath, ShaderName) \
-    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderType::Vertex, ShaderName, "MainVS")
+    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderFrequency::Vertex, ShaderName, "MainVS")
 
 #define DECLARE_GLOBAL_FRAGMENT_SHADER(ClassType, ShaderPath, ShaderName) \
-    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderType::Fragment, ShaderName, "MainPS")
+    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderFrequency::Fragment, ShaderName, "MainPS")
 
 #define DECLARE_GLOBAL_COMPUTE_SHADER(ClassType, ShaderPath, ShaderName) \
-    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderType::Compute, ShaderName, "MainCS")
+    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderFrequency::Compute, ShaderName, "MainCS")
 
 } // namespace RenderCore

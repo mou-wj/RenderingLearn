@@ -7,12 +7,12 @@
 namespace RenderCore {
 
 // Constructor
-Shader::Shader(const std::string& name, const std::vector<char>& shaderSourceCode, ERHIShaderType shaderType)
+Shader::Shader(const std::string& name, const std::vector<char>& shaderSourceCode, ERHIShaderFrequency shaderType)
     : Name(name), ShaderSourceCode(shaderSourceCode), ShaderType(shaderType), RHIShader(nullptr)
 {
 }
 
-Shader::Shader(const std::string& name, const std::string& shaderSourceCodePath, ERHIShaderType shaderType)
+Shader::Shader(const std::string& name, const std::string& shaderSourceCodePath, ERHIShaderFrequency shaderType)
     : Name(name), ShaderType(shaderType), RHIShader(nullptr)
 {
 

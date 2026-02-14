@@ -7,35 +7,166 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <optional>
 
 using namespace RHI;
 
 namespace RenderCore {
-
-    struct RENDERCORE_API ShaderParameterBinding{
-            EShaderUniformBaseType ParameterBaseType;
-            uint32_t NumRow;
-            int32_t NumColumn;  
-            uint32_t BindSlot;      
+    class ShaderParametersMetadata;
+    enum class EShaderParameterType : uint8_t
+    {
+        LooseData,
+        UniformBuffer,
+        Sampler,
+        SRV,
+        UAV,
+        BindlessResourceIndex,
+        BindlessSamplerIndex,
+        Num
     };
-    struct RENDERCORE_API ShaderParameterBindingInfo{
-        std::unordered_map<std::string, ShaderParameterBinding> ParameterBindings;
 
-        void AddParameterBinding(const std::string& name, const ShaderParameterBinding& binding)
+    // 单个参数在 CPU/GPU 中的分配信息
+    struct FParameterAllocation
+    {
+        uint16_t BufferIndex = 0;   // 所属 UniformBuffer 索引
+        uint16_t BaseIndex = 0;     // GPU binding slot
+        uint16_t Size = 0;          // 字节大小
+        EShaderParameterType Type = EShaderParameterType::Num;
+        mutable bool bBound = false;
+
+        FParameterAllocation() = default;
+
+        FParameterAllocation(uint16_t InBufferIndex, uint16_t InBaseIndex, uint16_t InSize, EShaderParameterType InType)
+            : BufferIndex(InBufferIndex)
+            , BaseIndex(InBaseIndex)
+            , Size(InSize)
+            , Type(InType)
         {
-            ParameterBindings[name] = binding;
+        }
+    };
+
+    // ShaderParameterMap：管理 Shader 参数名 → 分配信息
+    class ShaderParameterMap
+    {
+    public:
+        ShaderParameterMap() = default;
+
+        // 查找参数
+        std::optional<FParameterAllocation> FindParameterAllocation(const std::string& Name) const
+        {
+            auto it = ParameterMap.find(Name);
+            if (it != ParameterMap.end())
+                return it->second;
+            return std::nullopt;
         }
 
-        const ShaderParameterBinding* GetParameterBinding(const std::string& name) const
+        // 添加参数
+        void AddParameterAllocation(const std::string& Name, uint16_t BufferIndex, uint16_t BaseIndex, uint16_t Size, EShaderParameterType Type)
         {
-            auto it = ParameterBindings.find(name);
-            if (it != ParameterBindings.end())
+            ParameterMap[Name] = FParameterAllocation(BufferIndex, BaseIndex, Size, Type);
+        }
+
+        // 移除参数
+        void RemoveParameterAllocation(const std::string& Name)
+        {
+            ParameterMap.erase(Name);
+        }
+
+        // 判断参数是否存在
+        bool ContainsParameterAllocation(const std::string& Name) const
+        {
+            return ParameterMap.find(Name) != ParameterMap.end();
+        }
+
+        // 获取同类型参数列表
+        std::vector<std::string> GetAllParameterNamesOfType(EShaderParameterType Type) const
+        {
+            std::vector<std::string> Names;
+            for (const auto& kv : ParameterMap)
             {
-                return &it->second;
+                if (kv.second.Type == Type)
+                    Names.push_back(kv.first);
             }
+            return Names;
+        }
+
+        // 获取所有参数名
+        std::vector<std::string> GetAllParameterNames() const
+        {
+            std::vector<std::string> Names;
+            for (const auto& kv : ParameterMap)
+                Names.push_back(kv.first);
+            return Names;
+        }
+
+    private:
+        std::unordered_map<std::string, FParameterAllocation> ParameterMap;
+    };
+
+
+
+
+    // 上层 RenderCore 的绑定信息
+    struct RENDERCORE_API ShaderParameterBindingInfo
+    {
+        // --------- RenderCore 层的 Shader Parameter Binding ---------
+        struct RENDERCORE_API ShaderUniformBinding
+        {
+            EShaderUniformBaseType BaseType; // Float, Int, Bool 等基础类型
+            uint32_t Offset;                 // 在统一 buffer 中的偏移
+            uint32_t Size;                   // 字节大小
+        };
+
+        struct RENDERCORE_API ShaderResourceBinding
+        {
+            EShaderUniformBaseType BaseType; // Texture / Buffer / UAV / Sampler
+            uint16_t BindSlot;               // GPU绑定槽
+            uint16_t ArraySize = 1;          // 支持数组
+        };
+        // 名字到 Uniform 参数的映射
+        std::unordered_map<std::string, ShaderUniformBinding> UniformBindings;
+
+        // 名字到 Resource 参数的映射
+        std::unordered_map<std::string, ShaderResourceBinding> ResourceBindings;
+
+        // 添加 Uniform
+        void AddUniformBinding(const std::string& name, const ShaderUniformBinding& binding)
+        {
+            UniformBindings[name] = binding;
+        }
+
+        // 添加 Resource
+        void AddResourceBinding(const std::string& name, const ShaderResourceBinding& binding)
+        {
+            ResourceBindings[name] = binding;
+        }
+
+        // 获取 Uniform
+        const ShaderUniformBinding* GetUniformBinding(const std::string& name) const
+        {
+            auto it = UniformBindings.find(name);
+            if (it != UniformBindings.end())
+                return &it->second;
             return nullptr;
         }
 
+        // 获取 Resource
+        const ShaderResourceBinding* GetResourceBinding(const std::string& name) const
+        {
+            auto it = ResourceBindings.find(name);
+            if (it != ResourceBindings.end())
+                return &it->second;
+            return nullptr;
+        }
+    };
+    struct ShaderType;
+    struct ShaderCompiledInitializer
+    {
+        const ShaderType* Type;
+        const std::vector<uint8_t>& Code;
+        const ShaderParameterMap& ParameterMap;
+        uint32_t PermutationId;
+        size_t OutputHash;
     };
 
     // ShaderType ��
@@ -45,11 +176,12 @@ namespace RenderCore {
         std::string Name;             // Shader���ƣ��� BasePassVS
         std::string SourceFile;       // USF Դ�ļ�·��
         std::string EntryPoint;       // ������ں���
-        RHI::ERHIShaderType Frequency;   // VS / PS / CS
-        ShaderParameterBindingInfo ParameterBindingInfo;
+        RHI::ERHIShaderFrequency Frequency;   // VS / PS / CS
 		std::function< void(ShaderCompilerEnvironment&)> ModifyCompilationEnvironment;
         std::function< bool(const ShaderPermutationParameters&)> ShouldCompilePermutation;
-
+        std::function<RHIShader* (const ShaderCompiledInitializer&)> ConstructCompiled;
+        int32_t TotalPermutationCount = 1;
+        const ShaderParametersMetadata* RootParametersMetadata = nullptr;
         void operator=(const ShaderType& other) {
             Name = other.Name;
             SourceFile = other.SourceFile;
@@ -129,14 +261,14 @@ class RENDERCORE_API Shader
 {
 public:
     // Construction/Destruction
-    Shader(const std::string& name, const std::vector<char>& shaderSourceCode, ERHIShaderType shaderType);
-    Shader(const std::string& name, const std::string& shaderSourceCodePath, ERHIShaderType shaderType);
+    Shader(const std::string& name, const std::vector<char>& shaderSourceCode, ERHIShaderFrequency shaderType);
+    Shader(const std::string& name, const std::string& shaderSourceCodePath, ERHIShaderFrequency shaderType);
     virtual ~Shader();
 
     // Accessors
     const std::string& GetName() const { return Name; }
     const std::vector<char>& GetShaderSourceCode() const { return ShaderSourceCode; }
-    ERHIShaderType GetShaderType() const { return ShaderType; }
+    ERHIShaderFrequency GetShaderType() const { return ShaderType; }
 
     // RHI Resource
     RHIShaderSP GetRHIShader() const { return RHIShader; }
@@ -145,10 +277,7 @@ public:
     // Compilation (Called by the RenderGraphBuilder)
     bool Compile();
 
-    virtual const ShaderParameterBindingInfo& GetShaderParameterBindingInfo() const {
-        static ShaderParameterBindingInfo EmptyBindingInfo;
-        return EmptyBindingInfo;
-    }
+    ShaderParameterBindingInfo Bindings;
 
     static void ModifyShaderCompilerEnvironment(ShaderCompilerEnvironment& Env) {}
 
@@ -163,7 +292,7 @@ protected:
     std::vector<char> ShaderSourceCode;
 
     // Shader Type (Vertex, Fragment, Compute, etc.)
-    ERHIShaderType ShaderType;
+    ERHIShaderFrequency ShaderType;
 
     // RHI Shader Resource
     RHIShaderSP RHIShader;

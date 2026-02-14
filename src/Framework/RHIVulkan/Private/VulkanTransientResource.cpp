@@ -26,4 +26,13 @@ RHI::RHITransientBufferSP VulkanTransientResourceManager::CreateTransientBuffer(
     return std::dynamic_pointer_cast<RHI::RHITransientBuffer>(vulkanBuffer);
 }
 
+void VulkanTransientResourceManager::ReleaseTransientTexture(const RHITransientTextureSP& texture) 
+{
+
+}
+void VulkanTransientResourceManager::ReleaseTransientBuffer(const RHITransientBufferSP& buffer)
+{
+
+}
+
 } // namespace WR::RHIVulkan

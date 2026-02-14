@@ -7,91 +7,120 @@
 
 
 namespace RHIVulkan{
-// 渲染目标信息，描述单个附件
-    struct RenderTargetInfo
+
+    class VulkanDevice;
+    class VulkanCommandContext;
+    class VulkanCmdBuffer;
+
+    // ---------------------------------------------------
+    // VulkanRenderTargetLayout: 表示 RenderPass 附件布局
+    // ---------------------------------------------------
+    class VulkanRenderTargetLayout
     {
-        VkFormat format = VK_FORMAT_UNDEFINED;
+    public:
+        VulkanRenderTargetLayout() = default;
+        VulkanRenderTargetLayout(VulkanDevice& device, const RHIRenderPassInfo& rpInfo);
 
-        VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        uint32_t getCompatibleHash() const { return renderPassCompatibleHash; }
+        uint32_t getFullHash() const { return renderPassFullHash; }
 
-        VkAttachmentLoadOp stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        VkAttachmentStoreOp stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        const VkAttachmentReference* getColorAttachmentRefs() const { return colorRefs; }
+        const VkAttachmentReference* getResolveAttachmentRefs() const { return hasResolveAttachments ? resolveRefs : nullptr; }
+        const VkAttachmentReference* getDepthAttachmentRef() const { return hasDepthStencil ? &depthRef : nullptr; }
+        const VkAttachmentDescription* getAttachmentDescriptions() const { return attachmentDescs; }
+        uint32_t getAttachmentDescriptionCount() const { return attachmentDescCount; }
+        uint32_t getNumColorAttachments() const { return numColorAttachments; }
+        bool hasDepth() const { return hasDepthStencil; }
+        bool hasResolve() const { return hasResolveAttachments; }
 
-        VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VkImageLayout finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    private:
+        void resetAttachments();
+        void calculateHashes(const RHIRenderPassInfo& rpInfo);
 
-        // 是否是深度附件
-        bool bIsDepth = false;
+    private:
+        VkAttachmentReference colorRefs[MAX_RENDER_TARGETS];
+        VkAttachmentReference depthRef;
+        VkAttachmentReference resolveRefs[MAX_RENDER_TARGETS];
 
-        RenderTargetInfo() = default;
+        VkAttachmentDescription attachmentDescs[MAX_RENDER_TARGETS * 2 + 2];
+        uint32_t attachmentDescCount = 0;
 
-        RenderTargetInfo(
-            VkFormat inFormat,
-            VkAttachmentLoadOp inLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            VkAttachmentStoreOp inStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
-            VkAttachmentLoadOp inStencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            VkAttachmentStoreOp inStencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            VkImageLayout inInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            VkImageLayout inFinalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            bool inIsDepth = false)
-            : format(inFormat)
-            , loadOp(inLoadOp)
-            , storeOp(inStoreOp)
-            , stencilLoadOp(inStencilLoadOp)
-            , stencilStoreOp(inStencilStoreOp)
-            , initialLayout(inInitialLayout)
-            , finalLayout(inFinalLayout)
-            , bIsDepth(inIsDepth)
-        {}
-        bool operator==(const RenderTargetInfo& other) const
-        {
-            return format == other.format &&
-                   loadOp == other.loadOp &&
-                   storeOp == other.storeOp &&
-                   stencilLoadOp == other.stencilLoadOp &&
-                   stencilStoreOp == other.stencilStoreOp &&
-                   initialLayout == other.initialLayout &&
-                   finalLayout == other.finalLayout &&
-                   bIsDepth == other.bIsDepth;
-        }
+        uint8_t numColorAttachments = 0;
+        bool hasDepthStencil = false;
+        bool hasResolveAttachments = false;
+
+        uint32_t renderPassCompatibleHash = 0;
+        uint32_t renderPassFullHash = 0;
     };
 
-    // 渲染通道的键，用于哈希表
-    struct RenderPassKey
+    // RenderPass 管理
+    class VulkanRenderPass
     {
-        ::std::vector<RenderTargetInfo> colorAttachments;
-        ::std::unique_ptr<RenderTargetInfo> depthAttachment;
-        RenderPassKey() = default;
-        RenderPassKey(const RenderPassKey& other) :
-            colorAttachments(other.colorAttachments)
-        {
-            if (other.depthAttachment)
-            {
-                depthAttachment = ::std::make_unique<RenderTargetInfo>(*other.depthAttachment);
-            }
-        }
-        bool operator==(const RenderPassKey& other) const;
+    public:
+        VulkanRenderPass(VulkanDevice* device, const VulkanRenderTargetLayout& layout);
+        ~VulkanRenderPass();
+
+        VkRenderPass GetHandle() const { return RenderPass; }
+        const VulkanRenderTargetLayout& GetLayout() const { return Layout; }
+
+    private:
+        VulkanDevice* Device = nullptr;
+        VkRenderPass RenderPass = VK_NULL_HANDLE;
+        VulkanRenderTargetLayout Layout;
+    };
+
+    // Framebuffer 管理
+    class VulkanFramebuffer
+    {
+    public:
+        VulkanFramebuffer(VulkanDevice* device, const RHIRenderPassInfo& passInfo, VulkanRenderPass* renderPass);
+        ~VulkanFramebuffer();
+
+        VkFramebuffer GetHandle() const { return Framebuffer; }
+        bool Matches(const RHIRenderPassInfo& passInfo) const;
+
+    private:
+        friend class VulkanRenderPassManager;
+        VulkanDevice* Device = nullptr;
+        VkFramebuffer Framebuffer = VK_NULL_HANDLE;
+
+        // 缓存 RenderTarget 的 VkImage
+        std::vector<VkImage> ColorImages;
+        VkImage DepthImage = VK_NULL_HANDLE;
+
+        VkExtent2D Extent{};
+        uint32_t NumColorAttachments = 0;
+        bool HasDepth;
     };
 
 
-class VulkanDevice;
 
-class VulkanRenderPass
-{
-public:
-    explicit VulkanRenderPass(VulkanDevice* device);
-    ~VulkanRenderPass();
+    // RenderPassManager
+    class VulkanRenderPassManager
+    {
+    public:
+        VulkanRenderPassManager(VulkanDevice* device);
+        ~VulkanRenderPassManager();
 
-    // 创建 RenderPass
-    bool Create(const ::std::vector<RenderTargetInfo>& colorAttachments, const RenderTargetInfo* depthAttachment = nullptr);
+        // 获取或创建 RenderPass
+        VulkanRenderPass* GetOrCreateRenderPass(const VulkanRenderTargetLayout& layout);
 
-    VkRenderPass GetVkRenderPass() const { return m_renderPass; }
+        // 获取或创建 Framebuffer
+        VulkanFramebuffer* GetOrCreateFramebuffer(const RHIRenderPassInfo& passInfo, VulkanRenderPass* renderPass);
 
-private:
-    VulkanDevice* m_device = nullptr;
-    VkRenderPass m_renderPass = VK_NULL_HANDLE;
-};
+        // 清理被删除的 Image
+        void NotifyDeletedImage(VkImage image);
 
+    private:
+        uint32_t CalcFramebufferHash(const RHIRenderPassInfo& passInfo, VulkanRenderPass* renderPass);
+        VulkanDevice* Device = nullptr;
+
+
+        std::mutex RenderPassMutex;
+        std::mutex FramebufferMutex;
+
+        std::unordered_map<uint32_t, VulkanRenderPass*> RenderPassCache;
+        std::unordered_map<uint32_t, VulkanFramebuffer*> FramebufferCache;
+    };
 
 }

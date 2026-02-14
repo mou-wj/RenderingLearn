@@ -1,0 +1,14 @@
+// 输入结构（VS → PS）
+struct FPixelShaderInput
+{
+    float2 UV : TEXCOORD0;
+};
+
+
+float4 MainPS(FPixelShaderInput Input) : SV_Target
+{
+    // 从 InputTexture 使用 UV 采样
+    float4 Color = float4(1,0,0,1);
+
+    return Color;
+}

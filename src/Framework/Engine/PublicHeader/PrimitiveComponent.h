@@ -4,6 +4,7 @@
 #include "EngineExport.h"
 #include <cstdint>
 #include <vector>
+#include <typeinfo>
 #include "BoxSphereBounds.h"
 
 namespace Engine {
@@ -17,6 +18,7 @@ namespace Engine {
 
 	enum class EMobility : uint8_t { Static = 0, Stationary = 1, Movable = 2 };
 
+
 	// PrimitiveComponent: a lightweight, GameThread-only description of a renderable
 	// primitive. It does NOT own GPU/RHI resources. To render, it creates a SceneProxy
 	// snapshot which is enqueued to the RenderThread.
@@ -24,7 +26,13 @@ namespace Engine {
 	public:
 		PrimitiveComponent();
 		virtual ~PrimitiveComponent();
+		// 返回类型信息，用于动态判断
+		virtual const std::type_info& GetType() const = 0;
 
+		template<typename T>
+		bool IsA() const {
+			return GetType() == typeid(T);
+		}
 		// ------------------ Spatial (GameThread only) ------------------
 	protected:
 		FTransform LocalTransform;          // local transform

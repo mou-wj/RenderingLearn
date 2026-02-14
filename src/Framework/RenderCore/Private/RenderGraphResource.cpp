@@ -8,7 +8,7 @@ namespace RenderCore {
 //  Render Graph Resource Base Class Implementation
 // -------------------------------------------------------------------------------------------------
 RenderGraphResource::RenderGraphResource(const std::string& name)
-    : Name(name), bImported(false), bCreated(false), RHIResource(nullptr)
+    : Name(name), bImported(false), bCreated(false), Resource(nullptr)
 {
 }
 
@@ -17,9 +17,9 @@ RenderGraphResource::~RenderGraphResource()
     // Cleanup if necessary
 }
 
-void RenderGraphResource::SetRHIResource(RHIResourceSP resource)
+void RenderGraphResource::SetRHIResource(RHIResource* resource)
 {
-    RHIResource = resource;
+    Resource = resource;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -41,7 +41,7 @@ void RenderGraphTexture::Create(RenderGraphBuilder& builder)
     {
         RHITextureDesc textureDesc;
         RHITextureSP texture = GetGlobalRHIApi()->CreateTexture(textureDesc);
-        SetRHITexture(texture);
+        SetRHITexture(texture.get());
         SetCreated(true);
     }
 }
@@ -65,7 +65,7 @@ void RenderGraphBuffer::Create(RenderGraphBuilder& builder)
     {
         RHIBufferDesc bufferDesc;
         RHIBufferSP buffer = GetGlobalRHIApi()->CreateBuffer(bufferDesc);
-        SetRHIBuffer(buffer);
+        SetRHIBuffer(buffer.get());
         SetCreated(true);
     }
 }
@@ -90,7 +90,7 @@ RenderGraphView::RenderGraphView(const std::string& name) : RenderGraphResource(
 RenderGraphView::~RenderGraphView()
 {
 }
-RenderGraphResourceSP RenderGraphView::GetResource() const
+RenderGraphResource* RenderGraphView::GetResource() const
 {
 	return Resource;
 }
@@ -146,5 +146,12 @@ RenderGraphBufferUAV::~RenderGraphBufferUAV()
 
 
 
+
+RenderGraphTextureDesc RenderGraphTextureDesc::ConvertFrom(const RHI::RHITextureDesc& other)
+{
+    RenderGraphTextureDesc desc;
+    (RHI::RHITextureDesc)desc = other;
+    return desc;
+}
 
 } // namespace WR::RenderCore

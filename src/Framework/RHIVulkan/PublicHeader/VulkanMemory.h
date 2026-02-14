@@ -3,6 +3,8 @@
 #include <vector>
 #include <cstdint>
 #include <memory>
+#include <deque>
+#include "RHIResource.h"
 namespace RHIVulkan{
 
 
@@ -60,6 +62,74 @@ private:
     std::vector<std::unique_ptr<VulkanMemoryBlock>> blocks_;
 
     uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties) const;
+};
+
+class VulkanStagingBuffer : public RHI::RHIStagingBuffer
+{
+public:
+    VulkanStagingBuffer(VulkanDevice* device, VulkanMemoryManager* memManager, VkDeviceSize size);
+    ~VulkanStagingBuffer();
+
+    VkBuffer GetBuffer() const { return buffer_; }
+    VkDeviceSize GetSize() const { return size_; }
+    VulkanAllocation& GetAllocation() { return allocation_; }
+    void* Map(uint32_t Offset, uint32_t NumBytes) override;
+    void Unmap() override;
+
+private:
+    VulkanDevice* device_;
+    VulkanMemoryManager* memManager_;
+    VkBuffer buffer_ = VK_NULL_HANDLE;
+    VulkanAllocation allocation_;
+    void* mapped_ = nullptr;
+    VkDeviceSize size_ = 0;
+};
+
+class VulkanCommandBuffer;
+class VulkanFence;
+class VulkanStagingManager
+{
+public:
+    VulkanStagingManager(VulkanDevice* device, VulkanMemoryManager* memManager);
+    ~VulkanStagingManager();
+
+    std::shared_ptr<VulkanStagingBuffer> Acquire(VkDeviceSize size);
+
+    // CPU 用完，但 GPU 可能还在用
+    void ReleaseToCmdBuffer(VulkanCommandBuffer* cmd,
+        std::shared_ptr<VulkanStagingBuffer> buffer);
+
+    // 在 Queue Submit 之后调用，把本次提交的 staging 绑定到 fence
+    void OnCommandBufferSubmitted(VulkanCommandBuffer* cmd);
+
+    // 每帧调用，检查 fence 并回收 staging
+    void GarbageCollect();
+
+private:
+    struct PendingBuffer
+    {
+        std::shared_ptr<VulkanStagingBuffer> buffer;
+        VulkanFence* fence; // 不再用 value
+    };
+
+    struct CmdBufferEntry
+    {
+        VulkanCommandBuffer* cmd = nullptr;
+        std::vector<std::shared_ptr<VulkanStagingBuffer>> pendingBuffers;
+    };
+
+    VulkanDevice* device_;
+    VulkanMemoryManager* memManager_;
+
+    std::vector<std::shared_ptr<VulkanStagingBuffer>> freeBuffers_;
+
+    // 等待 fence 的 staging buffers
+    std::deque<PendingBuffer> pendingFree_;
+
+    // 记录某个 cmdBuffer 本次录制用了哪些 staging
+    std::unordered_map<VulkanCommandBuffer*, CmdBufferEntry> cmdBufferMap_;
+
+    std::mutex mutex_;
 };
 
 }

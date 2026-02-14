@@ -1,5 +1,6 @@
 #include "RHICommandList.h"
 #include "RHICommandContex.h"
+#include "RHIApi.h"
 
 namespace RHI {
 
@@ -66,6 +67,11 @@ void RHICommandList::Dispatch(uint32_t x, uint32_t y, uint32_t z)
     if (CommandContex)
         CommandContex->Dispatch(x, y, z);
 }
+void RHICommandList::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
+{
+    if (CommandContex)
+        CommandContex->CopyTexture(src, dst, copyDesc);
+}
 
 // ---------------- RHICommandList ----------------
 RHICommandList::RHICommandList(RHICommandContex* contex)
@@ -82,11 +88,6 @@ RHICommandContex* RHICommandList::GetCommandContex() const
     return CommandContex;
 }
 
-void RHICommandList::SetRenderTarget(const RHIRenderTargetsInfo& renderTargets)
-{
-    if (CommandContex)
-        CommandContex->SetRenderTarget(renderTargets);
-}
 
 void RHICommandList::SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset)
 {
@@ -94,20 +95,21 @@ void RHICommandList::SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuf
         CommandContex->SetStreamSource(streamIndex, VertexBuffer, Offset);
 }
 
-void RHICommandList::SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState)
+void RHICommandList::SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState)
 {
     if (CommandContex)
         CommandContex->SetGraphicPipelineState(pipelineState);
 }
 
-void RHICommandList::ViewportPresent(const RHIVIewportSP& viewport, const RHITextureSP& presentRenderTarget)
-{
-    if (CommandContex)
-        CommandContex->ViewportPresent(viewport, presentRenderTarget);
-}
+
 void RHICommandList::SetBatchedShaderParameters(const RHIShaderSP& shader, const RHIBatchedShaderParameters& bacthedShaderParameter) {
     if (CommandContex)
         CommandContex->SetBatchedShaderParameters(shader, bacthedShaderParameter);
+}
+void RHICommandList::UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size) {
+    if (GRHIApi) {
+        GRHIApi->UpdateTexture(*this, texture, data, size);
+    }
 }
 
 void RHICommandList::SetViewPortRect(const RHIIntRect& viewport)
@@ -126,6 +128,27 @@ void RHICommandList::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
 {
     if (CommandContex)
         CommandContex->TraceRays(width, height, depth);
+}
+
+void RHICommandList::BeginDrawingViewport(RHIViewport* Viewport, RHITexture* RenderTargetRHI)
+{
+    CommandContex->BeginDrawingViewport(Viewport, RenderTargetRHI);
+}
+void RHICommandList::EndDrawingViewport(RHIViewport* Viewport, bool bPresent)
+{
+    CommandContex->EndDrawingViewport(Viewport, bPresent);
+}
+void RHICommandList::BeginFrame()
+{
+    CommandContex->BeginFrame();
+}
+void RHICommandList::EndFrame()
+{
+    CommandContex->EndFrame();
+}
+
+void RHICommandList::Merge(std::shared_ptr<RHICommandList> other) {
+    commands.insert(commands.end(), other->commands.begin(), other->commands.end());
 }
 
 } //

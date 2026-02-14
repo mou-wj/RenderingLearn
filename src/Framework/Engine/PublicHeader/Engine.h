@@ -1,15 +1,20 @@
 #pragma once
 #include "EngineExport.h"
 namespace Engine {
-    class ENGINE_API EngineLoop
+
+    class ENGINE_API Engine
     {
     public:
-        static void Init();
-        static void Run();
-        static void Tick();
-        static void Shutdown();
+        Engine() = default;
+        virtual ~Engine() = default;
+
+        virtual void Init() = 0;
+        virtual void Tick(float deltaTime) = 0;
+        virtual void Shutdown() = 0;
+    protected:
     };
 
+    ENGINE_API Engine* GetEngineInstance();
 
 
 

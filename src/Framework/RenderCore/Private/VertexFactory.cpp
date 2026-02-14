@@ -1,7 +1,7 @@
 #include "VertexFactory.h"
 
 namespace RenderCore {
-	RHIVertexDescStateSP VertexFactory::GetRHIVertexDescState() const
+	RHI::RHIVertexDescStateSP VertexFactory::GetRHIVertexDescState() const
 	{
 		return RHIVertexDescState;
 	}

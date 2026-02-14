@@ -13,7 +13,9 @@ class ENGINE_API StaticMeshComponent : public PrimitiveComponent {
 public:
     StaticMeshComponent();
     ~StaticMeshComponent() override;
-
+    const std::type_info& GetType() const override {
+        return typeid(StaticMeshComponent);
+    }
     // Set or get the mesh asset
     void SetStaticMesh(std::shared_ptr<StaticMesh> InMesh) { Mesh = std::move(InMesh); }
     std::shared_ptr<StaticMesh> GetStaticMesh() const { return Mesh; }

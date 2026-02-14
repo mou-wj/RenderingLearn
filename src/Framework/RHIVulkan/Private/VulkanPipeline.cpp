@@ -11,7 +11,7 @@ using namespace RHI;
 namespace RHIVulkan {
 
 VulkanPipelineBase::~VulkanPipelineBase() {
-    VkDevice deviceHandle = device->GetDevice();
+    VkDevice deviceHandle = device->GetHandle();
     if (pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(deviceHandle, pipeline, nullptr);
         pipeline = VK_NULL_HANDLE;
@@ -21,12 +21,6 @@ VulkanPipelineBase::~VulkanPipelineBase() {
         vkDestroyPipelineLayout(deviceHandle, pipelineLayout, nullptr);
         pipelineLayout = VK_NULL_HANDLE;
     }
-
-    // 释放所有描述符集
-    for (auto& descriptorSet : boundDescriptorSets) {
-        delete descriptorSet;
-    }
-    boundDescriptorSets.clear();
 }
 
 
@@ -34,7 +28,6 @@ VulkanPipelineBase::~VulkanPipelineBase() {
 void VulkanPipelineBase::CreateLayout(const std::vector<RHIShaderStageDesc>& shaderStages) {
     // 获取描述符集布局信息
     std::vector<VkDescriptorSetLayout> descriptorSetLayoutHandles;
-    VulkanDescriptorSetLayoutMap layoutMap;
     std::vector<int> l;
     
     for (auto& shader : shaderStages)
@@ -45,49 +38,49 @@ void VulkanPipelineBase::CreateLayout(const std::vector<RHIShaderStageDesc>& sha
 
 
     // 分配描述符集
-    boundDescriptorSets = device->GetDescriptorPoolManager()->AllocateDescriptorSet(layoutMap);
+    //boundDescriptorSets = device->GetDescriptorPoolManager()->AllocateDescriptorSet(layoutMap);
 
     // 创建VkPipelineLayout
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(boundDescriptorSets.size());
+    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(0);
     std::vector<VkDescriptorSetLayout> setLayoutHandles;
-    for (auto& descriptorSet : boundDescriptorSets) {
-        setLayoutHandles.push_back(descriptorSet->GetLayout());
-    }
+    //for (auto& descriptorSet : boundDescriptorSets) {
+    //    setLayoutHandles.push_back(descriptorSet->GetLayout());
+    //}
     pipelineLayoutInfo.pSetLayouts = setLayoutHandles.data();
 
-    VkResult result = vkCreatePipelineLayout(device->GetDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout);
+    VkResult result = vkCreatePipelineLayout(device->GetHandle(), &pipelineLayoutInfo, nullptr, &pipelineLayout);
     if (result != VK_SUCCESS) {
         throw std::runtime_error("无法创建管道布局!");
     }
 }
 
-VulkanGraphicsPipeline::VulkanGraphicsPipeline(VulkanDevice* device, const RHIGraphicsPipelineStateDesc& pipelineDesc)
+VulkanGraphicsPipelineState::VulkanGraphicsPipelineState(VulkanDevice* device, const RHIGraphicsPipelineStateDesc& pipelineDesc)
     : VulkanPipelineBase(device), RHIGraphicsPipelineState(pipelineDesc) {
     // Convert RHI desc to Vulkan create info
     createInfo = {}; // Initialize createInfo
     createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    createInfo.renderPass = renderPass->GetVkRenderPass();
+    createInfo.renderPass = renderPass->GetHandle();
 
     CreateLayout(pipelineDesc.shaderStages);
     CreatePipeline();
 }
 
-VulkanGraphicsPipeline::~VulkanGraphicsPipeline() {
+VulkanGraphicsPipelineState::~VulkanGraphicsPipelineState() {
 }
 
 
-void VulkanGraphicsPipeline::CreatePipeline() {
+void VulkanGraphicsPipelineState::CreatePipeline() {
     // 设置VkGraphicsPipelineCreateInfo的其他成员
     // 这里仅提供一个示例，具体成员需要根据pipelineDesc填充
-    VkPipelineVertexInputStateCreateInfo &vertexInputInfo = std::static_pointer_cast<VulkanRHIVertexDescState>(desc.vertexDescState)->vertexInputInfo;
+    VkPipelineVertexInputStateCreateInfo &vertexInputInfo = dynamic_cast<VulkanVertexDescState*>(desc.vertexDescState)->vertexInputInfo;
 
-    VkPipelineRasterizationStateCreateInfo rasterizer = std::static_pointer_cast<VulkanRHIRasterizerState>(desc.rasterizerState)->rasterizerInfo;
+    VkPipelineRasterizationStateCreateInfo rasterizer = dynamic_cast<VulkanRasterizerState*>(desc.rasterizerState)->rasterizerInfo;
 
-    VkPipelineColorBlendStateCreateInfo colorBlending = std::static_pointer_cast<VulkanRHIColorBlendState>(desc.colorBlendState)->colorBlendInfo;
+    VkPipelineColorBlendStateCreateInfo colorBlending = dynamic_cast<VulkanColorBlendState*>(desc.colorBlendState)->colorBlendInfo;
 
-    VkPipelineDepthStencilStateCreateInfo depthStencil = std::static_pointer_cast<VulkanRHIDepthStencilState>(desc.depthStencilState)->depthStencilInfo;
+    VkPipelineDepthStencilStateCreateInfo depthStencil = dynamic_cast<VulkanDepthStencilState*>(desc.depthStencilState)->depthStencilInfo;
 
     // 设置管线布局
     createInfo.layout = pipelineLayout;
@@ -124,7 +117,7 @@ void VulkanGraphicsPipeline::CreatePipeline() {
         VkPipelineShaderStageCreateInfo shaderStageInfo = {};
         auto vulkanShaderSP = std::reinterpret_pointer_cast<VulkanRHIShader>(stage.shader);
         shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStageInfo.stage = TransforShaderStageFrom(stage.shader->GetShaderType());
+        shaderStageInfo.stage = TransformShaderStageFrom(stage.shader->GetShaderType());
         shaderStageInfo.module = vulkanShaderSP->GetShaderModule();
         shaderStageInfo.pName = vulkanShaderSP->GetEntryPoint().c_str();
         shaderStages[i] = shaderStageInfo;
@@ -133,7 +126,7 @@ void VulkanGraphicsPipeline::CreatePipeline() {
     createInfo.pStages = shaderStages.data();
 
     // 创建图形管线
-    VkResult result = vkCreateGraphicsPipelines(device->GetDevice(), VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
+    VkResult result = vkCreateGraphicsPipelines(device->GetHandle(), VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
     if (result != VK_SUCCESS) {
         throw std::runtime_error("无法创建图形管线!");
     }
@@ -167,7 +160,7 @@ void VulkanComputePipeline::CreatePipeline() {
 
 
     // 创建计算管线
-    VkResult result = vkCreateComputePipelines(device->GetDevice(), VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
+    VkResult result = vkCreateComputePipelines(device->GetHandle(), VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
     if (result != VK_SUCCESS) {
         throw std::runtime_error("无法创建计算管线!");
     }
@@ -215,7 +208,7 @@ void VulkanRayTracingPipeline::CreatePipeline() {
     //createInfo.maxRecursionDepth = pipelineDesc.maxRecursionDepth;
 
     //// 创建光线追踪管线
-    //VkResult result = vkCreateRayTracingPipelinesKHR(device->GetDevice(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
+    //VkResult result = vkCreateRayTracingPipelinesKHR(device->GetHandle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
     //if (result != VK_SUCCESS) {
     //    throw std::runtime_error("无法创建光线追踪管线!");
     //}

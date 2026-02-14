@@ -6,29 +6,10 @@
 #include "RHIShaderLibrary.h"
 #include <map>
 #include <string>
-
+#include "Module.h"
+#include "RHITransientResource.h"
 namespace RHI{
 class RHIApi;
-class RHI_API RHIApiCreator{
-    public:
-    RHIApiCreator() = default;
-    virtual ~RHIApiCreator() = default;
-    virtual RHIApi* CreateRHIApi() = 0;
-};
-
-
-class RHI_API RHIApiInitHelper{
-public:
-    static RHIApiInitHelper& Instance();
-    bool InitGRHIApi(const ::std::string& apiName);
-    void RegisterRHIApiCreator(const ::std::string& apiName, RHIApiCreator* creator);
-    ~RHIApiInitHelper() ;
-private:
-    RHIApiInitHelper() = default;
-    ::std::map<::std::string, RHIApiCreator*> m_RHIApiMap;
-
-
-};
 
 extern ERHIShaderPlatform GRHIShaderPlatform;
 
@@ -36,19 +17,6 @@ RHI_API bool InitGRHIApi(const ::std::string& apiName);
 RHI_API RHIApi* GetGlobalRHIApi();
 
 
-template<class RHIApiCreatorDerived>
-class RHIApiCreatorRegister
-{
-public:
-    RHIApiCreatorRegister(const ::std::string& apiName)
-    {
-        RHIApiInitHelper::Instance().RegisterRHIApiCreator(apiName, new RHIApiCreatorDerived());
-    }
-
-};
-
-#define REGISTER_RHI_API_CREATOR(apiName, apiCreator) \
-    static RHIApiCreatorRegister<apiCreator> g_RHIApiCreatorRegister##apiCreator(apiName);
 class RHIShaderLibrary;
 using RHIShaderLibrarySP = std::shared_ptr<RHIShaderLibrary>;
 
@@ -65,10 +33,23 @@ public:
 
     virtual RHITextureSP CreateTexture(const RHITextureDesc& desc) = 0;
     virtual RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) = 0;
-    virtual void UpdateTexture(RHITextureSP texture, const void* data,const RHITextureRegion& size) = 0;
-    virtual void UpdateBuffer(RHIBufferSP buffer, const void* data, uint64_t size) = 0;
+    virtual void UpdateTexture(RHICommandList& cmdList,RHITexture* texture, const void* data,const RHITextureRegion& size) = 0;
+    virtual void UpdateBuffer(RHIBuffer* buffer, const void* data,const RHIBufferRegion& region) = 0;
 
-    
+    virtual RHIShaderResourceViewSP CreateTextureShaderResourceView(
+        RHITexture* Texture, const RHITexSRVCreateInfo& Desc) = 0;
+
+    virtual RHIUnorderedAccessViewSP CreateTextureUnorderedAccessView(
+        RHITexture* Texture, const RHITexUAVCreateInfo& Desc) = 0;
+
+    virtual RHIShaderResourceViewSP CreateBufferShaderResourceView(
+        RHIBuffer* Buffer, const RHIBufferSRVCreateInfo& Desc) = 0;
+
+    virtual RHIUnorderedAccessViewSP CreateBufferUnorderedAccessView(
+        RHIBuffer* Buffer, const RHIBufferUAVCreateInfo& Desc) = 0;
+
+    // ´´½¨ StagingBuffer
+    virtual RHIStagingBufferSP CreateStagingBuffer(uint32_t size) = 0;
 
     virtual RHIGraphicsPipelineStateSP CreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) = 0;
     virtual RHIComputePipelineStateSP CreateComputePipelineState(const RHIComputePipelineStateDesc& desc) = 0;
@@ -79,7 +60,6 @@ public:
     virtual RHIColorBlendStateSP CreateColorBlendState(const RHIColorBlendStateDesc& desc) = 0;
     virtual RHIDepthStencilStateSP CreateDepthStencilState(const RHIDepthStencilStateDesc& desc) = 0;
 
-    virtual RHIShaderSP CreateShader(const std::vector<char>& shaderSourceCode,const ERHIResourceType& shaderType) = 0;
     virtual RHIVertexShaderSP CreateVertexShader(const std::vector<char>& shaderSourceCode) = 0;
     virtual RHIFragmentShaderSP CreateFragmentShader(const std::vector<char>& shaderSourceCode) = 0;
     virtual RHIComputeShaderSP CreateComputeShader(const std::vector<char>& shaderSourceCode) = 0;
@@ -96,19 +76,25 @@ public:
     virtual RHICallableShaderSP CreateCallableShader(const std::vector<char>& shaderSourceCode) = 0;
 
     virtual RHIFenceSP CreateFence() = 0;
-    virtual RHIVIewportSP CreateViewport(void* inWindowHandle,uint32_t w,uint32_t h) = 0;
+    virtual RHIViewportSP CreateViewport(void* inWindowHandle,uint32_t w,uint32_t h,ERHIFormat format) = 0;
+    virtual RHITextureSP GetViewportBackBuffer(RHIViewport* viewport) = 0;
     virtual RHISamplerSP CreateSampler(const RHISamplerDesc& desc) = 0;
 
-    virtual RHICommandContexSP GetGlobalCommandContex() = 0;
+    virtual RHICommandContex* GetDefualtCommandContex() = 0;
 
-    virtual RHICommandContexSP CreateCommandContex() = 0;
+    virtual RHITransientResourceManagerSP CreateTransientResourceManager() = 0;
+    
 
  
 };
 
+class RHI_API RHIModule : public Core::Module {
+public:
+	virtual RHIApi* CreateRHIApi() = 0;
+};
 
 
-
+extern RHI_API RHIApi* GRHIApi;
 
 
 }

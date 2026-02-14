@@ -45,12 +45,15 @@ public:
     RenderGraphTextureUAVSP CreateTextureUAV(const std::string& name, RenderGraphResourceSP resource);
     RenderGraphBufferUAVSP CreateBufferUAV(const std::string& name, RenderGraphResourceSP resource);
 
-    RenderGraphTextureSP RegisterExternalTexture(const std::string& name, RHITextureSP texture);
+    RenderGraphTextureSP RegisterExternalTexture(const std::string& name, RHITexture* texture);
+    RenderGraphTextureSP GetExternalTexture(const std::string& name);
 
     // Resource Access (Get RHI resources from RenderGraphResources)
-    RHITextureSP GetTexture(RenderGraphResourceSP resource);
-    RHIBufferSP GetBuffer(RenderGraphResourceSP resource);
+    RHITexture* GetTexture(RenderGraphResourceSP resource);
+    RHIBuffer* GetBuffer(RenderGraphResourceSP resource);
 
+    RenderGraphTextureSP GetTexture(const std::string& name);
+    RenderGraphBufferSP GetBuffer(const std::string& name);
     template<typename T>
     T* AllocateParameter(){
         T* ptr = new T();

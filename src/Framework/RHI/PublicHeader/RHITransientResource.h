@@ -1,48 +1,92 @@
 #pragma once
 #include "RHIResource.h"
 #include <memory>
+#include <string>
 
 namespace RHI {
 
-// TransientResource基类
-class RHI_API RHITransientResource
-{
-public:
-    explicit RHITransientResource(const RHIResourceSP& resource)
-        : Resource(resource) {}
-    virtual ~RHITransientResource() = default;
+    // 类型区分
+    enum class ERHITransientResourceType
+    {
+        Unknown,
+        Texture,
+        Buffer
+    };
 
-    RHIResourceSP GetResource() const { return Resource; }
+    // 内存分配类型（可扩展）
+    enum class ERHITransientAllocationType
+    {
+        Heap,
+        Page
+    };
 
-protected:
-    RHIResourceSP Resource;
-};
+    // 简化 Transient Resource 基类
+    class RHI_API RHITransientResource
+    {
+    public:
+        virtual ~RHITransientResource();
+
+        // 生命周期控制
+        virtual void Acquire(const std::string& name, uint32_t passIndex);
+        virtual void Release(uint32_t passIndex);
+
+        bool IsAcquired() const;
+        const std::string& GetName() const;
+        ERHITransientResourceType GetResourceType() const;
+
+    protected:
+        explicit RHITransientResource(ERHITransientResourceType type);
+
+    private:
+        ERHITransientResourceType ResourceType = ERHITransientResourceType::Unknown;
+        bool bAcquired = false;
+        std::string Name;
+        uint32_t AcquirePass = 0;
+        uint32_t ReleasePass = 0;
+    };
 
 // TransientTexture
-class RHI_API RHITransientTexture : public RHITransientResource
-{
-public:
-    explicit RHITransientTexture(const RHITextureSP& texture)
-        : RHITransientResource(texture) {}
-    virtual ~RHITransientTexture() = default;
 
-    RHITextureSP GetTexture() const { return std::static_pointer_cast<RHITexture>(Resource); }
-};
+    class RHI_API RHITransientTexture : public RHITransientResource
+    {
+    public:
+        explicit RHITransientTexture(const std::shared_ptr<RHITexture>& inTexture);
 
+        std::shared_ptr<RHITexture> GetTexture() const;
+
+    private:
+        std::shared_ptr<RHITexture> Texture;
+    };
+
+    using RHITransientTextureSP = std::shared_ptr<RHITransientTexture>;
 // TransientBuffer
-class RHI_API RHITransientBuffer : public RHITransientResource
-{
-public:
-    explicit RHITransientBuffer(const RHIBufferSP& buffer)
-        : RHITransientResource(buffer) {}
-    virtual ~RHITransientBuffer() = default;
+    class RHI_API RHITransientBuffer : public RHITransientResource
+    {
+    public:
+        explicit RHITransientBuffer(const std::shared_ptr<RHIBuffer>& inBuffer);
+        std::shared_ptr<RHIBuffer> GetBuffer() const;
 
-    RHIBufferSP GetBuffer() const { return std::static_pointer_cast<RHIBuffer>(Resource); }
-};
+    private:
+        std::shared_ptr<RHIBuffer> Buffer;
+    };
 
-using RHITransientTextureSP = std::shared_ptr<RHITransientTexture>;
-using RHITransientBufferSP = std::shared_ptr<RHITransientBuffer>;
+    using RHITransientBufferSP = std::shared_ptr<RHITransientBuffer>;
 
+    class RHI_API RHITransientResourceManager
+    {
+    public:
+        virtual ~RHITransientResourceManager() = default;
+
+        // 创建临时资源
+        virtual RHITransientTextureSP CreateTransientTexture(const RHI::RHITextureDesc& desc) = 0;
+        virtual RHITransientBufferSP CreateTransientBuffer(const RHI::RHIBufferDesc& desc) = 0;
+
+        // 回收资源
+        virtual void ReleaseTransientTexture(const RHITransientTextureSP& texture) = 0;
+        virtual void ReleaseTransientBuffer(const RHITransientBufferSP& buffer) = 0;
+    };
+
+    using RHITransientResourceManagerSP = std::shared_ptr<RHITransientResourceManager>;
 
 struct RHI_API RHITransientInfo {
 

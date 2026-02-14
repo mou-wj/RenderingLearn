@@ -2,15 +2,44 @@
 #include "VulkanDevice.h"
 #include "VulkanCommandContex.h"
 #include "VulkanQueue.h"
+#include "VulkanFuncWrapper.h"
 #include <stdexcept>
 
 namespace RHIVulkan{
 
 // VulkanCommandBuffer
 
-VulkanCommandBuffer::VulkanCommandBuffer(VulkanDevice* device, VkCommandBuffer cmdBuffer)
-    : device(device), commandBuffer(cmdBuffer)
-{}
+
+
+VulkanCommandBuffer::VulkanCommandBuffer(VulkanDevice* device, VulkanCommandBufferPool* owner, VkCommandBufferLevel level) :device(device), owner(owner),level(level)
+{
+    fence = device->GetFenceManager()->AcquireFence();
+}
+
+VulkanCommandBuffer::~VulkanCommandBuffer()
+{
+    RealeseMemory();
+    device->GetFenceManager()->ReleaseFence(fence);
+}
+
+void VulkanCommandBuffer::AllocateMemory()
+{
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = owner->GetHandle();
+    allocInfo.level = level;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmdBuffer;
+    if (!AllocateCommandBuffers(device->GetHandle(), &allocInfo, &cmdBuffer)) {
+        throw std::runtime_error("Failed to allocate command buffer");
+    }
+}
+
+void VulkanCommandBuffer::RealeseMemory()
+{
+    FreeCommandBuffers(device->GetHandle(), owner->GetHandle(), 1, &commandBuffer);
+}
 
 void VulkanCommandBuffer::Begin(VkCommandBufferUsageFlags usage)
 {
@@ -35,48 +64,71 @@ void VulkanCommandBuffer::Reset()
     vkResetCommandBuffer(commandBuffer, 0);
 }
 
-// VulkanCommandBufferPool
+void VulkanCommandBuffer::AddWaitSemaphores(VkPipelineStageFlags stage, const std::vector<VulkanSemaphore*>& semaphores)
+{
+    if (semaphores.empty())
+    {
+        return;
+    }
+    for (auto* semaphore : semaphores)
+    {
+        WaitFlags.push_back(stage);
+        WaitSemaphores.push_back(semaphore);
+    }
+}
 
-VulkanCommandBufferPool::VulkanCommandBufferPool(VulkanDevice* device, uint32_t queueFamilyIndex)
-    : device(device)
+// VulkanCommandBufferPool
+VulkanCommandBufferPool::VulkanCommandBufferPool(VulkanDevice* device, uint32_t queueFamily)
+    : device(device), queueFamilyIndex(queueFamily)
 {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.queueFamilyIndex = queueFamilyIndex;
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = queueFamily;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // 支持单个或整体 reset
 
-    if (vkCreateCommandPool(device->GetDevice(), &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create command pool");
-    }
+    vkCreateCommandPool(device->GetHandle(), &poolInfo, nullptr, &commandPool);
 }
 
 VulkanCommandBufferPool::~VulkanCommandBufferPool()
 {
-    if (commandPool != VK_NULL_HANDLE) {
-        vkDestroyCommandPool(device->GetDevice(), commandPool, nullptr);
+    // 析构所有 CommandBuffer
+    allBuffers.clear();
+
+    if (commandPool != VK_NULL_HANDLE)
+    {
+        vkDestroyCommandPool(device->GetHandle(), commandPool, nullptr);
         commandPool = VK_NULL_HANDLE;
     }
 }
 
 VulkanCommandBuffer* VulkanCommandBufferPool::AllocateCommandBuffer(VkCommandBufferLevel level)
 {
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = commandPool;
-    allocInfo.level = level;
-    allocInfo.commandBufferCount = 1;
-
-    VkCommandBuffer cmdBuffer;
-    if (vkAllocateCommandBuffers(device->GetDevice(), &allocInfo, &cmdBuffer) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate command buffer");
+    // 先从可用池拿
+    if (!availableBuffers.empty())
+    {
+        auto buf = availableBuffers.back();
+        availableBuffers.pop_back();
+        return buf;
     }
 
-    return new VulkanCommandBuffer(device, cmdBuffer);
+    auto cmdBuf = std::make_unique<VulkanCommandBuffer>(device, this,level);
+    VulkanCommandBuffer* ptr = cmdBuf.get();
+
+    allBuffers.push_back(std::move(cmdBuf));
+    return ptr;
 }
 
 void VulkanCommandBufferPool::Reset()
 {
-    vkResetCommandPool(device->GetDevice(), commandPool, 0);
+    // 重置 Vulkan CommandPool，所有 CommandBuffer 自动重置
+    vkResetCommandPool(device->GetHandle(), commandPool, 0);
+
+    // 所有 buffer 都回到可用池
+    availableBuffers.clear();
+    for (auto& buf : allBuffers) // 注意 auto&
+    {
+        availableBuffers.push_back(buf.get());
+    }
 }
 
 // VulkanCommandBufferManager
@@ -113,21 +165,31 @@ VulkanCommandBuffer* VulkanCommandBufferManager::Allocate(VkCommandBufferLevel l
     return pool->AllocateCommandBuffer(level);
 }
 
-VulkanCommandBuffer* VulkanCommandBufferManager::GetAvailableCommandBuffer(VkCommandBufferLevel level)
+VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkCommandBufferLevel level)
 {
+    if (ActiveCommandBuffer) {
+		return ActiveCommandBuffer;
+    }
+
     // 查找可复用的命令缓冲区（Fence已完成）
     for (auto& buffer : ManagedBuffers)
     {
         VulkanFence* fence = buffer->GetFence();
         if (fence && fence->IsSignaled())
         {
+            fence->Reset();
             buffer->Reset();
+            buffer->Begin();
+            
+            ActiveCommandBuffer = buffer.get();
             return buffer.get();
         }
     }
     // 没有可用的，分配新的
     VulkanCommandBuffer* newBuffer = Allocate(level);
     ManagedBuffers.emplace_back(newBuffer);
+    newBuffer->Begin();
+    ActiveCommandBuffer = newBuffer;
     return newBuffer;
 }
 
@@ -137,6 +199,30 @@ void VulkanCommandBufferManager::Reset()
     {
         pair.second->Reset();
     }
+}
+
+VulkanCommandBuffer* VulkanCommandBufferManager::BeginUploadCommandBuffer()
+{
+    if (ActiveUploadCommandBuffer)
+        return ActiveUploadCommandBuffer;
+
+    ActiveUploadCommandBuffer = Allocate(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+
+    ActiveUploadCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+    return ActiveUploadCommandBuffer;
+}
+
+void VulkanCommandBufferManager::EndAndSubmitUploadCommandBuffer(VulkanCommandBuffer* cmd)
+{
+    if (!cmd) return;
+
+    cmd->End();
+    
+    commandContext->GetQueue()->Submit(cmd);
+
+    // ⚠️ 不立刻 Reset，等 Fence 完成后由外部回收
+    ActiveUploadCommandBuffer = nullptr;
 }
 
 } // namespace WR::RHIVulkan

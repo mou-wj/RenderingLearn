@@ -1,5 +1,15 @@
 #pragma once
 #include <vector>
+#include <unordered_map>
+#include <string>
+// 一个简易版的 UE 风格宏
+#define ENUM_CLASS_FLAGS(Enum) \
+    inline Enum operator|(Enum a, Enum b) { return static_cast<Enum>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b)); } \
+    inline Enum& operator|=(Enum& a, Enum b) { a = a | b; return a; } \
+    inline Enum operator&(Enum a, Enum b) { return static_cast<Enum>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b)); } \
+    inline bool EnumHasAnyFlags(Enum Flags, Enum Contains) { return (static_cast<uint32_t>(Flags) & static_cast<uint32_t>(Contains)) != 0; }
+
+
 
 namespace RHI
 {
@@ -48,16 +58,65 @@ enum class ERHIFormat
     // ...可根据需要扩展
 };
 
+struct RHI_API FormatInfo
+{
+    std::string Name; // 名称，如 "R8G8B8A8_UNorm"
+    uint32_t BytesPerPixel = 0; // 每像素字节数
+    uint32_t NumComponents = 0; // 分量数量（R,G,B,A）
+    bool bIsDepth = false; // 是否深度纹理
+    bool bIsStencil = false; // 是否模板纹理
+    bool bIsSRGB = false; // 是否 sRGB
+    bool bIsFloat = false; // 是否浮点格式
+};
+
+extern RHI_API const std::unordered_map<ERHIFormat, FormatInfo> GFormatInfoMap;
+
 
 // 资源访问类型
 enum class ERHIResourceAccess
 {
     Unknown = 0,
-    Read,
-    Write,
-    ReadWrite,
-    // ...可根据需要扩展
+    Undefined = 1 << 0,  // 初始状态，不保留旧内容 (Discard)
+
+    // --- 只读语义 (Read-only) ---
+    CPURead = 1 << 1,  // CPU 读回
+    Present = 1 << 2,  // 交换链呈现 (Swapchain Read)
+    IndirectArgs = 1 << 3,  // 间接命令参数 (Indirect Draw/Dispatch)
+    VertexOrIndexBuffer = 1 << 4, // 顶点或索引缓冲区读取
+    SRVGraphics = 1 << 5,  // 图形着色器 (VS/PS/etc.) 采样或读取
+    SRVCompute = 1 << 6,  // 计算着色器读取
+    CopySrc = 1 << 7,  // 拷贝操作的源 (Transfer Src)
+    ResolveSrc = 1 << 8,  // 多重采样 Resolve 的源
+    DSVRead = 1 << 9,  // 深度/模板只读测试 (Depth Read Only)
+    ShadingRateSource = 1 << 10, // 可变速率着色掩码图
+
+    // --- 读写语义 (Read-Write) ---
+    UAVGraphics = 1 << 11, // 图形管线随机读写 (Storage Image/Buffer)
+    UAVCompute = 1 << 12, // 计算管线随机读写
+    RTV = 1 << 13, // 颜色附件写入
+    CopyDest = 1 << 14, // 拷贝操作的目的 (Transfer Dst)
+    ResolveDst = 1 << 15, // 多重采样 Resolve 的目的
+    DSVWrite = 1 << 16, // 深度/模板写入
+
+    // --- 光线追踪 (Ray Tracing) ---
+    BVHRead = 1 << 17, // 加速结构读取 (TraceRay/Build Input)
+    BVHWrite = 1 << 18, // 加速结构构建写入
+
+    // --- 掩码与常用组合 ---
+    SRVMask = SRVGraphics | SRVCompute,
+    UAVMask = UAVGraphics | UAVCompute,
+
+    // 排他性只读掩码（这些状态通常不与写入状态并存）
+    ReadOnlyExclusiveMask = CPURead | Present | IndirectArgs | VertexOrIndexBuffer | SRVMask | CopySrc | ResolveSrc | BVHRead,
+
+    // 可读状态掩码（包含 UAV）
+    ReadableMask = ReadOnlyExclusiveMask | DSVRead | UAVMask,
+
+    // 可写状态掩码
+    WritableMask = RTV | UAVMask | DSVWrite | CopyDest | ResolveDst | BVHWrite
 };
+// 使用宏
+ENUM_CLASS_FLAGS(ERHIResourceAccess);
 
 enum class ERHIFilter { Nearest, Linear };
 enum class ERHIAddressMode { Repeat, ClampToEdge, MirrorClampToEdge, MirrorRepeat };
@@ -68,6 +127,7 @@ enum class ERHIResourceType
     Unknown = 0,
     Texture,
     Buffer,
+    UniformBuffer,
     GraphicPipelineState,
     ComputePipelineState,
     RayTracingPipelineState,
@@ -115,7 +175,7 @@ enum class ERHIShaderPlatform
 };
 
 // 着色器类型
-enum class ERHIShaderType
+enum class ERHIShaderFrequency
 {
     Unknown = 0,
     Vertex,
@@ -134,24 +194,6 @@ enum class ERHIShaderType
     Callable,
     // ...可扩展
 };
-
-
-    /** 加载操作类型 */
-    enum class ERHILoadAction : uint8_t
-    {
-        Load,     // 保留现有内容
-        Clear,    // 清除内容
-        DontCare  // 不关心现有内容
-    };
-    
-    /** 存储操作类型 */
-    enum class ERHIStoreAction : uint8_t
-    {
-        Store,                   // 存储内容
-        MultisampleResolve,      // 多重采样解析
-        StoreAndMultisampleResolve, // 存储并解析多重采样
-        DontCare                // 不关心存储结果
-    };
 
     //定义color结构体
     struct RHI_API RHIColor{
@@ -172,6 +214,8 @@ enum class ERHIShaderType
     // 纹理类型枚举
     enum class ERHITextureType
     {
+		Unknown = 0,
+        Texture1D,
         Texture2D,
         Texture3D,
         TextureCube,
@@ -180,16 +224,26 @@ enum class ERHIShaderType
     };
 
     // 纹理用途标志（可组合使用）
-    enum ERHITextureFlags
+    enum class ERHITextureCreateFlags : uint32_t
     {
         None = 0,
-        ShaderResource = 1 << 0,
-        RenderTarget = 1 << 1,
-        UnorderedAccess = 1 << 2,
-        DepthStencil = 1 << 3,
-        TransferSrc = 1 << 4,
-        TransferDst = 1 << 5
+        ShaderResource = 1ull << 0,  // 可作为采样贴图 (SRV)
+        RenderTarget = 1ull << 1,  // 可作为颜色附件 (RTV)
+        DepthStencil = 1ull << 2,  // 可作为深度附件 (DSV)
+        UAV = 1ull << 3,  // 可随机读写 (Storage Image)
+        Presentable = 1ull << 4,  // 可用于显示输出 (Swapchain)
+
+        // 内存与更新属性
+        Dynamic = 1ull << 5,  // 频繁更新 (Hint)
+        CPUReadback = 1ull << 6,  // CPU 需读取 (Host Visible)
+        Memoryless = 1ull << 7,  // 仅存在于 Tile Memory (手机端优化)
+
+        // 拷贝属性
+        CopySrc = 1ull << 8,  // 可作为拷贝源
+        CopyDest = 1ull << 9,  // 可作为拷贝目的
     };
+    // 使用宏
+    ENUM_CLASS_FLAGS(ERHITextureCreateFlags);
 
     // 纹理描述结构体
     struct RHI_API RHITextureDesc
@@ -203,11 +257,12 @@ enum class ERHIShaderType
         ERHITextureType Type = ERHITextureType::Texture2D;   // 纹理类型
         uint32_t SampleCount = 1;            // 多重采样数量
         uint32_t SampleQuality = 0;          // 多重采样质量
-        uint32_t Usage = ERHITextureFlags::ShaderResource; // 纹理用途
+        ERHITextureCreateFlags Usage = ERHITextureCreateFlags::None; // 纹理用途
         bool bGenerateMips = false;          // 是否生成Mip贴图
         bool bCPUAccessible = false;         // CPU是否可访问
         const void* InitialData = nullptr;   // 初始数据
         const char* DebugName = nullptr;     // 调试名称
+
     };
 
     // 纹理视图描述
@@ -218,7 +273,7 @@ enum class ERHIShaderType
         uint32_t MipLevelCount = 1;          // Mip级别数量
         uint32_t ArraySlice = 0;             // 起始数组切片
         uint32_t ArraySliceCount = 1;        // 数组切片数量
-        uint32_t Flags = ERHITextureFlags::ShaderResource; // 视图用途
+        ERHITextureCreateFlags Flags = ERHITextureCreateFlags::ShaderResource; // 视图用途
     };
 
 
@@ -393,17 +448,71 @@ enum class ERHIShaderType
         uint32_t width = 0; // 更新区域宽度
         uint32_t height = 0; // 更新区域高度
         uint32_t depth = 1; // 更新区域深度（3D纹理）
-        bool IsIntersect(const RHITextureRegion& other) const {
-            return true; // 实现相交判断逻辑
+        static RHITextureRegion Create2DRegion(uint32_t InWidth,uint32_t InHeight) {
+			RHITextureRegion region;
+			region.mipLevel = 0;
+			region.arraySlice = 0;
+			region.numMipLevels = 1;
+			region.numArraySlices = 1;
+			region.xOffset = 0;
+			region.yOffset = 0;
+			region.zOffset = 0;
+			region.width = InWidth;
+			region.height = InHeight;
+			region.depth = 1;
+			return region;
         }
     };
     struct RHI_API RHIBufferRegion {
         uint32_t offset = 0; // 偏移
         uint32_t size = 0; // 大小
-        bool IsIntersect(const RHITextureRegion& other) const {
-            return true; // 实现相交判断逻辑
-        }
     };
+
+    // ---------------------------
+// Texture Shader Resource View
+// ---------------------------
+    struct RHI_API RHITexSRVCreateInfo
+    {
+        uint32_t MostDetailedMip = 0;
+        uint32_t MipLevelCount = 1;
+        uint32_t FirstArraySlice = 0;
+        uint32_t ArraySize = 1;
+        ERHIFormat Format = ERHIFormat::Unknown;
+    };
+
+    // ---------------------------
+    // Texture Unordered Access View
+    // ---------------------------
+    struct RHI_API RHITexUAVCreateInfo
+    {
+        uint32_t MipSlice = 0;
+        uint32_t FirstArraySlice = 0;
+        uint32_t ArraySize = 1;
+        ERHIFormat Format = ERHIFormat::Unknown;
+    };
+
+    // ---------------------------
+    // Buffer Shader Resource View
+    // ---------------------------
+    struct RHI_API RHIBufferSRVCreateInfo
+    {
+        uint64_t Offset = 0;        // 起始字节偏移
+        uint64_t NumElements = 0;   // 元素数量
+        uint32_t Stride = 0;        // 每个元素字节数
+        ERHIFormat Format = ERHIFormat::Unknown;
+    };
+
+    // ---------------------------
+    // Buffer Unordered Access View
+    // ---------------------------
+    struct RHI_API RHIBufferUAVCreateInfo
+    {
+        uint64_t Offset = 0;        // 起始字节偏移
+        uint64_t NumElements = 0;   // 元素数量
+        uint32_t Stride = 0;        // 每个元素字节数
+        ERHIFormat Format = ERHIFormat::Unknown;
+    };
+
 
     enum class EVerdorId
     {
@@ -418,4 +527,123 @@ enum class ERHIShaderType
 
 	};
 
+    struct RHIClearValueBinding
+    {
+        enum class ClearValueBinding
+        {
+            None,          // 不需要 clear
+            Color,         // ClearColor
+            DepthStencil   // ClearDepth / ClearStencil
+        } Binding;
+
+        union
+        {
+            float Color[4];
+            struct { float Depth; uint32_t Stencil; };
+        };
+    };
+
+    struct RHICopyTextureDesc {
+        // 源 mip / array slice
+        uint32_t SrcMipIndex = 0;
+        uint32_t SrcArraySlice = 0;
+
+        // 目标 mip / array slice
+        uint32_t DstMipIndex = 0;
+        uint32_t DstArraySlice = 0;
+    };
+
+
+    struct RHIUpdateTextureRegion2D
+    {
+        uint32_t DestX = 0; // 目标纹理起始 X
+        uint32_t DestY = 0; // 目标纹理起始 Y
+        uint32_t SrcX = 0; // 源数据起始 X
+        uint32_t SrcY = 0; // 源数据起始 Y
+        uint32_t Width = 0; // 更新宽度
+        uint32_t Height = 0; // 更新高度
+
+
+        RHIUpdateTextureRegion2D() = default;
+
+
+        RHIUpdateTextureRegion2D(uint32_t InDestX, uint32_t InDestY,
+            uint32_t InSrcX, uint32_t InSrcY,
+            uint32_t InWidth, uint32_t InHeight)
+            : DestX(InDestX), DestY(InDestY),
+            SrcX(InSrcX), SrcY(InSrcY),
+            Width(InWidth), Height(InHeight)
+        {
+        }
+    };
+
+
+
+    struct RHIUpdateTextureRegion3D
+    {
+        uint32_t DestX = 0;
+        uint32_t DestY = 0;
+        uint32_t DestZ = 0;
+        uint32_t SrcX = 0;
+        uint32_t SrcY = 0;
+        uint32_t SrcZ = 0;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+        uint32_t Depth = 0;
+
+
+        RHIUpdateTextureRegion3D() = default;
+
+
+        RHIUpdateTextureRegion3D(uint32_t InDestX, uint32_t InDestY, uint32_t InDestZ,
+            uint32_t InSrcX, uint32_t InSrcY, uint32_t InSrcZ,
+            uint32_t InWidth, uint32_t InHeight, uint32_t InDepth)
+            : DestX(InDestX), DestY(InDestY), DestZ(InDestZ),
+            SrcX(InSrcX), SrcY(InSrcY), SrcZ(InSrcZ),
+            Width(InWidth), Height(InHeight), Depth(InDepth)
+        {
+        }
+    };
+
+    enum class ERenderTargetLoadOp : uint8_t
+    {
+        DontCare = 0,   // 不保留旧内容
+        Load = 1,   // 读取旧内容
+        Clear = 2    // Clear
+    };
+
+    enum class ERenderTargetStoreOp : uint8_t
+    {
+        DontCare = 0,   // 不保留结果
+        Store = 1,   // 保存结果
+        Resolve = 2    // MSAA Resolve（代替 Store）
+    };
+
+    enum class ERenderTargetActions : uint8_t
+    {
+        // 低 2 bit = StoreOp
+        // 高 2 bit = LoadOp
+        LoadOpShift = 2,
+        StoreOpMask = 0x3,
+
+#define RT_ACTION_MAKE(Load, Store) \
+    ( (uint8_t(ERenderTargetLoadOp::Load)  << uint8_t(LoadOpShift)) | \
+      (uint8_t(ERenderTargetStoreOp::Store)) )
+
+        DontCare_DontCare = RT_ACTION_MAKE(DontCare, DontCare),
+
+        DontCare_Store = RT_ACTION_MAKE(DontCare, Store),
+        Clear_Store = RT_ACTION_MAKE(Clear, Store),
+        Load_Store = RT_ACTION_MAKE(Load, Store),
+
+        Clear_DontCare = RT_ACTION_MAKE(Clear, DontCare),
+        Load_DontCare = RT_ACTION_MAKE(Load, DontCare),
+
+        Clear_Resolve = RT_ACTION_MAKE(Clear, Resolve),
+        Load_Resolve = RT_ACTION_MAKE(Load, Resolve),
+
+#undef RT_ACTION_MAKE
+    };
+
+#define MAX_RENDER_TARGETS 8
 }

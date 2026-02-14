@@ -9,232 +9,171 @@
 #include <vector>
 #include <unordered_map>
 #include <type_traits>
+#include <iostream>
+
+#define SHADER_PARAMETER_ALIGNMENT 16
 
 namespace RenderCore {
-    using namespace Core;
-    // shader paramter meta data
-    struct RENDERCORE_API ShaderMetaData {
-        EShaderUniformBaseType Type;
-        int numRow = 1;
-        int numColumn = 1;
-        int BindSlot = -1;    // ���� CBV/SRV/UAV/Texture/Sampler ��Ч
-        size_t Offset = 0;    // �ڳ��������е�ƫ��
-        size_t Size = 0;      // ռ�ô�С
-        std::vector<ShaderMetaData> Nested; // Ƕ�׽ṹ��
+
+
+    class ShaderParametersMetadata;
+
+    template<typename T>
+    struct ShaderParameterTypeInfo
+    {
+        static constexpr EShaderUniformBaseType BaseType = EShaderUniformBaseType::Unknown;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 1;
+        static constexpr uint32_t NumElements = 0;
+
+        static constexpr uint32_t Alignment = SHADER_PARAMETER_ALIGNMENT;
+        static constexpr bool bIsStoredInConstantBuffer = true;
+
+        using TAlignedType = T;
+
+        static const ShaderParametersMetadata* GetStructMetadata()
+        {
+            return nullptr;
+        }
     };
 
-// -------------------------------------------------------------------------------------------------
-//  Shader Parameter Base Class
-// -------------------------------------------------------------------------------------------------
-class RENDERCORE_API ShaderParameter
-{
-public:
-    virtual ~ShaderParameter() = default;
-    ShaderParameter(const std::string& name = "") : Name(name) {}
-    // Get the name of the parameter
-    const std::string& GetName() const { return Name; }
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData metadata{};
-        return metadata; 
-    }
-    virtual size_t GetParameterSize() const { return 0; };
-private:
-    std::string Name; // Parameter name
-};
-
-
-// -------------------------------------------------------------------------------------------------
-//  Typed Shader Parameter Template Class
-// -------------------------------------------------------------------------------------------------
-template<class T>
-struct TypedShaderParameter : public ShaderParameter
-{
-
-    explicit TypedShaderParameter(const std::string& name = "", const T& value = {})
-        : ShaderParameter(name), Value(value) {}
-    T Value; // Stored value of the parameter
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData metadata{};
-        return metadata;
-    }
-};
-// Float
-template<>
-struct RENDERCORE_API TypedShaderParameter<float> : public ShaderParameter
-{
-    explicit TypedShaderParameter(const std::string& name = "", const float& value = 0.0f)
-        : ShaderParameter(name), Value(value) {
-    }
-
-    float Value;
-
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::Float32,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(TypedShaderParameter<float>), // Size
+    class ShaderParametersMetadata
+    {
+    public:
+        enum class EUseCase : uint8_t
+        {
+            ShaderParameterStruct,
+            UniformBuffer
         };
-        return meta;
-    }
-};
 
-// -------------------------------------------------------------------------------------------------
-//  Resource Shader Parameters (Texture and Buffer)
-// -------------------------------------------------------------------------------------------------
+        struct Member
+        {
+            const char* Name;
+            uint32_t Offset;
+            EShaderUniformBaseType BaseType;
+            uint32_t NumRows = 1;
+            uint32_t NumColumns = 1;
+            uint32_t NumElements = 0;
+            const ShaderParametersMetadata* StructMetadata = nullptr;
+            Member(
+            const char* InName,
+            uint32_t InOffset,
+            EShaderUniformBaseType InBaseType,
+            uint32_t InNumRows,
+            uint32_t InNumColumns,
+            uint32_t InNumElements,
+            const ShaderParametersMetadata* InStructMetadata
+            ):
+				Name(InName), 
+                Offset(InOffset), 
+                BaseType(InBaseType), 
+                NumRows(InNumRows), 
+                NumColumns(InNumColumns), 
+                NumElements(InNumElements), 
+                StructMetadata(InStructMetadata)
+            
+            {
 
-class RENDERCORE_API TextureParameter : public ShaderParameter
-{
-public:
-    explicit TextureParameter(const std::string& name = "")
-        : ShaderParameter(name) {
-    }
+            }
 
-    RenderGraphTextureSP Value;
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::Texture,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(RenderGraphTextureSP), // Size
+            bool IsStruct() const { return StructMetadata != nullptr; }
+            bool IsResource() const { return BaseType >= EShaderUniformBaseType::Texture; }
         };
-        return meta;
-    }
-};
 
-class RENDERCORE_API TextureSRVParameter : public ShaderParameter
-{
-public:
-    explicit TextureSRVParameter(const std::string& name = "", RenderGraphTextureSRVSP textureResource = nullptr)
-        : ShaderParameter(name), Value(textureResource) {}
+    public:
 
-    RenderGraphTextureSRVSP Value;
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::Texture_SRV,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(TextureSRVParameter), // Size
-        };
-        return meta;
-    }
-};
+        ShaderParametersMetadata(
+            const char* InStructName,
+            uint32_t InSize,
+            std::vector<Member> InMembers,
+            EUseCase InUseCase = EUseCase::ShaderParameterStruct)
+            : StructName(InStructName)
+            , Size(InSize)
+            , Members(std::move(InMembers))
+            , UseCase(InUseCase)
+        {
+        }
 
-class RENDERCORE_API TextureUAVParameter : public ShaderParameter
-{
-public:
-    explicit TextureUAVParameter(const std::string& name = "", RenderGraphTextureUAVSP textureResource = nullptr)
-        : ShaderParameter(name), Value(textureResource) {}
+        const char* GetStructName() const { return StructName; }
+        uint32_t GetSize() const { return Size; }
+        const std::vector<Member>& GetMembers() const { return Members; }
+        EUseCase GetUseCase() const { return UseCase; }
 
-    RenderGraphTextureUAVSP Value;
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::Texture_UAV,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(TextureUAVParameter), // Size
-        };
-        return meta;
-    }
-};
+        // ---------------------------
+        // HLSL generation
+        // ---------------------------
+        void GenerateHLSL(std::ostream& Out, uint32_t& cbufferRegister, int indent = 0) const
+        {
+            std::string IndentStr(indent, ' ');
 
-class RENDERCORE_API UniformBufferParameter : public ShaderParameter
-{
-public:
-    explicit UniformBufferParameter(const std::string& name = "")
-        : ShaderParameter(name) {
-    }
+            if (UseCase == EUseCase::UniformBuffer)
+            {
+                Out << IndentStr << "cbuffer " << StructName << " : register(b" << cbufferRegister++ << ")\n";
+                Out << IndentStr << "{\n";
+            }
 
-    RenderGraphBufferSP Value; // Pointer to the RenderGraphBuffer resource
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::Buffer,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(UniformBufferParameter), // Size
-        };
-        return meta;
-    }
-};
+            for (const auto& Member : Members)
+            {
+                if (Member.IsStruct())
+                {
+                    // 嵌套结构单独生成 cbuffer
+                    Member.StructMetadata->GenerateHLSL(Out, cbufferRegister, indent + 4);
+                    continue;
+                }
 
-class RENDERCORE_API UniformBufferSRVParameter : public ShaderParameter
-{
-public:
-    explicit UniformBufferSRVParameter(const std::string& name = "", RenderGraphBufferSRVSP bufferResource = nullptr)
-        : ShaderParameter(name), Value(bufferResource) {}
+                Out << IndentStr << "    " << GetHLSLType(Member) << " " << Member.Name;
 
-    RenderGraphBufferSRVSP Value; // Pointer to the RenderGraphBuffer resource
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::Buffer_SRV,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(UniformBufferSRVParameter), // Size
-        };
-        return meta;
-    }
-};
+                if (Member.NumElements > 0)
+                    Out << "[" << Member.NumElements << "]";
 
-class RENDERCORE_API UniformBufferUAVParameter : public ShaderParameter
-{
-public:
-    explicit UniformBufferUAVParameter(const std::string& name = "", RenderGraphBufferUAVSP bufferResource = nullptr)
-        : ShaderParameter(name), Value(bufferResource) {}
+                Out << ";\n";
+            }
 
-    RenderGraphBufferUAVSP Value; // Pointer to the RenderGraphBuffer resource
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::Buffer_UAV,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(UniformBufferUAVParameter), // Size
-        };
-        return meta;
-    }
-};
+            if (UseCase == EUseCase::UniformBuffer)
+            {
+                Out << IndentStr << "};\n\n";
+            }
+        }
 
-struct RENDERCORE_API RenderTargetBinding {
-    RenderGraphTextureSP Texture;
-    int mipLevel = 0;
-    int arraySlice = 0;
-};
-struct RENDERCORE_API RenderTargetBindingParameter : public ShaderParameter
-{
-public:
-    std::array<RenderTargetBinding, 8> ColorTargets;
-    RenderGraphTextureSP DepthStencilTarget;
-    static ShaderMetaData& GetMetaData() {
-        static ShaderMetaData meta{
-            EShaderUniformBaseType::ColorBindings,
-            1, 1,          // rows, cols
-            -1,            // BindSlot
-            0,             // Offset (稍后根据 struct 计算)
-            sizeof(RenderTargetBindingParameter), // Size
-        };
-        return meta;
-    }
-};
+    private:
+        const char* StructName;
+        uint32_t Size;
+        std::vector<Member> Members;
+        EUseCase UseCase;
 
+        static std::string GetHLSLType(const Member& M)
+        {
+            switch (M.BaseType)
+            {
+            case EShaderUniformBaseType::Float32:
+                if (M.NumRows == 1 && M.NumColumns == 1) return "float";
+                if (M.NumRows == 1 && M.NumColumns == 2) return "float2";
+                if (M.NumRows == 1 && M.NumColumns == 3) return "float3";
+                if (M.NumRows == 1 && M.NumColumns == 4) return "float4";
+                if (M.NumRows == 4 && M.NumColumns == 4) return "float4x4";
+                return "float";
+            case EShaderUniformBaseType::Int32: return "int";
+            case EShaderUniformBaseType::UInt32: return "uint";
+            case EShaderUniformBaseType::Texture: return "Texture2D";
+            case EShaderUniformBaseType::Texture_UAV: return "RWTexture2D<float4>";
+            case EShaderUniformBaseType::Buffer: return "StructuredBuffer<float4>";
+            case EShaderUniformBaseType::Buffer_UAV: return "RWStructuredBuffer<float4>";
+            case EShaderUniformBaseType::Sampler: return "SamplerState";
+            default: return "unknown";
+            }
+        }
+    };
+    
 
-// -------------------------------------------------------------------------------------------------
-//  Shader Macros for Simplified Shader Definitions
-// -------------------------------------------------------------------------------------------------
-struct ShaderParameters;
-
+#define STRUCT_OFFSET(StructType, Member) offsetof(StructType, Member)
 // Begin shader parameter struct
 #define BEGIN_SHADER_PARAMETER_STRUCT(StructClass) struct StructClass{ \
     struct FirstIdType{}; \
     using PrevMemberIdType = FirstIdType; \
+    using ThisStructType = StructClass; \
     using FuncPtr = void*;\
-    typedef FuncPtr(*MemberFuncType)(PrevMemberIdType, std::vector<ShaderMetaData>*);\
-    static FuncPtr sAppendMemberGetPrev(PrevMemberIdType, std::vector<ShaderMetaData>*) \
+    typedef FuncPtr(*MemberFuncType)(PrevMemberIdType, std::vector<ShaderParametersMetadata::Member>*);\
+    static FuncPtr sAppendMemberGetPrev(PrevMemberIdType, std::vector<ShaderParametersMetadata::Member>*) \
 		{ \
 			return nullptr; \
 		} \
@@ -242,99 +181,49 @@ struct ShaderParameters;
 // End shader parameter struct
 #define END_SHADER_PARAMETER_STRUCT(StructClass) \
     LastIdType;\
-    static ShaderMetaData& GetMetaData() \
+    static std::vector<ShaderParametersMetadata::Member> GetMetaData() \
     {\
-        ShaderMetaData metadata;\
-        metadata.Size = sizeof(StructClass);\
-        FuncPtr(*PrevFunc)(LastIdType, std::vector<ShaderMetaData>*);            \
+        std::vector<ShaderParametersMetadata::Member> Members;\
+        FuncPtr(*PrevFunc)(LastIdType, std::vector<ShaderParametersMetadata::Member>*);            \
         PrevFunc = sAppendMemberGetPrev; \
         FuncPtr func = (FuncPtr)PrevFunc; \
         do{\
-            func = reinterpret_cast<MemberFuncType>(func)(LastIdType(), &metadata.Nested);\
+            func = reinterpret_cast<MemberFuncType>(func)(LastIdType(), &Members);\
 	    } while (func != nullptr); \
-        return metadata;\
+        return Members;\
     }\
 };
 
-#define SHADER_PARAMETER_INTERNAL(CurMemberIdType,PreMemberIdType,ClassType,MemberName,ShaderParameterClass)\
-    struct CurMemberIdType : PreMemberIdType{};\
-    static FuncPtr sAppendMemberGetPrev(CurMemberIdType, std::vector<ShaderMetaData>* metaDatas) \
+#define SHADER_PARAMETER_INTERNAL(BaseType,MemberType,MemberName,TypeInfo)\
+    PrevType##Name;\
+    struct CurMember##Name : PrevType##Name{};\
+    using CurMemberIdType = CurMember##Name;\
+public:\
+    MemberType MemberName;\
+private:\
+    static FuncPtr sAppendMemberGetPrev(CurMemberIdType, std::vector<ShaderParametersMetadata::Member>* Members) \
 		{ \
-            metaDatas->push_back(ShaderParameterClass::GetMetaData());\
-			FuncPtr(*PrevFunc)(PreMemberIdType, std::vector<ShaderMetaData>*); \
+            Members->push_back(ShaderParametersMetadata::Member(\
+            #MemberName,\
+            STRUCT_OFFSET(ThisStructType, MemberName),\
+            BaseType,\
+            TypeInfo::NumRows,\
+            TypeInfo::NumColumns,\
+            TypeInfo::NumElements,\
+            TypeInfo::GetStructMetadata()));\
+			FuncPtr(*PrevFunc)(PrevType##Name, std::vector<ShaderParametersMetadata::Member>*); \
 			PrevFunc = sAppendMemberGetPrev; \
             return (FuncPtr)PrevFunc; \
 		} \
-	typedef CurMemberIdType
+	typedef PrevMemberIdType
 
 // Define a texture parameter
 #define SHADER_PARAMETER(ClassType,Name) \
- PrevType##Name;\
-TypedShaderParameter<ClassType> Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,ClassType,Name,TypedShaderParameter<ClassType>)
-
-// Define a texture parameter
-#define SHADER_PARAMETER_TEXTURE(Name) \
- PrevType##Name;\
-TextureParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Name,TextureParameter)
-
-#define SHADER_PARAMETER_TEXTURE_SRV(Name) \
- PrevType##Name;\
-TextureSRVParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Name,TextureSRVParameter)
-
-#define SHADER_PARAMETER_TEXTURE_UAV(Name) \
- PrevType##Name;\
-TextureUAVParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphTexture,Name,TextureUAVParameter)
-
-
-// Define a uniform parameter
-#define SHADER_PARAMETER_UNIFORM_BUFFER(Name) \
- PrevType##Name;\
-UniformBufferParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferParameter)
-
-#define SHADER_PARAMETER_UNIFORM_BUFFER_SRV(Name) \
- PrevType##Name;\
-UniformBufferSRVParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferSRVParameter)
-
-#define SHADER_PARAMETER_UNIFORM_BUFFER_UAV(Name) \
- PrevType##Name;\
-UniformBufferUAVParameter Name;\
-SHADER_PARAMETER_INTERNAL( CurMember##Name,PrevType##Name,RenderGraphBuffer,Name,UniformBufferUAVParameter)
-
-#define SHADER_PARAMETER_RENDER_TARGETS() \
- PrevType##RenderTargets;\
-RenderTargetBindingParameter RenderTargets;\
-SHADER_PARAMETER_INTERNAL( CurMember##RenderTargets,PrevType##RenderTargets,RenderTargetBindingParameter,RenderTargets,RenderTargetBindingParameter)
-
-
+SHADER_PARAMETER_INTERNAL(ShaderParameterTypeInfo<ClassType>::BaseType,ClassType,Name,ShaderParameterTypeInfo<ClassType>)
 
 BEGIN_SHADER_PARAMETER_STRUCT(A)
-    SHADER_PARAMETER(float,T1)
-    SHADER_PARAMETER(float,T2)
-    SHADER_PARAMETER_TEXTURE_SRV(T3)
-    SHADER_PARAMETER_UNIFORM_BUFFER_SRV(B1)
-    SHADER_PARAMETER_RENDER_TARGETS()
-END_SHADER_PARAMETER_STRUCT(A);
-
-//class ss {
-//public:
-//    ss() {
-//		auto a = A().GetMetaDatas();
-//        for (int i = 0; i < a.size(); i++) {
-//            printf("%s\n", a[i].Name.c_str());
-//        }
-//
-//    }
-//
-//
-//};
-//ss s;
-using ShaderParameterSP = std::shared_ptr<ShaderParameter>;
+    SHADER_PARAMETER(Core::Int2,Color)
+END_SHADER_PARAMETER_STRUCT(A)
 
 
 struct RENDERCORE_API ShaderParameterInstance
@@ -344,84 +233,85 @@ struct RENDERCORE_API ShaderParameterInstance
     size_t Size = 0;
 };
 
-class RENDERCORE_API ShaderParameterReader
-{
-public:
-    ShaderParameterReader(void* rawParameters, const ShaderMetaData& metaData)
-        : RawParameters(reinterpret_cast<uint8_t*>(rawParameters))
-        , ParameterMetaData(metaData)
-    {
-        Reset();
-    }
 
-    void Reset()
-    {
-        Stack.clear();
-        IndexStack.clear();
-        Stack.push_back(&ParameterMetaData);
-        IndexStack.push_back(0);
-    }
-
-    // 返回下一个非 struct 参数
-    bool ReadNext(ShaderParameterInstance& outParam)
-    {
-        while (!Stack.empty())
-        {
-            const ShaderMetaData* currentMeta = Stack.back();
-            size_t& currentIndex = IndexStack.back();
-
-            // 遍历 struct 的 Nested
-            if (currentIndex < currentMeta->Nested.size())
-            {
-                const ShaderMetaData& memberMeta = currentMeta->Nested[currentIndex++];
-
-                if (memberMeta.Type == EShaderUniformBaseType::Struct)
-                {
-                    // 进入 struct，递归展开
-                    Stack.push_back(&memberMeta);
-                    IndexStack.push_back(0);
-                    continue;
-                }
-
-                // 非 struct，返回参数
-                outParam.Type = memberMeta.Type;
-                outParam.Ptr = RawParameters + memberMeta.Offset;
-                outParam.Size = memberMeta.Size;
-                return true;
-            }
-            else
-            {
-                // struct 遍历完成，弹出
-                Stack.pop_back();
-                IndexStack.pop_back();
-            }
-        }
-
-        // 没有更多参数
-        return false;
-    }
-
-    std::map<std::string,ShaderParameter*> GetAllParameterMaps() {
-        std::map<std::string, ShaderParameter*> result;
-        ShaderParameterInstance param;
-        while (ReadNext(param)) {
-            auto parameter = static_cast<ShaderParameter*>(param.Ptr);
-            auto name = parameter->GetName();
-            result[name] = parameter;
-        }
-        return result;
-    }
-
-private:
-    uint8_t* RawParameters = nullptr;
-    const ShaderMetaData& ParameterMetaData;
-
-    // 用栈保存当前递归 struct 的状态
-    std::vector<const ShaderMetaData*> Stack;
-    std::vector<size_t> IndexStack;
-};
-
-
+//class RENDERCORE_API ShaderParameterReader
+//{
+//public:
+//    ShaderParameterReader(void* rawParameters, const ShaderMetaData& metaData)
+//        : RawParameters(reinterpret_cast<uint8_t*>(rawParameters))
+//        , ParameterMetaData(metaData)
+//    {
+//        Reset();
+//    }
+//
+//    void Reset()
+//    {
+//        Stack.clear();
+//        IndexStack.clear();
+//        Stack.push_back(&ParameterMetaData);
+//        IndexStack.push_back(0);
+//    }
+//
+//    // 返回下一个非 struct 参数
+//    bool ReadNext(ShaderParameterInstance& outParam)
+//    {
+//        while (!Stack.empty())
+//        {
+//            const ShaderMetaData* currentMeta = Stack.back();
+//            size_t& currentIndex = IndexStack.back();
+//
+//            // 遍历 struct 的 Nested
+//            if (currentIndex < currentMeta->Nested.size())
+//            {
+//                const ShaderMetaData& memberMeta = currentMeta->Nested[currentIndex++];
+//
+//                if (memberMeta.Type == EShaderUniformBaseType::Struct)
+//                {
+//                    // 进入 struct，递归展开
+//                    Stack.push_back(&memberMeta);
+//                    IndexStack.push_back(0);
+//                    continue;
+//                }
+//
+//                // 非 struct，返回参数
+//                outParam.Type = memberMeta.Type;
+//                outParam.Ptr = RawParameters + memberMeta.Offset;
+//                outParam.Size = memberMeta.Size;
+//                return true;
+//            }
+//            else
+//            {
+//                // struct 遍历完成，弹出
+//                Stack.pop_back();
+//                IndexStack.pop_back();
+//            }
+//        }
+//
+//        // 没有更多参数
+//        return false;
+//    }
+//
+//    std::map<std::string,ShaderParameter*> GetAllParameterMaps() {
+//        std::map<std::string, ShaderParameter*> result;
+//        ShaderParameterInstance param;
+//        while (ReadNext(param)) {
+//            auto parameter = static_cast<ShaderParameter*>(param.Ptr);
+//            auto name = parameter->GetName();
+//            result[name] = parameter;
+//        }
+//        return result;
+//    }
+//
+//private:
+//    uint8_t* RawParameters = nullptr;
+//    const ShaderMetaData& ParameterMetaData;
+//
+//    // 用栈保存当前递归 struct 的状态
+//    std::vector<const ShaderMetaData*> Stack;
+//    std::vector<size_t> IndexStack;
+//};
+//
+//
 class RENDERCORE_API ShaderParameterStruct {
 public:
     ShaderParameterStruct() = default;
@@ -436,9 +326,9 @@ public:
     }
 
     void* Paramters = nullptr;
-    ShaderMetaData ContentMetaData;
+    ShaderParametersMetadata ContentMetaData;
     // Set shader parameters into command list for the given shader
-    void SetShaderParameters(RHI::RHICommandList& cmdList, const ShaderSP& shader, ShaderParameterBindingInfo* bindingInfo) const
+    void SetShaderParameters(RHI::RHICommandList& cmdList, const ShaderSP& shader,ShaderParameterBindingInfo* bindingInfo) const
     {
         if (!Paramters || !shader)
             return;
@@ -449,23 +339,17 @@ public:
         // Create batched shader parameters
         RHI::RHIBatchedShaderParameters batchedParams;
 
-        auto allShaderParameters = ShaderParameterReader(Paramters, ContentMetaData).GetAllParameterMaps();
-
-        // Traverse ContentMetaData and match with binding info
-        for (const auto& paramInfo : allShaderParameters)
-        {
-            const ShaderParameterBinding* binding = bindingInfo->GetParameterBinding(paramInfo.first);
-            if (!binding)
-                continue; // Skip unmatched parameters
-            auto parameter = paramInfo.second;
-
-            //
-            RHIShaderParameterDesc desc;
-            //convert parameter to rhi shader parameter
-
-            
-            batchedParams.Parameters.emplace_back(desc);
-        }
+        //auto allShaderParameters = ShaderParameterReader(Paramters, ///ContentMetaData).GetAllParameterMaps();
+        //
+        //// Traverse ContentMetaData and match with binding info
+        //for (const auto& paramInfo : allShaderParameters)
+        //{
+        //    //const ShaderParameterBinding* binding = bindingInfo->GetParameterBind(paramInfo.first);
+        //    //if (!binding)
+        //    //    continue; // Skip unmatched parameters
+        //    //auto parameter = paramInfo.second;
+        //
+        //}
 
         // Set the batched parameters into the command list
         cmdList.SetBatchedShaderParameters(shader->GetRHIShader(), batchedParams);

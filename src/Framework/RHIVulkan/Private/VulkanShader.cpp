@@ -20,7 +20,7 @@ bool VulkanRHIShader::Initialize(const std::vector<char>& spirvCode)
     createInfo.codeSize = spirvCode.size();
     createInfo.pCode = reinterpret_cast<const uint32_t*>(spirvCode.data());
 
-    VkResult result = vkCreateShaderModule(Device->GetDevice(), &createInfo, nullptr, &shaderModule);
+    VkResult result = vkCreateShaderModule(Device->GetHandle(), &createInfo, nullptr, &shaderModule);
     if (result != VK_SUCCESS)
     {
         // Handle error
@@ -34,7 +34,7 @@ void VulkanRHIShader::Cleanup()
 {
     if (shaderModule != VK_NULL_HANDLE && Device)
     {
-        vkDestroyShaderModule(Device->GetDevice(), shaderModule, nullptr);
+        vkDestroyShaderModule(Device->GetHandle(), shaderModule, nullptr);
         shaderModule = VK_NULL_HANDLE;
     }
 

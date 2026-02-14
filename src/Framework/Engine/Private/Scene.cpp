@@ -57,7 +57,11 @@ void Scene::ForEachProxyInView(const View& /*view*/, std::function<void(ScenePro
         visitor(kv.second);
     }
 }
-
+void Scene::ForEachPrimitiveComponent(std::function<void(PrimitiveComponent*)> visitor) {
+    for (auto &kv : ComponentToProxyId) {
+        visitor(kv.first);
+    }
+}
 FrameIndex Scene::GetCurrentFrameIndex() const { return CurrentFrame; }
 double Scene::GetCurrentTimeSeconds() const { return CurrentTimeSeconds; }
 EFeatureLevel Scene::GetFeatureLevel() const { return FeatureLevel; }

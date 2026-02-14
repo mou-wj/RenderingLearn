@@ -62,7 +62,7 @@ ShaderCompilationResult ShaderCompiler::CompileShader(const ShaderSourceInfo& so
     result.PreprocessedSource = preprocessedSource;
 
     // Extract parameter binding info
-    if (!ExtractParameterBindingInfo(preprocessedSource, sourceInfo.ShaderType, result.BindingInfo))
+    if (!ExtractParameterMap(preprocessedSource, sourceInfo.ShaderType, result.ParameterMap))
     {
         result.Success = false;
         result.ErrorMessage = "Failed to extract parameter binding info";
@@ -95,7 +95,7 @@ ShaderCompilationResult ShaderCompiler::CompileShader(const ShaderSourceInfo& so
 
 ShaderCompilationResultPerPlatform ShaderCompiler::CompileShaderForPlatform(
     const std::string& preprocessedSource,
-    RHI::ERHIShaderType shaderType,
+    RHI::ERHIShaderFrequency shaderType,
     RHI::ERHIShaderPlatform platform)
 {
     ShaderCompilationResultPerPlatform result;
@@ -181,12 +181,12 @@ bool ShaderCompiler::PreprocessShader(const std::string& sourcePath, std::string
     return PreprocessSource(source, outPreprocessedSource);
 }
 
-bool ShaderCompiler::ExtractParameterBindingInfo(
+bool ShaderCompiler::ExtractParameterMap(
     const std::string& preprocessedSource,
-    RHI::ERHIShaderType shaderType,
-    ShaderParameterBindingInfo& outBindingInfo)
+    RHI::ERHIShaderFrequency shaderType,
+    ShaderParameterMap& outMap)
 {
-    return ParseHLSLResources(preprocessedSource, outBindingInfo);
+    return ParseHLSLResources(preprocessedSource, outMap);
 }
 
 bool ShaderCompiler::LoadShaderSource(const std::string& sourcePath, std::string& outSource)
@@ -271,7 +271,7 @@ void ShaderCompiler::ApplyMacroDefinitions(std::string& source)
 
 bool ShaderCompiler::CompileHLSLToSPIRV(
     const std::string& preprocessedSource,
-    RHI::ERHIShaderType shaderType,
+    RHI::ERHIShaderFrequency shaderType,
     std::vector<uint8_t>& outBinaryData)
 {
     // Using DXC (DirectX Shader Compiler) to compile HLSL -> SPIR-V
@@ -322,7 +322,7 @@ bool ShaderCompiler::CompileHLSLToSPIRV(
 
 bool ShaderCompiler::CompileHLSLToDirectXBytecode(
     const std::string& preprocessedSource,
-    RHI::ERHIShaderType shaderType,
+    RHI::ERHIShaderFrequency shaderType,
     RHI::ERHIShaderPlatform platform,
     std::vector<uint8_t>& outBinaryData)
 {
@@ -373,7 +373,7 @@ bool ShaderCompiler::CompileHLSLToDirectXBytecode(
 
 bool ShaderCompiler::CompileHLSLToMetalBytecode(
     const std::string& preprocessedSource,
-    RHI::ERHIShaderType shaderType,
+    RHI::ERHIShaderFrequency shaderType,
     std::vector<uint8_t>& outBinaryData)
 {
     // Metal compilation would require translating HLSL -> Metal Shading Language (MSL)
@@ -386,7 +386,7 @@ bool ShaderCompiler::CompileHLSLToMetalBytecode(
 
 bool ShaderCompiler::CompileGLSLToOpenGLBytecode(
     const std::string& preprocessedSource,
-    RHI::ERHIShaderType shaderType,
+    RHI::ERHIShaderFrequency shaderType,
     std::vector<uint8_t>& outBinaryData)
 {
     // For OpenGL, we typically store GLSL source as-is or compile to SPIR-V
@@ -406,7 +406,7 @@ bool ShaderCompiler::CompileGLSLToOpenGLBytecode(
 
 bool ShaderCompiler::ParseHLSLResources(
     const std::string& preprocessedSource,
-    ShaderParameterBindingInfo& outBindingInfo)
+    ShaderParameterMap& outMap)
 {
     // Parse cbuffer declarations
     std::regex cbufferRegex(
@@ -431,20 +431,20 @@ bool ShaderCompiler::ParseHLSLResources(
             std::string typeName = memberMatch[1].str();
             std::string memberName = memberMatch[2].str();
 
-            ShaderParameterBinding binding;
-            binding.BindSlot = bindSlot;
-
-            // Map HLSL types to parameter base types
-            if (typeName == "float")
-                binding.ParameterBaseType = RHI::EShaderUniformBaseType::Float32;
-            else if (typeName == "int")
-                binding.ParameterBaseType = RHI::EShaderUniformBaseType::Int32;
-            else if (typeName == "uint")
-                binding.ParameterBaseType = RHI::EShaderUniformBaseType::UInt32;
-            else
-                binding.ParameterBaseType = RHI::EShaderUniformBaseType::Unknown;
-
-            outBindingInfo.AddParameterBinding(memberName, binding);
+            //ShaderParameterBinding binding;
+            //binding.BindSlot = bindSlot;
+            //
+            //// Map HLSL types to parameter base types
+            //if (typeName == "float")
+            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::Float32;
+            //else if (typeName == "int")
+            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::Int32;
+            //else if (typeName == "uint")
+            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::UInt32;
+            //else
+            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::Unknown;
+            //
+            //outBindingInfo.AddParameterBinding(memberName, binding);
 
             memberSearchStart = memberMatch.suffix().first;
         }
@@ -463,12 +463,12 @@ bool ShaderCompiler::ParseHLSLResources(
         std::string textureName = match[1].str();
         uint32_t bindSlot = std::stoul(match[2].str());
 
-        ShaderParameterBinding binding;
-        binding.BindSlot = bindSlot;
-        binding.ParameterBaseType = RHI::EShaderUniformBaseType::Texture;
-
-        outBindingInfo.AddParameterBinding(textureName, binding);
-        searchStart = match.suffix().first;
+        //ShaderParameterBinding binding;
+        //binding.BindSlot = bindSlot;
+        //binding.ParameterBaseType = RHI::EShaderUniformBaseType::Texture;
+        //
+        //outBindingInfo.AddParameterBinding(textureName, binding);
+        //searchStart = match.suffix().first;
     }
 
     // Parse RWTexture/UAV declarations
@@ -482,68 +482,68 @@ bool ShaderCompiler::ParseHLSLResources(
         std::string uavName = match[1].str();
         uint32_t bindSlot = std::stoul(match[2].str());
 
-        ShaderParameterBinding binding;
-        binding.BindSlot = bindSlot;
-        binding.ParameterBaseType = RHI::EShaderUniformBaseType::Texture_UAV;
-
-        outBindingInfo.AddParameterBinding(uavName, binding);
-        searchStart = match.suffix().first;
+        //ShaderParameterBinding binding;
+        //binding.BindSlot = bindSlot;
+        //binding.ParameterBaseType = RHI::EShaderUniformBaseType::Texture_UAV;
+        //
+        //outBindingInfo.AddParameterBinding(uavName, binding);
+        //searchStart = match.suffix().first;
     }
 
     return true;
 }
 
-std::string ShaderCompiler::ShaderTypeToString(RHI::ERHIShaderType shaderType)
+std::string ShaderCompiler::ShaderTypeToString(RHI::ERHIShaderFrequency shaderType)
 {
     switch (shaderType)
     {
-    case RHI::ERHIShaderType::Vertex:
+    case RHI::ERHIShaderFrequency::Vertex:
         return "vertex";
-    case RHI::ERHIShaderType::Fragment:
+    case RHI::ERHIShaderFrequency::Fragment:
         return "fragment";
-    case RHI::ERHIShaderType::Compute:
+    case RHI::ERHIShaderFrequency::Compute:
         return "compute";
-    case RHI::ERHIShaderType::Geometry:
+    case RHI::ERHIShaderFrequency::Geometry:
         return "geometry";
-    case RHI::ERHIShaderType::TessControl:
+    case RHI::ERHIShaderFrequency::TessControl:
         return "tesscontrol";
-    case RHI::ERHIShaderType::TessEvaluation:
+    case RHI::ERHIShaderFrequency::TessEvaluation:
         return "tesseval";
     default:
         return "unknown";
     }
 }
 
-std::string ShaderCompiler::ShaderTypeToHLSLTarget(RHI::ERHIShaderType shaderType)
+std::string ShaderCompiler::ShaderTypeToHLSLTarget(RHI::ERHIShaderFrequency shaderType)
 {
     switch (shaderType)
     {
-    case RHI::ERHIShaderType::Vertex:
+    case RHI::ERHIShaderFrequency::Vertex:
         return "vs_6_0";
-    case RHI::ERHIShaderType::Fragment:
+    case RHI::ERHIShaderFrequency::Fragment:
         return "ps_6_0";
-    case RHI::ERHIShaderType::Compute:
+    case RHI::ERHIShaderFrequency::Compute:
         return "cs_6_0";
-    case RHI::ERHIShaderType::Geometry:
+    case RHI::ERHIShaderFrequency::Geometry:
         return "gs_6_0";
-    case RHI::ERHIShaderType::TessControl:
+    case RHI::ERHIShaderFrequency::TessControl:
         return "hs_6_0";
-    case RHI::ERHIShaderType::TessEvaluation:
+    case RHI::ERHIShaderFrequency::TessEvaluation:
         return "ds_6_0";
     default:
         return "unknown";
     }
 }
 
-std::string ShaderCompiler::ShaderTypeToMetalEntry(RHI::ERHIShaderType shaderType)
+std::string ShaderCompiler::ShaderTypeToMetalEntry(RHI::ERHIShaderFrequency shaderType)
 {
     switch (shaderType)
     {
-    case RHI::ERHIShaderType::Vertex:
+    case RHI::ERHIShaderFrequency::Vertex:
         return "vertexShader";
-    case RHI::ERHIShaderType::Fragment:
+    case RHI::ERHIShaderFrequency::Fragment:
         return "fragmentShader";
-    case RHI::ERHIShaderType::Compute:
+    case RHI::ERHIShaderFrequency::Compute:
         return "computeShader";
     default:
         return "unknown";
@@ -552,7 +552,7 @@ std::string ShaderCompiler::ShaderTypeToMetalEntry(RHI::ERHIShaderType shaderTyp
 
 bool ShaderCompiler::TranslateHLSLToGLSL(
     const std::string& hlslSource,
-    RHI::ERHIShaderType shaderType,
+    RHI::ERHIShaderFrequency shaderType,
     std::string& outGLSLSource)
 {
     // This would require HLSL-to-GLSL translation

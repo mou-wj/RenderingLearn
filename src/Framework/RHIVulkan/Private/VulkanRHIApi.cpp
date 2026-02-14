@@ -4,12 +4,21 @@
 #include "vulkan/vulkan.h"
 #include "VulkanResource.h"
 #include "RHIUtils.h"
+#include "VulkanSwapchain.h"
+#include "VulkanPipeline.h"
+#include "VulkanPlatformSurport.h"
+#include "VulkanCommandContex.h"
+#include "VulkanCommandBuffer.h"
+#include "VulkanMemory.h"
+#include "VulkanRHIUtils.h"
+#include "VulkanShader.h"
 
+#define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
 
 namespace RHIVulkan{
     
 
-	REGISTER_RHI_API_CREATOR("RHIVulkan", VulkanRHIApiCreator)
+
 // 析构函数实现
     VulkanRHIApi::~VulkanRHIApi()
 {
@@ -89,7 +98,7 @@ void VulkanRHIApi::Shutdown()
 }
 
 RHIShaderLibrarySP VulkanRHIApi::CreateShaderLibrary(const std::string& name, ERHIShaderPlatform platform) {
-		return nullptr; // 暂时返回nullptr
+	return nullptr; // 暂时返回nullptr
 }
 
 // 资源创建接口实现
@@ -97,7 +106,7 @@ RHITextureSP VulkanRHIApi::CreateTexture(const RHITextureDesc& desc)
 {
     // 创建Vulkan纹理资源
     // 这里需要实现Vulkan特定的纹理创建逻辑
-    return nullptr; // 暂时返回nullptr，实际实现需要返回有效的纹理对象
+    return DynamicPtrCast(std::make_shared<VulkanTexture>(Device, desc),RHITexture); // 暂时返回nullptr，实际实现需要返回有效的纹理对象
 }
 
 RHIBufferSP VulkanRHIApi::CreateBuffer(const RHIBufferDesc& desc)
@@ -107,20 +116,89 @@ RHIBufferSP VulkanRHIApi::CreateBuffer(const RHIBufferDesc& desc)
     return nullptr; // 暂时返回nullptr，实际实现需要返回有效的缓冲区对象
 }
 
-void VulkanRHIApi::UpdateTexture(RHITextureSP texture, const void* data,const RHITextureRegion& size)
+
+
+
+void VulkanRHIApi::UpdateTexture(RHICommandList& cmdList, RHITexture* texture, const void* data,const RHITextureRegion& region)
+{
+	if (!texture || !data)
+		return;
+	auto format = texture->GetDesc().Format;
+
+	VkDeviceSize totalSize = region.width * region.height * region.depth * RHI::GFormatInfoMap.at(format).BytesPerPixel; // 假设格式是RGBA8
+
+
+	// 1. 获取 staging buffer
+	auto staging = Device->GetStagingManager()->Acquire(totalSize);
+	void* mapped = staging->Map(0, totalSize);
+
+
+	// 复制数据到 staging buffer
+	memcpy(mapped, data, totalSize);
+
+	auto VkFormat = TransformFormatFrom(format);
+	auto imageFlag = GetImageAspectFlags(VkFormat);
+
+	// 3. 记录 CopyBufferToImage 命令
+	VkBufferImageCopy copyRegion{};
+	copyRegion.bufferOffset = 0;
+	copyRegion.bufferRowLength = 0;
+	copyRegion.bufferImageHeight = 0;
+	copyRegion.imageSubresource.aspectMask = imageFlag;
+	copyRegion.imageSubresource.mipLevel = region.mipLevel;
+	copyRegion.imageSubresource.baseArrayLayer = region.arraySlice;
+	copyRegion.imageSubresource.layerCount = region.numArraySlices;
+	copyRegion.imageOffset = { static_cast<int32_t>(region.xOffset),
+	static_cast<int32_t>(region.yOffset),
+	static_cast<int32_t>(region.zOffset) };
+	copyRegion.imageExtent = { region.width, region.height, region.depth };
+
+	VulkanTexture* vulkanTexture = dynamic_cast<VulkanTexture*>(texture);
+
+	cmdList.AddCommand<VulkanCommandUpdateTexture>(vulkanTexture, staging, copyRegion);
+	
+
+}
+void VulkanRHIApi::UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
 {
 
 }
-void VulkanRHIApi::UpdateBuffer(RHIBufferSP buffer, const void* data, uint64_t size)
-{
 
+RHIShaderResourceViewSP VulkanRHIApi::CreateTextureShaderResourceView(
+	RHITexture* Texture, const RHITexSRVCreateInfo& Desc) 
+{
+	return nullptr; // 暂时返回nullptr
+}
+
+RHIUnorderedAccessViewSP VulkanRHIApi::CreateTextureUnorderedAccessView(
+	RHITexture* Texture, const RHITexUAVCreateInfo& Desc)
+{
+	return nullptr; // 暂时返回nullptr
+}
+
+RHIShaderResourceViewSP VulkanRHIApi::CreateBufferShaderResourceView(
+	RHIBuffer* Buffer, const RHIBufferSRVCreateInfo& Desc)
+{
+	return nullptr; // 暂时返回nullptr
+}
+
+RHIUnorderedAccessViewSP VulkanRHIApi::CreateBufferUnorderedAccessView(
+	RHIBuffer* Buffer, const RHIBufferUAVCreateInfo& Desc)
+{
+	return nullptr; // 暂时返回nullptr
+}
+
+// 创建 StagingBuffer
+RHIStagingBufferSP VulkanRHIApi::CreateStagingBuffer(uint32_t size)
+{
+	return DynamicPtrCast(Device->GetStagingManager()->Acquire(size), RHIStagingBuffer) ;
 }
 
 // 管线状态相关接口实现
 RHIGraphicsPipelineStateSP VulkanRHIApi::CreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc)
 {
     // 创建Vulkan图形管线状态
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(std::make_shared<VulkanGraphicsPipelineState>(Device, desc), RHIGraphicsPipelineState);; // 暂时返回nullptr
 }
 
 RHIComputePipelineStateSP VulkanRHIApi::CreateComputePipelineState(const RHIComputePipelineStateDesc& desc)
@@ -138,51 +216,43 @@ RHIRayTracingPipelineStateSP VulkanRHIApi::CreateRayTracingsPipelineState(const 
 RHIVertexDescStateSP VulkanRHIApi::CreateVertexDescState(const RHIVertexDescStateDesc& desc)
 {
     // 创建Vulkan顶点描述状态
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(std::make_shared<VulkanVertexDescState>(Device, desc), RHIVertexDescState);; // 暂时返回nullptr
 }
 
 RHIRasterizerStateSP VulkanRHIApi::CreateRasterizerState(const RHIRasterizerStateDesc& desc)
 {
     // 创建Vulkan光栅化状态
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(std::make_shared<VulkanRasterizerState>(Device, desc), RHIRasterizerState);; // 暂时返回nullptr
 }
 
 RHIColorBlendStateSP VulkanRHIApi::CreateColorBlendState(const RHIColorBlendStateDesc& desc)
 {
     // 创建Vulkan颜色混合状态
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(std::make_shared<VulkanColorBlendState>(Device, desc), RHIColorBlendState); // 暂时返回nullptr
 }
 
 RHIDepthStencilStateSP VulkanRHIApi::CreateDepthStencilState(const RHIDepthStencilStateDesc& desc)
 {
     // 创建Vulkan深度模板状态
-    return nullptr; // 暂时返回nullptr
-}
-
-// 着色器相关接口实现
-RHIShaderSP VulkanRHIApi::CreateShader(const std::vector<char>& shaderSourceCode, const ERHIResourceType& shaderType)
-{
-    // 创建Vulkan着色器
-    // 需要根据shaderType创建不同类型的着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(std::make_shared<VulkanDepthStencilState>(Device, desc), RHIDepthStencilState);; // 暂时返回nullptr
 }
 
 RHIVertexShaderSP VulkanRHIApi::CreateVertexShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan顶点着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIVertexShader>(shaderSourceCode), RHIVertexShader); // 暂时返回nullptr
 }
 
 RHIFragmentShaderSP VulkanRHIApi::CreateFragmentShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan片段着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIFragmentShader>(shaderSourceCode), RHIFragmentShader); // 暂时返回nullptr
 }
 
 RHIComputeShaderSP VulkanRHIApi::CreateComputeShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan计算着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIComputeShader>(shaderSourceCode), RHIComputeShader); // 暂时返回nullptr
 }
 
 RHIGeometryShaderSP VulkanRHIApi::CreateGeometryShader(const std::vector<char>& shaderSourceCode)
@@ -258,10 +328,16 @@ RHIFenceSP VulkanRHIApi::CreateFence()
     return nullptr; // 暂时返回nullptr
 }
 
-RHIVIewportSP VulkanRHIApi::CreateViewport(void* inWindowHandle, uint32_t w, uint32_t h)
+RHIViewportSP VulkanRHIApi::CreateViewport(void* inWindowHandle, uint32_t w, uint32_t h, ERHIFormat format)
 {
     // 创建Vulkan视口
-    return std::make_shared<VulkanViewport>(Device,w,h,inWindowHandle); // 暂时返回nullptr
+    return std::make_shared<VulkanViewport>(Device,w,h,inWindowHandle,format); // 暂时返回nullptr
+}
+
+RHITextureSP VulkanRHIApi::GetViewportBackBuffer(RHIViewport* viewport)
+{
+	auto vulkanViewport = static_cast<VulkanViewport*>(viewport);
+	return std::dynamic_pointer_cast<RHITexture>(vulkanViewport->GetBackTexture());
 }
 
 RHISamplerSP VulkanRHIApi::CreateSampler(const RHISamplerDesc& desc)
@@ -271,15 +347,16 @@ RHISamplerSP VulkanRHIApi::CreateSampler(const RHISamplerDesc& desc)
 }
 
 // 创建上下文接口实现
-RHICommandContexSP VulkanRHIApi::GetGlobalCommandContex()
+RHICommandContex* VulkanRHIApi::GetDefualtCommandContex()
 {
     // 创建Vulkan图形上下文
-    return nullptr; // 暂时返回nullptr
+    return Device->GetGlobalCommandContext(); // 暂时返回nullptr
 }
 
-RHICommandContexSP VulkanRHIApi::CreateCommandContex()
+
+RHITransientResourceManagerSP VulkanRHIApi::CreateTransientResourceManager()
 {
-	return RHICommandContexSP();
+	return RHITransientResourceManagerSP();
 }
 
 
@@ -315,9 +392,7 @@ VkPhysicalDevice VulkanRHIApi::PickPhysicalDevice() {
 
 
 std::vector<const char*> VulkanRHIApi::GetWantedInstanceLayers() {
-	std::vector<const char*> wantLayers = {
-		"VK_LAYER_KHRONOS_validation" // Vulkan验证层
-	};
+	std::vector<const char*> wantLayers = VulkanPlatformSupport::GetPlatformWantedLayers();
     std::vector<const char*> res;
     //检查是否支持
 	uint32_t layerCount = 0;
@@ -337,10 +412,7 @@ std::vector<const char*> VulkanRHIApi::GetWantedInstanceLayers() {
 }
 
 std::vector<const char*> VulkanRHIApi::GetWantedInstanceExtensions() {
-	std::vector<const char*> wantExtensions = {
-		VK_KHR_SURFACE_EXTENSION_NAME, // 基础表面扩展
-		VK_EXT_DEBUG_UTILS_EXTENSION_NAME // 调试工具扩展
-	};
+	std::vector<const char*> wantExtensions = VulkanPlatformSupport::GetPlatformWantedExtentions();
     std::vector<const char*> res;
 	// 检查是否支持
 	uint32_t extensionCount = 0;
@@ -382,10 +454,8 @@ std::vector<const char*> VulkanRHIApi::GetWantedDeviceLayers() {
 }
 
 std::vector<const char*> VulkanRHIApi::GetWantedDeviceExtensions() {
-	std::vector<const char*> wantExtensions = {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME // 交换链扩展
-
-	};
+	std::vector<const char*> wantExtensions = VulkanPlatformSupport::GetPlatformWantedDeviceExtentions();
+	wantExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME); // 交换链扩展
     std::vector<const char*> res;
 	// 检查是否支持
 	uint32_t extensionCount = 0;
@@ -403,6 +473,42 @@ std::vector<const char*> VulkanRHIApi::GetWantedDeviceExtensions() {
 	}
 	return res;
 }
+
+
+
+
+
+
+
+VulkanRHIModule::VulkanRHIModule() {
+
+}
+VulkanRHIModule::~VulkanRHIModule() {
+}
+void VulkanRHIModule::StartupModule()
+{
+	RHI::GRHIApi = CreateRHIApi();
+	RHI::GRHIApi->Init();
+	bLoaded = true;
+}
+
+void VulkanRHIModule::ShutdownModule()
+{
+	bLoaded = false;
+}
+
+bool VulkanRHIModule::IsLoaded() const
+{
+	return bLoaded;
+}
+
+RHIApi* VulkanRHIModule::CreateRHIApi()
+{
+	// Module 只负责创建，不负责生命周期
+	return new VulkanRHIApi();
+}
+
+IMPLEMENT_SIMPLE_MODULE(VulkanRHIModule, "RHIVulkan");
 
 
 }

@@ -2,33 +2,53 @@
 
 #include "RHIResource.h"
 #include "RHIShaderParameter.h"
-#include "RHIRenderTargetInfo.h"
 #include "RHICommandList.h"
 
 namespace RHI
 {
 
-    // 统一的 RHIContext，整合 Compute / Graphics / RayTracing 接口
+    // 统一锟斤拷 RHIContext锟斤拷锟斤拷锟斤拷 Compute / Graphics / RayTracing 锟接匡拷
     class RHI_API RHICommandContex
     {
     public:
         RHICommandContex();
         virtual ~RHICommandContex() = default;
         // ========================
-        // Compute 接口
+        // Compute 锟接匡拷
         // ========================
         virtual void SetComputePipelineState(const RHIComputePipelineStateSP& pipelineState) = 0;
+        /** Set the shader resource view of a surface. */
+        virtual void RHISetShaderTexture(RHIShader* Shader, uint32_t TextureIndex, RHITexture* Texture) = 0;
+
+        virtual void RHISetShaderSampler(RHIShader* Shader, uint32_t SamplerIndex, RHISampler* NewState) = 0;
+
+        virtual void RHISetUAVParameter(RHIFragmentShader* PixelShader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV) = 0;
+
+
+        virtual void RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SamplerIndex, RHIShaderResourceView* SRV) = 0;
+
+        virtual void RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIUniformBuffer* Buffer) = 0;
+        virtual void RHISetShaderParameters(RHIShader* Shader, const std::vector<uint8_t>& InParametersData, const std::vector<RHIShaderUniformParameter>& InParameters, const std::vector<RHIShaderResourceParameter>& InResourceParameters) = 0;
+
+        virtual void RHISetShaderParameter(RHIShader* Shader, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) = 0;
+
         virtual void SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter) = 0;
+
+        std::vector<uint8_t> Data;
+        std::vector<RHIShaderUniformParameter> UniformParameters;
+        std::vector<RHIShaderResourceParameter> ResourceParameters;
+
+
+
         virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
+        virtual void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) = 0;
 
         // ========================
-        // Graphics 接口
+        // Graphics 锟接匡拷
         // ========================
-        virtual void SetRenderTarget(const RHIRenderTargetsInfo& renderTargets) = 0;
         virtual void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) = 0;
 
-        virtual void SetGraphicPipelineState(const RHIGraphicsPipelineStateSP& pipelineState) = 0;
-        virtual void ViewportPresent(const RHIVIewportSP& viewport, const RHITextureSP& presentRenderTarget) = 0;
+        virtual void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState) = 0;
         virtual void SetViewPortRect(const RHIIntRect& viewport) = 0;
         virtual void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
             uint32_t firstVertex = 0, uint32_t firstInstance = 0) = 0;
@@ -37,7 +57,7 @@ namespace RHI
             int32_t vertexOffset = 0, uint32_t firstInstance = 0) = 0;
 
         // ========================
-        // RayTracing 接口
+        // RayTracing 锟接匡拷
         // ========================
         virtual void SetRayTracingPipelineState(const RHIRayTracingPipelineStateSP& pipelineState) = 0;
         virtual void SetShaderTable() = 0;
@@ -46,10 +66,17 @@ namespace RHI
         // ========================
         // Command List
         // ========================
-        RHICommandListSP GetCommandList() const { return CommandList; }
+        RHICommandList& GetCommandList() { return CommandList; }
+
+        virtual void BeginDrawingViewport(RHIViewport* Viewport, RHITexture* RenderTargetRHI) = 0;
+        virtual void EndDrawingViewport(RHIViewport* Viewport, bool bPresent) = 0;
+        virtual void BeginFrame() = 0;
+        virtual void EndFrame() = 0;
+        virtual void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) = 0;
+        virtual void EndRenderPass() = 0;
 
     protected:
-        RHICommandListSP CommandList; // 指向当前命令列表
+        RHICommandList CommandList; // 指锟斤拷前锟斤拷锟斤拷锟叫憋拷
         ERHIPipelineType PipelineType;
     };
 

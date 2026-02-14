@@ -77,20 +77,26 @@ namespace Engine {
     };
 
 
+    class ENGINE_API MaterialRenderProxy
+    {
+    public:
+        Shader* Shader;
+        MaterialRuntimeParameters Parameters;  // uniform / texture
+    };
 
     // MaterialShaderMap
     class ENGINE_API MaterialShaderMap
     {
     public:
         std::unordered_map<MaterialShaderKey, Shader*> ShaderPermutations;
+        Shader* FindShader(const MaterialShaderKey& key) const;
     };
     class ENGINE_API MaterialInterface
     {
     public:
-        virtual Shader* GetShader(const MaterialShaderKey&) = 0;
-        virtual const MaterialShaderMap* GetShaderMap() const = 0;
-        virtual void GetStaticParameters(MaterialStaticParameters&) const = 0;
-        virtual void GetRuntimeParameters(MaterialRuntimeParameters&) const = 0;
+        virtual std::unique_ptr<MaterialRenderProxy> CreateRenderProxy() const = 0;
+        virtual void GatherStaticParameters(MaterialStaticParameters& Out) const = 0;
+        virtual void GatherRuntimeParameters(MaterialRuntimeParameters& Out) const = 0;
     };
 	using MaterialInterfaceSP = std::shared_ptr<MaterialInterface>;
     class ENGINE_API MaterialInstance : public MaterialInterface
@@ -100,10 +106,8 @@ namespace Engine {
         // 覆盖参数
         MaterialRuntimeParameters OverrideRuntimeParams;
         MaterialStaticParameters  OverrideStaticParams;
-
-        Shader* GetShader(const MaterialShaderKey&) override {
-            return nullptr;
-        }
+        void GatherStaticParameters(MaterialStaticParameters& Out) const override;
+        void GatherRuntimeParameters(MaterialRuntimeParameters& Out) const override;
     };
 
     class ENGINE_API Material : public MaterialInterface
@@ -120,25 +124,10 @@ namespace Engine {
         // Shader 规则
         MaterialShaderMap* ShaderMap;
 
-        Shader* GetShader(const MaterialShaderKey&) override {
-            return nullptr;
-        }
-    };
-
-    // MaterialShaderPermutation,后续移走
-    class ENGINE_API MaterialShaderPermutation
-    {
-    public:
-        MaterialShaderKey Key;
-        Shader* CompiledShader; // GPU Shader
-    };
-
-
-    class ENGINE_API MaterialRenderProxy
-    {
-    public:
-        Shader* Shader;
-        MaterialRuntimeParameters Parameters;  // uniform / texture
+        Shader* GetShader(const MaterialShaderKey&) const;
+        std::unique_ptr<MaterialRenderProxy> CreateRenderProxy() const;
+        void GatherStaticParameters(MaterialStaticParameters& Out) const override;
+        void GatherRuntimeParameters(MaterialRuntimeParameters& Out) const override;
     };
 
 
