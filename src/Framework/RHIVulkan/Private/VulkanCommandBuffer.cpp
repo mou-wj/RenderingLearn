@@ -30,8 +30,7 @@ void VulkanCommandBuffer::AllocateMemory()
     allocInfo.level = level;
     allocInfo.commandBufferCount = 1;
 
-    VkCommandBuffer cmdBuffer;
-    if (!AllocateCommandBuffers(device->GetHandle(), &allocInfo, &cmdBuffer)) {
+    if (!AllocateCommandBuffers(device->GetHandle(), &allocInfo, &commandBuffer)) {
         throw std::runtime_error("Failed to allocate command buffer");
     }
 }
@@ -50,6 +49,7 @@ void VulkanCommandBuffer::Begin(VkCommandBufferUsageFlags usage)
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("Failed to begin command buffer");
     }
+
 }
 
 void VulkanCommandBuffer::End()
@@ -75,6 +75,15 @@ void VulkanCommandBuffer::AddWaitSemaphores(VkPipelineStageFlags stage, const st
         WaitFlags.push_back(stage);
         WaitSemaphores.push_back(semaphore);
     }
+}
+
+void VulkanCommandBuffer::AddSignalSemaphores(const std::vector<VulkanSemaphore*>& semaphores)
+{
+    if (semaphores.empty())
+    {
+        return;
+    }
+    SignalSemaphores.insert(SignalSemaphores.end(), semaphores.begin(), semaphores.end());
 }
 
 // VulkanCommandBufferPool
@@ -112,6 +121,7 @@ VulkanCommandBuffer* VulkanCommandBufferPool::AllocateCommandBuffer(VkCommandBuf
     }
 
     auto cmdBuf = std::make_unique<VulkanCommandBuffer>(device, this,level);
+    cmdBuf->AllocateMemory();
     VulkanCommandBuffer* ptr = cmdBuf.get();
 
     allBuffers.push_back(std::move(cmdBuf));
@@ -180,7 +190,7 @@ VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkComman
             fence->Reset();
             buffer->Reset();
             buffer->Begin();
-            
+            commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(buffer.get());
             ActiveCommandBuffer = buffer.get();
             return buffer.get();
         }
@@ -189,8 +199,19 @@ VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkComman
     VulkanCommandBuffer* newBuffer = Allocate(level);
     ManagedBuffers.emplace_back(newBuffer);
     newBuffer->Begin();
+    commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(newBuffer);
     ActiveCommandBuffer = newBuffer;
     return newBuffer;
+}
+
+void VulkanCommandBufferManager::SubmitActiveCommandBuffer(uint32_t NumSignalSemaphores, VulkanSemaphore* SignalSemaphores)
+{
+	if (!ActiveCommandBuffer) return;
+	ActiveCommandBuffer->End();
+
+	commandContext->GetQueue()->Submit(ActiveCommandBuffer, NumSignalSemaphores, SignalSemaphores);
+	// ⚠️ 不立刻 Reset，等 Fence 完成后由外部回收
+	ActiveCommandBuffer = nullptr;
 }
 
 void VulkanCommandBufferManager::Reset()
@@ -223,6 +244,24 @@ void VulkanCommandBufferManager::EndAndSubmitUploadCommandBuffer(VulkanCommandBu
 
     // ⚠️ 不立刻 Reset，等 Fence 完成后由外部回收
     ActiveUploadCommandBuffer = nullptr;
+}
+
+void VulkanCommandBufferManager::GarbageCollect()
+{
+	for (auto it = ManagedBuffers.begin(); it != ManagedBuffers.end();)
+	{
+		VulkanFence* fence = (*it)->GetFence();
+		if (fence && fence->IsSignaled())
+		{
+			// 回收资源
+			(*it)->Reset();
+			it = ManagedBuffers.erase(it);
+		}
+		else
+		{
+			++it;
+		}
+	}
 }
 
 } // namespace WR::RHIVulkan

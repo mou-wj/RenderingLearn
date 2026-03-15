@@ -2,13 +2,13 @@
 
 #include "VulkanDevice.h"
 #include "VulkanBarriers.h"
+#include "VulkanCommandBuffer.h"
 #include <vector>
 
 namespace RHIVulkan{
 
 // 前向声明以避免循环依赖
 class VulkanDevice;
-class VulkanCommandBuffer;
 class VulkanSemaphore;
 
 class VulkanQueue
@@ -23,7 +23,13 @@ public:
     VkQueue GetHandle() const { return queue_; }
     uint32_t GetFamilyIndex() const { return familyIndex_; }
     VulkanDevice* GetDevice() const { return device_; }
-	VulkanImageLayoutManager& GetImageLayoutManager() { return imageLayoutManager_; }
+	VulkanImageLayoutManager* GetImageLayoutManager() { return &imageLayoutManager_; }
+    void UpdatedCommandBufferImageLayoutManager(VulkanCommandBuffer* commandBuffer) { 
+        if (commandBuffer) {
+            auto layoutManager = commandBuffer->GetImageLayoutManager();
+            imageLayoutManager_.TransferTo(*layoutManager);
+        }
+    }
 private:
     VulkanDevice* device_ = nullptr;
     VkQueue queue_ = VK_NULL_HANDLE;

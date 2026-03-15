@@ -76,7 +76,7 @@ namespace RenderCore{
             ShaderCompilerEnvironment env;
             if (st->ModifyCompilationEnvironment)
             {
-                st->ModifyCompilationEnvironment(env);
+                //st->ModifyCompilationEnvironment(env);
             }
 
             // Create a simple hashed key for the RHI layer

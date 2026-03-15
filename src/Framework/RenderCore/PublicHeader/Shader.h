@@ -26,7 +26,7 @@ namespace RenderCore {
     };
 
     // 单个参数在 CPU/GPU 中的分配信息
-    struct FParameterAllocation
+    struct ShaderParameterAllocation
     {
         uint16_t BufferIndex = 0;   // 所属 UniformBuffer 索引
         uint16_t BaseIndex = 0;     // GPU binding slot
@@ -34,9 +34,9 @@ namespace RenderCore {
         EShaderParameterType Type = EShaderParameterType::Num;
         mutable bool bBound = false;
 
-        FParameterAllocation() = default;
+        ShaderParameterAllocation() = default;
 
-        FParameterAllocation(uint16_t InBufferIndex, uint16_t InBaseIndex, uint16_t InSize, EShaderParameterType InType)
+        ShaderParameterAllocation(uint16_t InBufferIndex, uint16_t InBaseIndex, uint16_t InSize, EShaderParameterType InType)
             : BufferIndex(InBufferIndex)
             , BaseIndex(InBaseIndex)
             , Size(InSize)
@@ -46,13 +46,13 @@ namespace RenderCore {
     };
 
     // ShaderParameterMap：管理 Shader 参数名 → 分配信息
-    class ShaderParameterMap
+    class ShaderParameterAllocationMap
     {
     public:
-        ShaderParameterMap() = default;
+        ShaderParameterAllocationMap() = default;
 
         // 查找参数
-        std::optional<FParameterAllocation> FindParameterAllocation(const std::string& Name) const
+        std::optional<ShaderParameterAllocation> FindParameterAllocation(const std::string& Name) const
         {
             auto it = ParameterMap.find(Name);
             if (it != ParameterMap.end())
@@ -63,7 +63,7 @@ namespace RenderCore {
         // 添加参数
         void AddParameterAllocation(const std::string& Name, uint16_t BufferIndex, uint16_t BaseIndex, uint16_t Size, EShaderParameterType Type)
         {
-            ParameterMap[Name] = FParameterAllocation(BufferIndex, BaseIndex, Size, Type);
+            ParameterMap[Name] = ShaderParameterAllocation(BufferIndex, BaseIndex, Size, Type);
         }
 
         // 移除参数
@@ -100,7 +100,7 @@ namespace RenderCore {
         }
 
     private:
-        std::unordered_map<std::string, FParameterAllocation> ParameterMap;
+        std::unordered_map<std::string, ShaderParameterAllocation> ParameterMap;
     };
 
 
@@ -164,7 +164,7 @@ namespace RenderCore {
     {
         const ShaderType* Type;
         const std::vector<uint8_t>& Code;
-        const ShaderParameterMap& ParameterMap;
+        const ShaderParameterAllocationMap& ParameterMap;
         uint32_t PermutationId;
         size_t OutputHash;
     };

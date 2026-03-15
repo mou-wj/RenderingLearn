@@ -1,7 +1,9 @@
 #pragma once
 #include "RHIDefine.h"
+#include "Math.hpp"
 #include <vector>
 #include <memory>
+#include <assert.h>
 
 namespace RHI
 {
@@ -43,14 +45,22 @@ class RHI_API RHITexture : public RHIViewableResource
 {
 public:
 
-    RHITexture(const RHITextureDesc& desc) : RHIViewableResource(ERHIResourceType::Texture), Desc(desc) {}
+    RHITexture(const RHITextureDesc& desc) : RHIViewableResource(ERHIResourceType::Texture), Desc(desc) {
+        MipSizes.resize(Desc.MipLevels);
+        for (uint32_t i = 0; i < Desc.MipLevels; ++i) {
+            MipSizes[i] = Core::Int3(Desc.Width >> i, Desc.Height >> i, Desc.Depth >> i);
+        }
+    }
     virtual ~RHITexture() = default;
 
     // 获取纹理描述
     const RHITextureDesc& GetDesc() const { return Desc; }
 
+    const Core::Int3& GetMipSize(uint32_t MipLevel) const { return MipSizes[MipLevel]; }
+
 protected:
     RHITextureDesc Desc;
+    std::vector<Core::Int3> MipSizes;
 };
 
 // 缓冲区资源
@@ -441,21 +451,89 @@ using RHIDepthStencilStateSP = std::shared_ptr<RHIDepthStencilState>;
 
 
 // Shader Stage
-struct RHI_API RHIShaderStageDesc
+struct RHI_API RHIGraphicShaderStageDesc
 {
-    RHIShaderSP shader = nullptr; // 指向对应阶段的shader对象
+    RHIVertexShader* vertexShader = nullptr; // 指向对应阶段的shader对象
+    RHIFragmentShader* fragmentShader = nullptr; // 指向对应阶段的shader对象
     // 可扩展entry point等
+    
 };
+
+
+// RenderTarget 描述
+struct RHIColorAttachmentDesc
+{
+    ERHIFormat format = ERHIFormat::Unknown;                    // 像素格式（PF_XXX 或自定义枚举）
+    ERenderTargetActions actions = ERenderTargetActions::Load_Store;
+    bool enableResolve = false;
+    uint32_t sampleCount = 1;               // MSAA
+    static inline uint64_t CalculateHash(const RHIColorAttachmentDesc& att)
+    {
+        uint64_t hash = 14695981039346656037ull; // FNV64 offset
+        hash ^= static_cast<uint64_t>(att.format); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(att.actions); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(att.enableResolve); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(att.sampleCount); hash *= 1099511628211ull;
+        return hash;
+    }
+};
+
+
+
+struct RHIGraphicAttachmentDesc {
+    // RenderTarget 信息
+    uint32_t colorAttachmentCount = 0;
+    RHIColorAttachmentDesc colorAttachments[MAX_RENDER_TARGETS]{};
+
+    // Depth/Stencil Target 信息
+    bool enableDepth = false;                 // Depth 是否启用
+    bool enableStencil = false;               // Stencil 是否启用
+    ERHIFormat depthStencilFormat = ERHIFormat::Unknown;      // PF_XXX
+    ERenderTargetActions depthLoadAction = ERenderTargetActions::Load_Store;
+    ERenderTargetActions stencilLoadAction = ERenderTargetActions::Load_Store;
+
+    uint32_t numSamples = 1;              // MSAA 样本数
+
+    // 子通道（Vulkan Subpass hint）
+    uint32_t subpassIndex = 0;
+    static uint64_t CalculateHash(const RHIGraphicAttachmentDesc& desc)
+    {
+        uint64_t hash = 14695981039346656037ull; // FNV64 offset
+
+        // Color attachments
+        hash ^= static_cast<uint64_t>(desc.colorAttachmentCount); hash *= 1099511628211ull;
+        for (uint32_t i = 0; i < desc.colorAttachmentCount; ++i)
+        {
+            hash ^= RHIColorAttachmentDesc::CalculateHash(desc.colorAttachments[i]); hash *= 1099511628211ull;
+        }
+
+        // Depth/Stencil
+        hash ^= static_cast<uint64_t>(desc.enableDepth); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.enableStencil); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.depthStencilFormat); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.depthLoadAction); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.stencilLoadAction); hash *= 1099511628211ull;
+
+        // Global
+        hash ^= static_cast<uint64_t>(desc.numSamples); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.subpassIndex); hash *= 1099511628211ull;
+
+        return hash;
+    }
+};
+
 
 // Graphics Pipeline
 struct RHI_API RHIGraphicsPipelineStateDesc
 {
-    std::vector<RHIShaderStageDesc> shaderStages;
+    RHIGraphicShaderStageDesc shaderStages;
     // 可扩展其它管线相关状态引用，如顶点描述、光栅化、混合、深度模板等
     RHIVertexDescState* vertexDescState = nullptr; // 顶点描述状态
+    EPrimitiveTopology primitiveTopology = EPrimitiveTopology::TriangleList;
     RHIRasterizerState* rasterizerState = nullptr; // 光栅化状态
     RHIColorBlendState* colorBlendState = nullptr; // 颜色混合状态
     RHIDepthStencilState* depthStencilState = nullptr; // 深度测试和模板状态
+    RHIGraphicAttachmentDesc attachmentDesc;
 
 };
 
@@ -466,6 +544,7 @@ public:
     RHIGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) : RHIResource(ERHIResourceType::GraphicPipelineState), desc(desc) {}
 
     virtual ~RHIGraphicsPipelineState() = default;
+    const RHIGraphicsPipelineStateDesc& GetDesc() const { return desc; }
 
 protected:
     RHIGraphicsPipelineStateDesc desc;
@@ -474,7 +553,7 @@ protected:
 // Compute Pipeline
 struct RHI_API RHIComputePipelineStateDesc
 {
-    RHIShaderStageDesc shaderDesc;// 指向Compute Shader
+    RHIComputeShader* computeShader;// 指向Compute Shader
     // 可扩展Compute管线特有参数
 };
 
@@ -515,7 +594,7 @@ using RHIRayTracingPipelineStateSP = std::shared_ptr<RHIRayTracingPipelineState>
 
 constexpr int32_t MaxColorAttachments = 8;
 
-struct RHIRenderPassInfo
+struct RHIBoundRenderTargets
 {
     struct ColorAttachment
     {
@@ -523,9 +602,8 @@ struct RHIRenderPassInfo
         RHITexture* ResolveTarget = nullptr;
 
         uint8_t  MipIndex = 0;
-        int32_t  ArraySlice = -1;
-
-        ERenderTargetActions  Actions = ERenderTargetActions::DontCare_DontCare;
+        int32_t  ArraySlice = 0;
+        RHIClearValueBinding ClearBinding;
     };
 
     struct DepthStencilAttachment
@@ -533,14 +611,10 @@ struct RHIRenderPassInfo
         RHITexture* Texture = nullptr;
         RHITexture* ResolveTarget = nullptr;
 
-        ERenderTargetActions  DepthActions = ERenderTargetActions::DontCare_DontCare;
-        ERenderTargetActions  StencilActions = ERenderTargetActions::DontCare_DontCare;
-
         uint32_t MipIndex = 0;
         uint32_t ArraySlice = 0;
+        RHIClearValueBinding ClearBinding;
 
-        bool bReadOnlyDepth = false;
-        bool bReadOnlyStencil = false;
     };
 
     // === 核心数据 ===
@@ -548,11 +622,176 @@ struct RHIRenderPassInfo
     DepthStencilAttachment DepthStencil;
 
     uint8_t NumColorAttachments = 0;
-    uint8_t NumSamples = 1;
+    Core::Int2 Dimensions{};
+    RHIGraphicAttachmentDesc AttachmentDesc;
+    RHIBoundRenderTargets() = default;
+    void Bound(const RHIGraphicAttachmentDesc& inDesc,RHITexture* colorTexture, RHITexture* depthTexture) {
+        // 保存描述
+        AttachmentDesc = inDesc;
 
-    RHIIntRect RenderArea;
+        // reset
+        NumColorAttachments = 0;
+        for (uint32_t i = 0; i < MaxColorAttachments; ++i)
+        {
+            ColorAttachments[i] = {};
+        }
+        DepthStencil = {};
+
+        // =========================
+        // Color Attachments
+        // =========================
+        if (inDesc.colorAttachmentCount > 0)
+        {
+            assert(colorTexture != nullptr && "Color attachment enabled but colorTexture is null");
+
+            NumColorAttachments = inDesc.colorAttachmentCount;
+
+            for (uint32_t i = 0; i < NumColorAttachments; ++i)
+            {
+                const auto& desc = inDesc.colorAttachments[i];
+
+                // -------- format 校验 --------
+                assert(colorTexture->GetDesc().Format == desc.format &&
+                    "Color texture format mismatch with attachment desc");
+
+                // -------- MSAA 校验 --------
+                assert(colorTexture->GetDesc().SampleCount == desc.sampleCount &&
+                    "Color texture sample count mismatch");
+
+                ColorAttachment& att = ColorAttachments[i];
+
+                att.Texture = colorTexture;
+                att.ResolveTarget = nullptr;
+                att.MipIndex = 0;
+                att.ArraySlice = 0;
+
+                // Clear binding
+                att.ClearBinding.Binding =
+                    RHIClearValueBinding::ClearValueBinding::Color;
+
+            }
+        }
+        else
+        {
+            assert(colorTexture == nullptr &&
+                "colorTexture provided but desc.colorAttachmentCount == 0");
+        }
+
+        // =========================
+        // Depth / Stencil
+        // =========================
+        if (inDesc.enableDepth)
+        {
+            assert(depthTexture != nullptr && "Depth enabled but depthTexture is null");
+
+            // format 校验
+            assert(depthTexture->GetDesc().Format == inDesc.depthStencilFormat &&
+                "Depth format mismatch");
+
+            // MSAA 校验
+            assert(depthTexture->GetDesc().SampleCount == inDesc.numSamples &&
+                "Depth sample count mismatch");
+
+            DepthStencil.Texture = depthTexture;
+            DepthStencil.ResolveTarget = nullptr;
+            DepthStencil.MipIndex = 0;
+            DepthStencil.ArraySlice = 0;
+
+            DepthStencil.ClearBinding.Binding =
+                RHIClearValueBinding::ClearValueBinding::DepthStencil;
+
+            DepthStencil.ClearBinding.Depth = 1.0f;
+            DepthStencil.ClearBinding.Stencil = 0;
+        }
+        else
+        {
+            assert(depthTexture == nullptr &&
+                "Depth texture provided but desc.enableDepth == false");
+        }
+        CalculateDimensions();
+
+    }
+
+    static size_t CalculateHash(const RHIBoundRenderTargets& renderTargets) {
+        // FNV-1a 64bit
+        uint64_t hash = 14695981039346656037ull;
+        auto fnHashBytes = [&](const void* data, size_t size)
+            {
+                const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
+                for (size_t i = 0; i < size; ++i)
+                {
+                    hash ^= static_cast<uint64_t>(ptr[i]);
+                    hash *= 1099511628211ull;
+                }
+            };
+
+        // 1. Color attachments
+        fnHashBytes(&renderTargets.NumColorAttachments, sizeof(renderTargets.NumColorAttachments));
+        for (uint8_t i = 0; i < renderTargets.NumColorAttachments; ++i)
+        {
+            const auto& att = renderTargets.ColorAttachments[i];
+
+            uintptr_t texPtr = reinterpret_cast<uintptr_t>(att.Texture);
+            uintptr_t resolvePtr = reinterpret_cast<uintptr_t>(att.ResolveTarget);
+            fnHashBytes(&texPtr, sizeof(texPtr));
+            fnHashBytes(&resolvePtr, sizeof(resolvePtr));
+
+            fnHashBytes(&att.MipIndex, sizeof(att.MipIndex));
+            fnHashBytes(&att.ArraySlice, sizeof(att.ArraySlice));
+        }
+
+        // 2. Depth/Stencil
+        const auto& ds = renderTargets.DepthStencil;
+        uintptr_t dsTexPtr = reinterpret_cast<uintptr_t>(ds.Texture);
+        uintptr_t dsResolvePtr = reinterpret_cast<uintptr_t>(ds.ResolveTarget);
+        fnHashBytes(&dsTexPtr, sizeof(dsTexPtr));
+        fnHashBytes(&dsResolvePtr, sizeof(dsResolvePtr));
+        fnHashBytes(&ds.MipIndex, sizeof(ds.MipIndex));
+        fnHashBytes(&ds.ArraySlice, sizeof(ds.ArraySlice));
+
+        // 4. AttachmentDesc
+        size_t descHash = RHIGraphicAttachmentDesc::CalculateHash(renderTargets.AttachmentDesc);
+        fnHashBytes(&descHash, sizeof(descHash));
+
+        return static_cast<size_t>(hash);
+    }
+
+    
 
     bool HasDepth() const { return DepthStencil.Texture != nullptr; }
+protected:
+
+    void CalculateDimensions() const { 
+
+        // 1. 优先用 color attachment
+        for (uint8_t i = 0; i < NumColorAttachments; ++i)
+        {
+            const auto& att = ColorAttachments[i];
+            if (att.Texture)
+            {
+                Core::Int3 size = att.Texture->GetMipSize(att.MipIndex);
+                Dimensions.x = size.x;
+                Dimensions.y = size.y;
+            }
+        }
+
+        // 2. fallback depth
+        if (DepthStencil.Texture)
+        {
+            auto size = DepthStencil.Texture->GetMipSize(DepthStencil.MipIndex);
+            Dimensions.x = size.x;
+            Dimensions.y = size.y;
+        }
+    
+    }
+
+};
+
+struct RHIRenderPassInfo {
+    RHIBoundRenderTargets RenderTargets;
+    RHIRect RenderArea;
+
+
 };
 
 

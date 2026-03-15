@@ -112,10 +112,14 @@ void RHICommandList::UpdateTexture(RHITexture* texture, const void* data, const 
     }
 }
 
-void RHICommandList::SetViewPortRect(const RHIIntRect& viewport)
+void RHICommandList::SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth)
 {
     if (CommandContex)
-        CommandContex->SetViewPortRect(viewport);
+        CommandContex->SetViewport(x,y, w,h, minDepth, maxDepth);
+}
+void RHICommandList::SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) {
+	if (CommandContex)
+		CommandContex->SetScissor(x, y, w, h);
 }
 
 void RHICommandList::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
@@ -146,6 +150,13 @@ void RHICommandList::EndFrame()
 {
     CommandContex->EndFrame();
 }
+void RHICommandList::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) {
+    CommandContex->BeginRenderPass(renderPassInfo);
+}
+void RHICommandList::EndRenderPass() {
+    CommandContex->EndRenderPass();
+}
+
 
 void RHICommandList::Merge(std::shared_ptr<RHICommandList> other) {
     commands.insert(commands.end(), other->commands.begin(), other->commands.end());

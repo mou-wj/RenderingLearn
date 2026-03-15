@@ -1,8 +1,12 @@
 {
   "name": "glslang",
-  "need_pull": true,
-  "git": "https://github.com/KhronosGroup/glslang.git",
-  "branch": "main",
+
+  "type": "managed",
+
+  "source": {
+    "git": "https://github.com/KhronosGroup/glslang.git",
+    "branch": "main"
+  },
 
   "compiler": {
     "windows": {
@@ -21,28 +25,29 @@
       "cmake_toolset": ""
     }
   },
-  "need_compile": true,
-  "type":"shared",
-  "dependencies": ["SPIRV-Tools", "SPIRV-Headers"],
 
-  "cmake": {
-    "generator": "default",
+  "build": {
+    "system": "cmake",
     "configure_args": [
       "-DENABLE_OPT=OFF",
       "-DBUILD_EXTERNAL=OFF",
       "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/${CONFIG}"
     ],
     "build_targets": ["install"],
-    "build_configs": ["Debug","Release"]
+    "configs": ["Debug", "Release"],
+    "type" : "static"
   },
 
   "install_layout": {
+    "root": "${INSTALL_DIR}/${CONFIG}",
     "include": "${INSTALL_DIR}/${CONFIG}/include",
-    "include_extra": "${INSTALL_DIR}/${CONFIG}/include/glslang/Public",
     "lib": "${INSTALL_DIR}/${CONFIG}/lib",
     "bin": "${INSTALL_DIR}/${CONFIG}/bin"
   },
 
+  "dependencies": ["SPIRV-Tools", "SPIRV-Headers"],
 
-  "notes": "CMake builds and installs libraries and headers. CMake args may be adjusted for platform."
+  "auto_generate_find_cmake": "if_missing",
+
+  "notes": "CMake builds and installs libraries and headers. Prefer Config.cmake if available, otherwise auto-generate FindGLSLANG.cmake."
 }

@@ -44,7 +44,7 @@ namespace RHIVulkan {
 	{
 	public:
 		explicit VulkanImageLayoutManager(VulkanImageLayoutManager* fallback = nullptr);
-
+		void Clear() { Layouts.clear(); }
 
 		const VulkanImageLayout* Get(VkImage image) const;
 		VulkanImageLayout* GetOrCreate(VkImage image,

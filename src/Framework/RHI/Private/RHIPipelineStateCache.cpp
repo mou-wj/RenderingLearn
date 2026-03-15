@@ -18,7 +18,7 @@ std::mutex RHIPipelineStateCache::s_rasterizerMutex;
 std::mutex RHIPipelineStateCache::s_colorBlendMutex;
 std::mutex RHIPipelineStateCache::s_depthStencilMutex;
 
-RHIGraphicsPipelineStateSP RHIPipelineStateCache::GetGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) {
+RHIGraphicsPipelineStateSP RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) {
 	std::lock_guard<std::mutex> lock(RHIPipelineStateCache::s_graphicsMutex);
 	size_t hash = RHIPipelineStateCache::HashGraphicsPipelineDesc(desc);
 
@@ -26,13 +26,13 @@ RHIGraphicsPipelineStateSP RHIPipelineStateCache::GetGraphicsPipelineState(const
 	if (it != RHIPipelineStateCache::s_graphicsCache.end()) {
 		return it->second;
 	}
-	auto state = GetGlobalRHIApi()->CreateGraphicsPipelineState(desc);
+	auto state = GRHIApi->CreateGraphicsPipelineState(desc);
 	RHIPipelineStateCache::s_graphicsCache[hash] = state;
 	return state;
 }
 
 
-RHIComputePipelineStateSP RHIPipelineStateCache::GetComputePipelineState(const RHIComputePipelineStateDesc& desc) {
+RHIComputePipelineStateSP RHIPipelineStateCache::GetOrCreateComputePipelineState(const RHIComputePipelineStateDesc& desc) {
 	std::lock_guard<std::mutex> lock(s_computeMutex);
 	size_t hash = HashComputePipelineDesc(desc);
 
@@ -40,13 +40,13 @@ RHIComputePipelineStateSP RHIPipelineStateCache::GetComputePipelineState(const R
 	if (it != s_computeCache.end()) {
 		return it->second;
 	}
-	auto state = GetGlobalRHIApi()->CreateComputePipelineState(desc);
+	auto state = GRHIApi->CreateComputePipelineState(desc);
 	s_computeCache[hash] = state;
 	return state;
 
 }
 
-RHIVertexDescStateSP RHIPipelineStateCache::GetVertexDescState(const RHIVertexDescStateDesc& desc) {
+RHIVertexDescStateSP RHIPipelineStateCache::GetOrCreateVertexDescState(const RHIVertexDescStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_vertexDescMutex);
     size_t hash = HashVertexDescState(desc);
     
@@ -55,12 +55,12 @@ RHIVertexDescStateSP RHIPipelineStateCache::GetVertexDescState(const RHIVertexDe
         return it->second;
     }
 
-    auto state = GetGlobalRHIApi()->CreateVertexDescState(desc);
+    auto state = GRHIApi->CreateVertexDescState(desc);
     s_vertexDescCache[hash] = state;
     return state;
 }
 
-RHIRasterizerStateSP RHIPipelineStateCache::GetRasterizerState(const RHIRasterizerStateDesc& desc) {
+RHIRasterizerStateSP RHIPipelineStateCache::GetOrCreateRasterizerState(const RHIRasterizerStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_rasterizerMutex);
     size_t hash = HashRasterizerState(desc);
     
@@ -69,12 +69,12 @@ RHIRasterizerStateSP RHIPipelineStateCache::GetRasterizerState(const RHIRasteriz
         return it->second;
     }
 
-    auto state = GetGlobalRHIApi()->CreateRasterizerState(desc);
+    auto state = GRHIApi->CreateRasterizerState(desc);
     s_rasterizerCache[hash] = state;
     return state;
 }
 
-RHIColorBlendStateSP RHIPipelineStateCache::GetColorBlendState(const RHIColorBlendStateDesc& desc) {
+RHIColorBlendStateSP RHIPipelineStateCache::GetOrCreateColorBlendState(const RHIColorBlendStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_colorBlendMutex);
     size_t hash = HashColorBlendState(desc);
     
@@ -83,12 +83,12 @@ RHIColorBlendStateSP RHIPipelineStateCache::GetColorBlendState(const RHIColorBle
         return it->second;
     }
 
-    auto state = GetGlobalRHIApi()->CreateColorBlendState(desc);
+    auto state = GRHIApi->CreateColorBlendState(desc);
     s_colorBlendCache[hash] = state;
     return state;
 }
 
-RHIDepthStencilStateSP RHIPipelineStateCache::GetDepthStencilState(const RHIDepthStencilStateDesc& desc) {
+RHIDepthStencilStateSP RHIPipelineStateCache::GetOrCreateDepthStencilState(const RHIDepthStencilStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_depthStencilMutex);
     size_t hash = HashDepthStencilState(desc);
     
@@ -97,7 +97,7 @@ RHIDepthStencilStateSP RHIPipelineStateCache::GetDepthStencilState(const RHIDept
         return it->second;
     }
 
-    auto state = GetGlobalRHIApi()->CreateDepthStencilState(desc);
+    auto state = GRHIApi->CreateDepthStencilState(desc);
     s_depthStencilCache[hash] = state;
     return state;
 }
@@ -131,10 +131,6 @@ void RHIPipelineStateCache::ClearAll() {
 
 size_t RHIPipelineStateCache::HashGraphicsPipelineDesc(const RHIGraphicsPipelineStateDesc& desc) {
 	size_t hash = 0;
-	for (const auto& shaderStage : desc.shaderStages) {
-		//hash ^= std::hash<std::string>()(shaderStage.shader->GetName());
-		hash ^= std::hash<int>()(static_cast<int>(shaderStage.shader->GetShaderType()));
-	}
 	hash ^= HashVertexDescState(desc.vertexDescState->GetDesc());
 	hash ^= HashRasterizerState(desc.rasterizerState->GetDesc());
 	hash ^= HashColorBlendState(desc.colorBlendState->GetDesc());
@@ -144,7 +140,6 @@ size_t RHIPipelineStateCache::HashGraphicsPipelineDesc(const RHIGraphicsPipeline
 }
 size_t RHIPipelineStateCache::HashComputePipelineDesc(const RHIComputePipelineStateDesc& desc) {
 	size_t hash = 0;
-    hash ^= std::hash<int>()(static_cast<int>(desc.shaderDesc.shader->GetShaderType()));
 	return hash;
 
 }

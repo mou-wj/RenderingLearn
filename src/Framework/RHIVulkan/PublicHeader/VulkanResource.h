@@ -2,6 +2,7 @@
 #include "RHIResource.h"
 
 #include "VulkanMemory.h"
+#include "VulkanDevice.h"
 #include <vector>
 #include <memory>
 #include <deque>
@@ -9,6 +10,90 @@ using namespace RHI;
 
 namespace RHIVulkan{
 class VulkanCommandContext;
+
+struct VulkanTextureView
+{
+    VulkanTextureView()
+        : View(VK_NULL_HANDLE)
+        , Image(VK_NULL_HANDLE)
+        , ViewId(0)
+    {
+    }
+
+    // 创建 ImageView
+    bool Create(VulkanDevice* Device,
+        VkImage InImage,
+        VkImageViewType ViewType,
+        VkImageAspectFlags AspectFlags,
+        VkFormat Format,
+        uint32_t FirstMip,
+        uint32_t NumMips,
+        uint32_t ArraySliceIndex,
+        uint32_t NumArraySlices,
+        bool bUseIdentitySwizzle = false,
+        VkImageUsageFlags ImageUsageFlags = 0)
+    {
+        assert(InImage != VK_NULL_HANDLE);
+
+        Image = InImage;
+
+        // VkImageViewCreateInfo
+        VkImageViewCreateInfo ViewInfo{};
+        ViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        ViewInfo.image = Image;
+        ViewInfo.viewType = ViewType;
+        ViewInfo.format = Format;
+
+        ViewInfo.subresourceRange.aspectMask = AspectFlags;
+        ViewInfo.subresourceRange.baseMipLevel = FirstMip;
+        ViewInfo.subresourceRange.levelCount = NumMips;
+        ViewInfo.subresourceRange.baseArrayLayer = ArraySliceIndex;
+        ViewInfo.subresourceRange.layerCount = NumArraySlices;
+
+        // UE 支持 Identity Swizzle
+        if (bUseIdentitySwizzle)
+        {
+            ViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            ViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            ViewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            ViewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        }
+        else
+        {
+            ViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+            ViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+            ViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+            ViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        }
+
+        VkResult Result = vkCreateImageView(Device->GetHandle(), &ViewInfo, nullptr, &View);
+        assert(Result == VK_SUCCESS && "Failed to create VkImageView");
+
+        // 简单 ID 用于 debug / hash
+        static uint32_t NextViewId = 1;
+        ViewId = NextViewId++;
+        return Result == VK_SUCCESS;
+    }
+
+    // 销毁 ImageView
+    void Destroy(VulkanDevice* Device)
+    {
+        if (View != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(Device->GetHandle(), View, nullptr);
+            View = VK_NULL_HANDLE;
+        }
+
+        Image = VK_NULL_HANDLE;
+        ViewId = 0;
+    }
+
+public:
+    VkImageView View;
+    VkImage Image;
+    uint32_t ViewId;
+};
+
 // Vulkan Texture
 class VulkanTexture : public RHITexture {
 public:
@@ -17,22 +102,24 @@ public:
     ~VulkanTexture() override;
 
     VkImage GetImage() const { return Image; }
-    VkImageView GetImageView() const { return ImageView; }
+    VkImageView GetImageView() const { return DefaltView.View; }
     VkFormat GetFormat() const { return Format; }
+	VkImageAspectFlags GetAspectFlags() const { return ImageAspectFlags; }
 	VulkanAllocation& GetAllocation() { return Allocation; }
 
     void InitialImageState(VulkanCommandContext* context, VkImageLayout layout);
-
+	VkImageLayout GetDefaultLayout() const { return DefaultLayout; }
 private:
     VkImageLayout DetermineDefaultLayout(ERHITextureCreateFlags Flags);
 
     VkImage Image = VK_NULL_HANDLE;
-    VkImageView ImageView = VK_NULL_HANDLE;
+    VulkanTextureView DefaltView;
     VkFormat Format = VK_FORMAT_UNDEFINED;
     VulkanDevice* Device = nullptr;
     VulkanAllocation Allocation;
     bool owner = true;
     VkImageLayout DefaultLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkImageAspectFlags ImageAspectFlags = 0;
 };
 using VulkanTextureSP = std::shared_ptr<VulkanTexture>;
 
@@ -42,7 +129,7 @@ public:
     VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc);
     ~VulkanBuffer() override;
 
-    VkBuffer GetBuffer() const { return Buffer; }
+    const VkBuffer& GetHandle() const { return Buffer; }
     VkDeviceSize GetSize() const { return Size; }
 
 private:
@@ -157,6 +244,16 @@ private:
     std::string DebugName;
 };
 
+class VulkanUniformBuffer : public RHIUniformBuffer {
+public:
+    VulkanUniformBuffer(VulkanDevice* device, const RHIBufferDesc& desc);
+    ~VulkanUniformBuffer() override;
+
+private:
+};
+
+
+
 // Vulkan Sampler
 class VulkanSampler : public RHISampler {
 public:
@@ -179,7 +276,7 @@ public:
     // 新增：判断Fence是否已完成
     bool IsSignaled() const;
     void Reset();
-
+    void Wait();
 private:
     VkFence Fence = VK_NULL_HANDLE;
     VulkanDevice* Device = nullptr;
@@ -243,10 +340,9 @@ private:
 
     std::vector<VulkanTextureSP> backBufferTextures; // 所有 backbuffers
     std::vector<VulkanSemaphore*> backBufferRenderDoneSemaphores; // 每个backbuffer对应的渲染完成信号
-    VulkanSemaphore* acquireSemaphore = nullptr;
-
+    std::vector<VulkanSemaphore*> acquireSemaphores;
     int currentBackBufferIndex = -1;  // 渲染用
-
+    int currentIndex = 0; // Present用
     std::vector<VkImage> swapchainImages_;
 };
 
@@ -261,7 +357,6 @@ public:
     std::vector<VkVertexInputBindingDescription> bindingDescriptions;
     std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
 
-    void Initialize();
 private:
     VulkanDevice* Device = nullptr;
 };

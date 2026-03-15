@@ -8,6 +8,7 @@
 #include "VulkanSync.h"
 #include "VulkanCommandContex.h"
 #include "ThreadInfo.h"
+#include "VulkanQueue.h"
 using namespace Core;
 namespace RHIVulkan{
 
@@ -59,12 +60,13 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     : RHITexture(desc), Device(device) {
     VkDevice vkDevice = Device->GetHandle();
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
-    VkFormat format = TransformFormatFrom(desc.Format);
+    Format = TransformFormatFrom(desc.Format);
+	ImageAspectFlags = GetImageAspectFlags(Format);
     // Create VkImage
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = TransformImageTypeFrom(desc.Type); // TODO: Support other image types
-    imageInfo.format = format; // TODO: Support other formats
+    imageInfo.format = Format; // TODO: Support other formats
     imageInfo.extent.width = desc.Width;
     imageInfo.extent.height = desc.Height;
     imageInfo.extent.depth = desc.Depth;
@@ -94,24 +96,21 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     BindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
 
     // Create VkImageView
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = Image;
-    viewInfo.viewType = TransformViewTypeFrom(desc.Type); // TODO: Support other view types
-    viewInfo.format = format; // TODO: Support other formats
-    viewInfo.subresourceRange.aspectMask = GetImageAspectFlags(format);
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = desc.MipLevels;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = desc.ArraySize;
-    viewInfo.components = VkComponentMapping{
-        VK_COMPONENT_SWIZZLE_R,
-        VK_COMPONENT_SWIZZLE_G,
-        VK_COMPONENT_SWIZZLE_B,
-        VK_COMPONENT_SWIZZLE_A
-    };
+    bool viewSuccess = DefaltView.Create(
+        device,                                // fvulkan_device& device
+        Image,                                 // VkImage
+        TransformViewTypeFrom(desc.Type),      // VkImageViewType
+        GetImageAspectFlags(TransformFormatFrom(desc.Format)), // VkImageAspectFlags
+        TransformFormatFrom(desc.Format),       // VkFormat
+        0,                                      // first mip level
+        desc.MipLevels,                         // number of mips
+        0,                                      // base array layer
+        desc.ArraySize,                          // number of array layers
+        true,                                   // use identity swizzle
+        imageInfo.usage
+    );
 
-    if (!CreateImageView(vkDevice, &viewInfo, &ImageView)) {
+    if (!viewSuccess) {
         DestroyImage(vkDevice, Image);
         memoryManager->Free(Allocation);
     }
@@ -136,29 +135,23 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, V
 {
     owner = false;
     VkDevice vkDevice = Device->GetHandle();
-
+    Format = TransformFormatFrom(desc.Format);
+    ImageAspectFlags = GetImageAspectFlags(Format);
+    auto usage = TransformTextureUsageFlagsFrom(desc.Usage);
     // Create VkImageView
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = Image;
-    viewInfo.viewType = TransformViewTypeFrom(desc.Type); // TODO: Support other view types
-    auto format = TransformFormatFrom(desc.Format);
-    viewInfo.format = format; // TODO: Support other formats
-    viewInfo.subresourceRange.aspectMask = GetImageAspectFlags(format);
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = desc.MipLevels;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = desc.ArraySize;
-    viewInfo.components = VkComponentMapping{
-        VK_COMPONENT_SWIZZLE_R,
-        VK_COMPONENT_SWIZZLE_G,
-        VK_COMPONENT_SWIZZLE_B,
-        VK_COMPONENT_SWIZZLE_A
-    };
+    DefaltView.Create(device,                                // fvulkan_device& device
+        Image,                                 // VkImage
+        TransformViewTypeFrom(desc.Type),      // VkImageViewType
+        GetImageAspectFlags(TransformFormatFrom(desc.Format)), // VkImageAspectFlags
+        Format,       // VkFormat
+        0,                                      // first mip level
+        desc.MipLevels,                         // number of mips
+        0,                                      // base array layer
+        desc.ArraySize,                          // number of array layers
+        true,                                    // use identity swizzle)
+        usage
+    );
 
-    if (CreateImageView(vkDevice, &viewInfo, &ImageView)) {
-
-    }
     DefaultLayout = DetermineDefaultLayout(desc.Usage);
     auto vkCommandContex = VulkanCommandContext::CastFrom(device->GetGlobalCommandContext());
     auto commandList = vkCommandContex->GetCommandList();
@@ -176,9 +169,7 @@ VulkanTexture::~VulkanTexture() {
     VkDevice device = Device->GetHandle();
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
 
-    if (ImageView != VK_NULL_HANDLE) {
-        vkDestroyImageView(device, ImageView, nullptr);
-    }
+	DefaltView.Destroy(Device);
 
     if (Image != VK_NULL_HANDLE && owner) {
         vkDestroyImage(device, Image, nullptr);
@@ -192,10 +183,12 @@ void VulkanTexture::InitialImageState(VulkanCommandContext* context, VkImageLayo
     VulkanCommandContext* vulkanContex = context;
     // 2. 获取一个可用命令缓冲区
     VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->BeginUploadCommandBuffer();
-    cmdBuffer->Reset();
-    VulkanImageBarrierBuilder barrierBuilder;
     auto vkFormat = TransformFormatFrom(Desc.Format);
     auto imageFlags = GetImageAspectFlags(vkFormat);
+    //更新tracked image layout
+    auto cmdImageLayoutMgr = cmdBuffer->GetImageLayoutManager();
+    cmdImageLayoutMgr->GetOrCreate(Image, Desc.MipLevels, Desc.ArraySize, layout, imageFlags);
+    VulkanImageBarrierBuilder barrierBuilder;
     VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(imageFlags,
         0,
         Desc.MipLevels, 
@@ -218,7 +211,7 @@ VkImageLayout VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags
     if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::Presentable))
     {
         // Swapchain image 创建后默认 undefined
-        return VK_IMAGE_LAYOUT_UNDEFINED;
+        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     }
 
     // 2️⃣ DepthStencil 图像
@@ -361,7 +354,7 @@ void VulkanShaderResourceView::CreateBufferView(
 
     VkBufferViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-    viewInfo.buffer = buffer->GetBuffer();
+    viewInfo.buffer = buffer->GetHandle();
     viewInfo.format = Format;
     viewInfo.offset = SRVInfo.Offset;
     viewInfo.range =
@@ -479,7 +472,7 @@ void VulkanUnorderedAccessView::CreateBufferView(
 
     VkBufferViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-    viewInfo.buffer = buffer->GetBuffer();
+    viewInfo.buffer = buffer->GetHandle();
     viewInfo.format = Format;
     viewInfo.offset = UAVInfo.Offset;
     viewInfo.range =
@@ -527,7 +520,12 @@ VulkanViewport::VulkanViewport(VulkanDevice* device, uint32_t width, uint32_t he
 		LOG_ERROR("VulkanViewport: Invalid window handle");
     }
     CreateSwapchain();
-    acquireSemaphore = device->GetSemaphoreManager()->Acquire();
+    acquireSemaphores.resize(swapchainImages_.size());
+    backBufferRenderDoneSemaphores.resize(swapchainImages_.size());
+    for (int i = 0; i < swapchainImages_.size(); i++) {
+        backBufferRenderDoneSemaphores[i] = device->GetSemaphoreManager()->Acquire();
+        acquireSemaphores[i] = device->GetSemaphoreManager()->Acquire();
+    }
 }
 
 VulkanViewport::~VulkanViewport() {
@@ -540,9 +538,28 @@ VulkanViewport::~VulkanViewport() {
 void VulkanViewport::Present(VulkanCommandContext* context, VulkanCommandBuffer* commandBuffer, VulkanQueue* queue, VulkanQueue* presentQueue)
 {
     assert(queue == presentQueue);//先假定相等
-
-    commandBuffer->AddWaitSemaphores(1, { acquireSemaphore });
-    Swapchain->Present(presentQueue,backBufferRenderDoneSemaphores[currentBackBufferIndex]);
+    //转换布局
+    auto backBufferTexture = backBufferTextures[currentBackBufferIndex];
+	auto layout = commandBuffer->GetImageLayoutManager()->Get(backBufferTexture->GetImage());
+	VulkanImageBarrierBuilder barrierBuilder;
+    VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(backBufferTexture->GetAspectFlags(),
+        0,
+        1,
+        0,
+        1);
+    barrierBuilder.TransitionLayout(
+        backBufferTexture->GetImage(),
+        layout->GetMainLayout(),
+        backBufferTexture->GetDefaultLayout(),
+        transientRegion
+    );
+    barrierBuilder.Execute(commandBuffer);
+    commandBuffer->AddWaitSemaphores(VkPipelineStageFlagBits::VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { acquireSemaphores[currentIndex]});
+    commandBuffer->AddSignalSemaphores({ backBufferRenderDoneSemaphores[currentIndex] });
+    context->GetCommandBufferManager()->SubmitActiveCommandBuffer();
+    Swapchain->Present(presentQueue,backBufferRenderDoneSemaphores[currentIndex]);
+    currentIndex++;
+	currentIndex %= swapchainImages_.size();
     currentBackBufferIndex = -1;
 
 }
@@ -556,8 +573,16 @@ VulkanTextureSP VulkanViewport::GetBackTexture()
     if (currentBackBufferIndex != -1) {
         return backBufferTextures[currentBackBufferIndex];
     }
-    Swapchain->AcquireNextImage(acquireSemaphore ,&currentBackBufferIndex);
-    return nullptr;
+    //这里在获取下一个有效image之前必须要保证currentIndex对应的acquiredSemaphores已经执行完毕，这种必须需要等待fence，但是直接使用commandbuffer的fence会由于fence由其他地方管理而导致这里不能有效等待，所以这里先进行没绘制完所有image后统一等待一次队列，后续再考虑怎么修改
+    if (currentIndex == 0) {
+		Device->GetGraphicsQueue()->WaitIdle();
+    }
+
+    Swapchain->AcquireNextImage(acquireSemaphores[currentIndex], &currentBackBufferIndex);
+    if (currentBackBufferIndex == -1) {
+        return nullptr;
+    }
+    return backBufferTextures[currentBackBufferIndex];
 }
 
 void VulkanViewport::CreateSwapchain()
@@ -615,9 +640,9 @@ VulkanVertexDescState::VulkanVertexDescState(VulkanDevice* device, const RHIVert
     for (size_t i = 0; i < desc.attributes.size(); ++i) {
         const auto& attributeDesc = desc.attributes[i];
         attributeDescriptions[i].location = attributeDesc.location;
-        //attributeDescriptions[i].binding = attributeDesc.binding;
-        attributeDescriptions[i].format = TransformFormatFrom(attributeDesc.format); // TODO: Support other formats
-        attributeDescriptions[i].offset = 0; // TODO: Support other offsets
+        attributeDescriptions[i].binding = attributeDesc.binding;  // 必须
+        attributeDescriptions[i].format = TransformFormatFrom(attributeDesc.format);
+        attributeDescriptions[i].offset = attributeDesc.offset;   // 必须
     }
     vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
@@ -753,10 +778,12 @@ VulkanFence::VulkanFence(VulkanDevice* device)
 	VkDevice vkDevice = Device->GetHandle();
 	VkFenceCreateInfo fenceInfo{};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // 初始状态为已信号
+	fenceInfo.flags = 0; // 初始状态为已信号
 	if (vkCreateFence(vkDevice, &fenceInfo, nullptr, &Fence) != VK_SUCCESS) {
 
 	}
+    bool isSignaled = IsSignaled();
+    int a = 10;
 }
 
 // ----------------------------
@@ -773,6 +800,12 @@ void VulkanFence::Reset()
 {
     if (!Fence || !Device) return;
     ResetFences(Device->GetHandle(), 1, &Fence);
+}
+
+void VulkanFence::Wait()
+{
+	if (!Fence || !Device) return;
+	WaitForFences(Device->GetHandle(), 1, &Fence, VK_TRUE, UINT64_MAX);
 }
 
 
@@ -795,6 +828,7 @@ VulkanFence* VulkanFenceManager::AcquireFence()
     {
         VulkanFence* fence = availableFences.front();
         availableFences.pop_front();
+        //fence->Reset();
         return fence;
     }
 

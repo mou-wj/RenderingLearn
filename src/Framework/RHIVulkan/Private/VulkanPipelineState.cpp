@@ -1,15 +1,21 @@
-#include "VulkanPipeline.h"
+#include "VulkanPipelineState.h"
 #include "VulkanShader.h"
 
 #include "VulkanDescriptorSets.h"
 #include "VulkanResource.h"
 #include "VulkanRHIUtils.h"
+#include "VulkanCommandBuffer.h"
 #include <vector>
 
 using namespace RHI;
 
 namespace RHIVulkan {
 
+VulkanPipelineBase::VulkanPipelineBase(VulkanDevice* device)
+: device(device), pipeline(VK_NULL_HANDLE)
+{
+
+}
 VulkanPipelineBase::~VulkanPipelineBase() {
     VkDevice deviceHandle = device->GetHandle();
     if (pipeline != VK_NULL_HANDLE) {
@@ -17,57 +23,90 @@ VulkanPipelineBase::~VulkanPipelineBase() {
         pipeline = VK_NULL_HANDLE;
     }
 
-    if (pipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(deviceHandle, pipelineLayout, nullptr);
-        pipelineLayout = VK_NULL_HANDLE;
-    }
 }
 
 
-
-void VulkanPipelineBase::CreateLayout(const std::vector<RHIShaderStageDesc>& shaderStages) {
-    // 获取描述符集布局信息
-    std::vector<VkDescriptorSetLayout> descriptorSetLayoutHandles;
-    std::vector<int> l;
-    
-    for (auto& shader : shaderStages)
-    {
-        auto vulkanShaderSP = std::reinterpret_pointer_cast<VulkanRHIShader>(shader.shader);      
-
-    }
-
-
-    // 分配描述符集
-    //boundDescriptorSets = device->GetDescriptorPoolManager()->AllocateDescriptorSet(layoutMap);
-
-    // 创建VkPipelineLayout
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(0);
-    std::vector<VkDescriptorSetLayout> setLayoutHandles;
-    //for (auto& descriptorSet : boundDescriptorSets) {
-    //    setLayoutHandles.push_back(descriptorSet->GetLayout());
-    //}
-    pipelineLayoutInfo.pSetLayouts = setLayoutHandles.data();
-
-    VkResult result = vkCreatePipelineLayout(device->GetHandle(), &pipelineLayoutInfo, nullptr, &pipelineLayout);
-    if (result != VK_SUCCESS) {
-        throw std::runtime_error("无法创建管道布局!");
-    }
-}
 
 VulkanGraphicsPipelineState::VulkanGraphicsPipelineState(VulkanDevice* device, const RHIGraphicsPipelineStateDesc& pipelineDesc)
     : VulkanPipelineBase(device), RHIGraphicsPipelineState(pipelineDesc) {
     // Convert RHI desc to Vulkan create info
     createInfo = {}; // Initialize createInfo
     createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    VulkanRenderTargetLayout layout(pipelineDesc.attachmentDesc);
+    auto renderPass = device->GetRenderPassManager()->GetOrCreateRenderPass(layout);
     createInfo.renderPass = renderPass->GetHandle();
-
-    CreateLayout(pipelineDesc.shaderStages);
+    createInfo.subpass = pipelineDesc.attachmentDesc.subpassIndex;
+	auto layoutInfo = BuildPipelineLayoutInfo(pipelineDesc);
+    pipelineLayout = device->GetPipelineLayoutCache()->GetOrCreateLayout(layoutInfo);
+    
     CreatePipeline();
 }
 
 VulkanGraphicsPipelineState::~VulkanGraphicsPipelineState() {
+}
+
+void VulkanGraphicsPipelineState::Bind(VulkanCommandBuffer* cmdBuffer)
+{
+    vkCmdBindPipeline(cmdBuffer->GetHandle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+}
+
+PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RHIGraphicsPipelineStateDesc& pipelineDesc)
+{
+    PipelineLayoutInfo layoutInfo;
+
+    auto processShader = [&](VulkanRHIShader* shader)
+        {
+            if (!shader)
+                return;
+
+            const auto& header = shader->GetShaderReflection();
+
+            VkShaderStageFlags stageMask =
+                TransformShaderFrequencyToStage(header.Frequency);
+
+            auto ensureSet = [&](uint32_t set)
+                {
+                    if (layoutInfo.setLayouts.size() <= set)
+                    {
+                        layoutInfo.setLayouts.resize(set + 1);
+                    }
+                };
+
+            for (const auto& binding : header.DescriptorBindings)
+            {
+                ensureSet(binding.Set);
+
+                DescriptorSetLayoutInfo& setLayout =
+                    layoutInfo.setLayouts[binding.Set];
+
+                VkDescriptorType vkType = TransformDescriptorTypeFrom(binding.Type);
+
+                setLayout.AddBinding(
+                    binding.Binding,
+                    vkType,
+                    binding.Count,
+                    stageMask);
+            }
+
+            if (header.HasPushConstant)
+            {
+                layoutInfo.hasPushConstant = true;
+
+                layoutInfo.pushConstant.offset = 0;
+                layoutInfo.pushConstant.size = header.PushConstant.Size;
+
+                layoutInfo.pushConstant.stageFlags |=
+                    stageMask;
+            }
+        };
+
+    processShader(
+        dynamic_cast<VulkanRHIShader*>(pipelineDesc.shaderStages.vertexShader));
+
+    processShader(
+        dynamic_cast<VulkanRHIShader*>(pipelineDesc.shaderStages.fragmentShader));
+
+    return layoutInfo;
 }
 
 
@@ -83,46 +122,75 @@ void VulkanGraphicsPipelineState::CreatePipeline() {
     VkPipelineDepthStencilStateCreateInfo depthStencil = dynamic_cast<VulkanDepthStencilState*>(desc.depthStencilState)->depthStencilInfo;
 
     // 设置管线布局
-    createInfo.layout = pipelineLayout;
+    createInfo.layout = pipelineLayout->GetHandle();
 
 
     
     dynamicStates.push_back(VK_DYNAMIC_STATE_VIEWPORT);
     dynamicStates.push_back(VK_DYNAMIC_STATE_SCISSOR);
-    dynamicStates.push_back(VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY);
 
     VkPipelineDynamicStateCreateInfo dynamicState = {};
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamicState.dynamicStateCount = dynamicStates.size();
     dynamicState.pDynamicStates = dynamicStates.data();
 
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = TransformPrimitiveTopology(desc.primitiveTopology);
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = nullptr;
+    viewportState.pViewports = nullptr;
+
+    VkPipelineMultisampleStateCreateInfo multisample{};
+    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample.rasterizationSamples = TransformSampleCountFrom(desc.attachmentDesc.numSamples);
+    multisample.sampleShadingEnable = VK_FALSE;
+    multisample.minSampleShading = 1.0f;
+    multisample.pSampleMask = nullptr;
+    multisample.alphaToCoverageEnable = VK_FALSE;
+    multisample.alphaToOneEnable = VK_FALSE;
+
+
         // 设置createInfo的各个成员
     createInfo.pVertexInputState = &vertexInputInfo;
-    createInfo.pInputAssemblyState = nullptr;
-    createInfo.pViewportState = nullptr;
+    createInfo.pInputAssemblyState = &inputAssembly;
+    createInfo.pViewportState = &viewportState;
     createInfo.pColorBlendState = &colorBlending;
     createInfo.pDepthStencilState = &depthStencil;
     createInfo.pRasterizationState = &rasterizer;
-    createInfo.pMultisampleState = nullptr;
+    createInfo.pMultisampleState = &multisample;
     createInfo.pDynamicState = &dynamicState;
 
 
 
     // 设置着色器阶段
-    createInfo.stageCount = static_cast<uint32_t>(desc.shaderStages.size());
-    std::vector<VkPipelineShaderStageCreateInfo> shaderStages(createInfo.stageCount);
+	std::vector<RHI::RHIShader*> graphicShaders;
+    if (desc.shaderStages.vertexShader != nullptr) {
+        graphicShaders.push_back(desc.shaderStages.vertexShader);
+    }
+	if (desc.shaderStages.fragmentShader != nullptr) {
+		graphicShaders.push_back(desc.shaderStages.fragmentShader);
+	}
 
-    for (size_t i = 0; i < desc.shaderStages.size(); ++i) {
-        const auto& stage = desc.shaderStages[i];
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages(graphicShaders.size());
+
+    for (size_t i = 0; i < graphicShaders.size(); ++i) {
+        const auto& shader = graphicShaders[i];
         VkPipelineShaderStageCreateInfo shaderStageInfo = {};
-        auto vulkanShaderSP = std::reinterpret_pointer_cast<VulkanRHIShader>(stage.shader);
+        auto vulkanShaderSP = dynamic_cast<VulkanRHIShader*>(shader);
         shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStageInfo.stage = TransformShaderStageFrom(stage.shader->GetShaderType());
+        shaderStageInfo.stage = vulkanShaderSP->GetShaderStage();
         shaderStageInfo.module = vulkanShaderSP->GetShaderModule();
         shaderStageInfo.pName = vulkanShaderSP->GetEntryPoint().c_str();
         shaderStages[i] = shaderStageInfo;
     }
-
+    createInfo.stageCount = shaderStages.size();
     createInfo.pStages = shaderStages.data();
 
     // 创建图形管线
@@ -139,11 +207,15 @@ VulkanComputePipeline::VulkanComputePipeline(VulkanDevice* device, const RHIComp
     createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     createInfo.layout = VK_NULL_HANDLE;
 
-    CreateLayout({ pipelineDesc.shaderDesc});
     CreatePipeline();
 }
 
 VulkanComputePipeline::~VulkanComputePipeline() {
+}
+
+void VulkanComputePipeline::Bind(VulkanCommandBuffer* cmdBuffer)
+{
+    vkCmdBindPipeline(cmdBuffer->GetHandle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 }
 
 void VulkanComputePipeline::CreatePipeline() {
@@ -151,7 +223,7 @@ void VulkanComputePipeline::CreatePipeline() {
     // 这里仅提供一个示例，具体成员需要根据pipelineDesc填充
 
     // 设置着色器阶段
-    auto vulkanShaderSP = std::reinterpret_pointer_cast<VulkanRHIShader>(desc.shaderDesc.shader);
+    auto vulkanShaderSP = reinterpret_cast<VulkanRHIShader*>(desc.computeShader);
     VkPipelineShaderStageCreateInfo shaderStageInfo = {};
     shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	shaderStageInfo.stage = vulkanShaderSP->GetShaderStage(); // 计算着色器阶段
@@ -173,7 +245,6 @@ VulkanRayTracingPipeline::VulkanRayTracingPipeline(VulkanDevice* device, const R
     createInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
     createInfo.layout = VK_NULL_HANDLE;
 
-    CreateLayout({});
     CreatePipeline();
 }
 

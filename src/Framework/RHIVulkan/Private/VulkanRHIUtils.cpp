@@ -13,6 +13,7 @@ namespace RHIVulkan {
         case ERHIFormat::R16G16B16A16_Float: return VK_FORMAT_R16G16B16A16_SFLOAT;
         case ERHIFormat::R32_Float: return VK_FORMAT_R32_SFLOAT;
         case ERHIFormat::R32G32_Float: return VK_FORMAT_R32G32_SFLOAT;
+        case ERHIFormat::R32G32B32_Float: return VK_FORMAT_R32G32B32_SFLOAT;
         case ERHIFormat::R32G32B32A32_Float: return VK_FORMAT_R32G32B32A32_SFLOAT;
         case ERHIFormat::D24_UNorm_S8_UInt: return VK_FORMAT_D24_UNORM_S8_UINT;
         case ERHIFormat::D32_Float: return VK_FORMAT_D32_SFLOAT;
@@ -176,6 +177,78 @@ namespace RHIVulkan {
             // ---- Everything else treated as color ----
         default:
             return VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+    }
+
+    VkDescriptorType TransformDescriptorTypeFrom(RenderCore::SPIRVCompiledBinaryResultPacker::ESPIRVShaderResourceType type)
+    {
+        using ESPIRVShaderResourceType = RenderCore::SPIRVCompiledBinaryResultPacker::ESPIRVShaderResourceType;
+
+        switch (type)
+        {
+        case ESPIRVShaderResourceType::Sampler:
+            return VK_DESCRIPTOR_TYPE_SAMPLER;
+
+        case ESPIRVShaderResourceType::SampledImage:
+            return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // 或 VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE 根据需求
+
+        case ESPIRVShaderResourceType::StorageImage:
+            return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
+        case ESPIRVShaderResourceType::UniformBuffer:
+            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+        case ESPIRVShaderResourceType::StorageBuffer:
+            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+
+        default:
+            return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+        }
+    }
+    VkShaderStageFlagBits TransformShaderFrequencyToStage(ERHIShaderFrequency frequency)
+    {
+        switch (frequency)
+        {
+        case ERHIShaderFrequency::Vertex:         return VK_SHADER_STAGE_VERTEX_BIT;
+        case ERHIShaderFrequency::Fragment:       return VK_SHADER_STAGE_FRAGMENT_BIT;
+        case ERHIShaderFrequency::Geometry:       return VK_SHADER_STAGE_GEOMETRY_BIT;
+        case ERHIShaderFrequency::Compute:        return VK_SHADER_STAGE_COMPUTE_BIT;
+        case ERHIShaderFrequency::TessControl:    return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+        case ERHIShaderFrequency::TessEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        case ERHIShaderFrequency::Mesh:           return VK_SHADER_STAGE_MESH_BIT_NV;  // mesh shader extension
+        case ERHIShaderFrequency::Task:           return VK_SHADER_STAGE_TASK_BIT_NV;  // task shader extension
+        case ERHIShaderFrequency::RayGen:         return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+        case ERHIShaderFrequency::ClosestHit:     return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        case ERHIShaderFrequency::Miss:           return VK_SHADER_STAGE_MISS_BIT_KHR;
+        case ERHIShaderFrequency::AnyHit:         return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+        case ERHIShaderFrequency::Intersection:   return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+        case ERHIShaderFrequency::Callable:       return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+
+        default:
+            return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+        }
+    }
+
+    // 辅助函数：将自定义枚举转换为 Vulkan VkPrimitiveTopology
+    VkPrimitiveTopology TransformPrimitiveTopology(EPrimitiveTopology Topology)
+    {
+        switch (Topology)
+        {
+        case EPrimitiveTopology::PointList:                 return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+        case EPrimitiveTopology::LineList:                  return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+        case EPrimitiveTopology::LineStrip:                 return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+        case EPrimitiveTopology::TriangleList:             return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        case EPrimitiveTopology::TriangleStrip:            return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+        case EPrimitiveTopology::TriangleFan:              return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+        case EPrimitiveTopology::LineListWithAdjacency:    return VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY;
+        case EPrimitiveTopology::LineStripWithAdjacency:   return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY;
+        case EPrimitiveTopology::TriangleListWithAdjacency:return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY;
+        case EPrimitiveTopology::TriangleStripWithAdjacency:return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY;
+        case EPrimitiveTopology::PatchList_1:
+        case EPrimitiveTopology::PatchList_2:
+        case EPrimitiveTopology::PatchList_3:
+        case EPrimitiveTopology::PatchList_4:             return VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+        default:                                           return VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
         }
     }
 }

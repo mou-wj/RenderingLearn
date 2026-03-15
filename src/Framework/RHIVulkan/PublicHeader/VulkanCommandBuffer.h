@@ -33,6 +33,9 @@ public:
     VulkanFence* GetFence() const { return fence; } // 可选：用于同步
 
     void AddWaitSemaphores(VkPipelineStageFlags stage, const std::vector<VulkanSemaphore*>& semaphores);
+    void AddSignalSemaphores(const std::vector<VulkanSemaphore*>& semaphores);
+
+	VulkanImageLayoutManager* GetImageLayoutManager() { return &imageLayoutManager; }
 
 private:
     VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -44,6 +47,8 @@ private:
     std::vector<VkPipelineStageFlags> WaitFlags;
     std::vector<VulkanSemaphore*> WaitSemaphores;
     std::vector<VulkanSemaphore*> SubmittedWaitSemaphores;
+    std::vector<VulkanSemaphore*> SignalSemaphores;
+    VulkanImageLayoutManager imageLayoutManager;
 };
 
 class VulkanCommandBufferPool
@@ -87,6 +92,8 @@ public:
 
     // 获取一个可用的命令缓冲区（如有空闲则复用，否则新分配）
     VulkanCommandBuffer* GetActiveCommandBuffer(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	void SubmitActiveCommandBuffer(uint32_t NumSignalSemaphores = 0, VulkanSemaphore* SignalSemaphores = nullptr);
+
 
     // 重置所有池
     void Reset();
@@ -94,6 +101,8 @@ public:
     // -------- Upload 专用接口 --------
     VulkanCommandBuffer* BeginUploadCommandBuffer();
     void EndAndSubmitUploadCommandBuffer(VulkanCommandBuffer* cmd);
+
+    void GarbageCollect();
 
 private:
     // 分配命令缓冲区

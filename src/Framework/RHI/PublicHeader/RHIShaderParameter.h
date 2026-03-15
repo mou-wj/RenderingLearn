@@ -8,7 +8,8 @@ namespace RHI
     // 基础类型参数描述
     struct RHIShaderUniformParameter
     {
-        EShaderUniformBaseType Type;
+        uint32_t BufferIndex;
+        uint32_t BaseIndex;
         uint32_t Offset; // 在统一 buffer 内偏移
         uint32_t Size;   // 字节大小
     };
@@ -16,10 +17,23 @@ namespace RHI
     // 资源类型参数描述
     struct RHIShaderResourceParameter
     {
+        enum class EType : uint8_t
+        {
+            Texture,
+            SRV,
+            UAV,
+            Sampler,
+            UniformBuffer,
+        };
+
         RHIResource* Resource;
-        EShaderUniformBaseType Type; // Texture / Buffer / UAV / Sampler
-        uint16_t BindSlot;           // GPU绑定槽
-        uint16_t ArraySize = 1;      // 支持数组
+        EType Type; // Texture / Buffer / UAV / Sampler
+        uint32_t Index = 0;
+		template<typename T>
+		T* GetResourceAs() const
+		{
+			return static_cast<T*>(Resource);
+		}
     };
 
    
@@ -43,5 +57,8 @@ namespace RHI
             return !UniformParameters.empty() || !ResourceParameters.empty() || !Data.empty();
         }
     };
+
+
+
 
 }

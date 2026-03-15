@@ -69,9 +69,12 @@ public:
     RHITextureSP GetViewportBackBuffer(RHIViewport* viewport) override;
     RHISamplerSP CreateSampler(const RHISamplerDesc& desc) override;
 
-    virtual RHICommandContex* GetDefualtCommandContex() override;
+    RHICommandContex* GetDefualtCommandContex() override;
 
-    virtual RHITransientResourceManagerSP CreateTransientResourceManager() override;
+    RHITransientResourceManagerSP CreateTransientResourceManager() override;
+
+    virtual RHIPlatformCommandList* FinalizeCommandContex(RHICommandContex* contex) override;
+    virtual void SubmitPlatformCommandLists(std::vector<RHIPlatformCommandList*> cmdLists) override;
 private:
 	VkPhysicalDevice PickPhysicalDevice();
 

@@ -52,6 +52,7 @@ enum class ERHIFormat
     R16G16B16A16_Float,
     R32_Float,
     R32G32_Float,
+    R32G32B32_Float,
     R32G32B32A32_Float,
     D24_UNorm_S8_UInt,
     D32_Float,
@@ -200,11 +201,12 @@ enum class ERHIShaderFrequency
         float r, g, b, a;
     };
 
-    struct RHI_API RHIIntRect
+    struct RHI_API RHIRect
     {
-        int32_t X, Y, Width, Height;
+        int32_t X, Y;
+        uint32_t Width, Height;
 
-        RHIIntRect(int32_t InX = 0, int32_t InY = 0, int32_t InWidth = 0, int32_t InHeight = 0)
+        RHIRect(int32_t InX = 0, int32_t InY = 0, uint32_t InWidth = 0, uint32_t InHeight = 0)
             : X(InX), Y(InY), Width(InWidth), Height(InHeight) {}
 
         // 可扩展其他方法，如计算面积、中心点等
@@ -277,6 +279,7 @@ enum class ERHIShaderFrequency
     };
 
 
+
     //缓冲区相关描述
         // 缓冲区类型枚举
     enum class ERHIBufferType
@@ -301,6 +304,8 @@ enum class ERHIShaderFrequency
         MapRead = 1 << 4,
         MapWrite = 1 << 5
     };
+    // 使用宏
+    ENUM_CLASS_FLAGS(ERHIBufferFlags);
 
     // 缓冲区描述结构体
     struct RHI_API RHIBufferDesc
@@ -308,7 +313,7 @@ enum class ERHIShaderFrequency
         uint64_t Size = 0;                   // 缓冲区大小（字节）
         uint32_t Stride = 0;                 // 结构化缓冲区的元素大小
         ERHIBufferType Type = ERHIBufferType::Vertex; // 缓冲区类型
-        uint32_t Usage = (uint32_t)ERHIBufferFlags::ShaderResource; // 缓冲区用途
+        ERHIBufferFlags Usage = ERHIBufferFlags::ShaderResource; // 缓冲区用途
         bool bCPUAccessible = false;         // CPU是否可访问
         const void* InitialData = nullptr;   // 初始数据
         const char* DebugName = nullptr;     // 调试名称
@@ -354,6 +359,7 @@ enum class ERHIShaderFrequency
     struct RHI_API RHIVertexAttributeDesc
     {
         uint32_t location = 0;
+        uint32_t binding = 0;       
         uint32_t offset = 0;
         ERHIFormat format = ERHIFormat::Unknown; // 可用ERHIFormat或自定义格式
     };
@@ -422,6 +428,25 @@ enum class ERHIShaderFrequency
         RayTracing
     };
 
+    // 类似 UE 的 EPrimitiveType，用于描述顶点绘制拓扑
+    enum class EPrimitiveTopology : uint8_t
+    {
+        PointList,                   // 点列表，对应 VK_PRIMITIVE_TOPOLOGY_POINT_LIST
+        LineList,                    // 线段列表，对应 VK_PRIMITIVE_TOPOLOGY_LINE_LIST
+        LineStrip,                   // 线段条，对应 VK_PRIMITIVE_TOPOLOGY_LINE_STRIP
+        TriangleList,                // 三角形列表，对应 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        TriangleStrip,               // 三角形条，对应 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+        TriangleFan,                 // 三角形扇，对应 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN
+        LineListWithAdjacency,       // 带邻接信息的线段列表，对应 VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY
+        LineStripWithAdjacency,      // 带邻接信息的线段条，对应 VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY
+        TriangleListWithAdjacency,   // 带邻接信息的三角形列表，对应 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY
+        TriangleStripWithAdjacency,  // 带邻接信息的三角形条，对应 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY
+        PatchList_1,                 // Patch 列表，1 个控制点，对应 VK_PRIMITIVE_TOPOLOGY_PATCH_LIST
+        PatchList_2,                 // Patch 列表，2 个控制点
+        PatchList_3,                 // Patch 列表，3 个控制点
+        PatchList_4,                 // Patch 列表，4 个控制点，可继续扩展更多
+        Unknown                       // 未知类型
+    };
 
 
 
@@ -535,12 +560,12 @@ enum class ERHIShaderFrequency
             Color,         // ClearColor
             DepthStencil   // ClearDepth / ClearStencil
         } Binding;
-
         union
         {
             float Color[4];
             struct { float Depth; uint32_t Stencil; };
         };
+
     };
 
     struct RHICopyTextureDesc {

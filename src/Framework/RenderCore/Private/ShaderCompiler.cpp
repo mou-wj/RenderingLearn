@@ -10,556 +10,707 @@
 // #include <dxcapi.h>
 
 // For glslang
+#include <glslang/Public/ShaderLang.h>
+#include "spirv_glsl.hpp"
+#include "spirv_cross.hpp"
 #include "glslang/Public/ShaderLang.h"
 #include "glslang/SPIRV/GlslangToSpv.h"
 #include "PathInfo.h"
+#include "ShaderCompiledDataPacker.h"
 
 namespace RenderCore {
 
+struct SPIRVPackSource {
+    std::vector<uint32_t> *spirvCode;
+	spirv_cross::Compiler *compiler;
+    ERHIShaderFrequency frequency;
+    std::string entryPoint;
+};
+
+
 ShaderCompiler::ShaderCompiler()
 {
-    ShaderSourceDirectory = Core::GetProjectDir() + "/shaders";
+    glslang::InitializeProcess();
 }
 
 ShaderCompiler::~ShaderCompiler()
 {
 }
 
-bool ShaderCompiler::Initialize()
+bool ShaderCompiler::Initialize(const std::string& shaderSourceDir)
 {
-    // Verify shader source directory exists
-    if (!std::filesystem::exists(ShaderSourceDirectory))
+    if (shaderSourceDir == "") {
+        ShaderSourceDirectory = Core::GetProjectDir() + "/shaders";
+    }
+    if (!std::filesystem::exists(shaderSourceDir))
     {
         return false;
     }
-
-    // Initialize glslang if needed
-    glslang::InitializeProcess();
+    ShaderSourceDirectory = shaderSourceDir;
     return true;
 }
 
-ShaderCompilationResult ShaderCompiler::CompileShader(const ShaderSourceInfo& sourceInfo)
+ShaderCompilationOutput ShaderCompiler::Compile(const ShaderCompileInput& input)
 {
-    ShaderCompilationResult result;
+    ShaderCompilationOutput output;
+    output.Platform = input.Platform;
 
-    // Load source file
     std::string source;
-    if (!LoadShaderSource(sourceInfo.SourcePath, source))
+    std::vector<std::string> includedFiles;
+
+    if (!PreprocessSource(input, source, includedFiles))
     {
-        result.Success = false;
-        result.ErrorMessage = "Failed to load shader source: " + sourceInfo.SourcePath;
-        return result;
+        output.Success = false;
+        output.ErrorMessage = "Failed to preprocess shader.";
+        return output;
     }
 
-    // Preprocess source
-    std::string preprocessedSource;
-    if (!PreprocessSource(source, preprocessedSource))
+#if defined(SHADER_DEBUG)
+    output.PreprocessedSource = source;
+#endif
+    output.IncludedFiles = includedFiles;
+
+    bool compiled = false;
+    switch (input.Platform)
     {
-        result.Success = false;
-        result.ErrorMessage = "Failed to preprocess shader source";
-        return result;
-    }
-    result.PreprocessedSource = preprocessedSource;
-
-    // Extract parameter binding info
-    if (!ExtractParameterMap(preprocessedSource, sourceInfo.ShaderType, result.ParameterMap))
-    {
-        result.Success = false;
-        result.ErrorMessage = "Failed to extract parameter binding info";
-        return result;
-    }
-
-    // Compile for each target platform
-    std::vector<RHI::ERHIShaderPlatform> platforms = sourceInfo.TargetPlatforms;
-    if (platforms.empty())
-    {
-        // Default to Vulkan if no platforms specified
-        platforms.push_back(RHI::ERHIShaderPlatform::Vulkan);
-    }
-
-    bool allSuccess = true;
-    for (auto platform : platforms)
-    {
-        auto platformResult = CompileShaderForPlatform(preprocessedSource, sourceInfo.ShaderType, platform);
-        result.PlatformResults[static_cast<int>(platform)] = platformResult;
-        
-        if (!platformResult.Success)
-        {
-            allSuccess = false;
-        }
-    }
-
-    result.Success = allSuccess;
-    return result;
-}
-
-ShaderCompilationResultPerPlatform ShaderCompiler::CompileShaderForPlatform(
-    const std::string& preprocessedSource,
-    RHI::ERHIShaderFrequency shaderType,
-    RHI::ERHIShaderPlatform platform)
-{
-    ShaderCompilationResultPerPlatform result;
-    result.Platform = platform;
-
-    switch (platform)
-    {
-    case RHI::ERHIShaderPlatform::Vulkan:
-        if (CompileHLSLToSPIRV(preprocessedSource, shaderType, result.BinaryData))
-        {
-            result.Success = true;
-        }
-        else
-        {
-            result.Success = false;
-            result.ErrorMessage = "Failed to compile HLSL to SPIR-V for Vulkan";
-        }
+    case ERHIShaderPlatform::Vulkan:
+        CompileToSPIRV(source, input, output);
         break;
-
-    case RHI::ERHIShaderPlatform::D3D11:
-    case RHI::ERHIShaderPlatform::D3D12:
-        if (CompileHLSLToDirectXBytecode(preprocessedSource, shaderType, platform, result.BinaryData))
-        {
-            result.Success = true;
-        }
-        else
-        {
-            result.Success = false;
-            result.ErrorMessage = "Failed to compile HLSL to DirectX bytecode";
-        }
-        break;
-
-    case RHI::ERHIShaderPlatform::Metal:
-        if (CompileHLSLToMetalBytecode(preprocessedSource, shaderType, result.BinaryData))
-        {
-            result.Success = true;
-        }
-        else
-        {
-            result.Success = false;
-            result.ErrorMessage = "Failed to compile HLSL to Metal bytecode";
-        }
-        break;
-
-    case RHI::ERHIShaderPlatform::OpenGL:
-        if (CompileGLSLToOpenGLBytecode(preprocessedSource, shaderType, result.BinaryData))
-        {
-            result.Success = true;
-        }
-        else
-        {
-            result.Success = false;
-            result.ErrorMessage = "Failed to compile GLSL to OpenGL bytecode";
-        }
-        break;
-
     default:
-        result.Success = false;
-        result.ErrorMessage = "Unsupported shader platform";
+        output.ErrorMessage = "Platform not implemented!";
+        compiled = false;
         break;
     }
 
-    return result;
+    return output;
 }
 
-void ShaderCompiler::AddMacroDefinition(const std::string& name, const std::string& value)
+bool ShaderCompiler::LoadShaderSource(const ShaderCompileInput& input, std::string& outSource)
 {
-    MacroDefinitions[name] = value;
-}
-
-void ShaderCompiler::ClearMacroDefinitions()
-{
-    MacroDefinitions.clear();
-}
-
-bool ShaderCompiler::PreprocessShader(const std::string& sourcePath, std::string& outPreprocessedSource)
-{
-    std::string source;
-    if (!LoadShaderSource(sourcePath, source))
+    // 先检查 Environment.VirtualIncludes
+    auto it = input.Environment.VirtualIncludes.find(input.VirtualSourceFilePath);
+    if (it != input.Environment.VirtualIncludes.end())
     {
-        return false;
+        outSource = it->second;
+        return true;
     }
-    return PreprocessSource(source, outPreprocessedSource);
-}
 
-bool ShaderCompiler::ExtractParameterMap(
-    const std::string& preprocessedSource,
-    RHI::ERHIShaderFrequency shaderType,
-    ShaderParameterMap& outMap)
-{
-    return ParseHLSLResources(preprocessedSource, outMap);
-}
-
-bool ShaderCompiler::LoadShaderSource(const std::string& sourcePath, std::string& outSource)
-{
-    std::ifstream file(sourcePath);
+    // 尝试从 ShaderSourceDirectory + VirtualSourceFilePath 读取
+    std::string fullPath = ShaderSourceDirectory + "/" + input.VirtualSourceFilePath;
+    std::ifstream file(fullPath, std::ios::in | std::ios::binary);
     if (!file.is_open())
-    {
         return false;
-    }
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    outSource = buffer.str();
-    file.close();
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    outSource = ss.str();
     return true;
 }
 
-bool ShaderCompiler::PreprocessSource(const std::string& source, std::string& outProcessed)
+bool ShaderCompiler::PreprocessSource(const ShaderCompileInput& input, std::string& outSource, std::vector<std::string>& outIncludedFiles)
 {
-    // Expand includes
-    if (!ExpandIncludes(source, outProcessed))
-    {
+    std::string src;
+    // 1. 读取 shader 源
+    if (!LoadShaderSource(input, src))
         return false;
-    }
 
-    // Apply macro definitions
-    ApplyMacroDefinitions(outProcessed);
+    // 2. 使用 ExpandIncludes 展开所有 include
+    std::set<std::string> includeStack; // 用于循环 include 检测
+    if (!ExpandIncludes(src, input.Environment, outSource, outIncludedFiles, 16, &includeStack))
+        return false;
 
+    // 3. 应用宏定义
+    ApplyMacros(outSource, input.Environment.Definitions);
     return true;
 }
 
-bool ShaderCompiler::ExpandIncludes(const std::string& source, std::string& outExpanded, int depth)
+bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompilerEnvironment& env, std::string& outExpanded, std::vector<std::string>& outIncludedFiles, int depth, std::set<std::string>* includeStack)
 {
-    if (depth > MaxIncludeDepth)
+    bool localStack = false;
+    if (!includeStack)
     {
-        return false; // Prevent infinite recursion
+        includeStack = new std::set<std::string>();
+        localStack = true;
     }
 
-    std::string result = source;
-    std::regex includeRegex(R"(#include\s+[\"<]([^\">]+)[\">])");
-    std::smatch match;
-    std::string::const_iterator searchStart(result.cbegin());
+    std::istringstream stream(source);
+    std::ostringstream result;
+    std::string line;
 
-    while (std::regex_search(searchStart, result.cend(), match, includeRegex))
+    while (std::getline(stream, line))
     {
-        std::string includePath = match[1].str();
-        std::string fullPath = ShaderSourceDirectory + "/" + includePath;
-
-        std::string includedSource;
-        if (!LoadShaderSource(fullPath, includedSource))
+        size_t includePos = line.find("#include");
+        if (includePos != std::string::npos)
         {
-            return false;
+            size_t startQuote = line.find_first_of("\"<", includePos + 8);
+            size_t endQuote = line.find_first_of("\">", startQuote + 1);
+            if (startQuote != std::string::npos && endQuote != std::string::npos)
+            {
+                std::string includePath = line.substr(startQuote + 1, endQuote - startQuote - 1);
+
+                // 检查循环包含
+                if (includeStack->count(includePath))
+                    continue; // 已经包含过，跳过
+
+                includeStack->insert(includePath);
+                std::string includedSource;
+
+                // 虚拟 include
+                auto it = env.VirtualIncludes.find(includePath);
+                if (it != env.VirtualIncludes.end())
+                {
+                    includedSource = it->second;
+                }
+                else
+                {
+                    // 文件系统 include
+                    bool loaded = false;
+                    for (const auto& incDir : env.IncludePaths)
+                    {
+                        std::string fullPath = incDir + "/" + includePath;
+                        std::ifstream file(fullPath, std::ios::in | std::ios::binary);
+                        if (file.is_open())
+                        {
+                            std::ostringstream ss;
+                            ss << file.rdbuf();
+                            includedSource = ss.str();
+                            loaded = true;
+                            break;
+                        }
+                    }
+                    if (!loaded)
+                        return false;
+                }
+
+                std::string expandedInclude;
+                if (!ExpandIncludes(includedSource, env, expandedInclude, outIncludedFiles, depth + 1, includeStack))
+                    return false;
+
+                result << expandedInclude << "\n";
+                outIncludedFiles.push_back(includePath);
+
+                includeStack->erase(includePath);
+                continue;
+            }
         }
 
-        // Recursively expand includes in the included file
-        std::string expandedInclude;
-        if (!ExpandIncludes(includedSource, expandedInclude, depth + 1))
+        result << line << "\n";
+    }
+
+    outExpanded = result.str();
+    if (localStack)
+        delete includeStack;
+
+    return true;
+}
+
+void ShaderCompiler::ApplyMacros(std::string& source, const std::map<std::string, std::string>& macros)
+{
+    for (const auto& m : macros)
+    {
+        std::string define = "#define " + m.first + " " + m.second + "\n";
+        source = define + source;
+    }
+}
+
+void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
+{
+    out.Platform = ERHIShaderPlatform::Vulkan;
+    out.Success = false;
+    out.PackedBinaryData.clear();
+
+    // 1. 映射 Shader Stage
+    EShLanguage stage;
+    switch (input.Frequency)
+    {
+    case ERHIShaderFrequency::Vertex:         stage = EShLangVertex; break;
+    case ERHIShaderFrequency::Fragment:       stage = EShLangFragment; break;
+    case ERHIShaderFrequency::Compute:        stage = EShLangCompute; break;
+    case ERHIShaderFrequency::Geometry:       stage = EShLangGeometry; break;
+    case ERHIShaderFrequency::TessControl:    stage = EShLangTessControl; break;
+    case ERHIShaderFrequency::TessEvaluation: stage = EShLangTessEvaluation; break;
+    case ERHIShaderFrequency::Mesh:           stage = EShLangMeshNV; break;
+    case ERHIShaderFrequency::Task:           stage = EShLangTaskNV; break;
+    default:
+        out.ErrorMessage = "Unsupported shader stage for SPIR-V compilation";
+        return;
+    }
+
+    // 2. 创建 TShader
+    glslang::TShader shader(stage);
+    const char* sourceCStr = preprocessedSource.c_str();
+    shader.setStrings(&sourceCStr, 1);
+    shader.setEntryPoint(input.EntryPoint.c_str());
+    shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, 100);
+    shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
+    shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
+
+    // 3. 添加宏定义
+    TBuiltInResource resources = {};
+    // 初始化默认资源限制
+    resources.maxLights = 32;
+    resources.maxClipPlanes = 6;
+    resources.maxTextureUnits = 32;
+    resources.maxVertexAttribs = 64;
+    resources.maxVertexUniformComponents = 4096;
+    resources.maxVaryingFloats = 64;
+    resources.maxVertexTextureImageUnits = 32;
+    resources.maxCombinedTextureImageUnits = 80;
+    resources.maxTextureImageUnits = 32;
+    resources.maxFragmentUniformComponents = 4096;
+    resources.maxDrawBuffers = 32;
+    resources.maxVertexUniformVectors = 128;
+    resources.maxVaryingVectors = 8;
+    resources.maxFragmentUniformVectors = 16;
+    resources.maxVertexOutputVectors = 16;
+    resources.maxFragmentInputVectors = 15;
+    resources.minProgramTexelOffset = -8;
+    resources.maxProgramTexelOffset = 7;
+    resources.maxClipDistances = 8;
+    resources.maxComputeWorkGroupCountX = 65535;
+    resources.maxComputeWorkGroupCountY = 65535;
+    resources.maxComputeWorkGroupCountZ = 65535;
+    resources.maxComputeWorkGroupSizeX = 1024;
+    resources.maxComputeWorkGroupSizeY = 1024;
+    resources.maxComputeWorkGroupSizeZ = 64;
+    resources.maxComputeUniformComponents = 1024;
+    resources.maxComputeTextureImageUnits = 16;
+    resources.maxComputeImageUniforms = 8;
+    resources.maxComputeAtomicCounters = 8;
+    resources.maxComputeAtomicCounterBuffers = 1;
+    resources.maxVaryingComponents = 60;
+    resources.maxVertexOutputComponents = 64;
+    resources.maxGeometryInputComponents = 64;
+    resources.maxGeometryOutputComponents = 128;
+    resources.maxFragmentInputComponents = 128;
+    resources.maxImageUnits = 8;
+    resources.maxCombinedImageUnitsAndFragmentOutputs = 8;
+    resources.maxCombinedShaderOutputResources = 8;
+    resources.maxImageSamples = 0;
+    resources.maxVertexImageUniforms = 0;
+    resources.maxTessControlImageUniforms = 0;
+    resources.maxTessEvaluationImageUniforms = 0;
+    resources.maxGeometryImageUniforms = 0;
+    resources.maxFragmentImageUniforms = 8;
+    resources.maxCombinedImageUniforms = 8;
+
+    // 构建宏数组
+    std::vector<const char*> preprocessorDefines;
+    for (const auto& define : input.Environment.Definitions)
+    {
+        std::string def = define.first + "=" + define.second;
+        char* defStr = new char[def.size() + 1];
+        memcpy(defStr, def.c_str(), def.size() + 1);
+        preprocessorDefines.push_back(defStr);
+    }
+
+    if (!shader.parse(&resources, 100, false, EShMsgDefault))
+    {
+        out.ErrorMessage = shader.getInfoLog();
+        out.ErrorMessage += "\n";
+        out.ErrorMessage += shader.getInfoDebugLog();
+        // 清理
+        for (auto p : preprocessorDefines) delete[] p;
+        return;
+    }
+    for (auto p : preprocessorDefines) delete[] p;
+
+    // 4. 链接程序
+    glslang::TProgram program;
+    program.addShader(&shader);
+    if (!program.link(EShMsgDefault))
+    {
+        out.ErrorMessage = program.getInfoLog();
+        out.ErrorMessage += "\n";
+        out.ErrorMessage += program.getInfoDebugLog();
+        return;
+    }
+
+    // 5. 生成 SPIR-V
+    std::vector<uint32_t> spirv;
+    glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
+
+    
+
+    // 6. 使用 SPIRV-Cross 反射资源
+    spirv_cross::Compiler compiler(spirv);
+    spirv_cross::ShaderResources resourcesSC = compiler.get_shader_resources();
+
+    // ---------- Uniform Buffers ----------
+    for (const auto& ub : resourcesSC.uniform_buffers)
+    {
+        std::string name = compiler.get_name(ub.id);
+
+        uint32_t binding = compiler.get_decoration(ub.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(ub.id, spv::DecorationDescriptorSet);
+
+        auto& type = compiler.get_type(ub.base_type_id);
+        uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
+
+        out.ParameterMap.AddParameterAllocation(
+            name,
+            static_cast<uint16_t>(set),
+            static_cast<uint16_t>(binding),
+            static_cast<uint16_t>(size),
+            EShaderParameterType::UniformBuffer
+        );
+    }
+
+    // ---------- Sampled Images (Texture + Sampler) ----------
+    for (const auto& img : resourcesSC.sampled_images)
+    {
+        std::string name = compiler.get_name(img.id);
+
+        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
+
+        out.ParameterMap.AddParameterAllocation(
+            name,
+            static_cast<uint16_t>(set),
+            static_cast<uint16_t>(binding),
+            0,
+            EShaderParameterType::SRV
+        );
+    }
+
+    // ---------- Separate Samplers ----------
+    for (const auto& sampler : resourcesSC.separate_samplers)
+    {
+        std::string name = compiler.get_name(sampler.id);
+
+        uint32_t binding = compiler.get_decoration(sampler.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(sampler.id, spv::DecorationDescriptorSet);
+
+        out.ParameterMap.AddParameterAllocation(
+            name,
+            static_cast<uint16_t>(set),
+            static_cast<uint16_t>(binding),
+            0,
+            EShaderParameterType::Sampler
+        );
+    }
+
+    // ---------- Storage Images ----------
+    for (const auto& img : resourcesSC.storage_images)
+    {
+        std::string name = compiler.get_name(img.id);
+
+        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
+
+        out.ParameterMap.AddParameterAllocation(
+            name,
+            static_cast<uint16_t>(set),
+            static_cast<uint16_t>(binding),
+            0,
+            EShaderParameterType::UAV
+        );
+    }
+
+    // ---------- Storage Buffers ----------
+    for (const auto& sb : resourcesSC.storage_buffers)
+    {
+        std::string name = compiler.get_name(sb.id);
+
+        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
+
+        auto& type = compiler.get_type(sb.base_type_id);
+        uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
+
+        out.ParameterMap.AddParameterAllocation(
+            name,
+            static_cast<uint16_t>(set),
+            static_cast<uint16_t>(binding),
+            static_cast<uint16_t>(size),
+            EShaderParameterType::UAV
+        );
+    }
+    // 6. 填充输出
+    out.PackedBinaryData.resize(spirv.size() * sizeof(uint32_t));
+    memcpy(out.PackedBinaryData.data(), spirv.data(), spirv.size() * sizeof(uint32_t));
+
+	SPIRVPackSource packSource;
+	packSource.compiler = &compiler;
+	packSource.spirvCode = &spirv;
+    packSource.frequency = input.Frequency;
+    packSource.entryPoint = input.EntryPoint;
+	SPIRVCompiledBinaryResultPacker packer;
+	std::vector<char> packedData;
+
+	if (packer.Pack(&packSource, packedData))
+	{
+		out.PackedBinaryData = std::move(packedData);
+        out.Success = true;
+	}
+
+
+}
+
+void ShaderCompiler::CompileToDirectX(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
+{
+
+}
+
+void ShaderCompiler::CompileToMetal(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
+{
+
+}
+
+void ShaderCompiler::CompileToOpenGL(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
+{
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+ShaderCompilationCache* GShaderCompilationCache = nullptr;
+void SPIRVCompiledBinaryResultPacker::Depack(const std::vector<char>& packedResult)
+{
+    size_t offset = 0;
+
+    auto read = [&](void* dst, size_t size)
         {
-            return false;
-        }
+            memcpy(dst, packedResult.data() + offset, size);
+            offset += size;
+        };
 
-        // Replace #include directive with expanded content
-        std::string matchStr = match[0].str();
-        size_t pos = result.find(matchStr);
-        result.replace(pos, matchStr.length(), expandedInclude);
+    // =========================
+    // SPIR-V code
+    // =========================
 
-        searchStart = result.cbegin() + pos + expandedInclude.length();
-    }
+    uint32_t codeSize = 0;
+    read(&codeSize, sizeof(uint32_t));
 
-    outExpanded = result;
-    return true;
-}
+    DepackedData.SpirvCode.resize(codeSize);
 
-void ShaderCompiler::ApplyMacroDefinitions(std::string& source)
-{
-    for (const auto& macro : MacroDefinitions)
+    read(DepackedData.SpirvCode.data(), codeSize * sizeof(uint32_t));
+
+    // =========================
+    // Header basic info
+    // =========================
+
+    read(&DepackedData.header.Frequency, sizeof(ERHIShaderFrequency));
+
+    read(DepackedData.header.EntryPoint, sizeof(DepackedData.header.EntryPoint));
+
+    read(&DepackedData.header.ShaderHash, sizeof(uint64_t));
+
+    // =========================
+    // Descriptor bindings
+    // =========================
+
+    uint32_t bindingCount = 0;
+    read(&bindingCount, sizeof(uint32_t));
+
+    DepackedData.header.DescriptorBindings.resize(bindingCount);
+
+    for (uint32_t i = 0; i < bindingCount; ++i)
     {
-        std::regex macroRegex("\\b" + macro.first + "\\b");
-        source = std::regex_replace(source, macroRegex, macro.second);
+        read(&DepackedData.header.DescriptorBindings[i], sizeof(DescriptorBindingInfo));
     }
-}
 
-bool ShaderCompiler::CompileHLSLToSPIRV(
-    const std::string& preprocessedSource,
-    RHI::ERHIShaderFrequency shaderType,
-    std::vector<uint8_t>& outBinaryData)
-{
-    // Using DXC (DirectX Shader Compiler) to compile HLSL -> SPIR-V
-    // This requires DXC library with SPIR-V support
-    
-    // Pseudocode - actual implementation would depend on DXC API
-    /*
-    IDxcLibrary* library = nullptr;
-    IDxcCompiler* compiler = nullptr;
-    IDxcOperationResult* result = nullptr;
-    
-    DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&library));
-    DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
-    
-    IDxcBlobEncoding* sourceBlob = nullptr;
-    library->CreateBlobWithEncodingOnHeapCopy(
-        preprocessedSource.c_str(),
-        preprocessedSource.length(),
-        CP_UTF8,
-        &sourceBlob
-    );
-    
-    LPCWSTR arguments[] = {
-        L"-E", L"main",
-        L"-T", ShaderTypeToHLSLTarget(shaderType).c_str(),
-        L"-spirv"
-    };
-    
-    compiler->Compile(sourceBlob, L"", L"main", 
-        ShaderTypeToHLSLTarget(shaderType).c_str(), 
-        arguments, _countof(arguments), nullptr, 0, nullptr, &result);
-    
-    HRESULT hr;
-    result->GetStatus(&hr);
-    if (SUCCEEDED(hr)) {
-        IDxcBlob* code = nullptr;
-        result->GetResult(&code);
-        outBinaryData.resize(code->GetBufferSize());
-        memcpy(outBinaryData.data(), code->GetBufferPointer(), code->GetBufferSize());
-        return true;
-    }
-    */
+    // =========================
+    // Push constant
+    // =========================
 
-    // Placeholder: return empty for now
-    outBinaryData.clear();
-    return true;
-}
+    read(&DepackedData.header.HasPushConstant, sizeof(bool));
 
-bool ShaderCompiler::CompileHLSLToDirectXBytecode(
-    const std::string& preprocessedSource,
-    RHI::ERHIShaderFrequency shaderType,
-    RHI::ERHIShaderPlatform platform,
-    std::vector<uint8_t>& outBinaryData)
-{
-    // Using D3DCompile or DXC to compile HLSL bytecode
-    // Pseudocode - actual implementation would use D3DCompile or DXC API
-    
-    /*
-    IDxcLibrary* library = nullptr;
-    IDxcCompiler* compiler = nullptr;
-    IDxcOperationResult* result = nullptr;
-    
-    DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&library));
-    DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
-    
-    IDxcBlobEncoding* sourceBlob = nullptr;
-    library->CreateBlobWithEncodingOnHeapCopy(
-        preprocessedSource.c_str(),
-        preprocessedSource.length(),
-        CP_UTF8,
-        &sourceBlob
-    );
-    
-    LPCWSTR targetProfile = (platform == RHI::ERHIShaderPlatform::D3D12) ? L"6_0" : L"5_0";
-    LPCWSTR arguments[] = {
-        L"-E", L"main",
-        L"-T", ShaderTypeToHLSLTarget(shaderType).c_str(),
-    };
-    
-    compiler->Compile(sourceBlob, L"", L"main",
-        ShaderTypeToHLSLTarget(shaderType).c_str(),
-        arguments, _countof(arguments), nullptr, 0, nullptr, &result);
-    
-    HRESULT hr;
-    result->GetStatus(&hr);
-    if (SUCCEEDED(hr)) {
-        IDxcBlob* code = nullptr;
-        result->GetResult(&code);
-        outBinaryData.resize(code->GetBufferSize());
-        memcpy(outBinaryData.data(), code->GetBufferPointer(), code->GetBufferSize());
-        return true;
-    }
-    */
-
-    // Placeholder: return empty for now
-    outBinaryData.clear();
-    return true;
-}
-
-bool ShaderCompiler::CompileHLSLToMetalBytecode(
-    const std::string& preprocessedSource,
-    RHI::ERHIShaderFrequency shaderType,
-    std::vector<uint8_t>& outBinaryData)
-{
-    // Metal compilation would require translating HLSL -> Metal Shading Language (MSL)
-    // Then compiling with Metal compiler (metallib)
-    
-    // Placeholder: return empty for now
-    outBinaryData.clear();
-    return true;
-}
-
-bool ShaderCompiler::CompileGLSLToOpenGLBytecode(
-    const std::string& preprocessedSource,
-    RHI::ERHIShaderFrequency shaderType,
-    std::vector<uint8_t>& outBinaryData)
-{
-    // For OpenGL, we typically store GLSL source as-is or compile to SPIR-V
-    // OpenGL 4.6+ supports SPIR-V
-    
-    // First translate HLSL to GLSL
-    std::string glslSource;
-    if (!TranslateHLSLToGLSL(preprocessedSource, shaderType, glslSource))
+    if (DepackedData.header.HasPushConstant)
     {
+        read(&DepackedData.header.PushConstant, sizeof(PushConstantInfo));
+    }
+}
+bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& packedResultOut)
+{
+    if (!packSource)
         return false;
-    }
 
-    // Store GLSL source as binary (or could compile to SPIR-V for OpenGL 4.6+)
-    outBinaryData.assign(glslSource.begin(), glslSource.end());
-    return true;
-}
+    SPIRVPackSource* src = reinterpret_cast<SPIRVPackSource*>(packSource);
 
-bool ShaderCompiler::ParseHLSLResources(
-    const std::string& preprocessedSource,
-    ShaderParameterMap& outMap)
-{
-    // Parse cbuffer declarations
-    std::regex cbufferRegex(
-        R"(cbuffer\s+(\w+)\s*:\s*register\s*\(\s*b(\d+)\s*\)\s*\{([^}]*)\})"
-    );
-    std::smatch match;
-    std::string::const_iterator searchStart(preprocessedSource.cbegin());
+    DepackedData.SpirvCode = *(src->spirvCode);
 
-    while (std::regex_search(searchStart, preprocessedSource.cend(), match, cbufferRegex))
-    {
-        std::string cbufferName = match[1].str();
-        uint32_t bindSlot = std::stoul(match[2].str());
-        std::string cbufferContent = match[3].str();
+    spirv_cross::Compiler* compiler = src->compiler;
 
-        // Parse member variables in cbuffer
-        std::regex memberRegex(R"((\w+)\s+(\w+)\s*;)");
-        std::smatch memberMatch;
-        std::string::const_iterator memberSearchStart(cbufferContent.cbegin());
+    DepackedData.header.Frequency = src->frequency;
 
-        while (std::regex_search(memberSearchStart, cbufferContent.cend(), memberMatch, memberRegex))
+    strncpy(
+        DepackedData.header.EntryPoint,
+        src->entryPoint.c_str(),
+        sizeof(DepackedData.header.EntryPoint));
+
+    // 简单 hash
+    DepackedData.header.ShaderHash =
+        std::hash<std::string>()(
+            std::string(
+                reinterpret_cast<char*>(DepackedData.SpirvCode.data()),
+                DepackedData.SpirvCode.size() * sizeof(uint32_t)));
+
+    auto resources = compiler->get_shader_resources();
+
+    DepackedData.header.DescriptorBindings.clear();
+
+
+    auto addBinding =
+        [&](const spirv_cross::Resource& res, ESPIRVShaderResourceType type)
         {
-            std::string typeName = memberMatch[1].str();
-            std::string memberName = memberMatch[2].str();
+            DescriptorBindingInfo info{};
 
-            //ShaderParameterBinding binding;
-            //binding.BindSlot = bindSlot;
-            //
-            //// Map HLSL types to parameter base types
-            //if (typeName == "float")
-            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::Float32;
-            //else if (typeName == "int")
-            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::Int32;
-            //else if (typeName == "uint")
-            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::UInt32;
-            //else
-            //    binding.ParameterBaseType = RHI::EShaderUniformBaseType::Unknown;
-            //
-            //outBindingInfo.AddParameterBinding(memberName, binding);
+            info.Binding =
+                (uint16_t)compiler->get_decoration(res.id, spv::DecorationBinding);
 
-            memberSearchStart = memberMatch.suffix().first;
-        }
+            info.Set =
+                (uint16_t)compiler->get_decoration(res.id, spv::DecorationDescriptorSet);
 
-        searchStart = match.suffix().first;
+            auto& typeInfo = compiler->get_type(res.type_id);
+
+            if (!typeInfo.array.empty())
+                info.Count = (uint16_t)typeInfo.array[0];
+            else
+                info.Count = 1;
+
+            info.Type = type;
+
+            std::string name = compiler->get_name(res.id);
+
+            if (!name.empty())
+            {
+                strncpy(info.Name, name.c_str(), sizeof(info.Name));
+            }
+
+            DepackedData.header.DescriptorBindings.push_back(info);
+        };
+
+    // =========================
+    // Uniform buffers
+    // =========================
+
+    for (auto& ub : resources.uniform_buffers)
+    {
+        addBinding(ub, ESPIRVShaderResourceType::UniformBuffer);
     }
 
-    // Parse texture/sampler declarations
-    std::regex textureRegex(
-        R"(Texture2D\s+(\w+)\s*:\s*register\s*\(\s*t(\d+)\s*\))"
-    );
-    searchStart = preprocessedSource.cbegin();
+    // =========================
+    // Storage buffers
+    // =========================
 
-    while (std::regex_search(searchStart, preprocessedSource.cend(), match, textureRegex))
+    for (auto& sb : resources.storage_buffers)
     {
-        std::string textureName = match[1].str();
-        uint32_t bindSlot = std::stoul(match[2].str());
-
-        //ShaderParameterBinding binding;
-        //binding.BindSlot = bindSlot;
-        //binding.ParameterBaseType = RHI::EShaderUniformBaseType::Texture;
-        //
-        //outBindingInfo.AddParameterBinding(textureName, binding);
-        //searchStart = match.suffix().first;
+        addBinding(sb, ESPIRVShaderResourceType::StorageBuffer);
     }
 
-    // Parse RWTexture/UAV declarations
-    std::regex uavRegex(
-        R"(RWTexture2D\s*<\s*\w+\s*>\s+(\w+)\s*:\s*register\s*\(\s*u(\d+)\s*\))"
-    );
-    searchStart = preprocessedSource.cbegin();
+    // =========================
+    // Sampled images
+    // =========================
 
-    while (std::regex_search(searchStart, preprocessedSource.cend(), match, uavRegex))
+    for (auto& img : resources.sampled_images)
     {
-        std::string uavName = match[1].str();
-        uint32_t bindSlot = std::stoul(match[2].str());
+        addBinding(img, ESPIRVShaderResourceType::SampledImage);
+    }
 
-        //ShaderParameterBinding binding;
-        //binding.BindSlot = bindSlot;
-        //binding.ParameterBaseType = RHI::EShaderUniformBaseType::Texture_UAV;
-        //
-        //outBindingInfo.AddParameterBinding(uavName, binding);
-        //searchStart = match.suffix().first;
+    // =========================
+    // Storage images
+    // =========================
+
+    for (auto& img : resources.storage_images)
+    {
+        addBinding(img, ESPIRVShaderResourceType::StorageImage);
+    }
+
+    // =========================
+    // Push constants
+    // =========================
+
+    DepackedData.header.HasPushConstant = false;
+
+    if (!resources.push_constant_buffers.empty())
+    {
+        auto& pcb = resources.push_constant_buffers[0];
+
+        auto& type = compiler->get_type(pcb.base_type_id);
+
+        DepackedData.header.PushConstant.Size =
+            (uint16_t)compiler->get_declared_struct_size(type);
+        DepackedData.header.HasPushConstant = true;
+    }
+
+    // =========================
+    // Descriptor sort（非常重要）
+    // =========================
+
+    std::sort(
+        DepackedData.header.DescriptorBindings.begin(),
+        DepackedData.header.DescriptorBindings.end(),
+        [](const DescriptorBindingInfo& a, const DescriptorBindingInfo& b)
+        {
+            if (a.Set != b.Set)
+                return a.Set < b.Set;
+
+            return a.Binding < b.Binding;
+        });
+
+    // =========================
+    // Serialize
+    // =========================
+
+    packedResultOut.clear();
+
+    auto write = [&](const void* data, size_t size)
+        {
+            const char* c = reinterpret_cast<const char*>(data);
+            packedResultOut.insert(packedResultOut.end(), c, c + size);
+        };
+
+    // SPIRV
+
+    uint32_t codeSize = (uint32_t)DepackedData.SpirvCode.size();
+
+    write(&codeSize, sizeof(uint32_t));
+
+    write(
+        DepackedData.SpirvCode.data(),
+        codeSize * sizeof(uint32_t));
+
+    // Header basic
+
+    write(&DepackedData.header.Frequency, sizeof(ERHIShaderFrequency));
+
+    write(
+        DepackedData.header.EntryPoint,
+        sizeof(DepackedData.header.EntryPoint));
+
+    write(&DepackedData.header.ShaderHash, sizeof(uint64_t));
+
+    // Descriptor bindings
+
+    uint32_t bindingCount =
+        (uint32_t)DepackedData.header.DescriptorBindings.size();
+
+    write(&bindingCount, sizeof(uint32_t));
+
+    for (auto& b : DepackedData.header.DescriptorBindings)
+    {
+        write(&b, sizeof(DescriptorBindingInfo));
+    }
+
+    // Push constant
+
+    write(&DepackedData.header.HasPushConstant, sizeof(bool));
+
+    if (DepackedData.header.HasPushConstant)
+    {
+        write(&DepackedData.header.PushConstant, sizeof(PushConstantInfo));
     }
 
     return true;
 }
-
-std::string ShaderCompiler::ShaderTypeToString(RHI::ERHIShaderFrequency shaderType)
-{
-    switch (shaderType)
-    {
-    case RHI::ERHIShaderFrequency::Vertex:
-        return "vertex";
-    case RHI::ERHIShaderFrequency::Fragment:
-        return "fragment";
-    case RHI::ERHIShaderFrequency::Compute:
-        return "compute";
-    case RHI::ERHIShaderFrequency::Geometry:
-        return "geometry";
-    case RHI::ERHIShaderFrequency::TessControl:
-        return "tesscontrol";
-    case RHI::ERHIShaderFrequency::TessEvaluation:
-        return "tesseval";
-    default:
-        return "unknown";
-    }
-}
-
-std::string ShaderCompiler::ShaderTypeToHLSLTarget(RHI::ERHIShaderFrequency shaderType)
-{
-    switch (shaderType)
-    {
-    case RHI::ERHIShaderFrequency::Vertex:
-        return "vs_6_0";
-    case RHI::ERHIShaderFrequency::Fragment:
-        return "ps_6_0";
-    case RHI::ERHIShaderFrequency::Compute:
-        return "cs_6_0";
-    case RHI::ERHIShaderFrequency::Geometry:
-        return "gs_6_0";
-    case RHI::ERHIShaderFrequency::TessControl:
-        return "hs_6_0";
-    case RHI::ERHIShaderFrequency::TessEvaluation:
-        return "ds_6_0";
-    default:
-        return "unknown";
-    }
-}
-
-std::string ShaderCompiler::ShaderTypeToMetalEntry(RHI::ERHIShaderFrequency shaderType)
-{
-    switch (shaderType)
-    {
-    case RHI::ERHIShaderFrequency::Vertex:
-        return "vertexShader";
-    case RHI::ERHIShaderFrequency::Fragment:
-        return "fragmentShader";
-    case RHI::ERHIShaderFrequency::Compute:
-        return "computeShader";
-    default:
-        return "unknown";
-    }
-}
-
-bool ShaderCompiler::TranslateHLSLToGLSL(
-    const std::string& hlslSource,
-    RHI::ERHIShaderFrequency shaderType,
-    std::string& outGLSLSource)
-{
-    // This would require HLSL-to-GLSL translation
-    // Could use ANGLE or similar translation layer
-    // For now, this is a placeholder that returns the source as-is
-    outGLSLSource = hlslSource;
-    return true;
-}
-
 } // namespace RenderCore

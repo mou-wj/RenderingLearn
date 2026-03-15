@@ -18,6 +18,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${BINARY_DIR}")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${BINARY_DIR}")
 
 
+
 add_subdirectory(src)
 
 #renderdoc tool

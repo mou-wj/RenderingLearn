@@ -2,15 +2,8 @@
 #include "RHIDefine.h"
 
 namespace RHI{
-    static ERHIShaderPlatform GRHIShaderPlatform = ERHIShaderPlatform::Unknown;
     RHIApi* GRHIApi = nullptr;
-    
-    RHIApi* GetGlobalRHIApi()
-    {
-        return GRHIApi;
-    }
-
-
+    ERHIShaderPlatform GShaderPlatform = ERHIShaderPlatform::Unknown;
 
     const std::unordered_map<ERHIFormat, FormatInfo> GFormatInfoMap = {
     { ERHIFormat::Unknown, {"Unknown", 0, 0, false, false, false, false} },

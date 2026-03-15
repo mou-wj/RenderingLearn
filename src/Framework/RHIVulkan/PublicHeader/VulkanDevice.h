@@ -11,7 +11,6 @@ namespace RHIVulkan{
 
 class VulkanMemoryManager; // 前向声明
 class VulkanQueue; // 前向声明
-class VulkanDescriptorPoolManager; // 前向声明
 class VulkanSemaphoreManager; // 前向声明
 class VulkanEventManager; // 前向声明
 class VulkanStagingManager;// 前向声明
@@ -21,6 +20,7 @@ class VulkanRenderPassManager;
 class VulkanDescriptorSetLayoutManager;
 class VulkanDescriptorSetManager;
 class VulkanShaderManager;
+class VulkanPipelineLayoutCache;
 
 class VulkanDevice
 {
@@ -44,7 +44,6 @@ public:
     uint32_t GetPresentQueueFamilyIndex() const { return presentQueueFamilyIndex_; }
 
     VulkanMemoryManager* GetMemoryManager() const { return memoryManager_; }
-    VulkanDescriptorPoolManager* GetDescriptorPoolManager() const { return descriptorPoolManager_; }
     VkInstance GetInstance() const { return rhiApi_->GetInstance(); }
     bool InitPresentQueue(VkSurfaceKHR Surface);
     VulkanSemaphoreManager* GetSemaphoreManager() const { return semaphoreManager_; }
@@ -56,6 +55,7 @@ public:
     VulkanDescriptorSetLayoutManager* GetDescriptorSetLayoutManager() const { return descriptorSetLayoutManager_; }
     VulkanDescriptorSetManager* GetDescriptorSetManager() const { return descriptorSetManager_; }
 	VulkanShaderManager* GetShaderManager() const { return shaderManager_; }
+    VulkanPipelineLayoutCache* GetPipelineLayoutCache() const { return pipelineStateCache_; }
 private:
     void SelectQueueFamilies(VkPhysicalDevice physicalDevice);
     void CreateLogicalDevice(VkPhysicalDevice physicalDevice,
@@ -79,7 +79,6 @@ private:
     VulkanQueue *presentQueue_;
 
     VulkanMemoryManager* memoryManager_;
-    VulkanDescriptorPoolManager* descriptorPoolManager_ = nullptr;
 	VulkanSemaphoreManager* semaphoreManager_ = nullptr;
 	VulkanEventManager* eventManager_ = nullptr;
 	VulkanStagingManager* stagingManager_ = nullptr;
@@ -89,6 +88,7 @@ private:
     VulkanDescriptorSetLayoutManager* descriptorSetLayoutManager_;
     VulkanDescriptorSetManager* descriptorSetManager_;
     VulkanShaderManager* shaderManager_;
+    VulkanPipelineLayoutCache* pipelineStateCache_;
 };
 
 }

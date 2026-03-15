@@ -1,6 +1,7 @@
 #pragma once
 #include "RHIResource.h"
 #include "VulkanDevice.h"
+#include "ShaderCompiledDataPacker.h"
 #include <vector>
 #include <vulkan/vulkan.h>
 #include <map>
@@ -41,13 +42,14 @@ public:
 
     
 
-    bool Initialize(const std::vector<char>& spirvCode);
+    bool Initialize(const std::vector<char>& packedCode);
     void Cleanup();
-
+	RenderCore::SPIRVCompiledBinaryResultPacker::Header GetShaderReflection() const { return Reflection; }
 	VkShaderModule  GetShaderModule() const { return shaderModule; }
-	const std::string GetEntryPoint() const { return EntryPoint; }
+	const std::string& GetEntryPoint() const { return EntryPoint; }
     VkShaderStageFlagBits GetShaderStage() const { return ShaderStage; }
 protected:
+	RenderCore::SPIRVCompiledBinaryResultPacker::Header Reflection;
     VkShaderModule shaderModule = VK_NULL_HANDLE;
     VulkanDevice* Device = nullptr;
     std::string EntryPoint;
@@ -199,6 +201,8 @@ public:
 
         // 创建新的 shader
         auto shader = std::make_shared<ShaderType>(Device);
+
+
 
         if (!shader->Initialize(shaderCode))
         {

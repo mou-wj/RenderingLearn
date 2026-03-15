@@ -1,8 +1,12 @@
 {
   "name": "tinygltf",
-  "need_pull": true,
-  "git": "https://github.com/syoyo/tinygltf.git",
-  "branch": "release",
+
+  "type": "managed",
+
+  "source": {
+    "git": "https://github.com/syoyo/tinygltf.git",
+    "branch": "release"
+  },
 
   "compiler": {
     "windows": {
@@ -21,23 +25,26 @@
       "cmake_toolset": ""
     }
   },
-  "need_compile": true,
-  "type":"static",
-  "dependencies": [],
 
-  "cmake": {
+  "build": {
+    "system": "cmake",
     "configure_args": [
       "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/${CONFIG}"
     ],
     "build_targets": ["install"],
-    "build_configs": ["Debug","Release"]
+    "configs": ["Debug", "Release"],
+    "type" : "static"
   },
 
   "install_layout": {
+    "root": "${INSTALL_DIR}/${CONFIG}",
     "include": "${INSTALL_DIR}/${CONFIG}/include",
     "lib": "${INSTALL_DIR}/${CONFIG}/lib"
   },
 
+  "dependencies": [],
 
-  "notes": "tinygltf is header-only; CMake install will place headers into include/. No static libs expected."
+  "auto_generate_find_cmake": "if_missing",
+
+  "notes": "tinygltf is header-only; prefer Config.cmake if available; otherwise auto-generate FindTinyGLTF.cmake. No static libs expected."
 }

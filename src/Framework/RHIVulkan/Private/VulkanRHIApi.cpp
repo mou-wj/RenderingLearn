@@ -5,13 +5,14 @@
 #include "VulkanResource.h"
 #include "RHIUtils.h"
 #include "VulkanSwapchain.h"
-#include "VulkanPipeline.h"
+#include "VulkanPipelineState.h"
 #include "VulkanPlatformSurport.h"
 #include "VulkanCommandContex.h"
 #include "VulkanCommandBuffer.h"
 #include "VulkanMemory.h"
 #include "VulkanRHIUtils.h"
 #include "VulkanShader.h"
+#include "VulkanTransientResource.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
 
@@ -28,6 +29,7 @@ namespace RHIVulkan{
 // 初始化和销毁接口实现
 bool VulkanRHIApi::Init()
 {
+	GShaderPlatform = ERHIShaderPlatform::Vulkan;
     // 创建Vulkan实例
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -113,7 +115,7 @@ RHIBufferSP VulkanRHIApi::CreateBuffer(const RHIBufferDesc& desc)
 {
     // 创建Vulkan缓冲区资源
     // 这里需要实现Vulkan特定的缓冲区创建逻辑
-    return nullptr; // 暂时返回nullptr，实际实现需要返回有效的缓冲区对象
+    return DynamicPtrCast(std::make_shared<VulkanBuffer>(Device, desc), RHIBuffer); // 暂时返回nullptr，实际实现需要返回有效的缓冲区对象
 }
 
 
@@ -258,67 +260,67 @@ RHIComputeShaderSP VulkanRHIApi::CreateComputeShader(const std::vector<char>& sh
 RHIGeometryShaderSP VulkanRHIApi::CreateGeometryShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan几何着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIGeometryShader>(shaderSourceCode), RHIGeometryShader); // 暂时返回nullptr
 }
 
 RHITessControlShaderSP VulkanRHIApi::CreateTessControlShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan细分控制着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHITessControlShader>(shaderSourceCode), RHITessControlShader); // 暂时返回nullptr
 }
 
 RHITessEvalShaderSP VulkanRHIApi::CreateTessEvalShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan细分评估着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHITessEvalShader>(shaderSourceCode), RHITessEvalShader); // 暂时返回nullptr
 }
 
 RHIMeshShaderSP VulkanRHIApi::CreateMeshShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan网格着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIMeshShader>(shaderSourceCode), RHIMeshShader); // 暂时返回nullptr
 }
 
 RHITaskShaderSP VulkanRHIApi::CreateTaskShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan任务着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHITaskShader>(shaderSourceCode), RHITaskShader); // 暂时返回nullptr
 }
 
 RHIRayGenShaderSP VulkanRHIApi::CreateRayGenShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan光线生成着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIRayGenShader>(shaderSourceCode), RHIRayGenShader); // 暂时返回nullptr
 }
 
 RHICloseHitShaderSP VulkanRHIApi::CreateCloseHitShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan最近命中着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHICloseHitShader>(shaderSourceCode), RHICloseHitShader); // 暂时返回nullptr
 }
 
 RHIMissShaderSP VulkanRHIApi::CreateMissShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan未命中着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIMissShader>(shaderSourceCode), RHIMissShader); // 暂时返回nullptr
 }
 
 RHIAnyHitShaderSP VulkanRHIApi::CreateAnyHitShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan任何命中着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIAnyHitShader>(shaderSourceCode), RHIAnyHitShader); // 暂时返回nullptr
 }
 
 RHIIntersectionShaderSP VulkanRHIApi::CreateIntersectionShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan相交着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHIIntersectionShader>(shaderSourceCode), RHIIntersectionShader); // 暂时返回nullptr
 }
 
 RHICallableShaderSP VulkanRHIApi::CreateCallableShader(const std::vector<char>& shaderSourceCode)
 {
     // 创建Vulkan可调用着色器
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(Device->GetShaderManager()->GetOrCreateShader<VulkanRHICallableShader>(shaderSourceCode), RHICallableShader); // 暂时返回nullptr
 }
 
 
@@ -343,7 +345,7 @@ RHITextureSP VulkanRHIApi::GetViewportBackBuffer(RHIViewport* viewport)
 RHISamplerSP VulkanRHIApi::CreateSampler(const RHISamplerDesc& desc)
 {
     // 创建Vulkan采样器
-    return nullptr; // 暂时返回nullptr
+    return std::make_shared<VulkanSampler>(Device,desc); // 暂时返回nullptr
 }
 
 // 创建上下文接口实现
@@ -356,7 +358,30 @@ RHICommandContex* VulkanRHIApi::GetDefualtCommandContex()
 
 RHITransientResourceManagerSP VulkanRHIApi::CreateTransientResourceManager()
 {
-	return RHITransientResourceManagerSP();
+	return std::make_shared<VulkanTransientResourceManager>(Device);
+}
+
+struct VulkanPlatformCommandList : public RHIPlatformCommandList {
+		VulkanCommandContext* CommandContext;
+};
+
+RHIPlatformCommandList* VulkanRHIApi::FinalizeCommandContex(RHICommandContex* contex)
+{
+    // 创建Vulkan图形上下文
+	VulkanPlatformCommandList* platformCommandList = new VulkanPlatformCommandList();
+    platformCommandList->CommandContext = dynamic_cast<VulkanCommandContext*>(contex);
+	return platformCommandList;
+}
+
+void VulkanRHIApi::SubmitPlatformCommandLists(std::vector<RHIPlatformCommandList*> cmdLists)
+{
+	for (auto& cmdList : cmdLists) {
+		VulkanPlatformCommandList* vulkanCmdList = dynamic_cast<VulkanPlatformCommandList*>(cmdList);
+		if (vulkanCmdList && vulkanCmdList->CommandContext) {
+			vulkanCmdList->CommandContext->GetCommandBufferManager()->SubmitActiveCommandBuffer();
+		}
+		delete vulkanCmdList; // 提交后删除命令列表
+	}
 }
 
 

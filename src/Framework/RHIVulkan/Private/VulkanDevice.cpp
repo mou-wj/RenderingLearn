@@ -30,13 +30,14 @@ VulkanDevice::VulkanDevice(VulkanRHIApi* rhiApi,
 {
     memoryManager_ = new VulkanMemoryManager(this);
 	stagingManager_ = new VulkanStagingManager(this, memoryManager_);
-    globalCommandContext_ = new VulkanCommandContext(this, nullptr);
+
     fenceManager_ = new VulkanFenceManager(this);
     renderPassManager_ = new VulkanRenderPassManager(this);
     descriptorSetLayoutManager_ = new VulkanDescriptorSetLayoutManager(this);
     descriptorSetManager_ = new VulkanDescriptorSetManager(this, descriptorSetLayoutManager_);
 	shaderManager_ = new VulkanShaderManager(this);
-
+	pipelineStateCache_ = new VulkanPipelineLayoutCache(this);
+    semaphoreManager_ = new VulkanSemaphoreManager(this);
 }
 
 VulkanDevice::~VulkanDevice()
@@ -72,7 +73,7 @@ bool VulkanDevice::Init(const std::vector<const char*>& enabledLayers,
 {
     SelectQueueFamilies(physicalDevice_);
     CreateLogicalDevice(physicalDevice_, enabledExtensions, enabledLayers);
-
+    globalCommandContext_ = new VulkanCommandContext(this, graphicsQueue_);
     return true;
 }
 

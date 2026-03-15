@@ -16,13 +16,13 @@ namespace RHI
         // ========================
         // Compute �ӿ�
         // ========================
-        virtual void SetComputePipelineState(const RHIComputePipelineStateSP& pipelineState) = 0;
+        virtual void SetComputePipelineState(RHIComputePipelineState* pipelineState) = 0;
         /** Set the shader resource view of a surface. */
         virtual void RHISetShaderTexture(RHIShader* Shader, uint32_t TextureIndex, RHITexture* Texture) = 0;
 
         virtual void RHISetShaderSampler(RHIShader* Shader, uint32_t SamplerIndex, RHISampler* NewState) = 0;
 
-        virtual void RHISetUAVParameter(RHIFragmentShader* PixelShader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV) = 0;
+        virtual void RHISetUAVParameter(RHIShader* Shader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV) = 0;
 
 
         virtual void RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SamplerIndex, RHIShaderResourceView* SRV) = 0;
@@ -49,7 +49,8 @@ namespace RHI
         virtual void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) = 0;
 
         virtual void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState) = 0;
-        virtual void SetViewPortRect(const RHIIntRect& viewport) = 0;
+        virtual void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth) = 0;
+        virtual void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) = 0;
         virtual void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
             uint32_t firstVertex = 0, uint32_t firstInstance = 0) = 0;
         virtual void DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount,
@@ -59,7 +60,7 @@ namespace RHI
         // ========================
         // RayTracing �ӿ�
         // ========================
-        virtual void SetRayTracingPipelineState(const RHIRayTracingPipelineStateSP& pipelineState) = 0;
+        virtual void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) = 0;
         virtual void SetShaderTable() = 0;
         virtual void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) = 0;
 

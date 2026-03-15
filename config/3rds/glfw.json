@@ -1,8 +1,12 @@
 {
   "name": "glfw",
-  "need_pull": true,
-  "git": "https://github.com/glfw/glfw.git",
-  "branch": "master",
+
+  "type": "managed", 
+
+  "source": {
+    "git": "https://github.com/glfw/glfw.git",
+    "branch": "master"
+  },
 
   "compiler": {
     "windows": {
@@ -20,12 +24,10 @@
       "cmake_generator": "Unix Makefiles",
       "cmake_toolset": ""
     }
-  },   
-  "need_compile": true,  
-  "type":"shared",                           
-  "dependencies": [],                
+  },
 
-  "cmake": {
+  "build": {
+    "system": "cmake",
     "configure_args": [
       "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/${CONFIG}",
       "-DGLFW_BUILD_EXAMPLES=OFF",
@@ -33,15 +35,20 @@
       "-DGLFW_BUILD_DOCS=OFF"
     ],
     "build_targets": ["install"],
-    "build_configs": ["Debug","Release"]
+    "configs": ["Debug", "Release"],
+    "type" : "shared"
   },
 
   "install_layout": {
+    "root": "${INSTALL_DIR}/${CONFIG}",
     "include": "${INSTALL_DIR}/${CONFIG}/include",
     "lib": "${INSTALL_DIR}/${CONFIG}/lib",
     "bin": "${INSTALL_DIR}/${CONFIG}/bin"
   },
 
+  "dependencies": [],
 
-  "notes": "CMake installs headers and library; link glfw3.lib and add include dir to CMake."
+  "auto_generate_find_cmake": "if_missing", 
+
+  "notes": "CMake installs headers and library; prefer Config.cmake if available, otherwise auto-generate FindGLFW.cmake."
 }

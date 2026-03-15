@@ -11,11 +11,6 @@
 namespace RHI{
 class RHIApi;
 
-extern ERHIShaderPlatform GRHIShaderPlatform;
-
-RHI_API bool InitGRHIApi(const ::std::string& apiName);
-RHI_API RHIApi* GetGlobalRHIApi();
-
 
 class RHIShaderLibrary;
 using RHIShaderLibrarySP = std::shared_ptr<RHIShaderLibrary>;
@@ -84,7 +79,10 @@ public:
 
     virtual RHITransientResourceManagerSP CreateTransientResourceManager() = 0;
     
+    virtual RHIPlatformCommandList* FinalizeCommandContex(RHICommandContex* contex) = 0;
+    virtual void SubmitPlatformCommandLists(std::vector<RHIPlatformCommandList*> cmdLists) = 0;
 
+    
  
 };
 
@@ -95,6 +93,7 @@ public:
 
 
 extern RHI_API RHIApi* GRHIApi;
+extern RHI_API ERHIShaderPlatform GShaderPlatform;
 
 
 }

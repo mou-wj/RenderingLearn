@@ -16,9 +16,9 @@ namespace Renderer {
 		auto fullScreenQuad = GShaderMap.GetShader(fullScreenQuadShaderType, 0);
 		//获取默认管线状态
 		RHIGraphicsPipelineStateDesc pipelineStateDesc;
-		pipelineStateDesc.shaderStages[0].shader = drawTexture->GetRHIShader();
-        pipelineStateDesc.shaderStages[1].shader = fullScreenQuad->GetRHIShader();
-		auto graphicStates = RHIPipelineStateCache::GetGraphicsPipelineState(pipelineStateDesc);
+		pipelineStateDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(drawTexture->GetRHIShader().get());
+        pipelineStateDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(fullScreenQuad->GetRHIShader().get());
+		auto graphicStates = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineStateDesc);
 		//auto parameter = builder.AllocateParameter<ScenePassShaderParameter>();
 		//parameter->InText.Value = inTexture;
 		//parameter->RenderTargets.ColorTargets[0].Texture = outTexture;

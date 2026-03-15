@@ -1,15 +1,15 @@
 #include "VulkanDescriptorSets.h"
+#include "VulkanCommandBuffer.h"
 #include <stdexcept>
 namespace RHIVulkan {
         //------------------------------------------------------------
         // DescriptorSetLayoutInfo
         //------------------------------------------------------------
-    uint64_t DescriptorSetLayoutInfo::CalculateHash()
+    uint64_t DescriptorSetLayoutInfo::CalculateHash(const DescriptorSetLayoutInfo& info)
     {
-        if (Hash != 0) return Hash;
-
+        uint64_t Hash = 0;
         uint64_t h = 14695981039346656037ull;
-        for (auto& b : Bindings)
+        for (auto& b : info.bindings)
         {
             h ^= b.Binding; h *= 1099511628211ull;
             h ^= static_cast<uint64_t>(b.Type); h *= 1099511628211ull;
@@ -22,8 +22,7 @@ namespace RHIVulkan {
 
     void DescriptorSetLayoutInfo::AddBinding(uint32_t binding, VkDescriptorType type, uint32_t count, VkShaderStageFlags stageFlags)
     {
-        Bindings.push_back({ binding, type, count, stageFlags });
-        Hash = 0; // 重新计算 hash
+        bindings.push_back({ binding, type, count, stageFlags });
     }
 
     //------------------------------------------------------------
@@ -123,7 +122,7 @@ namespace RHIVulkan {
 
         // 没有可用 pool，创建新的
         std::array<uint32_t, VK_DESCRIPTOR_TYPE_RANGE_SIZE> poolSizes{};
-        for (auto& b : LayoutInfo.Bindings)
+        for (auto& b : LayoutInfo.bindings)
         {
             poolSizes[b.Type] += b.Count;
         }
@@ -148,13 +147,13 @@ namespace RHIVulkan {
     VkDescriptorSetLayout VulkanDescriptorSetLayoutManager::GetOrCreateLayout(const DescriptorSetLayoutInfo& info)
     {
 		
-        uint64_t hash = info.Hash;
+        uint64_t hash = DescriptorSetLayoutInfo::CalculateHash(info);
         auto it = LayoutMap.find(hash);
         if (it != LayoutMap.end())
             return it->second;
 
         std::vector<VkDescriptorSetLayoutBinding> bindings;
-        for (auto& b : info.Bindings)
+        for (auto& b : info.bindings)
         {
             VkDescriptorSetLayoutBinding binding{};
             binding.binding = b.Binding;
@@ -186,20 +185,104 @@ namespace RHIVulkan {
     {
     }
 
-    DescriptorSetEntry VulkanDescriptorSetManager::GetDescriptorSets(const DescriptorSetLayoutInfo& layoutInfo)
+    VkDescriptorSet VulkanDescriptorSetManager::GetDescriptorSet(const DescriptorSetLayoutInfo& layoutInfo)
     {
-        uint64_t hash = layoutInfo.Hash;
+        uint64_t hash = DescriptorSetLayoutInfo::CalculateHash(layoutInfo);
+
+        // 确保 pool 存在
         auto it = LayoutDescriptorPoolMap.find(hash);
         if (it == LayoutDescriptorPoolMap.end())
         {
             VkDescriptorSetLayout layout = LayoutCache->GetOrCreateLayout(layoutInfo);
-            LayoutDescriptorPoolMap[hash] = std::make_unique<TypedDescriptorPool>(Device, layout, layoutInfo, 256);
+
+            LayoutDescriptorPoolMap[hash] =
+                std::make_unique<TypedDescriptorPool>(Device, layout, layoutInfo, 256);
+
             it = LayoutDescriptorPoolMap.find(hash);
         }
 
-        VkDescriptorSet set = it->second->Allocate();
+        VkDescriptorSet set = VK_NULL_HANDLE;
 
-        return { set, hash, it->second.get() };
+        auto& allocated = LayoutAllocatedSetsMap[hash];
+
+        // 优先复用 FreeSets
+        if (!allocated.FreeSets.empty())
+        {
+            auto freeIt = allocated.FreeSets.begin();
+            set = *freeIt;
+            allocated.FreeSets.erase(freeIt);
+        }
+        else
+        {
+            set = it->second->Allocate();
+        }
+
+        allocated.InUseSets.insert(set);
+
+        DescriptorSetLayoutHashMap[set] = hash;
+
+        return set;
+    }
+
+    void VulkanDescriptorSetManager::BindDescriptorSets(VulkanCommandBuffer* cmdBuffer,VkPipelineLayout layout,VkPipelineBindPoint pipelineBindingPoint, const std::vector<VkDescriptorSet>& descriptorSets,const std::vector<uint32_t>& dynamicOffsets)
+    {
+        if (descriptorSets.empty())
+            return;
+
+        PendingDescriptorSetsInfo info;
+        info.CmdBuffer = cmdBuffer;
+        info.pendingSets = descriptorSets;
+        PendingFreeSetInfos.push_back(std::move(info));
+        vkCmdBindDescriptorSets(
+            cmdBuffer->GetHandle(),
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            layout,
+            0,
+            (uint32_t)descriptorSets.size(),
+            descriptorSets.data(),
+            dynamicOffsets.size(),
+            dynamicOffsets.data());
+    }
+
+    void VulkanDescriptorSetManager::GarbageCollect()
+    {
+        auto it = PendingFreeSetInfos.begin();
+
+        while (it != PendingFreeSetInfos.end())
+        {
+            VulkanCommandBuffer* cmdBuffer = it->CmdBuffer;
+
+            if (!cmdBuffer->GetFence() || cmdBuffer->GetFence()->IsSignaled())
+            {
+                ++it;
+                continue;
+            }
+
+            for (VkDescriptorSet set : it->pendingSets)
+            {
+                auto hashIt = DescriptorSetLayoutHashMap.find(set);
+                if (hashIt == DescriptorSetLayoutHashMap.end())
+                    continue;
+
+                uint64_t hash = hashIt->second;
+
+                auto allocIt = LayoutAllocatedSetsMap.find(hash);
+                if (allocIt == LayoutAllocatedSetsMap.end())
+                    continue;
+
+                auto& allocated = allocIt->second;
+
+                auto inUseIt = allocated.InUseSets.find(set);
+                if (inUseIt != allocated.InUseSets.end())
+                {
+                    allocated.InUseSets.erase(inUseIt);
+                    allocated.FreeSets.insert(set);
+                }
+            }
+
+            it = PendingFreeSetInfos.erase(it);
+        }
+
     }
 
 } // namespace WR::RHIVulkan

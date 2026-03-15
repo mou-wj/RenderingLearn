@@ -10,22 +10,22 @@ namespace RHI {
 class RHI_API RHIPipelineStateCache {
 public:
 
-    static RHIGraphicsPipelineStateSP GetGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc);
+    static RHIGraphicsPipelineStateSP GetOrCreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc);
     
   
-    static RHIComputePipelineStateSP GetComputePipelineState(const RHIComputePipelineStateDesc& desc);
+    static RHIComputePipelineStateSP GetOrCreateComputePipelineState(const RHIComputePipelineStateDesc& desc);
 
 
-    static RHIVertexDescStateSP GetVertexDescState(const RHIVertexDescStateDesc& desc);
+    static RHIVertexDescStateSP GetOrCreateVertexDescState(const RHIVertexDescStateDesc& desc);
 
 
-    static RHIRasterizerStateSP GetRasterizerState(const RHIRasterizerStateDesc& desc);
+    static RHIRasterizerStateSP GetOrCreateRasterizerState(const RHIRasterizerStateDesc& desc);
 
 
-    static RHIColorBlendStateSP GetColorBlendState(const RHIColorBlendStateDesc& desc);
+    static RHIColorBlendStateSP GetOrCreateColorBlendState(const RHIColorBlendStateDesc& desc);
 
 
-    static RHIDepthStencilStateSP GetDepthStencilState(const RHIDepthStencilStateDesc& desc);
+    static RHIDepthStencilStateSP GetOrCreateDepthStencilState(const RHIDepthStencilStateDesc& desc);
 
 
     static void ClearAll();

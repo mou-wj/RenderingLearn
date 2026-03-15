@@ -1,6 +1,8 @@
 #include "VulkanCommandContex.h"
 #include "VulkanCommandBuffer.h"
 #include "VulkanQueue.h"
+#include "VulkanShader.h"
+#include "VulkanDescriptorSets.h"
 
 namespace RHIVulkan {
     VulkanCommandContext* VulkanCommandContext::CastFrom(RHICommandContex* context)
@@ -11,45 +13,209 @@ namespace RHIVulkan {
 // Vulkan Command Context Implementation
 // -------------------------------------------------------------------------------------------------
 VulkanCommandContext::VulkanCommandContext(VulkanDevice* device, VulkanQueue* queue)
-    : device(device), queue(queue), commandBufferManager(new VulkanCommandBufferManager(device,this)) {}
+    : device(device)
+    , queue(queue)
+    , commandBufferManager(new VulkanCommandBufferManager(device,this))
+    ,PendingGfx(new VulkanPendingGfxState(device))
+    ,PendingCompute(new VulkanPendingComputeState(device))
+{
+    
+
+}
 
 VulkanCommandContext::~VulkanCommandContext() {
-
+    delete commandBufferManager;
+	delete PendingGfx;
+	delete PendingCompute;
 }
 
 void VulkanCommandContext::RHISetShaderTexture(RHIShader* Shader, uint32_t TextureIndex, RHITexture* Texture)
 {
+	auto shaderType = Shader->GetShaderType();
+	VulkanTexture* vulkanTexture = static_cast<VulkanTexture*>(Texture);
+    switch (shaderType)
+    {
+    case RHI::ERHIShaderFrequency::Vertex:
+    case RHI::ERHIShaderFrequency::Fragment:
+    case RHI::ERHIShaderFrequency::Geometry:
+    case RHI::ERHIShaderFrequency::Mesh:
+    case RHI::ERHIShaderFrequency::Task:
+    {
+        PendingGfx->SetTexture(shaderType, TextureIndex, vulkanTexture);
+        break;
+    }
+    case RHI::ERHIShaderFrequency::Compute:
+    {
+        PendingCompute->SetTexture(shaderType, TextureIndex, vulkanTexture);
+        break;
+    }
 
+    case RHI::ERHIShaderFrequency::TessControl:
+    case RHI::ERHIShaderFrequency::TessEvaluation:
+    case RHI::ERHIShaderFrequency::RayGen:
+    case RHI::ERHIShaderFrequency::ClosestHit:
+    case RHI::ERHIShaderFrequency::Miss:
+    case RHI::ERHIShaderFrequency::AnyHit:
+    case RHI::ERHIShaderFrequency::Intersection:
+    case RHI::ERHIShaderFrequency::Callable:
+    {
+        //to do
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 void VulkanCommandContext::RHISetShaderSampler(RHIShader* Shader, uint32_t SamplerIndex, RHISampler* NewState)
 {
+    auto shaderType = Shader->GetShaderType();
+    // 假设你有 VulkanSampler 对象
+    VulkanSampler* sampler = static_cast<VulkanSampler*>(NewState);
+
+    switch (shaderType)
+    {
+    case RHI::ERHIShaderFrequency::Vertex:
+    case RHI::ERHIShaderFrequency::Fragment:
+    case RHI::ERHIShaderFrequency::Geometry:
+    case RHI::ERHIShaderFrequency::Mesh:
+    case RHI::ERHIShaderFrequency::Task:
+        PendingGfx->SetSampler(shaderType, SamplerIndex, sampler);
+        break;
+
+    case RHI::ERHIShaderFrequency::Compute:
+        PendingCompute->SetSampler(shaderType, SamplerIndex, sampler);
+        break;
+
+    default:
+        break;
+    }
+}
+
+void VulkanCommandContext::RHISetUAVParameter(RHIShader* Shader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV)
+{
+    auto shaderType = Shader->GetShaderType();
+    VulkanUnorderedAccessView* vulkanUAV = static_cast<VulkanUnorderedAccessView*>(UAV);
+
+    switch (shaderType)
+    {
+    case RHI::ERHIShaderFrequency::Vertex:
+    case RHI::ERHIShaderFrequency::Fragment:
+    case RHI::ERHIShaderFrequency::Geometry:
+    case RHI::ERHIShaderFrequency::Mesh:
+    case RHI::ERHIShaderFrequency::Task:
+        PendingGfx->SetUAV(shaderType, UAVIndex, vulkanUAV);
+        break;
+
+    case RHI::ERHIShaderFrequency::Compute:
+        PendingCompute->SetUAV(shaderType, UAVIndex, vulkanUAV);
+        break;
+
+    default:
+        break;
+    }
 
 }
 
-void VulkanCommandContext::RHISetUAVParameter(RHIFragmentShader* PixelShader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV)
+
+void VulkanCommandContext::RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SRVIndex, RHIShaderResourceView* SRV)
 {
+    auto shaderType = Shader->GetShaderType();
+    VulkanShaderResourceView* vulkanSRV = static_cast<VulkanShaderResourceView*>(SRV);
 
-}
+    switch (shaderType)
+    {
+    case RHI::ERHIShaderFrequency::Vertex:
+    case RHI::ERHIShaderFrequency::Fragment:
+    case RHI::ERHIShaderFrequency::Geometry:
+    case RHI::ERHIShaderFrequency::Mesh:
+    case RHI::ERHIShaderFrequency::Task:
+        PendingGfx->SetSRV(shaderType, SRVIndex, vulkanSRV);
+        break;
 
+    case RHI::ERHIShaderFrequency::Compute:
+        PendingCompute->SetSRV(shaderType, SRVIndex, vulkanSRV);
+        break;
 
-void VulkanCommandContext::RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SamplerIndex, RHIShaderResourceView* SRV)
-{
-
+    default:
+        break;
+    }
 }
 
 void VulkanCommandContext::RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIUniformBuffer* Buffer)
 {
+    auto shaderType = Shader->GetShaderType();
+    VulkanUniformBuffer* vulkanBuffer = static_cast<VulkanUniformBuffer*>(Buffer);
 
+    switch (shaderType)
+    {
+    case RHI::ERHIShaderFrequency::Vertex:
+    case RHI::ERHIShaderFrequency::Fragment:
+    case RHI::ERHIShaderFrequency::Geometry:
+    case RHI::ERHIShaderFrequency::Mesh:
+    case RHI::ERHIShaderFrequency::Task:
+        PendingGfx->SetUniformBuffer(shaderType, BufferIndex, vulkanBuffer);
+        break;
+
+    case RHI::ERHIShaderFrequency::Compute:
+        PendingCompute->SetUniformBuffer(shaderType, BufferIndex, vulkanBuffer);
+        break;
+
+    default:
+        break;
+    }
 }
 void VulkanCommandContext::RHISetShaderParameters(RHIShader* Shader, const std::vector<uint8_t>& InParametersData, const std::vector<RHIShaderUniformParameter>& InParameters, const std::vector<RHIShaderResourceParameter>& InResourceParameters)
 {
+    // 遍历 UniformBuffer 参数
+    for (const auto& param : InParameters)
+    {
+        RHISetShaderParameter(Shader, param.BufferIndex, param.BaseIndex, param.Size, InParametersData.data() + param.Offset);
+    }
 
+    // 遍历 SRV/UAV/Texture 参数
+    for (const auto& res : InResourceParameters)
+    {
+        switch (res.Type)
+        {
+        case RHIShaderResourceParameter::EType::Texture:
+            RHISetShaderTexture(Shader, res.Index, res.GetResourceAs<RHITexture>());
+            break;
+        case RHIShaderResourceParameter::EType::SRV:
+            RHISetShaderResourceViewParameter(Shader, res.Index, res.GetResourceAs<RHIShaderResourceView>());
+            break;
+        case RHIShaderResourceParameter::EType::UAV:
+            RHISetUAVParameter(Shader, res.Index, res.GetResourceAs<RHIUnorderedAccessView>());
+            break;
+        case RHIShaderResourceParameter::EType::Sampler:
+            RHISetShaderSampler(Shader, res.Index, res.GetResourceAs<RHISampler>());
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 void VulkanCommandContext::RHISetShaderParameter(RHIShader* Shader, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue)
 {
+    auto shaderType = Shader->GetShaderType();
+    switch (shaderType)
+    {
+    case RHI::ERHIShaderFrequency::Vertex:
+    case RHI::ERHIShaderFrequency::Fragment:
+    case RHI::ERHIShaderFrequency::Geometry:
+    case RHI::ERHIShaderFrequency::Mesh:
+    case RHI::ERHIShaderFrequency::Task:
+        PendingGfx->SetShaderParameter(BufferIndex, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
+        break;
 
+    case RHI::ERHIShaderFrequency::Compute:
+        PendingCompute->SetShaderParameter(BufferIndex, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
+        break;
+
+    default:
+        break;
+    }
 }
 
 void VulkanCommandContext::SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter)
@@ -57,11 +223,8 @@ void VulkanCommandContext::SetBatchedShaderParameters(RHIShaderSP shader, const 
 
 }
 
-void VulkanCommandContext::SetComputePipelineState(const RHIComputePipelineStateSP& pipelineState) {
+void VulkanCommandContext::SetComputePipelineState(RHIComputePipelineState* pipelineState) {
 
-
-    ComputeState.PipelineState = std::static_pointer_cast<VulkanComputePipeline>(pipelineState);
-    VkDevice deviceHandle = device->GetHandle();
 
 }
 
@@ -77,48 +240,76 @@ void VulkanCommandContext::CopyTexture(RHITexture* src, RHITexture* dst, const R
 }
 
 void VulkanCommandContext::SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) {
-
+	VulkanBuffer* vulkanVertexBuffer = dynamic_cast<VulkanBuffer*>(VertexBuffer.get());
+    VkCommandBuffer commandBuffer = commandBufferManager->GetActiveCommandBuffer()->GetHandle();
+    VkDeviceSize offset = Offset;
+    if (PendingGfx->CurrentPipeline)
+    {
+        PendingGfx->SetVertexStream(streamIndex, vulkanVertexBuffer->GetHandle(),offset);
+    }
 }
 
 void VulkanCommandContext::SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState) {
-
-
-    GraphicState.PipelineState = dynamic_cast<VulkanGraphicsPipelineState*>(pipelineState);
-    VkDevice deviceHandle = device->GetHandle();
+    auto vkPipeline = static_cast<VulkanGraphicsPipelineState*>(pipelineState);
+    if (PendingGfx->CurrentPipeline != vkPipeline)
+    {
+        PendingGfx->SetPipeline(vkPipeline);
+    }
 
 }
 
 
-void VulkanCommandContext::SetViewPortRect(const RHIIntRect& viewport) {
+void VulkanCommandContext::SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth) {
 	VkCommandBuffer commandBuffer = commandBufferManager->GetActiveCommandBuffer()->GetHandle();
 	VkViewport vkViewport = {};
-	vkViewport.x = static_cast<float>(viewport.X);
-	vkViewport.y = static_cast<float>(viewport.Y);
-	vkViewport.width = static_cast<float>(viewport.Width);
-	vkViewport.height = static_cast<float>(viewport.Height);
-	vkViewport.minDepth = 0.0f;
-	vkViewport.maxDepth = 1.0f;
-	vkCmdSetViewport(commandBuffer, 0, 1, &vkViewport);
+	vkViewport.x = static_cast<float>(x);
+	vkViewport.y = static_cast<float>(y);
+	vkViewport.width = static_cast<float>(w);
+	vkViewport.height = static_cast<float>(h);
+    vkViewport.minDepth = minDepth;
+	vkViewport.maxDepth = maxDepth;
+    if (PendingGfx->CurrentPipeline)
+    {
+        PendingGfx->SetViewport(vkViewport);
+    }
+}
+void VulkanCommandContext::SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) {
+	VkCommandBuffer commandBuffer = commandBufferManager->GetActiveCommandBuffer()->GetHandle();
+	VkRect2D scissorRect = {};
+	scissorRect.offset = { x, y };
+	scissorRect.extent = { w, h };
+    if (PendingGfx->CurrentPipeline)
+    {
+        PendingGfx->SetScissor(scissorRect);
+    }
 }
 
 void VulkanCommandContext::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
-    VkCommandBuffer commandBuffer = commandBufferManager->GetActiveCommandBuffer()->GetHandle();
-    vkCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+
+    if (PendingGfx->CurrentPipeline)
+    {
+        PendingGfx->PrepareForDraw(commandBuffer);
+        vkCmdDraw(commandBuffer->GetHandle(), vertexCount, instanceCount, firstVertex, firstInstance);
+    }
+    
 }
 
 void VulkanCommandContext::DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
-    VkCommandBuffer commandBuffer = commandBufferManager->GetActiveCommandBuffer()->GetHandle();
-	VulkanBuffer* vulkanIndexBuffer = static_cast<VulkanBuffer*>(indexBuffer);
-	VkIndexType indexType = vulkanIndexBuffer->GetDesc().Stride == 4? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16; // Assuming 32-bit indices, adjust if needed
-	vkCmdBindIndexBuffer(commandBuffer, static_cast<VulkanBuffer*>(indexBuffer)->GetBuffer(), 0, indexType);
-    vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+    if (PendingGfx->CurrentPipeline)
+    {
+        PendingGfx->PrepareForDraw(commandBuffer);
+        VulkanBuffer* vulkanIndexBuffer = static_cast<VulkanBuffer*>(indexBuffer);
+        VkIndexType indexType = vulkanIndexBuffer->GetDesc().Stride == 4 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16; // Assuming 32-bit indices, adjust if needed
+        vkCmdBindIndexBuffer(commandBuffer->GetHandle(), static_cast<VulkanBuffer*>(indexBuffer)->GetHandle(), 0, indexType);
+        vkCmdDrawIndexed(commandBuffer->GetHandle(), indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    }
+
 }
 
-void VulkanCommandContext::SetRayTracingPipelineState(const RHIRayTracingPipelineStateSP& pipelineState) {
+void VulkanCommandContext::SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) {
 
-
-    RayTracingState.PipelineState = std::static_pointer_cast<VulkanRayTracingPipeline>(pipelineState);
-    VkDevice deviceHandle = device->GetHandle();
 
 }
 
@@ -155,7 +346,10 @@ void VulkanCommandContext::BeginDrawingViewport(RHIViewport* Viewport, RHITextur
 }
 void VulkanCommandContext::EndDrawingViewport(RHIViewport* Viewport, bool bPresent)
 {
+    VulkanViewport* vulkanViewport = dynamic_cast<VulkanViewport*>(Viewport);
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
 
+	vulkanViewport->Present(this, commandBuffer, device->GetGraphicsQueue(), device->GetPresentQueue());
 }
 void VulkanCommandContext::BeginFrame()
 {
@@ -163,15 +357,20 @@ void VulkanCommandContext::BeginFrame()
 }
 void VulkanCommandContext::EndFrame()
 {
+    device->GetDescriptorSetManager()->GarbageCollect();
+    commandBufferManager->GarbageCollect();
 
 }
 void VulkanCommandContext::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo)
 {
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+	device->GetRenderPassManager()->BeginRenderPass(commandBuffer, renderPassInfo);
 
 }
 void VulkanCommandContext::EndRenderPass()
 {
-
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+    device->GetRenderPassManager()->EndRenderPass(commandBuffer);
 }
 
 } // namespace WR::RHIVulkan

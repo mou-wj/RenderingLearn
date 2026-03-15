@@ -3,4 +3,5 @@
 out
 *.rdc
 deps
+depsbc
 cmake/Find3rdsGenerated.cmake

@@ -1,5 +1,6 @@
 #pragma once
 #include "RHIDefine.h"
+#include "ShaderCompiledDataPacker.h"
 #include <vulkan/vulkan.h>
 using namespace RHI;
 namespace RHIVulkan {
@@ -17,5 +18,11 @@ namespace RHIVulkan {
     VkImageViewType TransformViewTypeFrom(ERHITextureType type);
 
     VkImageAspectFlags GetImageAspectFlags(VkFormat format);
+
+    VkDescriptorType TransformDescriptorTypeFrom(RenderCore::SPIRVCompiledBinaryResultPacker::ESPIRVShaderResourceType type);
+
+	VkShaderStageFlagBits TransformShaderFrequencyToStage(ERHIShaderFrequency frequency);
+
+    VkPrimitiveTopology TransformPrimitiveTopology(EPrimitiveTopology Topology);
 
 }

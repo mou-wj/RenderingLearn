@@ -90,7 +90,8 @@ namespace RHI {
         void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
 
         
-        void SetViewPortRect(const RHIIntRect& viewport);
+        void SetViewport(float x, float y, float w, float h, float minDepth,float maxDepth);
+        void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h);
         void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
             uint32_t firstVertex = 0, uint32_t firstInstance = 0);
 
@@ -111,6 +112,8 @@ namespace RHI {
         void EndDrawingViewport(RHIViewport* Viewport, bool bPresent);
         void BeginFrame();
         void EndFrame();
+        void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
+        void EndRenderPass();
 
         void Merge(std::shared_ptr<RHICommandList> other);
 
@@ -122,6 +125,11 @@ namespace RHI {
         friend struct RHICommandDispatch;
         friend struct RHICommandDraw;
         friend struct RHICommandTraceRays;
+    };
+
+    class RHI_API RHIPlatformCommandList {
+	public:
+		virtual ~RHIPlatformCommandList() = default;
     };
 
     // -----------------------------

@@ -61,6 +61,13 @@ void VulkanQueue::Submit(VulkanCommandBuffer* CmdBuffer, uint32_t NumSignalSemap
         }
     }
 
+    //添加commandbuffer的signal semaphore
+    auto commandBufferSignalSemaphores = CmdBuffer->SignalSemaphores;
+    for (auto& semaphore : commandBufferSignalSemaphores) {
+        signalSemaphoreHandles.push_back(semaphore->GetHandle());
+    }
+
+
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
@@ -79,6 +86,7 @@ void VulkanQueue::Submit(VulkanCommandBuffer* CmdBuffer, uint32_t NumSignalSemap
     }
 
     device_->GetStagingManager()->GarbageCollect();
+    CmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
 }
 
 void VulkanQueue::WaitIdle() const

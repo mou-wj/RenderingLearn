@@ -40,7 +40,7 @@ void RenderGraphTexture::Create(RenderGraphBuilder& builder)
     if (!IsCreated())
     {
         RHITextureDesc textureDesc;
-        RHITextureSP texture = GetGlobalRHIApi()->CreateTexture(textureDesc);
+        RHITextureSP texture = GRHIApi->CreateTexture(textureDesc);
         SetRHITexture(texture.get());
         SetCreated(true);
     }
@@ -64,7 +64,7 @@ void RenderGraphBuffer::Create(RenderGraphBuilder& builder)
     if (!IsCreated())
     {
         RHIBufferDesc bufferDesc;
-        RHIBufferSP buffer = GetGlobalRHIApi()->CreateBuffer(bufferDesc);
+        RHIBufferSP buffer = GRHIApi->CreateBuffer(bufferDesc);
         SetRHIBuffer(buffer.get());
         SetCreated(true);
     }

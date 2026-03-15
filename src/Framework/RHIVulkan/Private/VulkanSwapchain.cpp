@@ -58,9 +58,9 @@ namespace RHIVulkan {
         device_->InitPresentQueue(surface_); // Initialize the present queue
 
         uint32_t presentQueueFamilyIndex = device_->GetPresentQueueFamilyIndex();
-        uint32_t computeQueueFamilyIndex = device_->GetComputeQueueFamilyIndex();
-        if (presentQueueFamilyIndex != computeQueueFamilyIndex) {
-			uint32_t queueFamilyIndices[] = { presentQueueFamilyIndex, computeQueueFamilyIndex };
+        uint32_t graphicQueueFamilyIndex = device_->GetGraphicsQueueFamilyIndex();
+        if (presentQueueFamilyIndex != graphicQueueFamilyIndex) {
+			uint32_t queueFamilyIndices[] = { presentQueueFamilyIndex, graphicQueueFamilyIndex };
 			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 			createInfo.queueFamilyIndexCount = 2;
 			createInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -152,7 +152,7 @@ namespace RHIVulkan {
     void VulkanSwapchain::AcquireNextImage(VulkanSemaphore* signalSemaphore, int* imageIndex)
     {
         uint32_t imageIndex_ = 0;
-        if (AcquireNextImageKHR(device_->GetHandle(), swapchain_, VK_TIMEOUT, signalSemaphore->GetHandle(), VK_NULL_HANDLE, &imageIndex_)) {
+        if (AcquireNextImageKHR(device_->GetHandle(), swapchain_, UINT64_MAX, signalSemaphore->GetHandle(), VK_NULL_HANDLE, &imageIndex_)) {
             *imageIndex = imageIndex_;
             currentImageIndex_ = imageIndex_;
         }

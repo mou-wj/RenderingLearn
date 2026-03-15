@@ -38,7 +38,10 @@ target_include_directories(${TARGET_NAME}
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
 )
 
-target_link_libraries(${TARGET_NAME} PUBLIC RHI VulkanSDK)
+find_package(Vulkan REQUIRED)
+
+target_link_libraries(${TARGET_NAME} PUBLIC RHI Vulkan::Vulkan RenderCore)
+
 target_compile_definitions(${TARGET_NAME}
     PRIVATE DEBUG_INFO=1
   )

@@ -4,155 +4,303 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <set>
 #include "Shader.h"
 #include "RHIDefine.h"
 
-namespace RenderCore {
+namespace RenderCore{
+    // ============================================================
+// Utility: Stable Hash Combine
+// ============================================================
 
-// Shader compilation result for a specific platform
-struct RENDERCORE_API ShaderCompilationResultPerPlatform
-{
-    RHI::ERHIShaderPlatform Platform = RHI::ERHIShaderPlatform::Unknown;
-    bool Success = false;
-    std::string ErrorMessage;
-    std::vector<uint8_t> BinaryData;  // Platform-specific compiled binary
-};
-
-// Shader compilation result (multi-platform)
-struct RENDERCORE_API ShaderCompilationResult
-{
-    bool Success = false;
-    std::string ErrorMessage;
-    std::string PreprocessedSource;            // Source after preprocessing
-    ShaderParameterMap ParameterMap;    // Extracted parameter binding info
-
-    // Platform-specific compilation results
-    std::unordered_map<int, ShaderCompilationResultPerPlatform> PlatformResults;
-
-    // Get compilation result for specific platform
-    const ShaderCompilationResultPerPlatform* GetPlatformResult(RHI::ERHIShaderPlatform platform) const
+    inline void HashCombine(size_t& seed, size_t value)
     {
-        auto it = PlatformResults.find(static_cast<int>(platform));
-        if (it == PlatformResults.end()) return nullptr;
-        return &it->second;
+        seed ^= value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
     }
-};
 
-// Shader source file information
-struct RENDERCORE_API ShaderSourceInfo
+    // ============================================================
+    // Compile Flags
+    // ============================================================
+
+    enum class EShaderCompileFlags : uint32_t
+    {
+        None = 0,
+        DebugInfo = 1 << 0,
+        DisableOptimize = 1 << 1,
+        WarningsAsError = 1 << 2,
+    };
+
+    inline EShaderCompileFlags operator|(EShaderCompileFlags a, EShaderCompileFlags b)
+    {
+        return static_cast<EShaderCompileFlags>(
+            static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+    }
+
+    // ============================================================
+    // Shader Compiler Environment
+    // ============================================================
+
+    struct ShaderCompilerEnvironment
+    {
+        // 核心宏定义
+        std::map<std::string, std::string> Definitions;
+
+        // 虚拟 include 内容
+        std::map<std::string, std::string> VirtualIncludes;
+
+        // include 搜索路径
+        std::vector<std::string> IncludePaths;
+
+        // 可选移动平台全精度控制
+        bool FullPrecisionInPS = false;
+
+        void Merge(const ShaderCompilerEnvironment& other)
+        {
+            Definitions.insert(other.Definitions.begin(), other.Definitions.end());
+            for (const auto& it : other.VirtualIncludes)
+            {
+                auto existing = VirtualIncludes.find(it.first);
+                if (existing != VirtualIncludes.end())
+                    existing->second.append(it.second);
+                else
+                    VirtualIncludes[it.first] = it.second;
+            }
+            IncludePaths.insert(IncludePaths.end(), other.IncludePaths.begin(), other.IncludePaths.end());
+            FullPrecisionInPS |= other.FullPrecisionInPS;
+        }
+        bool operator==(const ShaderCompilerEnvironment& other) const
+        {
+            return Definitions == other.Definitions &&
+                VirtualIncludes == other.VirtualIncludes &&
+				IncludePaths == other.IncludePaths &&
+				FullPrecisionInPS == other.FullPrecisionInPS;
+        }
+        void SetDefine(const std::string& name, const std::string& value) { Definitions[name] = value; }
+        void SetDefine(const std::string& name, int32_t value) { Definitions[name] = std::to_string(value); }
+        void SetDefine(const std::string& name, bool value) { Definitions[name] = value ? "1" : "0"; }
+        void SetDefine(const std::string& name, float value) { Definitions[name] = std::to_string(value); }
+    };
+
+    // ============================================================
+    // Shader Compile Input
+    // ============================================================
+
+    struct RENDERCORE_API ShaderCompileInput
+    {
+        // 原始文件路径（用于日志/调试）
+        std::string VirtualSourceFilePath;
+
+        std::string EntryPoint = "main";
+
+        RHI::ERHIShaderFrequency Frequency;
+        RHI::ERHIShaderPlatform Platform;
+
+        // 包含宏定义 / include 搜索路径 / 虚拟 include
+        ShaderCompilerEnvironment Environment;
+
+        std::string TargetProfile;     // vs_6_6 / ps_6_6 等
+        EShaderCompileFlags Flags = EShaderCompileFlags::None;
+
+        // 是否属于 shader pipeline（可选）
+        bool bCompilingForPipeline = false;
+
+        bool operator==(const ShaderCompileInput& other) const
+        {
+            return VirtualSourceFilePath == other.VirtualSourceFilePath &&
+                EntryPoint == other.EntryPoint &&
+                Frequency == other.Frequency &&
+                Platform == other.Platform &&
+                Environment == other.Environment &&
+                TargetProfile == other.TargetProfile &&
+                Flags == other.Flags &&
+                bCompilingForPipeline == other.bCompilingForPipeline;
+        }
+    };
+
+    // ============================================================
+    // Hash for ShaderCompileInput
+    // ============================================================
+
+} // namespace RenderCore
+
+namespace std
 {
-    std::string SourcePath;
-    RHI::ERHIShaderFrequency ShaderType;
-    std::unordered_map<std::string, std::string> MacroDefinitions;
-    std::vector<RHI::ERHIShaderPlatform> TargetPlatforms;  // Platforms to compile for
-};
+    template<>
+    struct hash<RenderCore::ShaderCompileInput>
+    {
+        size_t operator()(const RenderCore::ShaderCompileInput& input) const
+        {
+            using namespace RenderCore;
+            size_t seed = 0;
 
-// -------------------------------------------------------------------------------------------------
-//  Shader Compiler
-// -------------------------------------------------------------------------------------------------
-class RENDERCORE_API ShaderCompiler
+            HashCombine(seed, std::hash<std::string>()(input.VirtualSourceFilePath));
+            HashCombine(seed, std::hash<std::string>()(input.EntryPoint));
+            HashCombine(seed, std::hash<int>()(static_cast<int>(input.Frequency)));
+            HashCombine(seed, std::hash<int>()(static_cast<int>(input.Platform)));
+            HashCombine(seed, std::hash<std::string>()(input.TargetProfile));
+            HashCombine(seed, std::hash<uint32_t>()(static_cast<uint32_t>(input.Flags)));
+            HashCombine(seed, std::hash<int>()(input.bCompilingForPipeline ? 1 : 0));
+
+            for (const auto& m : input.Environment.Definitions)
+            {
+                HashCombine(seed, std::hash<std::string>()(m.first));
+                HashCombine(seed, std::hash<std::string>()(m.second));
+            }
+            for (const auto& m : input.Environment.VirtualIncludes)
+            {
+                HashCombine(seed, std::hash<std::string>()(m.first));
+                HashCombine(seed, std::hash<std::string>()(m.second));
+            }
+            for (const auto& path : input.Environment.IncludePaths)
+            {
+                HashCombine(seed, std::hash<std::string>()(path));
+            }
+
+            return seed;
+        }
+    };
+}
+
+namespace RenderCore
 {
-public:
-    ShaderCompiler();
-    ~ShaderCompiler();
 
-    // Initialize the compiler (setup paths, environments)
-    bool Initialize();
+    // ============================================================
+    // Shader Compilation Output
+    // ============================================================
 
-    // Compile a shader source file for multiple platforms
-    ShaderCompilationResult CompileShader(const ShaderSourceInfo& sourceInfo);
+    struct RENDERCORE_API ShaderCompilationOutput
+    {
+        RHI::ERHIShaderPlatform Platform;
 
-    // Compile shader for a specific platform
-    ShaderCompilationResultPerPlatform CompileShaderForPlatform(
-        const std::string& preprocessedSource,
-        RHI::ERHIShaderFrequency shaderType,
-        RHI::ERHIShaderPlatform platform
-    );
+        bool Success = false;
+        std::string ErrorMessage;
 
-    // Add a macro definition for preprocessing
-    void AddMacroDefinition(const std::string& name, const std::string& value);
+        std::vector<char> PackedBinaryData;
+        ShaderParameterAllocationMap ParameterMap;
 
-    // Clear all macro definitions
-    void ClearMacroDefinitions();
+#if defined(SHADER_DEBUG)
+        std::string PreprocessedSource;
+#endif
 
-    // Get the preprocessed shader source (without compilation)
-    bool PreprocessShader(const std::string& sourcePath, std::string& outPreprocessedSource);
+        // 依赖文件（用于热重载）
+        std::vector<std::string> IncludedFiles;
+    };
 
-    // Extract shader parameter binding info from source
-    bool ExtractParameterMap(
-        const std::string& preprocessedSource,
-        RHI::ERHIShaderFrequency shaderType,
-        ShaderParameterMap& outMap
-    );
+    // ============================================================
+    // Shader Compiler
+    // ============================================================
 
-private:
-    // Load shader source file
-    bool LoadShaderSource(const std::string& sourcePath, std::string& outSource);
+    class RENDERCORE_API ShaderCompiler
+    {
+    public:
+        ShaderCompiler();
+        ~ShaderCompiler();
 
-    // Preprocess shader source (expand includes, apply macros)
-    bool PreprocessSource(const std::string& source, std::string& outProcessed);
+        bool Initialize(const std::string& shaderSourceDir);
 
-    // Expand #include directives recursively
-    bool ExpandIncludes(const std::string& source, std::string& outExpanded, int depth = 0);
+        // 使用 ShaderCompileInput 进行完整编译
+        ShaderCompilationOutput Compile(const ShaderCompileInput& input);
 
-    // Apply macro definitions
-    void ApplyMacroDefinitions(std::string& source);
+    private:
+        bool LoadShaderSource(
+            const ShaderCompileInput& input,
+            std::string& outSource);
 
-    // Compile HLSL to SPIR-V (for Vulkan)
-    bool CompileHLSLToSPIRV(
-        const std::string& preprocessedSource,
-        RHI::ERHIShaderFrequency shaderType,
-        std::vector<uint8_t>& outBinaryData
-    );
+        bool PreprocessSource(
+            const ShaderCompileInput& input,
+            std::string& outSource,
+            std::vector<std::string>& outIncludedFiles);
 
-    // Compile HLSL to DirectX bytecode (D3D11/D3D12)
-    bool CompileHLSLToDirectXBytecode(
-        const std::string& preprocessedSource,
-        RHI::ERHIShaderFrequency shaderType,
-        RHI::ERHIShaderPlatform platform,
-        std::vector<uint8_t>& outBinaryData
-    );
+        bool ExpandIncludes(
+            const std::string& source,
+            const ShaderCompilerEnvironment& env,
+            std::string& outExpanded,
+            std::vector<std::string>& outIncludedFiles,
+            int depth = 0,
+            std::set<std::string>* includeStack = nullptr);
 
-    // Compile HLSL to Metal bytecode (Metal)
-    bool CompileHLSLToMetalBytecode(
-        const std::string& preprocessedSource,
-        RHI::ERHIShaderFrequency shaderType,
-        std::vector<uint8_t>& outBinaryData
-    );
+        void ApplyMacros(
+            std::string& source,
+            const std::map<std::string, std::string>& macros);
 
-    // Compile GLSL to OpenGL bytecode
-    bool CompileGLSLToOpenGLBytecode(
-        const std::string& preprocessedSource,
-        RHI::ERHIShaderFrequency shaderType,
-        std::vector<uint8_t>& outBinaryData
-    );
+        void CompileToSPIRV(
+            const std::string& preprocessedSource,
+            const ShaderCompileInput& input,
+            ShaderCompilationOutput& out);
 
-    // Parse HLSL source for cbuffer/resource declarations
-    bool ParseHLSLResources(
-        const std::string& preprocessedSource,
-        ShaderParameterMap& outMap
-    );
+        void CompileToDirectX(
+            const std::string& preprocessedSource,
+            const ShaderCompileInput& input,
+            ShaderCompilationOutput& out);
 
-    // Convert shader type enum to string
-    std::string ShaderTypeToString(RHI::ERHIShaderFrequency shaderType);
+        void CompileToMetal(
+            const std::string& preprocessedSource,
+            const ShaderCompileInput& input,
+            ShaderCompilationOutput& out);
 
-    // Convert shader type enum to HLSL target string (e.g., "vs_6_0")
-    std::string ShaderTypeToHLSLTarget(RHI::ERHIShaderFrequency shaderType);
+        void CompileToOpenGL(
+            const std::string& preprocessedSource,
+            const ShaderCompileInput& input,
+            ShaderCompilationOutput& out);
 
-    // Convert shader type to Metal entry point name
-    std::string ShaderTypeToMetalEntry(RHI::ERHIShaderFrequency shaderType);
+    private:
+        std::string ShaderSourceDirectory;
+        int MaxIncludeDepth = 10;
+    };
 
-    // Translate HLSL to GLSL if needed
-    bool TranslateHLSLToGLSL(
-        const std::string& hlslSource,
-        RHI::ERHIShaderFrequency shaderType,
-        std::string& outGLSLSource
-    );
+    // ============================================================
+    // Thread-Safe Shader Compilation Cache
+    // ============================================================
 
-private:
-    std::unordered_map<std::string, std::string> MacroDefinitions;
-    std::string ShaderSourceDirectory;
-    int MaxIncludeDepth = 10;
-};
+    class RENDERCORE_API ShaderCompilationCache
+    {
+    public:
+        ShaderCompilationCache() = default;
+        ~ShaderCompilationCache() = default;
+
+        ShaderCompilationOutput GetOrCompile(
+            ShaderCompiler& compiler,
+            const ShaderCompileInput& input)
+        {
+            std::lock_guard<std::mutex> lock(CacheMutex);
+
+            auto it = Cache.find(input);
+            if (it != Cache.end())
+            {
+                return it->second;
+            }
+
+            ShaderCompilationOutput output = compiler.Compile(input);
+            Cache.emplace(input, output);
+
+            return output;
+        }
+
+        const ShaderCompilationOutput* Find(
+            const ShaderCompileInput& input) const
+        {
+            std::lock_guard<std::mutex> lock(CacheMutex);
+
+            auto it = Cache.find(input);
+            if (it != Cache.end())
+                return &it->second;
+
+            return nullptr;
+        }
+
+        void Clear()
+        {
+            std::lock_guard<std::mutex> lock(CacheMutex);
+            Cache.clear();
+        }
+
+    private:
+        mutable std::mutex CacheMutex;
+        std::unordered_map<ShaderCompileInput, ShaderCompilationOutput> Cache;
+    };
+
+    extern RENDERCORE_API ShaderCompilationCache* GShaderCompilationCache;
+
+
 
 } // namespace RenderCore

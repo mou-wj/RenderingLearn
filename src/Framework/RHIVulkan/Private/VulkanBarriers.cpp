@@ -376,6 +376,20 @@ namespace RHIVulkan {
 		VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
+		auto imageLayoutManager = cmd->GetImageLayoutManager();
+		for (int i = 0; i < ImageBarriers.size(); i++) 
+		{
+			imageLayoutManager->Set(ImageBarriers[i].image, ImageBarriers[i].newLayout, ImageBarriers[i].subresourceRange);
+			VkAccessFlags srcAccess;
+			VkAccessFlags dstAccess;
+			VkPipelineStageFlags srcCurStage;
+            VkPipelineStageFlags dstCurStage;
+				
+			GetVulkanBarrierMasksByLayout(ImageBarriers[i].oldLayout, srcAccess, srcCurStage);
+			GetVulkanBarrierMasksByLayout(ImageBarriers[i].newLayout, dstAccess, dstCurStage);
+			srcStage |= srcCurStage;
+            dstStage |= dstCurStage;
+		}
 		vkCmdPipelineBarrier(
 			cmd->GetHandle(),
 			srcStage,
@@ -385,7 +399,6 @@ namespace RHIVulkan {
 			0, nullptr,
 			static_cast<uint32_t>(ImageBarriers.size()),
 			ImageBarriers.data());
-
 		ImageBarriers.clear();
 	}
 

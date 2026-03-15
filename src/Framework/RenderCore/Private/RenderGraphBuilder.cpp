@@ -190,7 +190,7 @@ namespace RenderCore {
             for (auto* p : group) groupCopy.push_back(p);
 
             // create a command context from global RHI
-            RHI::RHIApi* api = RHI::GetGlobalRHIApi();
+            RHI::RHIApi* api = GRHIApi;
             if (!api) return;
 
             RHI::RHICommandContex* ctx = api->GetDefualtCommandContex();

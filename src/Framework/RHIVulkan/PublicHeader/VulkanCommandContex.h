@@ -3,7 +3,8 @@
 
 #include "RHICommandContex.h"
 #include "VulkanDevice.h"
-#include "VulkanPipeline.h"
+#include "VulkanPipelineState.h"
+#include "VulkanPendingPipelineState.h"
 #include "VulkanResource.h"
 #include "VulkanMemory.h"
 #include "RHICommandList.h"
@@ -32,10 +33,10 @@ public:
 
     void RHISetShaderSampler(RHIShader* Shader, uint32_t SamplerIndex, RHISampler* NewState) override;
 
-    void RHISetUAVParameter(RHIFragmentShader* PixelShader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV) override;
+    void RHISetUAVParameter(RHIShader* Shader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV) override;
 
 
-    void RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SamplerIndex, RHIShaderResourceView* SRV) override;
+    void RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SRVIndex, RHIShaderResourceView* SRV) override;
 
     void RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIUniformBuffer* Buffer) override;
 
@@ -46,7 +47,7 @@ public:
     void SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter) override;
 
     // Compute接口
-    void SetComputePipelineState(const RHIComputePipelineStateSP& pipelineState) override;
+    void SetComputePipelineState(RHIComputePipelineState* pipelineState) override;
     void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
     void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) override;
 
@@ -54,12 +55,13 @@ public:
 
     // Graphics接口
     void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState) override;
-    virtual void SetViewPortRect(const RHIIntRect& viewport) override;
+    virtual void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth) override;
+    virtual void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) override;
     void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) override;
     void DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0) override;
 
     // RayTracing接口
-    void SetRayTracingPipelineState(const RHIRayTracingPipelineStateSP& pipelineState) override;
+    void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) override;
     void SetShaderTable() override;
     void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) override;
 
@@ -80,23 +82,8 @@ private:
     VulkanQueue* queue;
     VulkanCommandBufferManager* commandBufferManager;
 
-    struct GraphicContexState{
-        VulkanGraphicsPipelineState* PipelineState;
-        std::vector<RHIBufferSP> VertexBuffers;
-        RHIBufferSP IndexBuffer;
-
-    } GraphicState;             
-
-    struct ComputeContexState{
-        VulkanComputePipelineSP PipelineState;
-        uint32_t ShaderParameterCount = 0;
-    } ComputeState;
-
-    struct RayTracingContexState{   
-        VulkanRayTracingPipelineSP PipelineState;
-    } RayTracingState;
-
-
+    VulkanPendingGfxState*     PendingGfx;
+    VulkanPendingComputeState* PendingCompute;
 
 };
 
