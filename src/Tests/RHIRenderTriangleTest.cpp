@@ -101,6 +101,7 @@ public:
             passInfo.RenderTargets.Bound(TriangleGraphicsPipelineState->GetDesc().attachmentDesc, backTexture.get(), depthStencilTexture.get());
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[0] = 1;
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[3] = 1;
+			passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;
             passInfo.RenderArea.Width = FrameWidth;
             passInfo.RenderArea.Height = FrameHeight;
             cmdList.BeginFrame();
@@ -165,13 +166,19 @@ private:
 
         // 创建顶点缓冲区描述
         RHI::RHIBufferDesc bufferDesc;
-        bufferDesc.Type = RHI::ERHIBufferType::Vertex;
         bufferDesc.Size = sizeof(vertices);
-        bufferDesc.Usage = RHI::ERHIBufferFlags::ShaderResource;
-        bufferDesc.InitialData = vertices;
+        bufferDesc.Usage = RHI::ERHIBufferUsageFlags::Vertex | RHI::ERHIBufferUsageFlags::TransferDst;
 
         // 创建缓冲区
         VertexBuffer = api->CreateBuffer(bufferDesc);
+
+        // 将顶点数据拷贝到缓冲区
+		auto commandContext = api->GetDefualtCommandContex();
+        auto& commandList = commandContext->GetCommandList();
+        commandList.SetImmediate(true);
+        commandList.UpdateBuffer(VertexBuffer.get(), vertices, { 0, sizeof(vertices) });
+        commandList.ExecuteAll();
+
     }
 
     // ==========================================
@@ -235,7 +242,7 @@ private:
         psInput.Environment.VirtualIncludes["simple_ps.hlsl"] = R"(
         float4 PSMain() : SV_Target0
         {
-            return float4(1,0,0,1);
+            return float4(1,1,0,1);
         }
         )";
 
@@ -270,7 +277,13 @@ private:
         posAttr.location = 0;
         posAttr.format = RHI::ERHIFormat::R32G32B32_Float;
         posAttr.offset = offsetof(SimpleVertex, Position);
+        RHI::RHIVertexAttributeDesc colorAttr;
+        colorAttr.location = 1;
+        colorAttr.format = RHI::ERHIFormat::R32G32B32_Float;
+        colorAttr.offset = offsetof(SimpleVertex, Color);
+
         attributes.push_back(posAttr);
+        attributes.push_back(colorAttr);
 
 
         // 创建顶点描述状态
@@ -290,7 +303,7 @@ private:
         RHI::RHIRasterizerStateDesc rasterizerDesc;
         rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
         rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
-        rasterizerDesc.frontFace = RHI::ERHIFrontFace::CounterClockwise;
+        rasterizerDesc.frontFace = RHI::ERHIFrontFace::Clockwise;
         rasterizerDesc.lineWidth = 1.0f;
         rasterizerDesc.depthBiasEnable = false;
 
@@ -329,6 +342,7 @@ private:
 		pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
 		pipelineDesc.attachmentDesc.colorAttachments[0].format = RHI::ERHIFormat::B8G8R8A8_UNorm;
 		pipelineDesc.attachmentDesc.colorAttachments[0].actions = ERenderTargetActions::Clear_Store;
+        pipelineDesc.attachmentDesc.depthActions  = ERenderTargetActions::Clear_Store;
         pipelineDesc.attachmentDesc.enableDepth = true;
         pipelineDesc.attachmentDesc.depthStencilFormat = RHI::ERHIFormat::D32_Float;
         

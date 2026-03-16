@@ -53,7 +53,53 @@ namespace RHIVulkan{
             return VK_SHARING_MODE_CONCURRENT;
         }
     }
+    VkSharingMode DetermineBufferSharingMode(ERHIBufferUsageFlags flags, VulkanDevice* device, std::vector<uint32_t>& outQueueFamilyIndices)
+    {
+        outQueueFamilyIndices.clear();
 
+        auto AddQueue = [&](uint32_t queueFamily)
+            {
+                if (std::find(outQueueFamilyIndices.begin(), outQueueFamilyIndices.end(), queueFamily)
+                    == outQueueFamilyIndices.end())
+                {
+                    outQueueFamilyIndices.push_back(queueFamily);
+                }
+            };
+
+        // Graphics 队列默认需要（大多数 buffer 都会被 graphics 使用）
+        AddQueue(device->GetGraphicsQueueFamilyIndex());
+
+        // UAV / SRV 可能在 Compute 队列使用
+        if (EnumHasAnyFlags(flags, ERHIBufferUsageFlags::UnorderedAccess) ||
+            EnumHasAnyFlags(flags, ERHIBufferUsageFlags::ShaderResource))
+        {
+            if (device->GetComputeQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex())
+            {
+                AddQueue(device->GetComputeQueueFamilyIndex());
+            }
+        }
+
+        // Transfer 队列
+        if (EnumHasAnyFlags(flags, ERHIBufferUsageFlags::TransferSrc) ||
+            EnumHasAnyFlags(flags, ERHIBufferUsageFlags::TransferDst))
+        {
+            if (device->GetTransferQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex())
+            {
+                AddQueue(device->GetTransferQueueFamilyIndex());
+            }
+        }
+
+        // MapRead / MapWrite 不影响 queue family（CPU 访问）
+
+        if (outQueueFamilyIndices.size() <= 1)
+        {
+            return VK_SHARING_MODE_EXCLUSIVE;
+        }
+        else
+        {
+            return VK_SHARING_MODE_CONCURRENT;
+        }
+    }
 
 // Vulkan Texture
 VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
@@ -249,9 +295,14 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     // Create VkBuffer
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    Size = Desc.Size;
     bufferInfo.size = Desc.Size;
-    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; // TODO: Support other usages
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	auto usageFlags = TransformBufferUsageFlagsFrom(Desc.Usage);
+    bufferInfo.usage = usageFlags; // TODO: Support other usages
+    std::vector<uint32_t> queueFamilyIndices;
+    bufferInfo.sharingMode = DetermineBufferSharingMode(desc.Usage, Device, queueFamilyIndices);
+    bufferInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
+    bufferInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 
     if (vkCreateBuffer(vkDevice, &bufferInfo, nullptr, &Buffer) != VK_SUCCESS) {
     }
@@ -264,7 +315,7 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
         vkDestroyBuffer(vkDevice, Buffer, nullptr);
     }
-
+    
     // Bind memory to buffer
     vkBindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
 }
@@ -573,7 +624,7 @@ VulkanTextureSP VulkanViewport::GetBackTexture()
     if (currentBackBufferIndex != -1) {
         return backBufferTextures[currentBackBufferIndex];
     }
-    //这里在获取下一个有效image之前必须要保证currentIndex对应的acquiredSemaphores已经执行完毕，这种必须需要等待fence，但是直接使用commandbuffer的fence会由于fence由其他地方管理而导致这里不能有效等待，所以这里先进行没绘制完所有image后统一等待一次队列，后续再考虑怎么修改
+	//这里在获取下一个有效image之前必须要保证currentIndex对应的acquiredSemaphores已经执行完毕，这种必须需要等待fence，但是直接使用commandbuffer的fence会由于fence由其他地方管理而导致这里不能有效等待，所以这里先进行没绘制完所有image后统一等待一次队列，后续再考虑怎么修改 >>  后续可以改成commandbuffer不再单独持有fence，添加commandbuffer的状态管理，改成每次提交命令时由外部传入一个fence，提交后外部负责等待和重置，这样就可以在这里直接等待对应的fence了
     if (currentIndex == 0) {
 		Device->GetGraphicsQueue()->WaitIdle();
     }

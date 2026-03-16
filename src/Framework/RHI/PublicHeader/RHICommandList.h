@@ -77,6 +77,9 @@ namespace RHI {
 
         void SetBatchedShaderParameters(const RHIShaderSP& shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
         void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size);
+        //
+        void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);
+
         // -----------------
         // Compute 接口
         // -----------------
@@ -127,10 +130,7 @@ namespace RHI {
         friend struct RHICommandTraceRays;
     };
 
-    class RHI_API RHIPlatformCommandList {
-	public:
-		virtual ~RHIPlatformCommandList() = default;
-    };
+
 
     // -----------------------------
     // 类型别名

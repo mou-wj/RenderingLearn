@@ -6,6 +6,10 @@
 
 namespace RHI
 {
+    class RHI_API RHIPlatformCommandList {
+    public:
+        virtual ~RHIPlatformCommandList() = default;
+    };
 
     // ͳһ�� RHIContext������ Compute / Graphics / RayTracing �ӿ�
     class RHI_API RHICommandContex

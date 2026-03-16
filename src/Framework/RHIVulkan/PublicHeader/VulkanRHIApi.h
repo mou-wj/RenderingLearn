@@ -24,7 +24,7 @@ public:
     RHITextureSP CreateTexture(const RHITextureDesc& desc) override;
     RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) override;
     void UpdateTexture(RHICommandList& cmdList, RHITexture* texture, const void* data,const RHITextureRegion& size) override;
-    void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) override;
+    void UpdateBuffer(RHICommandList& cmdList, RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) override;
 
     RHIShaderResourceViewSP CreateTextureShaderResourceView(
         RHITexture* Texture, const RHITexSRVCreateInfo& Desc) override;

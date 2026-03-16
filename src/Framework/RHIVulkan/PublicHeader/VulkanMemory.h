@@ -70,7 +70,7 @@ public:
     VulkanStagingBuffer(VulkanDevice* device, VulkanMemoryManager* memManager, VkDeviceSize size);
     ~VulkanStagingBuffer();
 
-    VkBuffer GetBuffer() const { return buffer_; }
+    VkBuffer GetHandle() const { return buffer_; }
     VkDeviceSize GetSize() const { return size_; }
     VulkanAllocation& GetAllocation() { return allocation_; }
     void* Map(uint32_t Offset, uint32_t NumBytes) override;

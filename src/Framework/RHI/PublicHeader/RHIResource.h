@@ -489,8 +489,8 @@ struct RHIGraphicAttachmentDesc {
     bool enableDepth = false;                 // Depth 是否启用
     bool enableStencil = false;               // Stencil 是否启用
     ERHIFormat depthStencilFormat = ERHIFormat::Unknown;      // PF_XXX
-    ERenderTargetActions depthLoadAction = ERenderTargetActions::Load_Store;
-    ERenderTargetActions stencilLoadAction = ERenderTargetActions::Load_Store;
+    ERenderTargetActions depthActions = ERenderTargetActions::Load_Store;
+    ERenderTargetActions stencilActions = ERenderTargetActions::Load_Store;
 
     uint32_t numSamples = 1;              // MSAA 样本数
 
@@ -511,8 +511,8 @@ struct RHIGraphicAttachmentDesc {
         hash ^= static_cast<uint64_t>(desc.enableDepth); hash *= 1099511628211ull;
         hash ^= static_cast<uint64_t>(desc.enableStencil); hash *= 1099511628211ull;
         hash ^= static_cast<uint64_t>(desc.depthStencilFormat); hash *= 1099511628211ull;
-        hash ^= static_cast<uint64_t>(desc.depthLoadAction); hash *= 1099511628211ull;
-        hash ^= static_cast<uint64_t>(desc.stencilLoadAction); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.depthActions); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.stencilActions); hash *= 1099511628211ull;
 
         // Global
         hash ^= static_cast<uint64_t>(desc.numSamples); hash *= 1099511628211ull;

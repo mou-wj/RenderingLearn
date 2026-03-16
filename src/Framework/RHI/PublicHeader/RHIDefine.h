@@ -281,41 +281,36 @@ enum class ERHIShaderFrequency
 
 
     //缓冲区相关描述
-        // 缓冲区类型枚举
-    enum class ERHIBufferType
-    {
-        Vertex,         // 顶点缓冲区
-        Index,          // 索引缓冲区
-        Constant,       // 常量缓冲区
-        Structured,     // 结构化缓冲区
-        RawBuffer,      // 原始缓冲区
-        Indirect,       // 间接绘制缓冲区
-        Staging         // 暂存缓冲区（用于CPU到GPU的数据传输）
-    };
 
     // 缓冲区用途标志（可组合使用）
-    enum class ERHIBufferFlags
+    enum class ERHIBufferUsageFlags
     {
         None = 0,
-        ShaderResource = 1 << 0,
-        UnorderedAccess = 1 << 1,
-        TransferSrc = 1 << 2,
-        TransferDst = 1 << 3,
-        MapRead = 1 << 4,
-        MapWrite = 1 << 5
+        // ---------- Buffer 类型 ----------
+        Vertex = 1 << 0,  // 顶点缓冲区
+        Index = 1 << 1,  // 索引缓冲区
+        Constant = 1 << 2,  // 常量缓冲区 (Uniform)
+        Structured = 1 << 3,  // 结构化缓冲区
+        RawBuffer = 1 << 4,  // 原始缓冲区
+        Indirect = 1 << 5,  // 间接绘制缓冲区
+        Staging = 1 << 6,  // 暂存缓冲区（CPU->GPU 上传）
+
+        // ---------- Buffer 使用方式 ----------
+        ShaderResource = 1 << 16, // 作为 SRV
+        UnorderedAccess = 1 << 17, // 作为 UAV
+        TransferSrc = 1 << 18, // 传输源
+        TransferDst = 1 << 19, // 传输目标
     };
     // 使用宏
-    ENUM_CLASS_FLAGS(ERHIBufferFlags);
+    ENUM_CLASS_FLAGS(ERHIBufferUsageFlags);
 
     // 缓冲区描述结构体
     struct RHI_API RHIBufferDesc
     {
         uint64_t Size = 0;                   // 缓冲区大小（字节）
         uint32_t Stride = 0;                 // 结构化缓冲区的元素大小
-        ERHIBufferType Type = ERHIBufferType::Vertex; // 缓冲区类型
-        ERHIBufferFlags Usage = ERHIBufferFlags::ShaderResource; // 缓冲区用途
+        ERHIBufferUsageFlags Usage = ERHIBufferUsageFlags::None; // 缓冲区用途
         bool bCPUAccessible = false;         // CPU是否可访问
-        const void* InitialData = nullptr;   // 初始数据
         const char* DebugName = nullptr;     // 调试名称
     };
 
@@ -324,7 +319,7 @@ enum class ERHIShaderFrequency
     {
         uint64_t Offset = 0;                 // 视图起始偏移
         uint64_t Size = 0;                   // 视图大小
-        uint32_t Flags = (uint32_t)ERHIBufferFlags::ShaderResource; // 视图用途
+        ERHIBufferUsageFlags Usage = ERHIBufferUsageFlags::None; // 视图用途
     };
 
 

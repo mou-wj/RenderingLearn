@@ -135,11 +135,11 @@ namespace RHIVulkan {
             dst.format = TransformFormatFrom(desc.depthStencilFormat);
             dst.samples = TransformSampleCountFrom(desc.numSamples);
 
-            dst.loadOp = RTActionToLoadOp(desc.depthLoadAction);
-            dst.storeOp = RTActionToStoreOp(desc.depthLoadAction);
+            dst.loadOp = RTActionToLoadOp(desc.depthActions);
+            dst.storeOp = RTActionToStoreOp(desc.depthActions);
 
-            dst.stencilLoadOp = RTActionToLoadOp(desc.stencilLoadAction);
-            dst.stencilStoreOp = RTActionToStoreOp(desc.stencilLoadAction);
+            dst.stencilLoadOp = RTActionToLoadOp(desc.stencilActions);
+            dst.stencilStoreOp = RTActionToStoreOp(desc.stencilActions);
 
             dst.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             dst.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -176,8 +176,8 @@ namespace RHIVulkan {
             hash ^= RHIColorAttachmentDesc::CalculateHash(desc.colorAttachments[i]), hash *= 1099511628211ull;
 
         hash ^= static_cast<uint64_t>(hasDepthStencil); hash *= 1099511628211ull;
-        hash ^= static_cast<uint64_t>(desc.depthLoadAction); hash *= 1099511628211ull;
-        hash ^= static_cast<uint64_t>(desc.stencilLoadAction); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.depthActions); hash *= 1099511628211ull;
+        hash ^= static_cast<uint64_t>(desc.stencilActions); hash *= 1099511628211ull;
         hash ^= static_cast<uint64_t>(desc.depthStencilFormat); hash *= 1099511628211ull;
         hash ^= static_cast<uint64_t>(desc.numSamples); hash *= 1099511628211ull;
 

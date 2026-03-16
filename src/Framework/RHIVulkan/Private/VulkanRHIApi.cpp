@@ -161,9 +161,30 @@ void VulkanRHIApi::UpdateTexture(RHICommandList& cmdList, RHITexture* texture, c
 	
 
 }
-void VulkanRHIApi::UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
+void VulkanRHIApi::UpdateBuffer(RHICommandList& cmdList, RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
 {
+	if (!buffer || !data)
+		return;
 
+	VkDeviceSize totalSize = region.size;
+
+	// 1. 获取 staging buffer
+	auto staging = Device->GetStagingManager()->Acquire(totalSize);
+	void* mapped = staging->Map(0, totalSize);
+
+	// 2. 拷贝 CPU 数据
+	memcpy(mapped, data, totalSize);
+
+	// 3. 构造 CopyBuffer 区域
+	VkBufferCopy copyRegion{};
+	copyRegion.srcOffset = 0;
+	copyRegion.dstOffset = region.offset;
+	copyRegion.size = totalSize;
+
+	VulkanBuffer* vulkanBuffer = dynamic_cast<VulkanBuffer*>(buffer);
+
+	// 4. 记录 command
+	cmdList.AddCommand<VulkanCommandUpdateBuffer>(vulkanBuffer, staging, copyRegion);
 }
 
 RHIShaderResourceViewSP VulkanRHIApi::CreateTextureShaderResourceView(

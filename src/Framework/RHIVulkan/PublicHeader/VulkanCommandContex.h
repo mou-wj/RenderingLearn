@@ -88,7 +88,7 @@ private:
 };
 
 
-struct RHIVULKAN_API VulkanCommandUpdateTexture : public RHICommandBase
+struct VulkanCommandUpdateTexture : public RHICommandBase
 {
     VulkanTexture* texture;
     std::shared_ptr<VulkanStagingBuffer> staging;
@@ -100,7 +100,7 @@ struct RHIVULKAN_API VulkanCommandUpdateTexture : public RHICommandBase
         VulkanCommandContext* vulkanContex = dynamic_cast<VulkanCommandContext*>(contex);
         // 2. 获取一个可用命令缓冲区
         VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->BeginUploadCommandBuffer();
-		cmdBuffer->Reset();
+
         VulkanImageBarrierBuilder barrierBuilder;
         VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(copyRegion.imageSubresource.aspectMask,
             copyRegion.imageSubresource.mipLevel,
@@ -116,7 +116,7 @@ struct RHIVULKAN_API VulkanCommandUpdateTexture : public RHICommandBase
 
         CmdCopyBufferToImage(
             cmdBuffer->GetHandle(), // Vulkan 命令缓冲区
-            staging->GetBuffer(), // staging buffer
+            staging->GetHandle(), // staging buffer
             texture->GetImage(), // 目标纹理
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, // 假设已经是 transfer dst layout
             1,
@@ -127,6 +127,46 @@ struct RHIVULKAN_API VulkanCommandUpdateTexture : public RHICommandBase
         vulkanContex->GetDevice()->GetStagingManager()->OnCommandBufferSubmitted(cmdBuffer);
 
         
+    }
+};
+
+struct VulkanCommandUpdateBuffer : public RHICommandBase
+{
+    VulkanBuffer* buffer;
+    std::shared_ptr<VulkanStagingBuffer> staging;
+    VkBufferCopy copyRegion{};
+
+    VulkanCommandUpdateBuffer(
+        VulkanBuffer* buffer,
+        std::shared_ptr<VulkanStagingBuffer> stagingBuffer,
+        VkBufferCopy region)
+        : buffer(buffer), staging(stagingBuffer), copyRegion(region) {
+    }
+
+    void Execute(RHICommandList& cmdList) override
+    {
+        auto context = cmdList.GetCommandContex();
+        VulkanCommandContext* vulkanContext = dynamic_cast<VulkanCommandContext*>(context);
+
+        // 1. 获取 upload command buffer
+        VulkanCommandBuffer* cmdBuffer =
+            vulkanContext->GetCommandBufferManager()->BeginUploadCommandBuffer();
+
+        // 2. 执行 copy
+        vkCmdCopyBuffer(
+            cmdBuffer->GetHandle(),
+            staging->GetHandle(),
+            buffer->GetHandle(),
+            1,
+            &copyRegion
+        );
+
+        // 3. 提交 command buffer
+        vulkanContext->GetCommandBufferManager()->EndAndSubmitUploadCommandBuffer(cmdBuffer);
+
+        // 4. staging 生命周期绑定到 cmdBuffer
+        vulkanContext->GetDevice()->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
+        vulkanContext->GetDevice()->GetStagingManager()->OnCommandBufferSubmitted(cmdBuffer);
     }
 };
 

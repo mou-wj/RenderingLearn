@@ -111,6 +111,11 @@ void RHICommandList::UpdateTexture(RHITexture* texture, const void* data, const 
         GRHIApi->UpdateTexture(*this, texture, data, size);
     }
 }
+void RHICommandList::UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) {
+    if (GRHIApi) {
+        GRHIApi->UpdateBuffer(*this, buffer, data, region);
+    }
+}
 
 void RHICommandList::SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth)
 {

@@ -25,4 +25,6 @@ namespace RHIVulkan {
 
     VkPrimitiveTopology TransformPrimitiveTopology(EPrimitiveTopology Topology);
 
+    VkBufferUsageFlags TransformBufferUsageFlagsFrom(ERHIBufferUsageFlags Flags);
+
 }
