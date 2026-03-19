@@ -12,95 +12,7 @@
 using namespace Core;
 namespace RHIVulkan{
 
-    VkSharingMode DetermineImageSharingMode(ERHITextureCreateFlags flags, VulkanDevice* device, std::vector<uint32_t>& outQueueFamilyIndices)
-    {
-        outQueueFamilyIndices.clear();
-
-        // Graphics 队列总是需要
-        outQueueFamilyIndices.push_back(device->GetGraphicsQueueFamilyIndex());
-
-        // 如果有 Compute 标志，加入 Compute 队列
-        if (EnumHasAnyFlags(flags, ERHITextureCreateFlags::UAV) &&
-            device->GetComputeQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex())
-        {
-            outQueueFamilyIndices.push_back(device->GetComputeQueueFamilyIndex());
-        }
-
-        // 如果有 TransferSrc 或 TransferDst，加入 Transfer 队列
-        if (EnumHasAnyFlags(flags, ERHITextureCreateFlags::CopySrc) || EnumHasAnyFlags(flags, ERHITextureCreateFlags::CopyDest)  &&
-            device->GetTransferQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex() &&
-            (outQueueFamilyIndices.empty() || device->GetTransferQueueFamilyIndex() != outQueueFamilyIndices[0]))
-        {
-            outQueueFamilyIndices.push_back(device->GetTransferQueueFamilyIndex());
-        }
-
-        // 如果有 Present 标志，加入 Present 队列
-        if (EnumHasAnyFlags(flags, ERHITextureCreateFlags::Presentable) &&
-            device->GetPresentQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex() &&
-            (std::find(outQueueFamilyIndices.begin(), outQueueFamilyIndices.end(),
-                device->GetPresentQueueFamilyIndex()) == outQueueFamilyIndices.end()))
-        {
-            outQueueFamilyIndices.push_back(device->GetPresentQueueFamilyIndex());
-        }
-
-        // 根据队列族数量选择 sharing mode
-        if (outQueueFamilyIndices.size() <= 1)
-        {
-            return VK_SHARING_MODE_EXCLUSIVE;
-        }
-        else
-        {
-            return VK_SHARING_MODE_CONCURRENT;
-        }
-    }
-    VkSharingMode DetermineBufferSharingMode(ERHIBufferUsageFlags flags, VulkanDevice* device, std::vector<uint32_t>& outQueueFamilyIndices)
-    {
-        outQueueFamilyIndices.clear();
-
-        auto AddQueue = [&](uint32_t queueFamily)
-            {
-                if (std::find(outQueueFamilyIndices.begin(), outQueueFamilyIndices.end(), queueFamily)
-                    == outQueueFamilyIndices.end())
-                {
-                    outQueueFamilyIndices.push_back(queueFamily);
-                }
-            };
-
-        // Graphics 队列默认需要（大多数 buffer 都会被 graphics 使用）
-        AddQueue(device->GetGraphicsQueueFamilyIndex());
-
-        // UAV / SRV 可能在 Compute 队列使用
-        if (EnumHasAnyFlags(flags, ERHIBufferUsageFlags::UnorderedAccess) ||
-            EnumHasAnyFlags(flags, ERHIBufferUsageFlags::ShaderResource))
-        {
-            if (device->GetComputeQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex())
-            {
-                AddQueue(device->GetComputeQueueFamilyIndex());
-            }
-        }
-
-        // Transfer 队列
-        if (EnumHasAnyFlags(flags, ERHIBufferUsageFlags::TransferSrc) ||
-            EnumHasAnyFlags(flags, ERHIBufferUsageFlags::TransferDst))
-        {
-            if (device->GetTransferQueueFamilyIndex() != device->GetGraphicsQueueFamilyIndex())
-            {
-                AddQueue(device->GetTransferQueueFamilyIndex());
-            }
-        }
-
-        // MapRead / MapWrite 不影响 queue family（CPU 访问）
-
-        if (outQueueFamilyIndices.size() <= 1)
-        {
-            return VK_SHARING_MODE_EXCLUSIVE;
-        }
-        else
-        {
-            return VK_SHARING_MODE_CONCURRENT;
-        }
-    }
-
+   
 // Vulkan Texture
 VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     : RHITexture(desc), Device(device) {
@@ -122,7 +34,8 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = TransformTextureUsageFlagsFrom(desc.Usage); // TODO: Support other usages
 	std::vector<uint32_t> queueFamilyIndices;
-    imageInfo.sharingMode = DetermineImageSharingMode( desc.Usage, Device, queueFamilyIndices);
+    queueFamilyIndices.push_back(Device->GetGraphicsQueue()->GetFamilyIndex());
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
 	imageInfo.pQueueFamilyIndices = queueFamilyIndices.data();
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -218,10 +131,27 @@ VulkanTexture::~VulkanTexture() {
 	DefaltView.Destroy(Device);
 
     if (Image != VK_NULL_HANDLE && owner) {
-        vkDestroyImage(device, Image, nullptr);
+        Device->EnqueueImageForDeletion(Image);
+    }
+    for (auto view : views) {
+        view->Invalidate();
     }
 
     memoryManager->Free(Allocation);
+}
+
+void VulkanTexture::AttachView(VulkanViewBase* view)
+{
+    views.push_back(view);
+}
+
+void VulkanTexture::DetachView(VulkanViewBase* view)
+{
+    auto it = std::find(views.begin(), views.end(), view);
+    if (it != views.end())
+    {
+        views.erase(it);
+    }
 }
 
 void VulkanTexture::InitialImageState(VulkanCommandContext* context, VkImageLayout layout)
@@ -233,7 +163,7 @@ void VulkanTexture::InitialImageState(VulkanCommandContext* context, VkImageLayo
     auto imageFlags = GetImageAspectFlags(vkFormat);
     //更新tracked image layout
     auto cmdImageLayoutMgr = cmdBuffer->GetImageLayoutManager();
-    cmdImageLayoutMgr->GetOrCreate(Image, Desc.MipLevels, Desc.ArraySize, layout, imageFlags);
+    cmdImageLayoutMgr->SetFullLayout(this, layout);
     VulkanImageBarrierBuilder barrierBuilder;
     VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(imageFlags,
         0,
@@ -300,7 +230,8 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
 	auto usageFlags = TransformBufferUsageFlagsFrom(Desc.Usage);
     bufferInfo.usage = usageFlags; // TODO: Support other usages
     std::vector<uint32_t> queueFamilyIndices;
-    bufferInfo.sharingMode = DetermineBufferSharingMode(desc.Usage, Device, queueFamilyIndices);
+    queueFamilyIndices.push_back(Device->GetGraphicsQueue()->GetFamilyIndex());
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     bufferInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
     bufferInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 
@@ -325,12 +256,25 @@ VulkanBuffer::~VulkanBuffer() {
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
 
     if (Buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(device, Buffer, nullptr);
+        Device->EnqueueBufferForDeletion(Buffer);
     }
 
     memoryManager->Free(Allocation);
 }
 
+void VulkanBuffer::AttachView(VulkanViewBase* view)
+{
+    views.push_back(view);
+}
+
+void VulkanBuffer::DetachView(VulkanViewBase* view)
+{
+    auto it = std::find(views.begin(), views.end(), view);
+    if (it != views.end())
+    {
+        views.erase(it);
+    }
+}
 
 VulkanShaderResourceView::VulkanShaderResourceView(VulkanDevice* device,
     RHIViewableResource* Resource,
@@ -342,6 +286,16 @@ VulkanShaderResourceView::VulkanShaderResourceView(VulkanDevice* device,
     ResourceType = EResourceType::Texture;
 
     CreateTextureView(SRVInfo);
+
+    // Attach to resource
+    if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+    {
+        vulkanResource->AttachView(this);
+    }
+    else if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
+    {
+        vulkanResource->AttachView(this);
+    }
 }
 
 VulkanShaderResourceView::VulkanShaderResourceView(
@@ -355,6 +309,12 @@ VulkanShaderResourceView::VulkanShaderResourceView(
     ResourceType = EResourceType::Buffer;
 
     CreateBufferView(SRVInfo);
+
+    // Attach to resource
+    if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
+    {
+        vulkanResource->AttachView(this);
+    }
 }
 
 void VulkanShaderResourceView::CreateTextureView(
@@ -387,11 +347,10 @@ void VulkanShaderResourceView::CreateTextureView(
     viewInfo.subresourceRange.baseArrayLayer = BaseArrayLayer;
     viewInfo.subresourceRange.layerCount = LayerCount;
 
-    vkCreateImageView(
-        Device->GetHandle(),
-        &viewInfo,
-        nullptr,
-        &ImageView);
+    // 使用 VulkanTextureView 结构体创建
+    TextureView.Create(Device, texture->GetImage(), viewInfo.viewType, 
+                      viewInfo.subresourceRange.aspectMask, Format,
+                      BaseMipLevel, MipLevelCount, BaseArrayLayer, LayerCount);
 
     DescriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 }
@@ -403,49 +362,63 @@ void VulkanShaderResourceView::CreateBufferView(
 
     Format = TransformFormatFrom(SRVInfo.Format);
 
-    VkBufferViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-    viewInfo.buffer = buffer->GetHandle();
-    viewInfo.format = Format;
-    viewInfo.offset = SRVInfo.Offset;
-    viewInfo.range =
-        (SRVInfo.NumElements * SRVInfo.Stride);
-
-    vkCreateBufferView(
-        Device->GetHandle(),
-        &viewInfo,
-        nullptr,
-        &BufferView);
-
-    DescriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    // 只有当 Buffer 的 usage 包含 Texel 标志时才创建 BufferView
+    if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlags::Texel))
+    {
+        VkDeviceSize range = (SRVInfo.NumElements * SRVInfo.Stride);
+        BufferViewObj.Create(Device, buffer->GetHandle(), Format, SRVInfo.Offset, range);
+        DescriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    }
+    else
+    {
+        // 如果没有 Texel 标志，默认使用 STORAGE_BUFFER 类型
+        DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    }
 }
 
 VulkanShaderResourceView::~VulkanShaderResourceView()
 {
+    // Detach from resource
+    if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+    {
+        vulkanResource->DetachView(this);
+    }
+    else if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
+    {
+        vulkanResource->DetachView(this);
+    }
+
     DestroyView();
+}
+
+VkImageView VulkanShaderResourceView::GetImageView() const
+{
+    return TextureView.View;
+}
+
+VkBufferView VulkanShaderResourceView::GetBufferView() const
+{
+    return BufferViewObj.View;
+}
+
+void VulkanShaderResourceView::Invalidate()
+{
+    // 销毁 TextureView
+    if (TextureView.View != VK_NULL_HANDLE)
+    {
+        TextureView.Destroy(Device);
+    }
+
+    // 销毁 BufferView
+    if (BufferViewObj.View != VK_NULL_HANDLE)
+    {
+        BufferViewObj.Destroy(Device);
+    }
 }
 
 void VulkanShaderResourceView::DestroyView()
 {
-    if (ImageView != VK_NULL_HANDLE)
-    {
-        vkDestroyImageView(
-            Device->GetHandle(),
-            ImageView,
-            nullptr);
-
-        ImageView = VK_NULL_HANDLE;
-    }
-
-    if (BufferView != VK_NULL_HANDLE)
-    {
-        vkDestroyBufferView(
-            Device->GetHandle(),
-            BufferView,
-            nullptr);
-
-        BufferView = VK_NULL_HANDLE;
-    }
+    Invalidate();
 }
 
 VulkanUnorderedAccessView::VulkanUnorderedAccessView(
@@ -459,6 +432,12 @@ VulkanUnorderedAccessView::VulkanUnorderedAccessView(
     ResourceType = EResourceType::Texture;
 
     CreateTextureView(UAVInfo);
+
+    // Attach to resource
+    if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+    {
+        vulkanResource->AttachView(this);
+    }
 }
 
 VulkanUnorderedAccessView::VulkanUnorderedAccessView(
@@ -472,6 +451,12 @@ VulkanUnorderedAccessView::VulkanUnorderedAccessView(
     ResourceType = EResourceType::Buffer;
 
     CreateBufferView(UAVInfo);
+
+    // Attach to resource
+    if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
+    {
+        vulkanResource->AttachView(this);
+    }
 }
 
 
@@ -505,11 +490,10 @@ void VulkanUnorderedAccessView::CreateTextureView(
     viewInfo.subresourceRange.baseArrayLayer = BaseArrayLayer;
     viewInfo.subresourceRange.layerCount = LayerCount;
 
-    vkCreateImageView(
-        Device->GetHandle(),
-        &viewInfo,
-        nullptr,
-        &ImageView);
+    // 使用 VulkanTextureView 结构体创建
+    TextureView.Create(Device, texture->GetImage(), viewInfo.viewType,
+                      viewInfo.subresourceRange.aspectMask, Format,
+                      BaseMipLevel, MipLevelCount, BaseArrayLayer, LayerCount);
 
     DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 }
@@ -521,41 +505,63 @@ void VulkanUnorderedAccessView::CreateBufferView(
 
     Format = TransformFormatFrom(UAVInfo.Format);
 
-    VkBufferViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-    viewInfo.buffer = buffer->GetHandle();
-    viewInfo.format = Format;
-    viewInfo.offset = UAVInfo.Offset;
-    viewInfo.range =
-        (UAVInfo.NumElements * UAVInfo.Stride);
-
-    vkCreateBufferView(
-        Device->GetHandle(),
-        &viewInfo,
-        nullptr,
-        &BufferView);
-
-    DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+    // 只有当 Buffer 的 usage 包含 Texel 标志时才创建 BufferView
+    if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlags::Texel))
+    {
+        VkDeviceSize range = (UAVInfo.NumElements * UAVInfo.Stride);
+        BufferViewObj.Create(Device, buffer->GetHandle(), Format, UAVInfo.Offset, range);
+        DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+    }
+    else
+    {
+        // 如果没有 Texel 标志，默认使用 STORAGE_BUFFER 类型
+        DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    }
 }
 
 VulkanUnorderedAccessView::~VulkanUnorderedAccessView()
 {
+    // Detach from resource
+    if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+    {
+        vulkanResource->DetachView(this);
+    }
+    else if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
+    {
+        vulkanResource->DetachView(this);
+    }
+
     DestroyView();
+}
+
+VkImageView VulkanUnorderedAccessView::GetImageView() const
+{
+    return TextureView.View;
+}
+
+VkBufferView VulkanUnorderedAccessView::GetBufferView() const
+{
+    return BufferViewObj.View;
+}
+
+void VulkanUnorderedAccessView::Invalidate()
+{
+    // 销毁 TextureView
+    if (TextureView.View != VK_NULL_HANDLE)
+    {
+        TextureView.Destroy(Device);
+    }
+
+    // 销毁 BufferView
+    if (BufferViewObj.View != VK_NULL_HANDLE)
+    {
+        BufferViewObj.Destroy(Device);
+    }
 }
 
 void VulkanUnorderedAccessView::DestroyView()
 {
-    if (ImageView != VK_NULL_HANDLE)
-    {
-        vkDestroyImageView(Device->GetHandle(), ImageView, nullptr);
-        ImageView = VK_NULL_HANDLE;
-    }
-
-    if (BufferView != VK_NULL_HANDLE)
-    {
-        vkDestroyBufferView(Device->GetHandle(), BufferView, nullptr);
-        BufferView = VK_NULL_HANDLE;
-    }
+    Invalidate();
 }
 
 
@@ -591,7 +597,7 @@ void VulkanViewport::Present(VulkanCommandContext* context, VulkanCommandBuffer*
     assert(queue == presentQueue);//先假定相等
     //转换布局
     auto backBufferTexture = backBufferTextures[currentBackBufferIndex];
-	auto layout = commandBuffer->GetImageLayoutManager()->Get(backBufferTexture->GetImage());
+	auto layout = commandBuffer->GetImageLayoutManager()->GetFullLayout(backBufferTexture->GetImage());
 	VulkanImageBarrierBuilder barrierBuilder;
     VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(backBufferTexture->GetAspectFlags(),
         0,
@@ -835,6 +841,14 @@ VulkanFence::VulkanFence(VulkanDevice* device)
 	}
     bool isSignaled = IsSignaled();
     int a = 10;
+}
+
+VulkanFence::~VulkanFence()
+{
+	if (Fence) {
+		vkDestroyFence(Device->GetHandle(), Fence, nullptr);
+		Fence = VK_NULL_HANDLE;
+	}
 }
 
 // ----------------------------

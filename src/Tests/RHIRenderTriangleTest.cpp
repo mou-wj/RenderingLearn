@@ -75,8 +75,9 @@ public:
         }
 
         auto& cmdList = cmdContext->GetCommandList();
-
-        while (true) {
+        int i = 0;
+        while (i < 20) {
+            i++;
             // 设置为即时执行模式
             cmdList.SetImmediate(true);
 
@@ -132,6 +133,15 @@ public:
         TriangleGraphicsPipelineState.reset();
         VertexDescState.reset();
         depthStencilTexture.reset();
+		Viewport.reset();
+		Window.reset();
+        auto* api = RHI::GRHIApi;
+        if (!api)
+        {
+            return;
+        }
+		api->Shutdown();
+        delete api;
     }
 
 private:

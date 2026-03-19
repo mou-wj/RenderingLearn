@@ -75,7 +75,7 @@ namespace RHI {
         void SetImmediate(bool bImmediate);
         bool IsImmediate() const;
 
-        void SetBatchedShaderParameters(const RHIShaderSP& shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
+        void SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
         void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size);
         //
         void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);

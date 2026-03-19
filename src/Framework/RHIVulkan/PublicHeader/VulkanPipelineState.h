@@ -81,8 +81,11 @@ namespace RHIVulkan{
 
         ~VulkanPipelineLayout()
         {
-            if (layout != VK_NULL_HANDLE)
+            if (layout != VK_NULL_HANDLE) 
+            {
                 vkDestroyPipelineLayout(device->GetHandle(), layout, nullptr);
+            }
+                
         }
 
         VkPipelineLayout GetHandle()
@@ -180,13 +183,14 @@ private:
 };
 
 // 计算管线
-class VulkanComputePipeline : public VulkanPipelineBase ,public RHIComputePipelineState {
+class VulkanComputePipelineState : public VulkanPipelineBase ,public RHIComputePipelineState {
 public:
-    VulkanComputePipeline(VulkanDevice* device, const RHIComputePipelineStateDesc& pipelineDesc);
-    ~VulkanComputePipeline();
+    VulkanComputePipelineState(VulkanDevice* device, const RHIComputePipelineStateDesc& pipelineDesc);
+    ~VulkanComputePipelineState();
     void Bind(VulkanCommandBuffer* cmdBuffer);
 
 private:
+    PipelineLayoutInfo BuildPipelineLayoutInfo(const RHIComputePipelineStateDesc& pipelineDesc);
     VkComputePipelineCreateInfo createInfo; // Vulkan-specific create info
 
     void CreatePipeline() override;
@@ -206,7 +210,7 @@ private:
 
 using VulkanPipelineSP = std::shared_ptr<VulkanPipelineBase>;
 using VulkanGraphicsPipelineStateSP = std::shared_ptr<VulkanGraphicsPipelineState>;
-using VulkanComputePipelineSP = std::shared_ptr<VulkanComputePipeline>;
+using VulkanComputePipelineStateSP = std::shared_ptr<VulkanComputePipelineState>;
 using VulkanRayTracingPipelineSP = std::shared_ptr<VulkanRayTracingPipeline>;
 
 }

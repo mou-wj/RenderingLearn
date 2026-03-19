@@ -417,14 +417,14 @@ namespace RHIVulkan {
 
         VulkanComputePipelineDescriptorState(
             VulkanDevice* device,
-            VulkanComputePipeline* pipeline)
+            VulkanComputePipelineState* pipeline)
             : VulkanCommonPipelineDescriptorState(device, pipeline)
             , Pipeline(pipeline)
         {
             pipelineBindingPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
         }
     private:
-        VulkanComputePipeline* Pipeline = nullptr;
+        VulkanComputePipelineState* Pipeline = nullptr;
     };
 
     class VulkanGraphicsPipelineDescriptorState
@@ -451,7 +451,7 @@ namespace RHIVulkan {
         {
         }
 
-        void SetPipeline(VulkanComputePipeline* pipeline)
+        void SetPipeline(VulkanComputePipelineState* pipeline)
         {
             if (CurrentPipeline == pipeline)
                 return;
@@ -564,11 +564,11 @@ namespace RHIVulkan {
     private:
         VulkanDevice* Device;
         friend class VulkanCommandContext;
-        VulkanComputePipeline* CurrentPipeline = nullptr;
+        VulkanComputePipelineState* CurrentPipeline = nullptr;
         VulkanComputePipelineDescriptorState* CurrentState = nullptr;
 
         std::unordered_map<
-            VulkanComputePipeline*,
+            VulkanComputePipelineState*,
             std::unique_ptr<VulkanComputePipelineDescriptorState>> States;
     };
 

@@ -6,6 +6,7 @@
 
 namespace RHI
 {
+
     class RHI_API RHIPlatformCommandList {
     public:
         virtual ~RHIPlatformCommandList() = default;
@@ -36,12 +37,7 @@ namespace RHI
 
         virtual void RHISetShaderParameter(RHIShader* Shader, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) = 0;
 
-        virtual void SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter) = 0;
-
-        std::vector<uint8_t> Data;
-        std::vector<RHIShaderUniformParameter> UniformParameters;
-        std::vector<RHIShaderResourceParameter> ResourceParameters;
-
+        virtual void SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& parameter) = 0;
 
 
         virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;

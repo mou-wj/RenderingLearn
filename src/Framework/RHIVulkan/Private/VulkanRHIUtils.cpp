@@ -255,65 +255,42 @@ namespace RHIVulkan {
     {
         VkBufferUsageFlags usage = 0;
 
-        // ---------- 根据 Buffer 类型设置基础 usage ----------
+        // ---------- 基础类型 ----------
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Vertex))
-        {
             usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        }
 
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Index))
-        {
             usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-        }
 
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Constant))
-        {
             usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        }
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Structured))
-        {
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Structured) ||
+            EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::RawBuffer))
             usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        }
-
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::RawBuffer))
-        {
-            usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        }
 
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Indirect))
-        {
             usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-        }
 
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Staging))
-        {
-            // Staging buffer 不需要特殊 usage，主要靠 memory property
-            // 这里可以留空或者加 TRANSFER bits
             usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        }
 
-        // ---------- 根据访问方式设置 usage ----------
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::ShaderResource))
+        // ---------- Texel Buffer（必须显式声明） ----------
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Texel))
         {
-            // 如果 Buffer 是 Vertex / Index / Constant 之类，可作为 texel buffer 使用
-            usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::ShaderResource))
+                usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+
+            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::UnorderedAccess))
+                usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::UnorderedAccess))
-        {
-            usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        }
-
+        // ---------- 通用访问 ----------
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferSrc))
-        {
             usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        }
 
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferDst))
-        {
             usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        }
 
         return usage;
     }

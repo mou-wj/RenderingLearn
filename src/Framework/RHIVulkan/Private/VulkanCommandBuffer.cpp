@@ -18,7 +18,6 @@ VulkanCommandBuffer::VulkanCommandBuffer(VulkanDevice* device, VulkanCommandBuff
 
 VulkanCommandBuffer::~VulkanCommandBuffer()
 {
-    RealeseMemory();
     device->GetFenceManager()->ReleaseFence(fence);
 }
 
@@ -33,11 +32,6 @@ void VulkanCommandBuffer::AllocateMemory()
     if (!AllocateCommandBuffers(device->GetHandle(), &allocInfo, &commandBuffer)) {
         throw std::runtime_error("Failed to allocate command buffer");
     }
-}
-
-void VulkanCommandBuffer::RealeseMemory()
-{
-    FreeCommandBuffers(device->GetHandle(), owner->GetHandle(), 1, &commandBuffer);
 }
 
 void VulkanCommandBuffer::Begin(VkCommandBufferUsageFlags usage)
@@ -190,9 +184,9 @@ VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkComman
             fence->Reset();
             buffer->Reset();
             buffer->Begin();
-            commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(buffer.get());
-            ActiveCommandBuffer = buffer.get();
-            return buffer.get();
+            commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(buffer);
+            ActiveCommandBuffer = buffer;
+            return buffer;
         }
     }
     // 没有可用的，分配新的
@@ -230,7 +224,7 @@ VulkanCommandBuffer* VulkanCommandBufferManager::BeginUploadCommandBuffer()
     ActiveUploadCommandBuffer = Allocate(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     ActiveUploadCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
+    commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(ActiveUploadCommandBuffer);
     return ActiveUploadCommandBuffer;
 }
 

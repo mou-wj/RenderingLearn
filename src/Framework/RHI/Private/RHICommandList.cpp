@@ -102,7 +102,7 @@ void RHICommandList::SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineS
 }
 
 
-void RHICommandList::SetBatchedShaderParameters(const RHIShaderSP& shader, const RHIBatchedShaderParameters& bacthedShaderParameter) {
+void RHICommandList::SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter) {
     if (CommandContex)
         CommandContex->SetBatchedShaderParameters(shader, bacthedShaderParameter);
 }

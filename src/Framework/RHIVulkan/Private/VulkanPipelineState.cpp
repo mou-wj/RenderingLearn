@@ -19,7 +19,7 @@ VulkanPipelineBase::VulkanPipelineBase(VulkanDevice* device)
 VulkanPipelineBase::~VulkanPipelineBase() {
     VkDevice deviceHandle = device->GetHandle();
     if (pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(deviceHandle, pipeline, nullptr);
+        device->EnqueuePipelineForDeletion(pipeline);
         pipeline = VK_NULL_HANDLE;
     }
 
@@ -200,36 +200,97 @@ void VulkanGraphicsPipelineState::CreatePipeline() {
     }
 }
 
-VulkanComputePipeline::VulkanComputePipeline(VulkanDevice* device, const RHIComputePipelineStateDesc& pipelineDesc)
+
+VulkanComputePipelineState::VulkanComputePipelineState(VulkanDevice* device, const RHIComputePipelineStateDesc& pipelineDesc)
     : VulkanPipelineBase(device), RHIComputePipelineState(pipelineDesc) {
     // Convert RHI desc to Vulkan create info
     createInfo = {}; // Initialize createInfo
     createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    createInfo.layout = VK_NULL_HANDLE;
+    createInfo.flags = 0;
+    createInfo.pNext = nullptr;
+    createInfo.basePipelineHandle = VK_NULL_HANDLE;
+    createInfo.basePipelineIndex = -1;
+
+    // Build layout and cache it
+    PipelineLayoutInfo layoutInfo = BuildPipelineLayoutInfo(pipelineDesc);
+    pipelineLayout = device->GetPipelineLayoutCache()->GetOrCreateLayout(layoutInfo);
+    createInfo.layout = pipelineLayout->GetHandle();
 
     CreatePipeline();
 }
 
-VulkanComputePipeline::~VulkanComputePipeline() {
+VulkanComputePipelineState::~VulkanComputePipelineState() {
 }
 
-void VulkanComputePipeline::Bind(VulkanCommandBuffer* cmdBuffer)
+void VulkanComputePipelineState::Bind(VulkanCommandBuffer* cmdBuffer)
 {
     vkCmdBindPipeline(cmdBuffer->GetHandle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 }
 
-void VulkanComputePipeline::CreatePipeline() {
+PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHIComputePipelineStateDesc& pipelineDesc)
+{
+    PipelineLayoutInfo layoutInfo;
+
+    auto vulkanShaderSP = dynamic_cast<VulkanRHIShader*>(pipelineDesc.computeShader);
+    if (!vulkanShaderSP)
+        return layoutInfo;
+
+    const auto& header = vulkanShaderSP->GetShaderReflection();
+    VkShaderStageFlags stageMask = TransformShaderFrequencyToStage(header.Frequency);
+
+    auto ensureSet = [&](uint32_t set)
+        {
+            if (layoutInfo.setLayouts.size() <= set)
+            {
+                layoutInfo.setLayouts.resize(set + 1);
+            }
+        };
+
+    for (const auto& binding : header.DescriptorBindings)
+    {
+        ensureSet(binding.Set);
+
+        DescriptorSetLayoutInfo& setLayout = layoutInfo.setLayouts[binding.Set];
+
+        VkDescriptorType vkType = TransformDescriptorTypeFrom(binding.Type);
+
+        setLayout.AddBinding(
+            binding.Binding,
+            vkType,
+            binding.Count,
+            stageMask);
+    }
+
+    if (header.HasPushConstant)
+    {
+        layoutInfo.hasPushConstant = true;
+
+        layoutInfo.pushConstant.offset = 0;
+        layoutInfo.pushConstant.size = header.PushConstant.Size;
+
+        layoutInfo.pushConstant.stageFlags = stageMask;
+    }
+
+    return layoutInfo;
+}
+
+
+void VulkanComputePipelineState::CreatePipeline() {
     // 设置VkComputePipelineCreateInfo的各个成员
     // 这里仅提供一个示例，具体成员需要根据pipelineDesc填充
 
     // 设置着色器阶段
-    auto vulkanShaderSP = reinterpret_cast<VulkanRHIShader*>(desc.computeShader);
+    auto vulkanShaderSP = dynamic_cast<VulkanRHIShader*>(desc.computeShader);
+    if (!vulkanShaderSP)
+        throw std::runtime_error("Compute shader is null for compute pipeline");
+
     VkPipelineShaderStageCreateInfo shaderStageInfo = {};
     shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStageInfo.stage = vulkanShaderSP->GetShaderStage(); // 计算着色器阶段
+    shaderStageInfo.stage = vulkanShaderSP->GetShaderStage(); // 计算着色器阶段
     shaderStageInfo.module = vulkanShaderSP->GetShaderModule();
     shaderStageInfo.pName = vulkanShaderSP->GetEntryPoint().c_str();
 
+    createInfo.stage = shaderStageInfo;
 
     // 创建计算管线
     VkResult result = vkCreateComputePipelines(device->GetHandle(), VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);

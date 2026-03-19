@@ -13,6 +13,7 @@
 #include "VulkanRHIUtils.h"
 #include "VulkanShader.h"
 #include "VulkanTransientResource.h"
+#include "RHIPipelineStateCache.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
 
@@ -89,6 +90,10 @@ bool VulkanRHIApi::Init()
 
 void VulkanRHIApi::Shutdown()
 {
+	RHI::RHIPipelineStateCache::ClearAll();
+
+	delete Device;
+
     // 销毁Vulkan实例和其他资源
     if (Instance != VK_NULL_HANDLE)
     {
@@ -190,25 +195,25 @@ void VulkanRHIApi::UpdateBuffer(RHICommandList& cmdList, RHIBuffer* buffer, cons
 RHIShaderResourceViewSP VulkanRHIApi::CreateTextureShaderResourceView(
 	RHITexture* Texture, const RHITexSRVCreateInfo& Desc) 
 {
-	return nullptr; // 暂时返回nullptr
+	return DynamicPtrCast(std::make_shared<VulkanShaderResourceView>(Device, Texture, Desc), RHIShaderResourceView);
 }
 
 RHIUnorderedAccessViewSP VulkanRHIApi::CreateTextureUnorderedAccessView(
 	RHITexture* Texture, const RHITexUAVCreateInfo& Desc)
 {
-	return nullptr; // 暂时返回nullptr
+	return DynamicPtrCast(std::make_shared<VulkanUnorderedAccessView>(Device, Texture, Desc), RHIUnorderedAccessView);
 }
 
 RHIShaderResourceViewSP VulkanRHIApi::CreateBufferShaderResourceView(
 	RHIBuffer* Buffer, const RHIBufferSRVCreateInfo& Desc)
 {
-	return nullptr; // 暂时返回nullptr
+	return DynamicPtrCast(std::make_shared<VulkanShaderResourceView>(Device, Buffer, Desc), RHIShaderResourceView);
 }
 
 RHIUnorderedAccessViewSP VulkanRHIApi::CreateBufferUnorderedAccessView(
 	RHIBuffer* Buffer, const RHIBufferUAVCreateInfo& Desc)
 {
-	return nullptr; // 暂时返回nullptr
+	return DynamicPtrCast(std::make_shared<VulkanUnorderedAccessView>(Device, Buffer, Desc), RHIUnorderedAccessView);
 }
 
 // 创建 StagingBuffer
@@ -227,7 +232,7 @@ RHIGraphicsPipelineStateSP VulkanRHIApi::CreateGraphicsPipelineState(const RHIGr
 RHIComputePipelineStateSP VulkanRHIApi::CreateComputePipelineState(const RHIComputePipelineStateDesc& desc)
 {
     // 创建Vulkan计算管线状态
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(std::make_shared<VulkanComputePipelineState>(Device, desc), RHIComputePipelineState);; // 暂时返回nullptr
 }
 
 RHIRayTracingPipelineStateSP VulkanRHIApi::CreateRayTracingsPipelineState(const RHIRayTracingPipelineStateDesc& desc)

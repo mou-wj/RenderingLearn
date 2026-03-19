@@ -80,7 +80,7 @@ struct VulkanTextureView
     {
         if (View != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(Device->GetHandle(), View, nullptr);
+            Device->EnqueueImageViewForDeletion(View);
             View = VK_NULL_HANDLE;
         }
 
@@ -92,6 +92,72 @@ public:
     VkImageView View;
     VkImage Image;
     uint32_t ViewId;
+};
+
+struct VulkanBufferView
+{
+    VulkanBufferView()
+        : View(VK_NULL_HANDLE)
+        , Buffer(VK_NULL_HANDLE)
+        , ViewId(0)
+        , Format(VK_FORMAT_UNDEFINED)
+    {
+    }
+
+    // 创建 BufferView
+    bool Create(VulkanDevice* Device,
+        VkBuffer InBuffer,
+        VkFormat InFormat,
+        VkDeviceSize Offset,
+        VkDeviceSize Size)
+    {
+        assert(InBuffer != VK_NULL_HANDLE);
+
+        Buffer = InBuffer;
+        Format = InFormat;
+
+        // VkBufferViewCreateInfo
+        VkBufferViewCreateInfo ViewInfo{};
+        ViewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+        ViewInfo.buffer = Buffer;
+        ViewInfo.format = Format;
+        ViewInfo.offset = Offset;
+        ViewInfo.range = Size;
+
+        VkResult Result = vkCreateBufferView(Device->GetHandle(), &ViewInfo, nullptr, &View);
+        assert(Result == VK_SUCCESS && "Failed to create VkBufferView");
+
+        // 简单 ID 用于 debug / hash
+        static uint32_t NextViewId = 1;
+        ViewId = NextViewId++;
+        return Result == VK_SUCCESS;
+    }
+
+    // 销毁 BufferView
+    void Destroy(VulkanDevice* Device)
+    {
+        if (View != VK_NULL_HANDLE)
+        {
+            Device->EnqueueBufferViewForDeletion(View);
+            View = VK_NULL_HANDLE;
+        }
+
+        Buffer = VK_NULL_HANDLE;
+        Format = VK_FORMAT_UNDEFINED;
+        ViewId = 0;
+    }
+
+public:
+    VkBufferView View;
+    VkBuffer Buffer;
+    uint32_t ViewId;
+    VkFormat Format;
+};
+
+class VulkanViewBase{
+public:
+    virtual void Invalidate() = 0;
+    virtual ~VulkanViewBase() = default;
 };
 
 // Vulkan Texture
@@ -109,6 +175,10 @@ public:
 
     void InitialImageState(VulkanCommandContext* context, VkImageLayout layout);
 	VkImageLayout GetDefaultLayout() const { return DefaultLayout; }
+
+    // View management
+    void AttachView(VulkanViewBase* view);
+    void DetachView(VulkanViewBase* view);
 private:
     VkImageLayout DetermineDefaultLayout(ERHITextureCreateFlags Flags);
 
@@ -120,6 +190,8 @@ private:
     bool owner = true;
     VkImageLayout DefaultLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	VkImageAspectFlags ImageAspectFlags = 0;
+
+    std::vector<VulkanViewBase*> views;
 };
 using VulkanTextureSP = std::shared_ptr<VulkanTexture>;
 
@@ -132,17 +204,23 @@ public:
     const VkBuffer& GetHandle() const { return Buffer; }
     VkDeviceSize GetSize() const { return Size; }
 
+    // View management
+    void AttachView(VulkanViewBase* view);
+    void DetachView(VulkanViewBase* view);
+
 private:
     VkBuffer Buffer = VK_NULL_HANDLE;
     VkDeviceSize Size = 0;
     VulkanDevice* Device = nullptr;
     VulkanAllocation Allocation;
+
+    std::vector<VulkanViewBase*> views;
 };
 
 // --------------------------------------------------
-   // Vulkan Shader Resource View
-   // --------------------------------------------------
-class VulkanShaderResourceView : public RHIShaderResourceView
+// Vulkan Shader Resource View
+// --------------------------------------------------
+class VulkanShaderResourceView : public RHIShaderResourceView, public VulkanViewBase
 {
 public:
     // Texture SRV 构造
@@ -153,8 +231,8 @@ public:
     ~VulkanShaderResourceView() override;
 
     // Vulkan 句柄访问
-    VkImageView GetImageView() const { return ImageView; }
-    VkBufferView GetBufferView() const { return BufferView; }
+    VkImageView GetImageView() const;
+    VkBufferView GetBufferView() const;
 
     // 元信息查询
     bool IsTexture() const { return ResourceType == EResourceType::Texture; }
@@ -167,6 +245,9 @@ public:
     VkDescriptorType GetDescriptorType() const { return DescriptorType; }
     const std::string& GetDebugName() const { return DebugName; }
 
+    // VulkanViewBase override
+    void Invalidate() override;
+
 private:
     void CreateTextureView(const RHITexSRVCreateInfo& SRVInfo);
     void CreateBufferView(const RHIBufferSRVCreateInfo& SRVInfo);
@@ -176,9 +257,9 @@ private:
     VulkanDevice* Device = nullptr;
     RHIViewableResource* ResourcePtr = nullptr;
 
-    // Vulkan句柄
-    VkImageView ImageView = VK_NULL_HANDLE;
-    VkBufferView BufferView = VK_NULL_HANDLE;
+    // 存储 view 对象（而非原生句柄）
+    VulkanTextureView TextureView;
+    VulkanBufferView BufferViewObj;
 
     // 类型信息
     enum class EResourceType { Texture, Buffer } ResourceType;
@@ -196,10 +277,11 @@ private:
 };
 
 
+
 // --------------------------------------------------
 // Vulkan Unordered Access View
 // --------------------------------------------------
-class VulkanUnorderedAccessView : public RHIUnorderedAccessView
+class VulkanUnorderedAccessView : public RHIUnorderedAccessView, public VulkanViewBase
 {
 public:
     VulkanUnorderedAccessView(VulkanDevice* device, RHIViewableResource* Resource, const RHITexUAVCreateInfo& UAVInfo);
@@ -207,8 +289,9 @@ public:
 
     ~VulkanUnorderedAccessView() override;
 
-    VkImageView GetImageView() const { return ImageView; }
-    VkBufferView GetBufferView() const { return BufferView; }
+    // Vulkan 句柄访问
+    VkImageView GetImageView() const;
+    VkBufferView GetBufferView() const;
 
     bool IsTexture() const { return ResourceType == EResourceType::Texture; }
     bool IsBuffer() const { return ResourceType == EResourceType::Buffer; }
@@ -220,6 +303,9 @@ public:
     VkDescriptorType GetDescriptorType() const { return DescriptorType; }
     const std::string& GetDebugName() const { return DebugName; }
 
+    // VulkanViewBase override
+    void Invalidate() override;
+
 private:
     void CreateTextureView(const RHITexUAVCreateInfo& UAVInfo);
     void CreateBufferView(const RHIBufferUAVCreateInfo& UAVInfo);
@@ -229,8 +315,9 @@ private:
     VulkanDevice* Device = nullptr;
     RHIViewableResource* ResourcePtr = nullptr;
 
-    VkImageView ImageView = VK_NULL_HANDLE;
-    VkBufferView BufferView = VK_NULL_HANDLE;
+    // 存储 view 对象（而非原生句柄）
+    VulkanTextureView TextureView;
+    VulkanBufferView BufferViewObj;
 
     enum class EResourceType { Texture, Buffer } ResourceType;
     VkFormat Format = VK_FORMAT_UNDEFINED;
@@ -271,7 +358,7 @@ private:
 class VulkanFence : public RHIFence {
 public:
     VulkanFence(VulkanDevice* device);
-    ~VulkanFence() override = default;
+    ~VulkanFence() override;
 
     // 新增：判断Fence是否已完成
     bool IsSignaled() const;

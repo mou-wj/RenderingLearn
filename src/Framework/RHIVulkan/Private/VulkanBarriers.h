@@ -3,6 +3,7 @@
 #include <unordered_map>
 namespace RHIVulkan {
 	class VulkanCommandBuffer;
+	class VulkanTexture;
 	class VulkanImageLayout
 	{
 	public:
@@ -46,22 +47,21 @@ namespace RHIVulkan {
 		explicit VulkanImageLayoutManager(VulkanImageLayoutManager* fallback = nullptr);
 		void Clear() { Layouts.clear(); }
 
-		const VulkanImageLayout* Get(VkImage image) const;
-		VulkanImageLayout* GetOrCreate(VkImage image,
-			uint32_t mips,
-			uint32_t layers,
-			VkImageLayout initial,
-			VkImageAspectFlags aspect);
+		const VulkanImageLayout* GetFullLayout(VkImage image) const;
+		const VulkanImageLayout* GetFullLayout(VulkanTexture* texture) const;
 
-
-		void Set(VkImage image, const VulkanImageLayout& layout);
-		void Set(VkImage image,
+		void SetFullLayout(VkImage image, const VulkanImageLayout& layout);
+		void SetFullLayout(VulkanTexture* texture, const VulkanImageLayout& layout);
+		void SetFullLayout(VulkanTexture* texture, VkImageLayout layout);
+		void SetLayout(VulkanTexture* texture,
 			VkImageLayout layout,
 			const VkImageSubresourceRange& range);
 
 
 		void TransferTo(VulkanImageLayoutManager& dst);
 		void Remove(VkImage image);
+
+		void NotifyDeletedImage(VkImage image);
 
 
 	private:

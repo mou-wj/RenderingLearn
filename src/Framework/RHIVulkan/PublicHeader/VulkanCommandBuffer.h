@@ -24,7 +24,6 @@ public:
 
     VkCommandBuffer GetHandle() const { return commandBuffer; }
     void AllocateMemory();
-    void RealeseMemory();
 
     void Begin(VkCommandBufferUsageFlags usage = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     void End();
@@ -113,7 +112,7 @@ private:
     VulkanDevice* device = nullptr;
     VulkanCommandContext* commandContext = nullptr;
     std::unordered_map<uint32_t, std::unique_ptr<VulkanCommandBufferPool>> Pools;
-    std::vector<std::unique_ptr<VulkanCommandBuffer>> ManagedBuffers; // 管理所有分配的buffer
+    std::vector<VulkanCommandBuffer*> ManagedBuffers; // 管理所有分配的buffer
 };
 
 

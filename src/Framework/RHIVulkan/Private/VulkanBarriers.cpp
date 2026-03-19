@@ -2,6 +2,7 @@
 #include "VulkanCommandBuffer.h"
 #include "VulkanFuncWrapper.h"
 #include "RHIDefine.h"
+#include "VulkanResource.h"
 namespace RHIVulkan {
 
 	static void GetVulkanBarrierMasksByLayout(
@@ -33,7 +34,7 @@ namespace RHIVulkan {
 
 		case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
 			OutAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			// ¼ÙÉè¿ÉÄÜÔÚ¶¥µã»òÏñËØ½×¶Î¶ÁÈ¡£¬È¡²¢¼¯¸ü°²È«
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø½×¶Î¶ï¿½È¡ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È«
 			OutStageMask = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			break;
 
@@ -73,7 +74,7 @@ namespace RHIVulkan {
 			return;
 		}
 
-		// --- Ö»¶Á·ÖÖ§ ---
+		// --- Ö»ï¿½ï¿½ï¿½ï¿½Ö§ ---
 		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::SRVGraphics))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -99,7 +100,7 @@ namespace RHIVulkan {
 			OutStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 		}
 
-		// --- Ð´Èë·ÖÖ§ ---
+		// --- Ð´ï¿½ï¿½ï¿½Ö§ ---
 		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::RTV))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -126,7 +127,7 @@ namespace RHIVulkan {
 			OutStageMask |= VK_PIPELINE_STAGE_TRANSFER_BIT;
 		}
 
-		// --- Buffer ÌØÓÐ×´Ì¬ÍÆµ¼ ---
+		// --- Buffer ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½Æµï¿½ ---
 		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::VertexOrIndexBuffer))
 		{
 			OutAccessMask |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
@@ -143,7 +144,7 @@ namespace RHIVulkan {
 			OutStageMask |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 		}
 
-		// Õë¶Ô·ÇÎÆÀí×ÊÔ´µÄÐÞÕý
+		// ï¿½ï¿½Ô·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		if (!bIsTexture)
 		{
 			OutLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -159,6 +160,7 @@ namespace RHIVulkan {
 		, NumLayers(numLayers)
 		, MainLayout(initial)
 	{
+
 	}
 
 
@@ -239,46 +241,51 @@ namespace RHIVulkan {
 	}
 
 
-	const VulkanImageLayout* VulkanImageLayoutManager::Get(VkImage image) const
+	const VulkanImageLayout* VulkanImageLayoutManager::GetFullLayout(VkImage image) const
 	{
 		auto it = Layouts.find(image);
 		if (it != Layouts.end())
 			return &it->second;
 
-
-		return Fallback ? Fallback->Get(image) : nullptr;
+		return Fallback ? Fallback->GetFullLayout(image) : nullptr;
 	}
 
 
-	VulkanImageLayout* VulkanImageLayoutManager::GetOrCreate(
-		VkImage image,
-		uint32_t mips,
-		uint32_t layers,
-		VkImageLayout initial,
-		VkImageAspectFlags aspect)
+	const VulkanImageLayout* VulkanImageLayoutManager::GetFullLayout(VulkanTexture* texture) const
 	{
-		auto it = Layouts.find(image);
-		if (it != Layouts.end())
-			return &it->second;
-
-
-		auto [iter, _] = Layouts.emplace(
-			image, VulkanImageLayout(initial, mips, layers, aspect));
-		return &iter->second;
+		return GetFullLayout(texture->GetImage());
 	}
 
 
-	void VulkanImageLayoutManager::Set(VkImage image, const VulkanImageLayout& layout)
+	void VulkanImageLayoutManager::SetFullLayout(VkImage image, const VulkanImageLayout& layout)
 	{
 		Layouts[image] = layout;
 	}
 
 
-	void VulkanImageLayoutManager::Set(VkImage image,
+	void VulkanImageLayoutManager::SetFullLayout(VulkanTexture* texture, const VulkanImageLayout& layout)
+	{
+		SetFullLayout(texture->GetImage(), layout);
+	}
+
+
+	void VulkanImageLayoutManager::SetFullLayout(VulkanTexture* texture, VkImageLayout layout)
+	{
+		// Create a full layout with the specified layout for all subresources
+		const auto& desc = texture->GetDesc();
+		VkImageAspectFlags aspect = texture->GetAspectFlags();
+		uint32_t numMips = desc.MipLevels;
+		uint32_t numLayers = desc.ArraySize;
+		VulkanImageLayout fullLayout(layout, numMips, numLayers, aspect);
+		SetFullLayout(texture, fullLayout);
+	}
+
+
+	void VulkanImageLayoutManager::SetLayout(VulkanTexture* texture,
 		VkImageLayout layout,
 		const VkImageSubresourceRange& range)
 	{
-		auto& imgLayout = Layouts[image];
+		auto& imgLayout = Layouts[texture->GetImage()];
 		imgLayout.Set(layout, range);
 	}
 
@@ -293,6 +300,11 @@ namespace RHIVulkan {
 	void VulkanImageLayoutManager::Remove(VkImage image)
 	{
 		Layouts.erase(image);
+	}
+
+	void VulkanImageLayoutManager::NotifyDeletedImage(VkImage image)
+	{
+        Remove(image);
 	}
 
 	void VulkanImageBarrierBuilder::Push(const VkImageMemoryBarrier& barrier)
@@ -376,10 +388,8 @@ namespace RHIVulkan {
 		VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
-		auto imageLayoutManager = cmd->GetImageLayoutManager();
 		for (int i = 0; i < ImageBarriers.size(); i++) 
 		{
-			imageLayoutManager->Set(ImageBarriers[i].image, ImageBarriers[i].newLayout, ImageBarriers[i].subresourceRange);
 			VkAccessFlags srcAccess;
 			VkAccessFlags dstAccess;
 			VkPipelineStageFlags srcCurStage;

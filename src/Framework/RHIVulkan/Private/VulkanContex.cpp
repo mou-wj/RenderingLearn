@@ -218,20 +218,30 @@ void VulkanCommandContext::RHISetShaderParameter(RHIShader* Shader, uint32_t Buf
     }
 }
 
-void VulkanCommandContext::SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter)
+void VulkanCommandContext::SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& parameter)
 {
-
+	RHISetShaderParameters(shader, parameter.Data, parameter.UniformParameters, parameter.ResourceParameters);
 }
 
 void VulkanCommandContext::SetComputePipelineState(RHIComputePipelineState* pipelineState) {
-
+    auto vkPipeline = static_cast<VulkanComputePipelineState*>(pipelineState);
+    if (PendingCompute->CurrentPipeline != vkPipeline)
+    {
+        PendingCompute->SetPipeline(vkPipeline);
+    }
 
 }
 
 
 void VulkanCommandContext::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
-    VkCommandBuffer commandBuffer = commandBufferManager->GetActiveCommandBuffer()->GetHandle();
-    vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+    if (PendingCompute->CurrentPipeline)
+    {
+        PendingCompute->PrepareForDispatch(commandBuffer);
+        vkCmdDispatch(commandBuffer->GetHandle(), groupCountX, groupCountY, groupCountZ);
+    }
+
+
     
 }
 
@@ -359,6 +369,7 @@ void VulkanCommandContext::EndFrame()
 {
     device->GetDescriptorSetManager()->GarbageCollect();
     commandBufferManager->GarbageCollect();
+    device->ReleaseDeferredResources();
 
 }
 void VulkanCommandContext::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo)

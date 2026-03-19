@@ -7,6 +7,8 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <queue>
+#include <mutex>
 namespace RHIVulkan{
 
 class VulkanMemoryManager; // 前向声明
@@ -21,6 +23,70 @@ class VulkanDescriptorSetLayoutManager;
 class VulkanDescriptorSetManager;
 class VulkanShaderManager;
 class VulkanPipelineLayoutCache;
+
+// 延迟删除队列 - 用于延迟删除Vulkan对象
+class VulkanDeferredDeleteQueue
+{
+public:
+    enum class EResourceType
+    {
+        RenderPass,
+        Buffer,
+        BufferView,
+        Image,
+        ImageView,
+        Pipeline,
+        Framebuffer,
+        Sampler,
+        ShaderModule,
+        MAX_TYPE
+    };
+
+    struct FDeferredDelete
+    {
+        uint64_t Handle;
+        uint32_t FrameNumber;
+    };
+
+    VulkanDeferredDeleteQueue(class VulkanDevice* InDevice);
+    ~VulkanDeferredDeleteQueue();
+
+    // 入队资源
+    template <typename T>
+    void EnqueueResource(EResourceType Type, T Handle)
+    {
+        static_assert(sizeof(T) <= sizeof(uint64_t), "Vulkan resource handle size too large.");
+        EnqueueGenericResource(Type, reinterpret_cast<uint64_t>(Handle));
+    }
+
+    // 释放资源
+    void ReleaseResources(uint32_t FrameDelay = 2);
+
+    // 立即清空所有资源
+    void Clear();
+
+private:
+    void EnqueueGenericResource(EResourceType Type, uint64_t Handle);
+    void ReleaseResource(EResourceType Type, const FDeferredDelete& Entry);
+
+    class VulkanDevice* device_;
+    std::array<std::queue<FDeferredDelete>, static_cast<size_t>(EResourceType::MAX_TYPE)> queues_;
+    std::mutex queueMutex_;
+    uint32_t currentFrameNumber_;
+
+    // 删除顺序：从最不依赖的开始
+    static constexpr std::array<EResourceType, 15> DeletionOrder = {
+        EResourceType::Pipeline,        // Pipeline 依赖于 PipelineLayout 和 ShaderModule
+        EResourceType::Framebuffer,     // Framebuffer 依赖于 RenderPass 和 ImageView
+        EResourceType::ImageView,       // ImageView 依赖于 Image
+        EResourceType::BufferView,      // BufferView 依赖于 Buffer
+        EResourceType::RenderPass,      // RenderPass 不依赖其他延迟删除对象
+        EResourceType::ShaderModule,    // ShaderModule 不依赖其他延迟删除对象
+        EResourceType::Image,           // Image 不依赖其他延迟删除对象
+        EResourceType::Buffer,          // Buffer 不依赖其他延迟删除对象
+        EResourceType::Sampler,         // Sampler 不依赖其他延迟删除对象
+    };
+};
 
 class VulkanDevice
 {
@@ -55,7 +121,21 @@ public:
     VulkanDescriptorSetLayoutManager* GetDescriptorSetLayoutManager() const { return descriptorSetLayoutManager_; }
     VulkanDescriptorSetManager* GetDescriptorSetManager() const { return descriptorSetManager_; }
 	VulkanShaderManager* GetShaderManager() const { return shaderManager_; }
-    VulkanPipelineLayoutCache* GetPipelineLayoutCache() const { return pipelineStateCache_; }
+    VulkanPipelineLayoutCache* GetPipelineLayoutCache() const { return pipelineLayoutCache_; }
+
+    // 延迟删除资源接口
+    void EnqueueRenderPassForDeletion(VkRenderPass RenderPass);
+    void EnqueueBufferForDeletion(VkBuffer Buffer);
+    void EnqueueImageForDeletion(VkImage Image);
+    void EnqueueImageViewForDeletion(VkImageView ImageView);
+    void EnqueueBufferViewForDeletion(VkBufferView BufferView);
+    void EnqueuePipelineForDeletion(VkPipeline Pipeline);
+    void EnqueueFramebufferForDeletion(VkFramebuffer Framebuffer);
+    void EnqueueSamplerForDeletion(VkSampler Sampler);
+    void EnqueueShaderModuleForDeletion(VkShaderModule ShaderModule);
+
+    // 释放延迟删除的资源
+    void ReleaseDeferredResources(uint32_t FrameDelay = 2);
 private:
     void SelectQueueFamilies(VkPhysicalDevice physicalDevice);
     void CreateLogicalDevice(VkPhysicalDevice physicalDevice,
@@ -88,7 +168,8 @@ private:
     VulkanDescriptorSetLayoutManager* descriptorSetLayoutManager_;
     VulkanDescriptorSetManager* descriptorSetManager_;
     VulkanShaderManager* shaderManager_;
-    VulkanPipelineLayoutCache* pipelineStateCache_;
+    VulkanPipelineLayoutCache* pipelineLayoutCache_;
+    VulkanDeferredDeleteQueue* deferredDeleteQueue_ = nullptr;
 };
 
 }

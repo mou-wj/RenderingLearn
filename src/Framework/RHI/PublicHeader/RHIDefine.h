@@ -294,7 +294,7 @@ enum class ERHIShaderFrequency
         RawBuffer = 1 << 4,  // 原始缓冲区
         Indirect = 1 << 5,  // 间接绘制缓冲区
         Staging = 1 << 6,  // 暂存缓冲区（CPU->GPU 上传）
-
+        Texel = 1 << 7,   // 
         // ---------- Buffer 使用方式 ----------
         ShaderResource = 1 << 16, // 作为 SRV
         UnorderedAccess = 1 << 17, // 作为 UAV

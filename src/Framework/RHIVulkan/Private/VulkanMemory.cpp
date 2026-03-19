@@ -163,7 +163,7 @@ VulkanStagingBuffer::~VulkanStagingBuffer()
 {
     if (buffer_)
     {
-        vkDestroyBuffer(device_->GetHandle(), buffer_, nullptr);
+        device_->EnqueueBufferForDeletion(buffer_);
         buffer_ = VK_NULL_HANDLE;
     }
 

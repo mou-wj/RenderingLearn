@@ -44,7 +44,7 @@ public:
 
     void RHISetShaderParameter(RHIShader* Shader, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) override;
 
-    void SetBatchedShaderParameters(RHIShaderSP shader, const RHIBatchedShaderParameters& parameter) override;
+    void SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& parameter) override;
 
     // Compute接口
     void SetComputePipelineState(RHIComputePipelineState* pipelineState) override;
@@ -113,6 +113,9 @@ struct VulkanCommandUpdateTexture : public RHICommandBase
             transientRegion
 		);
         barrierBuilder.Execute(cmdBuffer);
+        //记录当前的修改待提交
+        cmdBuffer->GetImageLayoutManager()->SetLayout(texture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, transientRegion);
+
 
         CmdCopyBufferToImage(
             cmdBuffer->GetHandle(), // Vulkan 命令缓冲区

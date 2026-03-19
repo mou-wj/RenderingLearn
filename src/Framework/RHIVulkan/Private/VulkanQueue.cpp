@@ -87,6 +87,7 @@ void VulkanQueue::Submit(VulkanCommandBuffer* CmdBuffer, uint32_t NumSignalSemap
 
     device_->GetStagingManager()->GarbageCollect();
     CmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
+    CmdBuffer->GetImageLayoutManager()->Clear();
 }
 
 void VulkanQueue::WaitIdle() const

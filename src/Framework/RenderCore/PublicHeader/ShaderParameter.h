@@ -352,7 +352,7 @@ public:
         //}
 
         // Set the batched parameters into the command list
-        cmdList.SetBatchedShaderParameters(shader->GetRHIShader(), batchedParams);
+        //cmdList.SetBatchedShaderParameters(shader->GetRHIShader(), batchedParams);
     }
 };
 
