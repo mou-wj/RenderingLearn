@@ -318,66 +318,121 @@ namespace RHIVulkan {
 		VkImageLayout newLayout,
 		const VkImageSubresourceRange& range)
 	{
-		VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-		b.image = image;
-		b.oldLayout = oldLayout;
-		b.newLayout = newLayout;
-		b.subresourceRange = range;
-		b.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-		b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-		Push(b);
+		VkAccessFlags srcAccess, dstAccess;
+		VkPipelineStageFlags srcStage, dstStage;
+		GetVulkanBarrierMasksByLayout(oldLayout, srcAccess, srcStage);
+		GetVulkanBarrierMasksByLayout(newLayout, dstAccess, dstStage);
+
+		// Only insert barrier if access flags or layout differ
+		if (srcAccess != dstAccess || oldLayout != newLayout)
+		{
+			VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+			b.image = image;
+			b.oldLayout = oldLayout;
+			b.newLayout = newLayout;
+			b.subresourceRange = range;
+			b.srcAccessMask = srcAccess;
+			b.dstAccessMask = dstAccess;
+			Push(b);
+		}
 	}
 
-	void VulkanImageBarrierBuilder::TransitionAccess(
+	void VulkanImageBarrierBuilder::TransitionLayout(
 		VkImage image,
-		VkImageLayout layout,
-		VkAccessFlags srcAccess,
-		VkAccessFlags dstAccess,
-		const VkImageSubresourceRange& range)
-	{
-		VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-		b.image = image;
-		b.oldLayout = layout;
-		b.newLayout = layout;
-		b.subresourceRange = range;
-		b.srcAccessMask = srcAccess;
-		b.dstAccessMask = dstAccess;
-		Push(b);
-	}
-
-	void VulkanImageBarrierBuilder::TransitionLayoutAndAccess(
-		VkImage image,
-		VkImageLayout oldLayout,
+		const VulkanImageLayout& oldLayout,
 		VkImageLayout newLayout,
-		VkAccessFlags srcAccess,
-		VkAccessFlags dstAccess,
 		const VkImageSubresourceRange& range)
 	{
-		VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-		b.image = image;
-		b.oldLayout = oldLayout;
-		b.newLayout = newLayout;
-		b.subresourceRange = range;
-		b.srcAccessMask = srcAccess;
-		b.dstAccessMask = dstAccess;
-		Push(b);
-	}
+		// 如果所有 subresource 都有相同的布局
+		if (oldLayout.IsUniform())
+		{
+			VkImageLayout oldLayoutVk = oldLayout.GetMainLayout();
+			
+			// 只在布局不同时才插入 barrier
+			if (oldLayoutVk != newLayout)
+			{
+				VkAccessFlags srcAccess, dstAccess;
+				VkPipelineStageFlags srcStage, dstStage;
+				GetVulkanBarrierMasksByLayout(oldLayoutVk, srcAccess, srcStage);
+				GetVulkanBarrierMasksByLayout(newLayout, dstAccess, dstStage);
+				
+				VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+				b.image = image;
+				b.oldLayout = oldLayoutVk;
+				b.newLayout = newLayout;
+				b.subresourceRange = range;
+				b.srcAccessMask = srcAccess;
+				b.dstAccessMask = dstAccess;
+				Push(b);
+			}
+		}
+		else
+		{
+			// 不同的 subresource 有不同的布局，需要差分处理
+			uint32_t baseMip = range.baseMipLevel;
+			uint32_t mipCount = range.levelCount == VK_REMAINING_MIP_LEVELS
+				? oldLayout.GetNumMips() - baseMip
+				: range.levelCount;
 
-	void VulkanImageBarrierBuilder::FullImageAccessBarrier(
-		VkImage image,
-		VkImageLayout layout,
-		VkAccessFlags srcAccess,
-		VkAccessFlags dstAccess,
-		VkImageAspectFlags aspect)
-	{
-		VkImageSubresourceRange range{};
-		range.aspectMask = aspect;
-		range.baseMipLevel = 0;
-		range.levelCount = VK_REMAINING_MIP_LEVELS;
-		range.baseArrayLayer = 0;
-		range.layerCount = VK_REMAINING_ARRAY_LAYERS;
+			uint32_t baseLayer = range.baseArrayLayer;
+			uint32_t layerCount = range.layerCount == VK_REMAINING_ARRAY_LAYERS
+				? oldLayout.GetNumLayers() - baseLayer
+				: range.layerCount;
 
-		TransitionAccess(image, layout, srcAccess, dstAccess, range);
+			// 按当前布局分组，只为需要转换的 subresource 插入 barrier
+			std::unordered_map<VkImageLayout, VkImageSubresourceRange> layoutGroups;
+
+			for (uint32_t layer = 0; layer < layerCount; ++layer)
+			{
+				for (uint32_t mip = 0; mip < mipCount; ++mip)
+				{
+					VkImageLayout currentLayout = oldLayout.Get(baseMip + mip, baseLayer + layer);
+					
+					// 只处理需要转换的 subresource
+					if (currentLayout != newLayout)
+					{
+						auto it = layoutGroups.find(currentLayout);
+						if (it == layoutGroups.end())
+						{
+							// 创建新的分组
+							VkImageSubresourceRange newRange{};
+							newRange.aspectMask = range.aspectMask;
+							newRange.baseMipLevel = baseMip + mip;
+							newRange.levelCount = 1;
+							newRange.baseArrayLayer = baseLayer + layer;
+							newRange.layerCount = 1;
+							layoutGroups[currentLayout] = newRange;
+						}
+						else
+						{
+							// 尝试合并相邻的 subresource
+							it->second.levelCount++;
+						}
+					}
+				}
+			}
+
+			// 为每个布局组插入 barrier
+			for (auto& pair : layoutGroups)
+			{
+				VkImageLayout currentLayout = pair.first;
+				VkImageSubresourceRange subRange = pair.second;
+				
+				VkAccessFlags srcAccess, dstAccess;
+				VkPipelineStageFlags srcStage, dstStage;
+				GetVulkanBarrierMasksByLayout(currentLayout, srcAccess, srcStage);
+				GetVulkanBarrierMasksByLayout(newLayout, dstAccess, dstStage);
+
+				VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+				b.image = image;
+				b.oldLayout = currentLayout;
+				b.newLayout = newLayout;
+				b.subresourceRange = subRange;
+				b.srcAccessMask = srcAccess;
+				b.dstAccessMask = dstAccess;
+				Push(b);
+			}
+		}
 	}
 
 	void VulkanImageBarrierBuilder::Execute(
@@ -399,6 +454,7 @@ namespace RHIVulkan {
 			GetVulkanBarrierMasksByLayout(ImageBarriers[i].newLayout, dstAccess, dstCurStage);
 			srcStage |= srcCurStage;
             dstStage |= dstCurStage;
+
 		}
 		vkCmdPipelineBarrier(
 			cmd->GetHandle(),

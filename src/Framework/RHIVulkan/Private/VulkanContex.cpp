@@ -16,8 +16,9 @@ VulkanCommandContext::VulkanCommandContext(VulkanDevice* device, VulkanQueue* qu
     : device(device)
     , queue(queue)
     , commandBufferManager(new VulkanCommandBufferManager(device,this))
-    ,PendingGfx(new VulkanPendingGfxState(device))
-    ,PendingCompute(new VulkanPendingComputeState(device))
+    ,PendingGfx(new VulkanPendingGfxState(device,this))
+    ,PendingCompute(new VulkanPendingComputeState(device,this))
+	, LooseUniformDataUploader(new VulkanLooseUniformDataUploader(device))
 {
     
 
@@ -27,6 +28,7 @@ VulkanCommandContext::~VulkanCommandContext() {
     delete commandBufferManager;
 	delete PendingGfx;
 	delete PendingCompute;
+    delete LooseUniformDataUploader;
 }
 
 void VulkanCommandContext::RHISetShaderTexture(RHIShader* Shader, uint32_t TextureIndex, RHITexture* Texture)
@@ -206,11 +208,11 @@ void VulkanCommandContext::RHISetShaderParameter(RHIShader* Shader, uint32_t Buf
     case RHI::ERHIShaderFrequency::Geometry:
     case RHI::ERHIShaderFrequency::Mesh:
     case RHI::ERHIShaderFrequency::Task:
-        PendingGfx->SetShaderParameter(BufferIndex, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
+        PendingGfx->SetShaderParameter(shaderType, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
         break;
 
     case RHI::ERHIShaderFrequency::Compute:
-        PendingCompute->SetShaderParameter(BufferIndex, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
+        PendingCompute->SetShaderParameter(shaderType, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
         break;
 
     default:

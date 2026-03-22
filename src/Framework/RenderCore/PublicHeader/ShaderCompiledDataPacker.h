@@ -18,7 +18,18 @@ namespace RenderCore {
             SampledImage = 1,
             StorageImage = 2,
             UniformBuffer = 3,
-            StorageBuffer = 4
+            StorageBuffer = 4,
+            // 补充类型
+            UniformTexelBuffer = 5,    // tN: Buffer<T>
+            StorageTexelBuffer = 6,    // uN: RWBuffer<T>
+
+            // 特殊提交方式
+            PushConstant = 7,          // 这种资源没有 Binding，只有 Offset
+
+            // 现代 API 特性
+            AccelerationStructure = 8, // 光追加速结构
+            Num = 9
+
         };
 
         struct DescriptorBindingInfo
@@ -45,9 +56,10 @@ namespace RenderCore {
             uint64_t ShaderHash = 0;
 
             std::vector<DescriptorBindingInfo> DescriptorBindings;
-
             bool HasPushConstant = false;
             PushConstantInfo PushConstant;
+            int GlobalUniformBufferBinding = -1;
+            int GlobalUniformBufferSet = -1;
         };
 
         struct PackedCode {

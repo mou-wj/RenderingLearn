@@ -442,12 +442,14 @@ namespace RHIVulkan {
                     color.ArraySlice,
                     1);
 			;
+            auto curLayout = layout->Get(color.MipIndex, color.ArraySlice);
             barrierBuilder.TransitionLayout(
                 vkTex->GetImage(),
-                layout->GetMainLayout(),
+                curLayout,
                 colorAttachment->initialLayout,
                 range
             );
+            layoutManager->SetLayout(vkTex, colorAttachment->finalLayout, range);
         }
 
         // ================================
@@ -468,13 +470,14 @@ namespace RHIVulkan {
                     1,
                     depth.ArraySlice,
                     1);
-
+            auto curLayout = layout->Get(depth.MipIndex, depth.ArraySlice);
             barrierBuilder.TransitionLayout(
                 vkTex->GetImage(),
-                layout->GetMainLayout(),
+                curLayout,
                 depthAttachment->initialLayout,
                 range
             );
+            layoutManager->SetLayout(vkTex, depthAttachment->finalLayout, range);
         }
 
         // ================================

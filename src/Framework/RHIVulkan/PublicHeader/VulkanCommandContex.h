@@ -77,6 +77,8 @@ public:
     VulkanQueue* GetQueue() const { return queue; }
     VulkanCommandBufferManager* GetCommandBufferManager() const { return commandBufferManager; }
     VulkanDevice* GetDevice() const { return device; }
+	VulkanLooseUniformDataUploader* GetLooseUniformDataUploader() const { return LooseUniformDataUploader; }
+
 private:
     VulkanDevice* device;
     VulkanQueue* queue;
@@ -84,6 +86,7 @@ private:
 
     VulkanPendingGfxState*     PendingGfx;
     VulkanPendingComputeState* PendingCompute;
+    VulkanLooseUniformDataUploader* LooseUniformDataUploader;
 
 };
 
@@ -106,9 +109,11 @@ struct VulkanCommandUpdateTexture : public RHICommandBase
             copyRegion.imageSubresource.mipLevel,
             1, copyRegion.imageSubresource.baseArrayLayer,
             copyRegion.imageSubresource.layerCount);
+        auto layout = cmdBuffer->GetImageLayoutManager()->GetFullLayout(texture->GetImage());
+
 		barrierBuilder.TransitionLayout(
 			texture->GetImage(),
-			VK_IMAGE_LAYOUT_UNDEFINED,
+            *layout,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             transientRegion
 		);

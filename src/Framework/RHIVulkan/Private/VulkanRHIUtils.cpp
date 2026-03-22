@@ -255,7 +255,7 @@ namespace RHIVulkan {
     {
         VkBufferUsageFlags usage = 0;
 
-        // ---------- 基础类型 ----------
+        // 1. 基础类型（显式指定的用途）
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Vertex))
             usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
@@ -265,31 +265,36 @@ namespace RHIVulkan {
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Constant))
             usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Structured) ||
-            EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::RawBuffer))
-            usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Indirect))
             usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Staging))
-            usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        // 2. 存储/结构化类型 (UAV/SRV 的物理载体)
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Structured | ERHIBufferUsageFlags::RawBuffer))
+            usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-        // ---------- Texel Buffer（必须显式声明） ----------
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Texel))
+        // 3. 处理 SRV / UAV (重点改进)
+        // 如果是 UAV，必须开启 STORAGE 位
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::UnorderedAccess))
         {
-            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::ShaderResource))
-                usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-
-            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::UnorderedAccess))
+            usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Texel))
                 usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
         }
 
-        // ---------- 通用访问 ----------
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferSrc))
+        // 如果是 SRV，且不是 Constant，通常也需要作为 Storage 或 Texel 访问
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::ShaderResource))
+        {
+            usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Texel))
+                usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+            // 注意：有些架构下 StructuredBuffer 的 SRV 也要走 STORAGE_BUFFER_BIT
+        }
+
+        // 4. 数据传输
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferSrc | ERHIBufferUsageFlags::Staging))
             usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferDst))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferDst | ERHIBufferUsageFlags::Staging))
             usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
         return usage;

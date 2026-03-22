@@ -339,6 +339,66 @@ public:
 private:
 };
 
+// Vulkan Ring Buffer - 用于动态分配小块内存的环形缓冲区
+class VulkanRingBuffer
+{
+public:
+    VulkanRingBuffer(VulkanDevice* device, uint64_t totalSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags memPropertyFlags);
+    ~VulkanRingBuffer();
+
+    // 分配内存空间
+    uint64_t AllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer);
+
+    // 获取缓冲区信息
+    uint32_t GetBufferOffset() const { return Allocation.GetOffset(); }
+    VkDeviceAddress GetBufferAddress() const { return BufferAddress; }
+    VkBuffer GetHandle() const { return Allocation.GetBufferHandle(); }
+    void* GetMappedPointer() { return Allocation.GetMappedPointer(); }
+    VulkanAllocation& GetAllocation() { return Allocation; }
+    const VulkanAllocation& GetAllocation() const { return Allocation; }
+
+private:
+    uint64_t BufferSize;
+    uint64_t BufferOffset;
+    VkDeviceAddress BufferAddress;
+    uint32_t MinAlignment;
+    VulkanAllocation Allocation;
+    VulkanDevice* Device;
+
+    // 用于环绕分配的同步
+    VulkanCommandBuffer* FenceCmdBuffer = nullptr;
+    uint64_t FenceCounter = 0;
+
+    uint64_t WrapAroundAllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer);
+};
+
+// Vulkan Loose Uniform Buffer Uploader - 用于上传uniform buffer数据的工具
+class VulkanLooseUniformDataUploader
+{
+public:
+    VulkanLooseUniformDataUploader(VulkanDevice* device);
+    ~VulkanLooseUniformDataUploader();
+
+    // 获取CPU映射指针
+    uint8_t* GetCPUMappedPointer() { return static_cast<uint8_t*>(CPUBuffer->GetMappedPointer()); }
+
+    // 分配内存
+    uint64_t AllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer)
+    {
+        return CPUBuffer->AllocateMemory(size, alignment, cmdBuffer);
+    }
+
+    // 获取缓冲区信息
+    const VulkanAllocation& GetCPUBufferAllocation() const { return CPUBuffer->GetAllocation(); }
+    VkBuffer GetCPUBufferHandle() const { return CPUBuffer->GetHandle(); }
+    uint32_t GetCPUBufferOffset() const { return CPUBuffer->GetBufferOffset(); }
+    VkDeviceAddress GetCPUBufferAddress() const { return CPUBuffer->GetBufferAddress(); }
+
+private:
+    VulkanRingBuffer* CPUBuffer;
+    friend class VulkanCommandContext; // 允许命令上下文访问
+};
+
 
 
 // Vulkan Sampler

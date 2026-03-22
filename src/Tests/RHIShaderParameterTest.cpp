@@ -206,16 +206,17 @@ private:
         csInput.Environment.VirtualIncludes["param_cs.hlsl"] = R"(
         Texture2D InputTexture : register(t0);
         RWTexture2D<unorm float4> OutputTexture : register(u0);
-        RWStructuredBuffer<float4> InputBuffer : register(t1);
-        RWStructuredBuffer<float4> OutputBuffer : register(u1);
+        RWStructuredBuffer<float4> InputBuffer : register(u1);
+        RWStructuredBuffer<float4> OutputBuffer : register(u2);
 
         cbuffer ComputeConstants : register(b0)
         {
             uint bFlipTextureVertical;
             uint bFlipBufferHorizontal;
-            uint2 padding;
+            uint2 padding ;
         };
-
+        uint bExtraParam;
+        uint bExtraParam1;
         [numthreads(8, 8, 1)]
         void CSMain(uint3 DTid : SV_DispatchThreadID)
         {
@@ -241,6 +242,16 @@ private:
                     bufData = float4(bufData.y, bufData.x, bufData.w, bufData.z);
                 }
                 OutputBuffer[0] = bufData;
+            }
+            if(bExtraParam)
+            {
+                OutputBuffer[0] = float4(0, 1, 1, 1);
+                // 这里可以测试更多的参数绑定类型，比如纹理数组、结构化缓冲区等
+            }
+            if(bExtraParam1)
+            {
+                OutputBuffer[0] = float4(0, 1, 1, 1);
+                // 这里可以测试更多的参数绑定类型，比如纹理数组、结构化缓冲区等
             }
         }
         )";
@@ -361,6 +372,6 @@ private:
     }
 
 };
-REGISTER_RENDER_TEST("RHIShaderParameter", RHIShaderParameterTest);
+REGISTER_RENDER_TEST("RHIShaderParameterTest", RHIShaderParameterTest);
 
 } // namespace Test

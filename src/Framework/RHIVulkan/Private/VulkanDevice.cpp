@@ -288,23 +288,25 @@ void VulkanDevice::Destroy()
     }
 
 
-	std::set<VulkanQueue*> uniqueQueues;
-    uniqueQueues.insert(graphicsQueue_);
-	uniqueQueues.insert(computeQueue_);
-	uniqueQueues.insert(transferQueue_);
-	uniqueQueues.insert(presentQueue_);
-	for (auto queue : uniqueQueues) {
-		if (queue != nullptr)
-		{
-			delete queue;
-		}
-	}
-    transferQueue_ = nullptr;
-    computeQueue_ = nullptr;
-	graphicsQueue_ = nullptr;
-	presentQueue_ = nullptr;
+
     
     ReleaseDeferredResources();
+
+    std::set<VulkanQueue*> uniqueQueues;
+    uniqueQueues.insert(graphicsQueue_);
+    uniqueQueues.insert(computeQueue_);
+    uniqueQueues.insert(transferQueue_);
+    uniqueQueues.insert(presentQueue_);
+    for (auto queue : uniqueQueues) {
+        if (queue != nullptr)
+        {
+            delete queue;
+        }
+    }
+    transferQueue_ = nullptr;
+    computeQueue_ = nullptr;
+    graphicsQueue_ = nullptr;
+    presentQueue_ = nullptr;
 
     if (deferredDeleteQueue_ != nullptr)
     {

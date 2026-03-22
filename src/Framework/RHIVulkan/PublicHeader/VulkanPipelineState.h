@@ -8,6 +8,7 @@
 #include "VulkanDescriptorSets.h"
 #include "VulkanRenderPass.h"
 #include "VulkanResource.h"
+#include "RHIDefine.h"
 inline void HashCombine(size_t& seed, size_t value)
 {
     seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
@@ -16,18 +17,78 @@ inline void HashCombine(size_t& seed, size_t value)
 namespace RHIVulkan{
     struct PipelineLayoutInfo
     {
-        std::vector<DescriptorSetLayoutInfo> setLayouts;
+        // 按着色器频率分组管理 descriptor set layouts
+        // key: ERHIShaderFrequency cast to uint32_t, value: descriptor set layouts for that stage
+		struct ShaderFrequencyLayoutInfo
+		{
+			std::vector<DescriptorSetLayoutInfo> Layouts;
+			int GlobalUniformBufferBinding = -1; // 全局 uniform buffer 的绑定点，-1 表示没有
+            int GlobalUniformBufferSet = -1; // 全局 uniform buffer 的 set，-1 表示没有
+		};
 
+
+        std::unordered_map<uint32_t, ShaderFrequencyLayoutInfo> setLayoutsByFrequency;
         VkPushConstantRange pushConstant{};
         bool hasPushConstant = false;
+
+        // 获取指定着色器频率的 descriptor set layouts
+        const ShaderFrequencyLayoutInfo* GetLayoutsForFrequency(RHI::ERHIShaderFrequency frequency) const
+        {
+            auto it = setLayoutsByFrequency.find(static_cast<uint32_t>(frequency));
+            if (it != setLayoutsByFrequency.end()) {
+                return &it->second;
+            }
+            return nullptr;
+        }
+
+        // 为指定着色器频率添加 descriptor set layout
+        void AddLayoutForFrequency(RHI::ERHIShaderFrequency frequency, const DescriptorSetLayoutInfo& layout, int globalBufferBinding = -1, int globalBufferSet = -1)
+        {
+            ShaderFrequencyLayoutInfo& freqInfo = setLayoutsByFrequency[static_cast<uint32_t>(frequency)];
+            freqInfo.Layouts.push_back(layout);
+            if (globalBufferBinding >= 0) {
+                freqInfo.GlobalUniformBufferBinding = globalBufferBinding;
+            }
+            if (globalBufferSet >= 0) {
+                freqInfo.GlobalUniformBufferSet = globalBufferSet;
+            }
+        }
+
+        // 获取所有着色器频率的 descriptor set layouts（展平）
+        std::vector<DescriptorSetLayoutInfo> GetAllLayouts() const
+        {
+            std::vector<DescriptorSetLayoutInfo> result;
+            for (const auto& pair : setLayoutsByFrequency) {
+                result.insert(result.end(), pair.second.Layouts.begin(), pair.second.Layouts.end());
+            }
+            return result;
+        }
 
         static uint64_t CalculateHash(const PipelineLayoutInfo& info)
         {
             size_t h = 0;
 
-            for (auto layout : info.setLayouts)
+            // Hash setLayoutsByFrequency - iterate through all frequencies
+            for (const auto& frequencyPair : info.setLayoutsByFrequency)
             {
-                HashCombine(h, std::hash<uint64_t>()((uint64_t)DescriptorSetLayoutInfo::CalculateHash(layout)));
+                // Hash the frequency
+                HashCombine(h, std::hash<uint32_t>()(frequencyPair.first));
+
+                const ShaderFrequencyLayoutInfo& freqInfo = frequencyPair.second;
+
+                // Hash all layouts for this frequency
+                for (const auto& layout : freqInfo.Layouts)
+                {
+                    HashCombine(h, std::hash<uint64_t>()((uint64_t)DescriptorSetLayoutInfo::CalculateHash(layout)));
+                }
+
+                // Hash global uniform buffer binding info
+                if (freqInfo.GlobalUniformBufferBinding >= 0) {
+                    HashCombine(h, std::hash<int>()(freqInfo.GlobalUniformBufferBinding));
+                }
+                if (freqInfo.GlobalUniformBufferSet >= 0) {
+                    HashCombine(h, std::hash<int>()(freqInfo.GlobalUniformBufferSet));
+                }
             }
 
             if (info.hasPushConstant)
@@ -54,11 +115,12 @@ namespace RHIVulkan{
             VkPipelineLayoutCreateInfo createInfo{};
             createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-            createInfo.setLayoutCount =
-                (uint32_t)info.setLayouts.size();
+            // 获取所有着色器频率的 descriptor set layouts
+            std::vector<DescriptorSetLayoutInfo> allLayouts = info.GetAllLayouts();
+            createInfo.setLayoutCount = (uint32_t)allLayouts.size();
 
             std::vector<VkDescriptorSetLayout> layouts;
-            for (auto layout : info.setLayouts)
+            for (const auto& layout : allLayouts)
 			{
 				layouts.push_back(
 					device->GetDescriptorSetLayoutManager()->GetOrCreateLayout(layout));

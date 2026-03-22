@@ -81,29 +81,11 @@ namespace RHIVulkan {
 			const VkImageSubresourceRange& range);
 
 
-		void TransitionAccess(
+		void TransitionLayout(
 			VkImage image,
-			VkImageLayout layout,
-			VkAccessFlags srcAccess,
-			VkAccessFlags dstAccess,
-			const VkImageSubresourceRange& range);
-
-
-		void TransitionLayoutAndAccess(
-			VkImage image,
-			VkImageLayout oldLayout,
+			const VulkanImageLayout& oldLayout,
 			VkImageLayout newLayout,
-			VkAccessFlags srcAccess,
-			VkAccessFlags dstAccess,
 			const VkImageSubresourceRange& range);
-
-
-		void FullImageAccessBarrier(
-			VkImage image,
-			VkImageLayout layout,
-			VkAccessFlags srcAccess,
-			VkAccessFlags dstAccess,
-			VkImageAspectFlags aspect);
 
 
 		void Execute(VulkanCommandBuffer* cmd);

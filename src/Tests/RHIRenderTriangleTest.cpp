@@ -76,7 +76,7 @@ public:
 
         auto& cmdList = cmdContext->GetCommandList();
         int i = 0;
-        while (i < 20) {
+        while (true) {
             i++;
             // 设置为即时执行模式
             cmdList.SetImmediate(true);
@@ -392,6 +392,6 @@ private:
 // ==========================================
 // 注册测试用例
 // ==========================================
-REGISTER_RENDER_TEST("RHIRenderTriangle", RHIRenderTriangleTest);
+REGISTER_RENDER_TEST("RHIRenderTriangleTest", RHIRenderTriangleTest);
 
 } // namespace Test

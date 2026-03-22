@@ -10,11 +10,11 @@
 #include "VulkanPipelineState.h"
 #include "VulkanCommandBuffer.h"
 namespace RHIVulkan {
-
+    class VulkanCommandContext;
     struct DescriptorBindingState
     {
         VkDescriptorType Type;
-        uint64_t ResourceHash = 0; // SRV/UAV/Sampler Î¨Ò»±êÊ¶
+        uint64_t ResourceHash = 0; // SRV/UAV/Sampler Î¨Ò»ï¿½ï¿½Ê¶
         bool Dirty = true;
     };
 
@@ -63,14 +63,21 @@ namespace RHIVulkan {
     struct PackedUniformBuffer
     {
         std::vector<uint8_t> Data;
-
+        uint64_t GPUBufferOffset = 0;  // GPUç¼“å†²åŒºä¸­çš„åç§»
+        bool bDirty = true;  // æ˜¯å¦æœ‰å¾…æ›´æ–°çš„æ•°æ®
+        
+		PackedUniformBuffer() = default;
         PackedUniformBuffer(size_t InSize)
-            : Data(InSize, 0)
+            : Data(InSize, 0), GPUBufferOffset(0), bDirty(true)
         {
         }
 
         uint8_t* GetData() { return Data.data(); }
         size_t Num() const { return Data.size(); }
+        
+        void MarkDirty() { bDirty = true; }
+        void MarkClean() { bDirty = false; }
+        bool IsDirty() const { return bDirty; }
     };
 
 
@@ -78,9 +85,10 @@ namespace RHIVulkan {
     {
     public:
 
-        VulkanCommonPipelineDescriptorState(VulkanDevice* device, VulkanPipelineBase* pipeline)
+        VulkanCommonPipelineDescriptorState(VulkanDevice* device, VulkanPipelineBase* pipeline,VulkanCommandContext* context)
             : Device(device)
             , pipeline(pipeline)
+            , Context(context)
         {
             Sets.resize(MaxDescriptorSets);
 			ParsePipelineLayout(*(pipeline->GetLayout()));
@@ -301,31 +309,51 @@ namespace RHIVulkan {
     private:
         void ParsePipelineLayout(const VulkanPipelineLayout& layout)
         {
-            const auto& sets = layout.GetInfo().setLayouts;
-
-            for (uint32_t setIndex = 0; setIndex < sets.size(); ++setIndex)
+            uint32_t globalSetIndex = 0;
+            for (const auto& pair : layout.GetInfo().setLayoutsByFrequency)
             {
-                const DescriptorSetLayoutInfo& setLayout = sets[setIndex];
-                for (const auto& binding : setLayout.bindings)
+                ERHIShaderFrequency freq = static_cast<ERHIShaderFrequency>(pair.first);
+                const PipelineLayoutInfo::ShaderFrequencyLayoutInfo& freqInfo = pair.second;
+
+                // å¦‚æœè¯¥shaderé˜¶æ®µæœ‰å…¨å±€uniform bufferï¼Œåˆ™åˆ›å»ºå¯¹åº”çš„PackedUniformBuffer
+                if (freqInfo.GlobalUniformBufferSet != -1 && freqInfo.GlobalUniformBufferBinding != -1)
                 {
-                    ShaderParameterKey key;
-                    key.Frequency = ERHIShaderFrequency::Compute;
-                    key.ParameterId = binding.Binding; // parameterIdÕâÀï¼ò»¯Îªbinding id
+                    PackedUniformBuffersByFrequency[freq] = PackedUniformBuffer(4096);
+                    // è®°å½•è¯¥é¢‘ç‡çš„å…¨å±€uniform bufferçš„setå’Œbinding
+                    GlobalUniformBufferInfo[freq] = {
+                        static_cast<uint32_t>(freqInfo.GlobalUniformBufferSet),
+                        static_cast<uint32_t>(freqInfo.GlobalUniformBufferBinding)
+                    };
+                }
 
-                    ShaderParameterBinding value;
-                    value.SetIndex = setIndex;
-                    value.Binding = binding.Binding;
-
-                    ParameterBindingMap[key] = value;
+                // æ„å»ºshaderå‚æ•°çš„bindingæ˜ å°„
+                for (size_t localSetIndex = 0; localSetIndex < freqInfo.Layouts.size(); ++localSetIndex)
+                {
+                    const DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[localSetIndex];
+                    for (const auto& binding : setLayout.bindings)
+                    {
+                        ShaderParameterKey key{freq, binding.Binding};
+                        ShaderParameterBinding value{globalSetIndex, binding.Binding};
+                        ParameterBindingMap[key] = value;
+                    }
+                    globalSetIndex++;
                 }
             }
         }
+        
+        struct GlobalUniformBufferDesc
+        {
+            uint32_t SetIndex;
+            uint32_t BindingIndex;
+        };
+        
+        std::unordered_map<ERHIShaderFrequency, GlobalUniformBufferDesc> GlobalUniformBufferInfo;
         std::unordered_map<
             ShaderParameterKey,
             ShaderParameterBinding,
             ShaderParameterKeyHash> ParameterBindingMap;
     public:
-        // Íâ²¿»ñÈ¡ set + binding
+        // ï¿½â²¿ï¿½ï¿½È¡ set + binding
         bool GetBinding(
             ERHIShaderFrequency frequency,
             uint32_t parameterId,
@@ -342,69 +370,39 @@ namespace RHIVulkan {
             return true;
         }
 
-        void FlushAndBind(VulkanCommandBuffer* cmd)
-        {
-            const auto& sets = pipeline->GetLayout()->GetInfo().setLayouts;
-
-            for (uint32_t i = 0; i < sets.size(); i++)
-            {
-                AllocateIfNeeded(i, sets[i]);
-            }
-
-            UpdateIfDirty();
-
-            std::vector<VkDescriptorSet> vkSets;
-            vkSets.reserve(sets.size());
-
-            for (uint32_t i = 0; i < sets.size(); i++)
-                vkSets.push_back(GetDescriptorSet(i));
-
-            Device->GetDescriptorSetManager()->BindDescriptorSets(cmd, pipeline->GetLayout()->GetHandle(),pipelineBindingPoint,vkSets);
-        }
+        void FlushAndBind(VulkanCommandBuffer* cmd);
     protected:
-        std::vector<PackedUniformBuffer> PackedUniformBuffers;
-        uint64_t PackedUniformBufferDirtyMask = 0; // Ã¿Ò»Î»±íÊ¾Ò»¸ö buffer ÊÇ·ñ±»ĞŞ¸Ä
-
-        // ³õÊ¼»¯£¬±ÈÈç 4 ¸ö uniform buffer£¬Ã¿¸ö 4KB
-        void InitPackedUniformBuffers()
-        {
-            PackedUniformBuffers.clear();
-            for (int i = 0; i < 4; ++i)
-            {
-                PackedUniformBuffers.emplace_back(4096);
-            }
-        }
+        std::unordered_map<ERHIShaderFrequency, PackedUniformBuffer> PackedUniformBuffersByFrequency;
         public:
         void SetPackedGlobalParameter(
-            uint32_t BufferIndex,
+            ERHIShaderFrequency frequency,
             uint32_t ByteOffset,
             uint32_t NumBytes,
             const void* NewValue)
         {
-            // ¼ì²é·¶Î§
-            auto& StagingBuffer = PackedUniformBuffers[BufferIndex];
-            assert(ByteOffset + NumBytes <= StagingBuffer.Num());
+            auto it = PackedUniformBuffersByFrequency.find(frequency);
+            if (it == PackedUniformBuffersByFrequency.end())
+                return;
+
+            PackedUniformBuffer& buffer = it->second;
+            assert(ByteOffset + NumBytes <= buffer.Num());
             assert((NumBytes & 3) == 0 && (ByteOffset & 3) == 0);
 
-            uint32_t* dst = reinterpret_cast<uint32_t*>(StagingBuffer.GetData() + ByteOffset);
+            uint32_t* dst = reinterpret_cast<uint32_t*>(buffer.GetData() + ByteOffset);
             const uint32_t* src = reinterpret_cast<const uint32_t*>(NewValue);
             size_t count = NumBytes / 4;
 
-            bool bChanged = false;
             for (size_t i = 0; i < count; ++i)
             {
-                if (dst[i] != src[i])
-                {
-                    dst[i] = src[i];
-                    bChanged = true;
-                }
+                dst[i] = src[i];
             }
-
-            if (bChanged)
-                PackedUniformBufferDirtyMask |= (1ull << BufferIndex);
+            
+            // æ ‡è®°ç¼“å†²åŒºä¸ºdirtyï¼Œéœ€è¦æ›´æ–°åˆ°GPU
+            buffer.MarkDirty();
         }
     protected:
         VkPipelineBindPoint pipelineBindingPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+		VulkanCommandContext* Context = nullptr;
     };
 
 
@@ -417,8 +415,9 @@ namespace RHIVulkan {
 
         VulkanComputePipelineDescriptorState(
             VulkanDevice* device,
-            VulkanComputePipelineState* pipeline)
-            : VulkanCommonPipelineDescriptorState(device, pipeline)
+            VulkanComputePipelineState* pipeline,
+            VulkanCommandContext* context)
+            : VulkanCommonPipelineDescriptorState(device, pipeline,context)
             , Pipeline(pipeline)
         {
             pipelineBindingPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
@@ -433,8 +432,9 @@ namespace RHIVulkan {
     public:
         VulkanGraphicsPipelineDescriptorState(
             VulkanDevice* device,
-            VulkanGraphicsPipelineState* pipeline)
-            : VulkanCommonPipelineDescriptorState(device, pipeline)
+            VulkanGraphicsPipelineState* pipeline,
+            VulkanCommandContext* context)
+            : VulkanCommonPipelineDescriptorState(device, pipeline,context)
             , Pipeline(pipeline)
         {
             pipelineBindingPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -446,8 +446,9 @@ namespace RHIVulkan {
     class VulkanPendingComputeState
     {
     public:
-        VulkanPendingComputeState(VulkanDevice* device)
+        VulkanPendingComputeState(VulkanDevice* device, VulkanCommandContext* context)
             : Device(device)
+			, Context(context)
         {
         }
 
@@ -464,7 +465,7 @@ namespace RHIVulkan {
                 auto state =
                     std::make_unique<
                     VulkanComputePipelineDescriptorState>(
-                        Device, pipeline);
+                        Device, pipeline,Context);
 
                 CurrentState = state.get();
                 States[pipeline] = std::move(state);
@@ -502,7 +503,7 @@ namespace RHIVulkan {
 
 
         //--------------------------------------------------------
-        // Í¨¹ı ShaderFrequency + parameterId ÉèÖÃ SRV
+        // Í¨ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ SRV
         //--------------------------------------------------------
         void SetSRV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanShaderResourceView* srv)
         {
@@ -518,7 +519,7 @@ namespace RHIVulkan {
         }
 
         //--------------------------------------------------------
-        // Í¨¹ı ShaderFrequency + parameterId ÉèÖÃ UAV
+        // Í¨ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ UAV
         //--------------------------------------------------------
         void SetUAV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUnorderedAccessView* uav)
         {
@@ -534,7 +535,7 @@ namespace RHIVulkan {
         }
 
         //--------------------------------------------------------
-        // Í¨¹ı ShaderFrequency + parameterId ÉèÖÃ UniformBuffer
+        // Í¨ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ UniformBuffer
         //--------------------------------------------------------
         void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUniformBuffer* uniformBuffer)
         {
@@ -549,10 +550,10 @@ namespace RHIVulkan {
             }
         }
 
-        void SetShaderParameter(uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
+        void SetShaderParameter(ERHIShaderFrequency frequency, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
 			if (!CurrentState)
 				return;
-            CurrentState->SetPackedGlobalParameter(BufferIndex, BaseIndex, NumBytes, NewValue);
+            CurrentState->SetPackedGlobalParameter(frequency, BaseIndex, NumBytes, NewValue);
         }
 
         void PrepareForDispatch(VulkanCommandBuffer* cmd)
@@ -566,6 +567,7 @@ namespace RHIVulkan {
         friend class VulkanCommandContext;
         VulkanComputePipelineState* CurrentPipeline = nullptr;
         VulkanComputePipelineDescriptorState* CurrentState = nullptr;
+		VulkanCommandContext* Context = nullptr;
 
         std::unordered_map<
             VulkanComputePipelineState*,
@@ -575,8 +577,9 @@ namespace RHIVulkan {
     class VulkanPendingGfxState
     {
     public:
-        VulkanPendingGfxState(VulkanDevice* device)
+        VulkanPendingGfxState(VulkanDevice* device,VulkanCommandContext* context)
             : Device(device)
+			, Context(context)
         {
             Reset();
         }
@@ -605,7 +608,7 @@ namespace RHIVulkan {
             if (it == States.end())
             {
                 auto state = std::make_unique<VulkanGraphicsPipelineDescriptorState>(
-                    Device, pipeline);
+                    Device, pipeline,Context);
                 CurrentState = state.get();
                 States[pipeline] = std::move(state);
             }
@@ -615,9 +618,9 @@ namespace RHIVulkan {
             }
         }
 
-        // ÔÚ VulkanPendingGfxState ÖĞ
+        // ï¿½ï¿½ VulkanPendingGfxState ï¿½ï¿½
         //--------------------------------------------------------
-        // Ê¹ÓÃ ShaderFrequency + parameterId ÉèÖÃ Texture
+        // Ê¹ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ Texture
         //--------------------------------------------------------
         void SetTexture(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanTexture* texture)
         {
@@ -633,7 +636,7 @@ namespace RHIVulkan {
         }
 
         //--------------------------------------------------------
-        // Ê¹ÓÃ ShaderFrequency + parameterId ÉèÖÃ sampler
+        // Ê¹ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ sampler
         //--------------------------------------------------------
 		void SetSampler(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanSampler* sampler)
 		{
@@ -648,7 +651,7 @@ namespace RHIVulkan {
 		}
 
         //--------------------------------------------------------
-        // Ê¹ÓÃ ShaderFrequency + parameterId ÉèÖÃ SRV
+        // Ê¹ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ SRV
         //--------------------------------------------------------
         void SetSRV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanShaderResourceView* srv)
         {
@@ -664,7 +667,7 @@ namespace RHIVulkan {
         }
 
         //--------------------------------------------------------
-        // Ê¹ÓÃ ShaderFrequency + parameterId ÉèÖÃ UAV
+        // Ê¹ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ UAV
         //--------------------------------------------------------
         void SetUAV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUnorderedAccessView* uav)
         {
@@ -680,7 +683,7 @@ namespace RHIVulkan {
         }
 
         //--------------------------------------------------------
-        // Ê¹ÓÃ ShaderFrequency + parameterId ÉèÖÃ UniformBuffer
+        // Ê¹ï¿½ï¿½ ShaderFrequency + parameterId ï¿½ï¿½ï¿½ï¿½ UniformBuffer
         //--------------------------------------------------------
         void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUniformBuffer* uniformBuffer)
         {
@@ -694,10 +697,10 @@ namespace RHIVulkan {
                 //CurrentState->SetUniformBuffer(setIndex, binding, buffer, offset, size);
             }
         }
-        void SetShaderParameter(uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
+        void SetShaderParameter(ERHIShaderFrequency frequency, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
             if (!CurrentState)
                 return;
-            CurrentState->SetPackedGlobalParameter(BufferIndex, BaseIndex, NumBytes, NewValue);
+            CurrentState->SetPackedGlobalParameter(frequency, BaseIndex, NumBytes, NewValue);
         }
 
         // Dynamic states
@@ -727,7 +730,7 @@ namespace RHIVulkan {
             bDirtyVertexStreams = true;
         }
 
-        // DrawÇ°°ó¶¨
+        // DrawÇ°ï¿½ï¿½
         void PrepareForDraw(VulkanCommandBuffer* cmd)
         {
             // 1. Bind pipeline
@@ -787,6 +790,7 @@ namespace RHIVulkan {
         constexpr static uint32_t MaxVertexElementCount = 8;
         FVertexStream PendingStreams[MaxVertexElementCount];
         bool bDirtyVertexStreams = true;
+		VulkanCommandContext* Context = nullptr;
     };
 
 

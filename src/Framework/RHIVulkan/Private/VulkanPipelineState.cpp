@@ -61,14 +61,20 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
 
             const auto& header = shader->GetShaderReflection();
 
+            RHI::ERHIShaderFrequency frequency = header.Frequency;
             VkShaderStageFlags stageMask =
-                TransformShaderFrequencyToStage(header.Frequency);
+                TransformShaderFrequencyToStage(frequency);
+
+            // 获取或创建该着色器频率对应的 ShaderFrequencyLayoutInfo
+            uint32_t freqKey = static_cast<uint32_t>(frequency);
+            PipelineLayoutInfo::ShaderFrequencyLayoutInfo& freqInfo = 
+                layoutInfo.setLayoutsByFrequency[freqKey];
 
             auto ensureSet = [&](uint32_t set)
                 {
-                    if (layoutInfo.setLayouts.size() <= set)
+                    if (freqInfo.Layouts.size() <= set)
                     {
-                        layoutInfo.setLayouts.resize(set + 1);
+                        freqInfo.Layouts.resize(set + 1);
                     }
                 };
 
@@ -76,8 +82,7 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
             {
                 ensureSet(binding.Set);
 
-                DescriptorSetLayoutInfo& setLayout =
-                    layoutInfo.setLayouts[binding.Set];
+                DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
 
                 VkDescriptorType vkType = TransformDescriptorTypeFrom(binding.Type);
 
@@ -86,6 +91,13 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
                     vkType,
                     binding.Count,
                     stageMask);
+            }
+            
+            if (header.GlobalUniformBufferSet != -1) {
+				ensureSet(header.GlobalUniformBufferSet);
+				freqInfo.GlobalUniformBufferSet = header.GlobalUniformBufferSet;
+				freqInfo.GlobalUniformBufferBinding = header.GlobalUniformBufferBinding;
+			
             }
 
             if (header.HasPushConstant)
@@ -236,13 +248,19 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
         return layoutInfo;
 
     const auto& header = vulkanShaderSP->GetShaderReflection();
-    VkShaderStageFlags stageMask = TransformShaderFrequencyToStage(header.Frequency);
+    RHI::ERHIShaderFrequency frequency = header.Frequency;
+    VkShaderStageFlags stageMask = TransformShaderFrequencyToStage(frequency);
+
+    // 获取该着色器频率对应的 ShaderFrequencyLayoutInfo
+    uint32_t freqKey = static_cast<uint32_t>(frequency);
+    PipelineLayoutInfo::ShaderFrequencyLayoutInfo& freqInfo = 
+        layoutInfo.setLayoutsByFrequency[freqKey];
 
     auto ensureSet = [&](uint32_t set)
         {
-            if (layoutInfo.setLayouts.size() <= set)
+            if (freqInfo.Layouts.size() <= set)
             {
-                layoutInfo.setLayouts.resize(set + 1);
+                freqInfo.Layouts.resize(set + 1);
             }
         };
 
@@ -250,7 +268,7 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
     {
         ensureSet(binding.Set);
 
-        DescriptorSetLayoutInfo& setLayout = layoutInfo.setLayouts[binding.Set];
+        DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
 
         VkDescriptorType vkType = TransformDescriptorTypeFrom(binding.Type);
 
@@ -259,6 +277,13 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
             vkType,
             binding.Count,
             stageMask);
+    }
+
+    if (header.GlobalUniformBufferSet != -1) {
+        ensureSet(header.GlobalUniformBufferSet);
+        freqInfo.GlobalUniformBufferSet = header.GlobalUniformBufferSet;
+        freqInfo.GlobalUniformBufferBinding = header.GlobalUniformBufferBinding;
+       
     }
 
     if (header.HasPushConstant)

@@ -15,6 +15,7 @@
 #include "spirv_cross.hpp"
 #include "glslang/Public/ShaderLang.h"
 #include "glslang/SPIRV/GlslangToSpv.h"
+#include "spirv_hlsl.hpp"
 #include "PathInfo.h"
 #include "ShaderCompiledDataPacker.h"
 
@@ -25,6 +26,8 @@ struct SPIRVPackSource {
 	spirv_cross::Compiler *compiler;
     ERHIShaderFrequency frequency;
     std::string entryPoint;
+    int globalUniformBufferBinding = -1;
+    int globalUniformBufferSet = -1;
 };
 
 
@@ -221,18 +224,41 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
     // 1. 映射 Shader Stage
     EShLanguage stage;
+    std::string setId = "0";
     switch (input.Frequency)
     {
-    case ERHIShaderFrequency::Vertex:         stage = EShLangVertex; break;
-    case ERHIShaderFrequency::Fragment:       stage = EShLangFragment; break;
-    case ERHIShaderFrequency::Compute:        stage = EShLangCompute; break;
-    case ERHIShaderFrequency::Geometry:       stage = EShLangGeometry; break;
-    case ERHIShaderFrequency::TessControl:    stage = EShLangTessControl; break;
-    case ERHIShaderFrequency::TessEvaluation: stage = EShLangTessEvaluation; break;
-    case ERHIShaderFrequency::Mesh:           stage = EShLangMeshNV; break;
-    case ERHIShaderFrequency::Task:           stage = EShLangTaskNV; break;
+        // --- 情况 A: 独立运行的计算着色器 ---
+    case ERHIShaderFrequency::Compute:
+        stage = EShLangCompute;
+        setId = "0"; // 永远从 0 开始
+        break;
+
+        // --- 情况 B: 标准图形管线 (通常 Set 0 为 VS, Set 1 为 PS) ---
+    case ERHIShaderFrequency::Vertex:         stage = EShLangVertex;    setId = "0"; break;
+    case ERHIShaderFrequency::Fragment:       stage = EShLangFragment;  setId = "1"; break;
+    case ERHIShaderFrequency::Geometry:       stage = EShLangGeometry;  setId = "2"; break;
+        // 几何处理通常与 VS 紧密结合，可以根据需求微调
+    case ERHIShaderFrequency::TessControl:    stage = EShLangTessControl;    setId = "3"; break;
+    case ERHIShaderFrequency::TessEvaluation: stage = EShLangTessEvaluation; setId = "4"; break;
+
+        // --- 情况 C: 现代 Mesh 渲染管线 ---
+    case ERHIShaderFrequency::Task:           stage = EShLangTaskNV; setId = "0"; break;
+    case ERHIShaderFrequency::Mesh:           stage = EShLangMeshNV; setId = "1"; break;
+
+        // --- 情况 D: 光线追踪管线 (关键：共享布局) ---
+    case ERHIShaderFrequency::RayGen:
+    case ERHIShaderFrequency::ClosestHit:
+    case ERHIShaderFrequency::Miss:
+    case ERHIShaderFrequency::AnyHit:
+    case ERHIShaderFrequency::Intersection:
+    case ERHIShaderFrequency::Callable:
+        // 光追阶段建议全部映射到相同的几个逻辑 Set (例如 0, 1, 2)
+        // 具体的 stage 映射...
+        setId = "0"; // 或者根据资源频率设为 "0", "1"
+        break;
+
     default:
-        out.ErrorMessage = "Unsupported shader stage for SPIR-V compilation";
+        out.ErrorMessage = "Unsupported shader stage";
         return;
     }
 
@@ -244,6 +270,21 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, 100);
     shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
     shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
+    // 定义偏移量 (你可以根据自己 RHI 的习惯调整这些常数)
+    const int CBV_SHIFT = 100;   // b 寄存器 (Constant Buffer)
+    const int SRV_SHIFT = 200; // t 寄存器 (Texture/Buffer SRV)
+    const int SAMPLER_SHIFT = 300; // s 寄存器 (Sampler)
+    const int UAV_SHIFT = 400; // u 寄存器 (RWTexture/RWBuffer UAV)
+
+    // --- 开启自动映射binding ---
+    shader.setShiftBindingForSet(glslang::EResUbo, CBV_SHIFT,0);
+    shader.setShiftBindingForSet(glslang::EResUbo, CBV_SHIFT,0);
+    shader.setShiftBindingForSet(glslang::EResTexture, SRV_SHIFT,0);
+    shader.setShiftBindingForSet(glslang::EResSampler, SAMPLER_SHIFT, 0);
+    shader.setShiftBindingForSet(glslang::EResUav, UAV_SHIFT, 0);
+    shader.setShiftBindingForSet(glslang::EResImage, UAV_SHIFT, 0);
+    shader.setShiftBindingForSet(glslang::EResSsbo, UAV_SHIFT,0);
+    shader.setResourceSetBinding({ setId });
 
     // 3. 添加宏定义
     TBuiltInResource resources = {};
@@ -318,6 +359,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     // 4. 链接程序
     glslang::TProgram program;
     program.addShader(&shader);
+
     if (!program.link(EShMsgDefault))
     {
         out.ErrorMessage = program.getInfoLog();
@@ -325,7 +367,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         out.ErrorMessage += program.getInfoDebugLog();
         return;
     }
-
+    program.mapIO();
     // 5. 生成 SPIR-V
     std::vector<uint32_t> spirv;
     glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
@@ -336,24 +378,62 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     spirv_cross::Compiler compiler(spirv);
     spirv_cross::ShaderResources resourcesSC = compiler.get_shader_resources();
 
+    int globalUniformBufferIndex = -1;
+    int globalUniformBufferSet = -1;
     // ---------- Uniform Buffers ----------
     for (const auto& ub : resourcesSC.uniform_buffers)
     {
-        std::string name = compiler.get_name(ub.id);
+        std::string bufferName = compiler.get_name(ub.id);
+        if (bufferName.empty()) {
+            bufferName = compiler.get_name(ub.base_type_id); // 如果没有实例名，获取类型名 ($Globals)
+        }
 
         uint32_t binding = compiler.get_decoration(ub.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(ub.id, spv::DecorationDescriptorSet);
 
         auto& type = compiler.get_type(ub.base_type_id);
-        uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
+        uint32_t bufferSize = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
 
-        out.ParameterMap.AddParameterAllocation(
-            name,
-            static_cast<uint16_t>(set),
-            static_cast<uint16_t>(binding),
-            static_cast<uint16_t>(size),
-            EShaderParameterType::UniformBuffer
-        );
+        // 2. 区分是显式 cbuffer 还是隐式 LooseData 块
+        // 通常包含 "$Globals" 或者没有实例名的块就是 LooseData
+        bool bIsLooseDataBlock = (bufferName.find("$Global") != std::string::npos);
+
+        if (bIsLooseDataBlock)
+        {
+            globalUniformBufferIndex = static_cast<int>(binding);
+            globalUniformBufferSet = static_cast<int>(set);
+            // --- 处理 LooseData: 拆解结构体成员 ---
+            uint32_t memberCount = (uint32_t)type.member_types.size();
+            for (uint32_t i = 0; i < memberCount; i++)
+            {
+                // 获取成员变量名 (如 "bExtraParam")
+                std::string memberName = compiler.get_member_name(ub.base_type_id, i);
+                // 获取成员在 Buffer 内部的偏移量
+                uint32_t memberOffset = compiler.type_struct_member_offset(type, i);
+                // 获取成员的大小
+                uint32_t memberSize = static_cast<uint32_t>(compiler.get_declared_struct_member_size(type, i));
+
+                // 注意：对于 LooseData，我们需要存储 Binding 和 Offset 两个信息
+                out.ParameterMap.AddParameterAllocation(
+                    memberName,
+                    static_cast<uint32_t>(binding),
+                    static_cast<uint32_t>(memberOffset), // 这里存 Offset
+                    static_cast<uint32_t>(memberSize),   // 这里存 Size
+                    EShaderParameterType::LooseData      // 明确区分类型
+                );
+            }
+        }
+        else
+        {
+            // --- 处理显式 Uniform Buffer (如 ComputeConstants) ---
+            out.ParameterMap.AddParameterAllocation(
+                bufferName,
+                static_cast<uint32_t>(binding),
+                0, // 显式 UB 通常不需要内部 Offset
+                static_cast<uint32_t>(bufferSize),
+                EShaderParameterType::UniformBuffer
+            );
+        }
     }
 
     // ---------- Sampled Images (Texture + Sampler) ----------
@@ -366,8 +446,8 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(set),
             static_cast<uint16_t>(binding),
+            0,
             0,
             EShaderParameterType::SRV
         );
@@ -383,10 +463,21 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(set),
             static_cast<uint16_t>(binding),
             0,
+            0,
             EShaderParameterType::Sampler
+        );
+    }
+    // ---------- Separate Images ----------
+    for (const auto& img : resourcesSC.separate_images)
+    {
+        std::string name = compiler.get_name(img.id);
+        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
+
+        out.ParameterMap.AddParameterAllocation(
+            name, (uint32_t)binding, 0,0, EShaderParameterType::SRV
         );
     }
 
@@ -400,8 +491,8 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(set),
             static_cast<uint16_t>(binding),
+            0,
             0,
             EShaderParameterType::UAV
         );
@@ -420,12 +511,37 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(set),
             static_cast<uint16_t>(binding),
             static_cast<uint16_t>(size),
+            0,
             EShaderParameterType::UAV
         );
     }
+
+    // 处理 Push Constants 的反射逻辑
+    for (const auto& pc : resourcesSC.push_constant_buffers)
+    {
+        // 获取这个 PC 块的类型信息
+        auto& type = compiler.get_type(pc.base_type_id);
+
+        // 遍历内部成员（即那些被编译器选中的 Loose Data）
+        for (uint32_t i = 0; i < type.member_types.size(); i++)
+        {
+            std::string name = compiler.get_member_name(pc.base_type_id, i);
+            uint32_t offset = compiler.type_struct_member_offset(type, i);
+            uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_member_size(type, i));
+
+            // 存入你的 ParameterMap
+            out.ParameterMap.AddParameterAllocation(
+                name,
+                0,      // BufferIndex 对 PC 通常没意义，或设为特定标识
+                static_cast<uint16_t>(offset), // BaseIndex 就是 PC 的 Offset
+                static_cast<uint16_t>(size),
+                EShaderParameterType::LooseData // 标记类型
+            );
+        }
+    }
+
     // 6. 填充输出
     out.PackedBinaryData.resize(spirv.size() * sizeof(uint32_t));
     memcpy(out.PackedBinaryData.data(), spirv.data(), spirv.size() * sizeof(uint32_t));
@@ -435,6 +551,8 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 	packSource.spirvCode = &spirv;
     packSource.frequency = input.Frequency;
     packSource.entryPoint = input.EntryPoint;
+    packSource.globalUniformBufferBinding = globalUniformBufferIndex;
+    packSource.globalUniformBufferSet = globalUniformBufferSet;
 	SPIRVCompiledBinaryResultPacker packer;
 	std::vector<char> packedData;
 
@@ -529,6 +647,9 @@ void SPIRVCompiledBinaryResultPacker::Depack(const std::vector<char>& packedResu
     {
         read(&DepackedData.header.PushConstant, sizeof(PushConstantInfo));
     }
+
+    read(&DepackedData.header.GlobalUniformBufferBinding, sizeof(int));
+	read(&DepackedData.header.GlobalUniformBufferSet, sizeof(int));
 }
 bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& packedResultOut)
 {
@@ -613,6 +734,13 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
     // =========================
 
     for (auto& img : resources.sampled_images)
+    {
+        addBinding(img, ESPIRVShaderResourceType::SampledImage);
+    }
+    // =========================
+    // Separated images
+    // =========================
+    for (auto& img : resources.separate_images)
     {
         addBinding(img, ESPIRVShaderResourceType::SampledImage);
     }
@@ -711,6 +839,10 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
         write(&DepackedData.header.PushConstant, sizeof(PushConstantInfo));
     }
 
+    DepackedData.header.GlobalUniformBufferBinding = src->globalUniformBufferBinding;
+	DepackedData.header.GlobalUniformBufferSet = src->globalUniformBufferSet;
+    write(&DepackedData.header.GlobalUniformBufferBinding, sizeof(int));
+    write(&DepackedData.header.GlobalUniformBufferSet, sizeof(int));
     return true;
 }
 } // namespace RenderCore

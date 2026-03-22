@@ -9,6 +9,7 @@
 #include "VulkanCommandContex.h"
 #include "ThreadInfo.h"
 #include "VulkanQueue.h"
+#include <algorithm> // for std::max
 using namespace Core;
 namespace RHIVulkan{
 
@@ -604,13 +605,16 @@ void VulkanViewport::Present(VulkanCommandContext* context, VulkanCommandBuffer*
         1,
         0,
         1);
+    auto curLayout = layout->Get(0, 0);
     barrierBuilder.TransitionLayout(
         backBufferTexture->GetImage(),
-        layout->GetMainLayout(),
+        curLayout,
         backBufferTexture->GetDefaultLayout(),
         transientRegion
     );
     barrierBuilder.Execute(commandBuffer);
+    commandBuffer->GetImageLayoutManager()->SetFullLayout(backBufferTexture.get(), backBufferTexture->GetDefaultLayout());
+
     commandBuffer->AddWaitSemaphores(VkPipelineStageFlagBits::VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { acquireSemaphores[currentIndex]});
     commandBuffer->AddSignalSemaphores({ backBufferRenderDoneSemaphores[currentIndex] });
     context->GetCommandBufferManager()->SubmitActiveCommandBuffer();
@@ -933,6 +937,121 @@ void VulkanFenceManager::GarbageCollect()
             pendingFences.push_back(fence);
         }
     }
+}
+
+// Vulkan Ring Buffer Implementation
+VulkanRingBuffer::VulkanRingBuffer(VulkanDevice* device, uint64_t totalSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags memPropertyFlags)
+    : Device(device), BufferSize(totalSize), BufferOffset(0), MinAlignment(256) // 默认最小对齐为256字节
+{
+    VkDevice vkDevice = Device->GetHandle();
+    VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
+
+    // 创建缓冲区
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = totalSize;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkBuffer buffer;
+    CreateBuffer(vkDevice, &bufferInfo, &buffer);
+
+    // 获取内存需求
+    VkMemoryRequirements memRequirements;
+    GetBufferMemoryRequirements(vkDevice, buffer, &memRequirements);
+
+    // 分配内存
+    if (!memoryManager->Allocate(memRequirements, memPropertyFlags, Allocation)) {
+        LOG_ERROR("Failed to allocate memory for ring buffer");
+        DestroyBuffer(vkDevice, buffer);
+        return;
+    }
+
+    // 绑定内存
+    BindBufferMemory(vkDevice, buffer, Allocation.GetMemory(), Allocation.GetOffset());
+
+    // 设置缓冲区句柄到分配对象
+    Allocation.SetBufferHandle(buffer);
+
+    // 如果是主机可见内存，映射地址
+    if (memPropertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+        void* mappedPtr = nullptr;
+        Allocation = VulkanAllocation(Allocation.GetMemory(), Allocation.GetOffset(), totalSize, mappedPtr, buffer);
+        mappedPtr = Allocation.GetMappedPointer();
+    }
+}
+
+VulkanRingBuffer::~VulkanRingBuffer()
+{
+    if (Allocation.GetMemory() != VK_NULL_HANDLE) {
+        VkDevice vkDevice = Device->GetHandle();
+        VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
+
+        // 取消映射（如果已映射）
+        if (Allocation.GetMappedPointer()) {
+			vkUnmapMemory(vkDevice, Allocation.GetMemory());
+        }
+
+        // 销毁缓冲区
+        VkBuffer buffer = Allocation.GetBufferHandle();
+        if (buffer != VK_NULL_HANDLE) {
+            DestroyBuffer(vkDevice, buffer);
+        }
+
+        // 释放内存
+        memoryManager->Free(Allocation);
+    }
+}
+
+uint64_t VulkanRingBuffer::AllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer)
+{
+    alignment = alignment > MinAlignment ? alignment : MinAlignment;
+    // 简单的对齐计算：向上对齐到alignment的倍数
+    uint64_t alignedOffset = (BufferOffset + alignment - 1) & ~(alignment - 1);
+
+    if (alignedOffset + size <= BufferSize) {
+        BufferOffset = alignedOffset + size;
+        return alignedOffset;
+    }
+
+    return WrapAroundAllocateMemory(size, alignment, cmdBuffer);
+}
+
+uint64_t VulkanRingBuffer::WrapAroundAllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer)
+{
+    // 检查是否有足够的命令缓冲区引用来等待
+    if (FenceCmdBuffer && FenceCmdBuffer != cmdBuffer) {
+        // 等待之前的命令缓冲区完成
+        FenceCmdBuffer->GetFence()->Wait();
+    }
+
+    // 重置缓冲区偏移
+    BufferOffset = 0;
+
+    // 记录当前命令缓冲区用于同步
+    FenceCmdBuffer = cmdBuffer;
+    FenceCounter++;
+
+    // 分配新内存
+    uint64_t alignedOffset = (BufferOffset + alignment - 1) & ~(alignment - 1);
+    BufferOffset = alignedOffset + size;
+
+    return alignedOffset;
+}
+
+// Vulkan Uniform Buffer Uploader Implementation
+VulkanLooseUniformDataUploader::VulkanLooseUniformDataUploader(VulkanDevice* device)
+{
+    // 创建CPU可见的环形缓冲区用于uniform buffer上传
+    const uint64_t BufferSize = 1024 * 1024; // 1MB 缓冲区
+    CPUBuffer = new VulkanRingBuffer(device, BufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+}
+
+VulkanLooseUniformDataUploader::~VulkanLooseUniformDataUploader()
+{
+    delete CPUBuffer;
 }
 
 

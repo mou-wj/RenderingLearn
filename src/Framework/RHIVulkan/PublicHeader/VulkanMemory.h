@@ -11,19 +11,23 @@ namespace RHIVulkan{
 class VulkanAllocation
 {
 public:
-    VulkanAllocation(VkDeviceMemory memory = VK_NULL_HANDLE, VkDeviceSize offset = 0, VkDeviceSize size = 0, void* mapped = nullptr)
-        : memory_(memory), offset_(offset), size_(size), mapped_(mapped) {}
+    VulkanAllocation(VkDeviceMemory memory = VK_NULL_HANDLE, VkDeviceSize offset = 0, VkDeviceSize size = 0, void* mapped = nullptr, VkBuffer buffer = VK_NULL_HANDLE)
+        : memory_(memory), offset_(offset), size_(size), mapped_(mapped), buffer_(buffer) {}
 
     VkDeviceMemory GetMemory() const { return memory_; }
     VkDeviceSize GetOffset() const { return offset_; }
     VkDeviceSize GetSize() const { return size_; }
     void* GetMappedPointer() const { return mapped_; }
+    VkBuffer GetBufferHandle() const { return buffer_; }
+
+    void SetBufferHandle(VkBuffer buffer) { buffer_ = buffer; }
 
 private:
     VkDeviceMemory memory_;
     VkDeviceSize offset_;
     VkDeviceSize size_;
     void* mapped_; // 可选，仅对HOST_VISIBLE内存使用
+    VkBuffer buffer_; // 关联的缓冲区句柄
 };
 
 class VulkanMemoryBlock
