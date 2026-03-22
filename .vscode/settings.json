@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "*.hpp11": "cpp",
-        "parentbad": "cpp"
-    },
-    "CodeGPT.apiKey": "Ollama"
-}
