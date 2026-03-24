@@ -42,8 +42,9 @@ public:
 
     virtual RHIUnorderedAccessViewSP CreateBufferUnorderedAccessView(
         RHIBuffer* Buffer, const RHIBufferUAVCreateInfo& Desc) = 0;
+        
 
-    // ´´½¨ StagingBuffer
+    // ï¿½ï¿½ï¿½ï¿½ StagingBuffer
     virtual RHIStagingBufferSP CreateStagingBuffer(uint32_t size) = 0;
 
     virtual RHIGraphicsPipelineStateSP CreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) = 0;
@@ -76,6 +77,9 @@ public:
     virtual RHISamplerSP CreateSampler(const RHISamplerDesc& desc) = 0;
 
     virtual RHICommandContex* GetDefualtCommandContex() = 0;
+
+    virtual void RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo) = 0;
+    virtual void RHIReleaseTransition(RHITransition* Transition) = 0;
 
     virtual RHITransientResourceManagerSP CreateTransientResourceManager() = 0;
     

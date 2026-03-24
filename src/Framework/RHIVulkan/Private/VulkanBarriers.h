@@ -71,7 +71,7 @@ namespace RHIVulkan {
 
 
 
-	class VulkanImageBarrierBuilder
+	class VulkanPipelineBarrier
 	{
 	public:
 		void TransitionLayout(

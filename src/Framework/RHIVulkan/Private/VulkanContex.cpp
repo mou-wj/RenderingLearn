@@ -144,10 +144,10 @@ void VulkanCommandContext::RHISetShaderResourceViewParameter(RHIShader* Shader, 
     }
 }
 
-void VulkanCommandContext::RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIUniformBuffer* Buffer)
+void VulkanCommandContext::RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIBuffer* Buffer)
 {
     auto shaderType = Shader->GetShaderType();
-    VulkanUniformBuffer* vulkanBuffer = static_cast<VulkanUniformBuffer*>(Buffer);
+    VulkanBuffer* vulkanBuffer = static_cast<VulkanBuffer*>(Buffer);
 
     switch (shaderType)
     {
@@ -191,6 +191,9 @@ void VulkanCommandContext::RHISetShaderParameters(RHIShader* Shader, const std::
             break;
         case RHIShaderResourceParameter::EType::Sampler:
             RHISetShaderSampler(Shader, res.Index, res.GetResourceAs<RHISampler>());
+            break;
+        case RHIShaderResourceParameter::EType::UniformBuffer:
+            RHISetShaderUniformBuffer(Shader, res.Index, res.GetResourceAs<RHIBuffer>());
             break;
         default:
             break;
@@ -384,6 +387,30 @@ void VulkanCommandContext::EndRenderPass()
 {
     auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
     device->GetRenderPassManager()->EndRenderPass(commandBuffer);
+}
+
+void VulkanCommandContext::RHIBeginTransitions(std::vector<const RHITransition*> Transitions)
+{
+    for (const RHITransition* transition : Transitions)
+	{
+		const VulkanPipelineBarrier* pipelineBarrier = transition->GetPrivateData<VulkanPipelineBarrier>();
+		if (pipelineBarrier)
+		{
+			
+		}
+	}
+}
+
+void VulkanCommandContext::RHIEndTransitions(std::vector<const RHITransition*> Transitions)
+{
+	for (const RHITransition* transition : Transitions)
+	{
+		const VulkanPipelineBarrier* pipelineBarrier = transition->GetPrivateData<VulkanPipelineBarrier>();
+		if (pipelineBarrier)
+		{
+			
+		}
+	}
 }
 
 } // namespace WR::RHIVulkan

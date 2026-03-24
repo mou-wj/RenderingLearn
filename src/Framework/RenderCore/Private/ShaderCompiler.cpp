@@ -428,8 +428,8 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
             // --- 处理显式 Uniform Buffer (如 ComputeConstants) ---
             out.ParameterMap.AddParameterAllocation(
                 bufferName,
-                static_cast<uint32_t>(binding),
-                0, // 显式 UB 通常不需要内部 Offset
+                static_cast<uint32_t>(set),
+                static_cast<uint32_t>(binding),  
                 static_cast<uint32_t>(bufferSize),
                 EShaderParameterType::UniformBuffer
             );
@@ -446,9 +446,9 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(binding),
-            0,
-            0,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
             EShaderParameterType::SRV
         );
     }
@@ -463,9 +463,9 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(binding),
-            0,
-            0,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
             EShaderParameterType::Sampler
         );
     }
@@ -477,7 +477,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
 
         out.ParameterMap.AddParameterAllocation(
-            name, (uint32_t)binding, 0,0, EShaderParameterType::SRV
+            name, (uint32_t)set, (uint32_t)binding,1, EShaderParameterType::SRV
         );
     }
 
@@ -491,9 +491,9 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(binding),
-            0,
-            0,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
             EShaderParameterType::UAV
         );
     }
@@ -511,9 +511,9 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint16_t>(binding),
-            static_cast<uint16_t>(size),
-            0,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
             EShaderParameterType::UAV
         );
     }

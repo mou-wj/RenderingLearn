@@ -537,7 +537,7 @@ namespace RHIVulkan {
         //--------------------------------------------------------
         // ͨ�� ShaderFrequency + parameterId ���� UniformBuffer
         //--------------------------------------------------------
-        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUniformBuffer* uniformBuffer)
+        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanBuffer* uniformBuffer)
         {
             if (!CurrentState)
                 return;
@@ -546,7 +546,7 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                ///CurrentState->SetUniformBuffer(setIndex, binding, buffer, offset, size);
+                CurrentState->SetUniformBuffer(setIndex, binding, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
             }
         }
 
@@ -685,7 +685,7 @@ namespace RHIVulkan {
         //--------------------------------------------------------
         // ʹ�� ShaderFrequency + parameterId ���� UniformBuffer
         //--------------------------------------------------------
-        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUniformBuffer* uniformBuffer)
+        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanBuffer* uniformBuffer)
         {
             if (!CurrentState)
                 return;
@@ -694,7 +694,7 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                //CurrentState->SetUniformBuffer(setIndex, binding, buffer, offset, size);
+                CurrentState->SetUniformBuffer(setIndex, binding, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
             }
         }
         void SetShaderParameter(ERHIShaderFrequency frequency, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {

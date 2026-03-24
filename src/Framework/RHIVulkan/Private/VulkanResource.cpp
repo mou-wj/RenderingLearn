@@ -165,19 +165,19 @@ void VulkanTexture::InitialImageState(VulkanCommandContext* context, VkImageLayo
     //更新tracked image layout
     auto cmdImageLayoutMgr = cmdBuffer->GetImageLayoutManager();
     cmdImageLayoutMgr->SetFullLayout(this, layout);
-    VulkanImageBarrierBuilder barrierBuilder;
-    VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(imageFlags,
+    VulkanPipelineBarrier barrier;
+    VkImageSubresourceRange transientRegion = VulkanPipelineBarrier::MakeSubresourceRange(imageFlags,
         0,
         Desc.MipLevels, 
         0,
         Desc.ArraySize);
-    barrierBuilder.TransitionLayout(
+    barrier.TransitionLayout(
         Image,
         VK_IMAGE_LAYOUT_UNDEFINED,
         layout,
         transientRegion
     );
-    barrierBuilder.Execute(cmdBuffer);
+    barrier.Execute(cmdBuffer);
     vulkanContex->GetCommandBufferManager()->EndAndSubmitUploadCommandBuffer(cmdBuffer);
 
 }
@@ -599,20 +599,20 @@ void VulkanViewport::Present(VulkanCommandContext* context, VulkanCommandBuffer*
     //转换布局
     auto backBufferTexture = backBufferTextures[currentBackBufferIndex];
 	auto layout = commandBuffer->GetImageLayoutManager()->GetFullLayout(backBufferTexture->GetImage());
-	VulkanImageBarrierBuilder barrierBuilder;
-    VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(backBufferTexture->GetAspectFlags(),
+    VulkanPipelineBarrier barrier;
+    VkImageSubresourceRange transientRegion = VulkanPipelineBarrier::MakeSubresourceRange(backBufferTexture->GetAspectFlags(),
         0,
         1,
         0,
         1);
     auto curLayout = layout->Get(0, 0);
-    barrierBuilder.TransitionLayout(
+    barrier.TransitionLayout(
         backBufferTexture->GetImage(),
         curLayout,
         backBufferTexture->GetDefaultLayout(),
         transientRegion
     );
-    barrierBuilder.Execute(commandBuffer);
+    barrier.Execute(commandBuffer);
     commandBuffer->GetImageLayoutManager()->SetFullLayout(backBufferTexture.get(), backBufferTexture->GetDefaultLayout());
 
     commandBuffer->AddWaitSemaphores(VkPipelineStageFlagBits::VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { acquireSemaphores[currentIndex]});
@@ -973,12 +973,6 @@ VulkanRingBuffer::VulkanRingBuffer(VulkanDevice* device, uint64_t totalSize, VkB
     // 设置缓冲区句柄到分配对象
     Allocation.SetBufferHandle(buffer);
 
-    // 如果是主机可见内存，映射地址
-    if (memPropertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-        void* mappedPtr = nullptr;
-        Allocation = VulkanAllocation(Allocation.GetMemory(), Allocation.GetOffset(), totalSize, mappedPtr, buffer);
-        mappedPtr = Allocation.GetMappedPointer();
-    }
 }
 
 VulkanRingBuffer::~VulkanRingBuffer()

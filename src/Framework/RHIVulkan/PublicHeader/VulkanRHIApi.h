@@ -71,6 +71,9 @@ public:
 
     RHICommandContex* GetDefualtCommandContex() override;
 
+    void RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo) override;
+    void RHIReleaseTransition(RHITransition* Transition) override;
+
     RHITransientResourceManagerSP CreateTransientResourceManager() override;
 
     virtual RHIPlatformCommandList* FinalizeCommandContex(RHICommandContex* contex) override;

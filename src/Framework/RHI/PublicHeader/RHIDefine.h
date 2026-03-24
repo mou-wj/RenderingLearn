@@ -423,6 +423,31 @@ enum class ERHIShaderFrequency
         RayTracing
     };
 
+    // For transitions
+    enum class ERHIPipeline : uint8_t
+    {
+        None = 0,
+        Graphics = 1 << 0,
+        AsyncCompute = 1 << 1,
+        Num = 2
+    };
+    ENUM_CLASS_FLAGS(ERHIPipeline)
+
+    enum class EResourceTransitionFlags : uint8_t
+    {
+        None = 0,
+        MaintainCompression = 1 << 0,
+        Discard = 1 << 1,
+    };
+    ENUM_CLASS_FLAGS(EResourceTransitionFlags)
+
+    enum class ERHITransitionCreateFlags : uint8_t
+    {
+        None = 0,
+        NoSplit = 1 << 0,
+    };
+    ENUM_CLASS_FLAGS(ERHITransitionCreateFlags)
+
     // 类似 UE 的 EPrimitiveType，用于描述顶点绘制拓扑
     enum class EPrimitiveTopology : uint8_t
     {

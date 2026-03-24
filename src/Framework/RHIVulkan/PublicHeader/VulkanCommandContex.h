@@ -38,7 +38,7 @@ public:
 
     void RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SRVIndex, RHIShaderResourceView* SRV) override;
 
-    void RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIUniformBuffer* Buffer) override;
+    void RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIBuffer* Buffer) override;
 
     void RHISetShaderParameters(RHIShader* Shader, const std::vector<uint8_t>& InParametersData, const std::vector<RHIShaderUniformParameter>& InParameters, const std::vector<RHIShaderResourceParameter>& InResourceParameters) override;
 
@@ -72,6 +72,8 @@ public:
     void EndFrame() override;
     void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) override;
     void EndRenderPass() override;
+    void RHIBeginTransitions(std::vector<const RHITransition*> Transitions) override;
+    void RHIEndTransitions(std::vector<const RHITransition*> Transitions) override;
 
 
     VulkanQueue* GetQueue() const { return queue; }
@@ -104,20 +106,20 @@ struct VulkanCommandUpdateTexture : public RHICommandBase
         // 2. 获取一个可用命令缓冲区
         VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->BeginUploadCommandBuffer();
 
-        VulkanImageBarrierBuilder barrierBuilder;
-        VkImageSubresourceRange transientRegion = VulkanImageBarrierBuilder::MakeSubresourceRange(copyRegion.imageSubresource.aspectMask,
+        VulkanPipelineBarrier barrier;
+        VkImageSubresourceRange transientRegion = VulkanPipelineBarrier::MakeSubresourceRange(copyRegion.imageSubresource.aspectMask,
             copyRegion.imageSubresource.mipLevel,
             1, copyRegion.imageSubresource.baseArrayLayer,
             copyRegion.imageSubresource.layerCount);
         auto layout = cmdBuffer->GetImageLayoutManager()->GetFullLayout(texture->GetImage());
 
-		barrierBuilder.TransitionLayout(
+		barrier.TransitionLayout(
 			texture->GetImage(),
             *layout,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             transientRegion
 		);
-        barrierBuilder.Execute(cmdBuffer);
+        barrier.Execute(cmdBuffer);
         //记录当前的修改待提交
         cmdBuffer->GetImageLayoutManager()->SetLayout(texture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, transientRegion);
 

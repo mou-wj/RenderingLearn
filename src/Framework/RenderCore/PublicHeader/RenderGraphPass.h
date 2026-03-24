@@ -9,7 +9,7 @@
 
 #include "RHICommandList.h"
 #include "ShaderParameter.h"
-#include "RHITransientResource.h"
+#include "RHITransition.h"
 
 namespace RenderCore {
     // Forward Declarations
@@ -18,30 +18,30 @@ class RenderGraphBuilder;
 
 class RENDERCORE_API BarrierBatchBegin {
 public:
-    void AddTransition(const RHITransientInfo& transientInfo) {
+    void AddTransition(const RHITransitionInfo& transientInfo) {
         transitions.push_back(transientInfo);
     }
 
     void Execute(RHICommandList& commandList);
 
-    const std::vector<RHITransientInfo>& GetTransitions() const { return transitions; }
+    const std::vector<RHITransitionInfo>& GetTransitions() const { return transitions; }
 
 private:
-    std::vector<RHITransientInfo> transitions;
+    std::vector<RHITransitionInfo> transitions;
 };
 
 class RENDERCORE_API BarrierBatchEnd {
 public:
-    void AddTransition(const RHITransientInfo& transientInfo) {
+    void AddTransition(const RHITransitionInfo& transientInfo) {
         transitions.push_back(transientInfo);
     }
 
     void Execute(RHICommandList& commandList);
 
-    const std::vector<RHITransientInfo>& GetTransitions() const { return transitions; }
+    const std::vector<RHITransitionInfo>& GetTransitions() const { return transitions; }
 
 private:
-    std::vector<RHITransientInfo> transitions;
+    std::vector<RHITransitionInfo> transitions;
 };
 
 enum class EPassFlag {

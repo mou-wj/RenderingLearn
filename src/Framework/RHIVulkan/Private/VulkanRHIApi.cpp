@@ -14,9 +14,11 @@
 #include "VulkanShader.h"
 #include "VulkanTransientResource.h"
 #include "RHIPipelineStateCache.h"
+#include "VulkanBarriers.h"
+#include "RHITransition.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
-
+using namespace  RHI;
 namespace RHIVulkan{
     
 
@@ -82,6 +84,23 @@ bool VulkanRHIApi::Init()
 		return false;
 	}
 	Device = device;
+
+	// 1. 确定头大小
+	uint32_t HeaderSize = sizeof(RHITransition);
+
+	// 2. 确定私有数据的大小和对齐要求
+	// 注意：如果你的私有数据需要动态支持多个 Barrier，
+	// 这里的 PrivateSize 可以预留一个“常用最大值”，或者只存固定头
+	uint32_t PrivateSize = sizeof(VulkanPipelineBarrier);
+	uint32_t Alignment = alignof(VulkanPipelineBarrier);
+
+	// 3. 计算偏移量 (对齐 Header 之后的地址)
+	G_RHITransition_PrivateDataOffset = (HeaderSize + Alignment - 1) & ~(Alignment - 1);
+
+	// 4. 计算总分配大小
+	G_RHITransition_TotalSize = G_RHITransition_PrivateDataOffset + PrivateSize;
+
+
 
     return true;
     // 初始化其他Vulkan资源
@@ -381,7 +400,73 @@ RHICommandContex* VulkanRHIApi::GetDefualtCommandContex()
     return Device->GetGlobalCommandContext(); // 暂时返回nullptr
 }
 
+void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo)
+{
+    if (!Transition)
+        return;
 
+    VulkanPipelineBarrier* pipelineBarrier = Transition->GetPrivateData<VulkanPipelineBarrier>();
+    if (!pipelineBarrier)
+        return;
+
+    // placement new 确保私有数据对象被构造
+    new (pipelineBarrier) VulkanPipelineBarrier();
+
+    for (const auto& transitionInfo : CreateInfo.TransitionInfos)
+    {
+        if (transitionInfo.Type == RHITransitionInfo::EType::Texture)
+        {
+            VulkanTexture* vulkanTexture = static_cast<VulkanTexture*>(transitionInfo.Texture);
+            if (!vulkanTexture)
+                continue;
+
+            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            VkAccessFlags oldAccessMask = 0;
+            VkPipelineStageFlags oldStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+            if (transitionInfo.AccessBefore != ERHIResourceAccess::Unknown)
+            {
+                //GetVulkanBarrierInfo(true, transitionInfo.AccessBefore, oldLayout, oldAccessMask, oldStageMask);
+            }
+
+            VkImageLayout newLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            VkAccessFlags newAccessMask = 0;
+            VkPipelineStageFlags newStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+            //GetVulkanBarrierInfo(true, transitionInfo.AccessAfter, newLayout, newAccessMask, newStageMask);
+
+            VkImageSubresourceRange subresourceRange{};
+            subresourceRange.aspectMask = vulkanTexture->GetAspectFlags();
+            subresourceRange.baseMipLevel = transitionInfo.MipIndex != RHISubresourceRange::kAllSubresources ? transitionInfo.MipIndex : 0;
+            subresourceRange.levelCount = transitionInfo.MipIndex != RHISubresourceRange::kAllSubresources ? 1 : vulkanTexture->GetDesc().MipLevels;
+            subresourceRange.baseArrayLayer = transitionInfo.ArraySlice != RHISubresourceRange::kAllSubresources ? transitionInfo.ArraySlice : 0;
+            subresourceRange.layerCount = transitionInfo.ArraySlice != RHISubresourceRange::kAllSubresources ? 1 : vulkanTexture->GetDesc().ArraySize;
+
+            pipelineBarrier->TransitionLayout(vulkanTexture->GetImage(), oldLayout, newLayout, subresourceRange);
+        }
+        else if (transitionInfo.Type == RHITransitionInfo::EType::Buffer)
+        {
+            // VulkanPipelineBarrier 当前仅支持图像屏障；Buffer 屏障可在后续补全。
+        }
+    }
+
+    // 不在这里执行命令缓冲区屏障，交给命令上下文（Begin/End）执行。
+}
+
+
+void VulkanRHIApi::RHIReleaseTransition(RHITransition* Transition)
+{
+    if (!Transition)
+        return;
+
+    VulkanPipelineBarrier* pipelineBarrier = Transition->GetPrivateData<VulkanPipelineBarrier>();
+    if (pipelineBarrier)
+    {
+        pipelineBarrier->~VulkanPipelineBarrier();
+    }
+}
+
+// 创建上下文接口实现
 RHITransientResourceManagerSP VulkanRHIApi::CreateTransientResourceManager()
 {
 	return std::make_shared<VulkanTransientResourceManager>(Device);

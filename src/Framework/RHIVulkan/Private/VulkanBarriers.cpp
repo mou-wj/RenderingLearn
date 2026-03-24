@@ -307,12 +307,12 @@ namespace RHIVulkan {
         Remove(image);
 	}
 
-	void VulkanImageBarrierBuilder::Push(const VkImageMemoryBarrier& barrier)
+	void VulkanPipelineBarrier::Push(const VkImageMemoryBarrier& barrier)
 	{
 		ImageBarriers.push_back(barrier);
 	}
 
-	void VulkanImageBarrierBuilder::TransitionLayout(
+	void VulkanPipelineBarrier::TransitionLayout(
 		VkImage image,
 		VkImageLayout oldLayout,
 		VkImageLayout newLayout,
@@ -337,7 +337,7 @@ namespace RHIVulkan {
 		}
 	}
 
-	void VulkanImageBarrierBuilder::TransitionLayout(
+	void VulkanPipelineBarrier::TransitionLayout(
 		VkImage image,
 		const VulkanImageLayout& oldLayout,
 		VkImageLayout newLayout,
@@ -435,7 +435,7 @@ namespace RHIVulkan {
 		}
 	}
 
-	void VulkanImageBarrierBuilder::Execute(
+	void VulkanPipelineBarrier::Execute(
 		VulkanCommandBuffer* cmd)
 	{
 		if (ImageBarriers.empty())
@@ -468,7 +468,7 @@ namespace RHIVulkan {
 		ImageBarriers.clear();
 	}
 
-	VkImageSubresourceRange VulkanImageBarrierBuilder::MakeSubresourceRange(VkImageAspectFlags aspectMask, uint32_t baseMip, uint32_t mipCount, uint32_t baseLayer, uint32_t layerCount)
+	VkImageSubresourceRange VulkanPipelineBarrier::MakeSubresourceRange(VkImageAspectFlags aspectMask, uint32_t baseMip, uint32_t mipCount, uint32_t baseLayer, uint32_t layerCount)
 	{
 		VkImageSubresourceRange Range;
 		Range.aspectMask = aspectMask;

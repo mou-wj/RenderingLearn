@@ -109,59 +109,6 @@ protected:
     uint32_t Size;
 };
 
-
-struct RHIUniformBufferResource
-{
-    uint16_t MemberOffset = 0;                // 在 UB 内偏移
-    EShaderUniformBaseType MemberType = EShaderUniformBaseType::Unknown;
-
-    bool operator==(const RHIUniformBufferResource& Other) const
-    {
-        return MemberOffset == Other.MemberOffset && MemberType == Other.MemberType;
-    }
-};
-struct RHIUniformBufferLayout
-{
-    std::string Name;                                  // 调试用名字
-    // Graph 和非 Graph 的分类资源
-    std::vector<RHIUniformBufferResource> Resources;          // 外部资源
-    std::vector<RHIUniformBufferResource> GraphResources;     // Graph 资源总表
-    std::vector<RHIUniformBufferResource> GraphTextures;      // Graph 纹理
-    std::vector<RHIUniformBufferResource> GraphBuffers;       // Graph Buffer
-    std::vector<RHIUniformBufferResource> GraphUniformBuffers;// Graph UB
-    std::vector<RHIUniformBufferResource> UniformBuffers;     // 外部非 Graph UB
-    uint32_t ConstantBufferSize = 0;                  // 常量数据大小
-    bool bNoEmulatedUniformBuffer = false;            // 是否强制 GPU 创建真实 UB
-
-    // 比较布局是否一致
-    bool operator==(const RHIUniformBufferLayout& Other) const
-    {
-        return ConstantBufferSize == Other.ConstantBufferSize && Resources == Other.Resources && GraphResources == Other.GraphResources && GraphTextures == Other.GraphTextures && GraphBuffers == Other.GraphBuffers && GraphUniformBuffers == Other.GraphUniformBuffers && UniformBuffers == Other.UniformBuffers;
-    }
-};
-
-class RHIUniformBuffer : public RHIResource
-{
-    RHIUniformBuffer(const RHIUniformBufferLayout* InLayout)
-        : RHIResource(ERHIResourceType::UniformBuffer),Layout(InLayout)
-    {
-        ConstantData.resize(Layout->ConstantBufferSize);
-        // 资源表初始化为空
-        ResourceTable.resize(Layout->Resources.size(), nullptr);
-    }
-
-    // UB 布局
-    const RHIUniformBufferLayout* Layout = nullptr;
-
-    // 常量数据存储
-    std::vector<uint8_t> ConstantData;
-
-    // 资源表
-    std::vector<RHIResource*> ResourceTable;
-
-    uint32_t GetSize() const { return ConstantData.size(); }
-};
-
 // Shader基类
 class RHI_API RHIShader : public RHIResource
 {

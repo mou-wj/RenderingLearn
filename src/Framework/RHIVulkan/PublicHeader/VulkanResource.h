@@ -331,13 +331,6 @@ private:
     std::string DebugName;
 };
 
-class VulkanUniformBuffer : public RHIUniformBuffer {
-public:
-    VulkanUniformBuffer(VulkanDevice* device, const RHIBufferDesc& desc);
-    ~VulkanUniformBuffer() override;
-
-private:
-};
 
 // Vulkan Ring Buffer - 用于动态分配小块内存的环形缓冲区
 class VulkanRingBuffer

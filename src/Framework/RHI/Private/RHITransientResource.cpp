@@ -55,4 +55,5 @@ namespace RHI {
 
     std::shared_ptr<RHIBuffer> RHITransientBuffer::GetBuffer() const { return Buffer; }
 
+
 }

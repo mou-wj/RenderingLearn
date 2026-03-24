@@ -263,15 +263,15 @@ namespace RenderCore {
             // If previously visited by another pass, insert a transition from previous access -> current
             if (state.LastVisitor && state.LastVisitor != pass) {
                 // create transient info describing transition
-                RHI::RHITransientInfo transient{};
+                RHI::RHITransitionInfo transient{};
                 // determine type
                 if (dynamic_cast<RenderGraphTexture*>(resource)) {
-                    transient.Type = RHI::RHITransientInfo::EType::Texture;
+                    transient.Type = RHI::RHITransitionInfo::EType::Texture;
                     // fill texture range defaults already in struct ctor
                 } else if (dynamic_cast<RenderGraphBuffer*>(resource)) {
-                    transient.Type = RHI::RHITransientInfo::EType::Buffer;
+                    transient.Type = RHI::RHITransitionInfo::EType::Buffer;
                 } else {
-                    transient.Type = RHI::RHITransientInfo::EType::Unknown;
+                    transient.Type = RHI::RHITransitionInfo::EType::Unknown;
                 }
 
                 transient.Resource = nullptr; // underlying RHI resource may be created later

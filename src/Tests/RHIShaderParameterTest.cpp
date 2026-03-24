@@ -69,9 +69,8 @@ public:
             // 准备计算着色器参数
             RHI::RHIBatchedShaderParameters computeParams;
 
-            // 常量缓冲数据：根据迭代次数设置翻转标志
+            // 更新常量缓冲数据：ComputeConstants (UniformBuffer)
             ComputeShaderConstants cbData = { 0, 0, 0, 0 };
-
             if (iteration == 1)
                 cbData.bFlipTextureVertical = 1;
             else if (iteration == 2)
@@ -81,55 +80,88 @@ public:
                 cbData.bFlipTextureVertical = 1;
                 cbData.bFlipBufferHorizontal = 1;
             }
+            cmdList.UpdateBuffer(ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
 
-            // 更新常量缓冲
-            computeParams.Data.resize(sizeof(ComputeShaderConstants));
-            memcpy(computeParams.Data.data(), &cbData, sizeof(ComputeShaderConstants));
+            std::optional<ShaderParameterAllocation> alloc;
+            // 设置 ComputeConstants 作为 UniformBuffer
+            if (alloc = ParameterMap.FindParameterAllocation("ComputeConstants"))
+            {
+                RHI::RHIShaderResourceParameter ubParam;
+                ubParam.Type = RHI::RHIShaderResourceParameter::EType::UniformBuffer;
+                ubParam.Resource = ConstantBuffer.get();
+                ubParam.Index = alloc->BaseIndex;
+                computeParams.ResourceParameters.push_back(ubParam);
+            }
 
-            RHI::RHIShaderUniformParameter cbParam;
-            cbParam.BufferIndex = 0;
-            cbParam.BaseIndex = 0;
-            cbParam.Offset = 0;
-            cbParam.Size = sizeof(ComputeShaderConstants);
-            computeParams.UniformParameters.push_back(cbParam);
+            // 设置离散参数：bExtraParam 和 bExtraParam1
+            uint32_t bExtraParamValue = (iteration == 0) ? 0 : 1;  // 示例：根据迭代设置
+            uint32_t bExtraParam1Value = (iteration == 1) ? 1 : 0; // 示例
 
-            // 纹理 SRV（输入）
-            if (TestTextureSRV)
+            size_t dataOffset = 0;
+            if (alloc = ParameterMap.FindParameterAllocation("bExtraParam"))
+            {
+                RHI::RHIShaderUniformParameter param;
+                param.BufferIndex = alloc->BufferIndex;
+                param.BaseIndex = alloc->BaseIndex;
+                param.Offset = dataOffset;
+                param.Size = alloc->Size;
+                computeParams.UniformParameters.push_back(param);
+                dataOffset += alloc->Size;
+            }
+
+            if (alloc = ParameterMap.FindParameterAllocation("bExtraParam1"))
+            {
+                RHI::RHIShaderUniformParameter param;
+                param.BufferIndex = alloc->BufferIndex;
+                param.BaseIndex = alloc->BaseIndex;
+                param.Offset = dataOffset;
+                param.Size = alloc->Size;
+                computeParams.UniformParameters.push_back(param);
+                dataOffset += alloc->Size;
+            }
+
+            // 设置 Data
+            computeParams.Data.resize(dataOffset);
+            memcpy(computeParams.Data.data(), &bExtraParamValue, sizeof(uint32_t));
+            memcpy(computeParams.Data.data() + sizeof(uint32_t), &bExtraParam1Value, sizeof(uint32_t));
+
+            // 设置资源参数：纹理 SRV
+            if (TestTextureSRV && (alloc = ParameterMap.FindParameterAllocation("InputTexture")))
             {
                 RHI::RHIShaderResourceParameter texParam;
                 texParam.Type = RHI::RHIShaderResourceParameter::EType::Texture;
                 texParam.Resource = TestTexture.get();
-                texParam.Index = 0;  // t0
+                texParam.Index = alloc->BaseIndex;
                 computeParams.ResourceParameters.push_back(texParam);
             }
 
-            // 纹理 UAV（输出）
-            if (OutputTextureUAV)
+            // 纹理 UAV
+            if (OutputTextureUAV && (alloc = ParameterMap.FindParameterAllocation("OutputTexture")))
             {
                 RHI::RHIShaderResourceParameter texUavParam;
                 texUavParam.Type = RHI::RHIShaderResourceParameter::EType::UAV;
                 texUavParam.Resource = OutputTextureUAV.get();
-                texUavParam.Index = 0;  // u0
+                texUavParam.Index = alloc->BaseIndex;
                 computeParams.ResourceParameters.push_back(texUavParam);
             }
 
-            // 缓冲区 SRV（输入）
-            if (TestBufferSRV)
+            // 缓冲区 SRV
+            if (TestBufferSRV && (alloc = ParameterMap.FindParameterAllocation("InputBuffer")))
             {
                 RHI::RHIShaderResourceParameter bufSrvParam;
                 bufSrvParam.Type = RHI::RHIShaderResourceParameter::EType::SRV;
                 bufSrvParam.Resource = TestBufferSRV.get();
-                bufSrvParam.Index = 1;  // t1
+                bufSrvParam.Index = alloc->BaseIndex;
                 computeParams.ResourceParameters.push_back(bufSrvParam);
             }
 
-            // 缓冲区 UAV（输出）
-            if (OutputBufferUAV)
+            // 缓冲区 UAV
+            if (OutputBufferUAV && (alloc = ParameterMap.FindParameterAllocation("OutputBuffer")))
             {
                 RHI::RHIShaderResourceParameter bufUavParam;
                 bufUavParam.Type = RHI::RHIShaderResourceParameter::EType::UAV;
                 bufUavParam.Resource = OutputBufferUAV.get();
-                bufUavParam.Index = 1;  // u1
+                bufUavParam.Index = alloc->BaseIndex;
                 computeParams.ResourceParameters.push_back(bufUavParam);
             }
 
@@ -189,6 +221,9 @@ private:
     RHI::RHIBufferSP OutputBuffer;
     RHI::RHIUnorderedAccessViewSP OutputBufferUAV;
     RHI::RHIBufferSP ConstantBuffer;
+
+    // Shader 参数映射
+    RenderCore::ShaderParameterAllocationMap ParameterMap;
 
     void CreateShaders(RHI::RHIApi* api)
     {
@@ -260,6 +295,7 @@ private:
         if (!csOutput.Success)
             return;
 
+        ParameterMap = csOutput.ParameterMap;
         ComputeShader = api->CreateComputeShader(csOutput.PackedBinaryData);
     }
 

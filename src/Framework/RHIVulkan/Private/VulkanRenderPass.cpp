@@ -417,7 +417,7 @@ namespace RHIVulkan {
         renderPassBeginInfo.pClearValues = clearValues.data();
 
         //ת��render target image layout
-        VulkanImageBarrierBuilder barrierBuilder;
+        VulkanPipelineBarrier barrier;
 
         auto layoutManager = cmdBuffer->GetImageLayoutManager();
          // ================================
@@ -435,7 +435,7 @@ namespace RHIVulkan {
             auto layout = layoutManager->GetFullLayout(vkTex->GetImage());
             auto colorAttachment = renderTargrtInfo.getColorAttachmentDescription(i);
             VkImageSubresourceRange range =
-                VulkanImageBarrierBuilder::MakeSubresourceRange(
+                VulkanPipelineBarrier::MakeSubresourceRange(
                     vkTex->GetAspectFlags(),
                     color.MipIndex,
                     1,
@@ -443,7 +443,7 @@ namespace RHIVulkan {
                     1);
 			;
             auto curLayout = layout->Get(color.MipIndex, color.ArraySlice);
-            barrierBuilder.TransitionLayout(
+            barrier.TransitionLayout(
                 vkTex->GetImage(),
                 curLayout,
                 colorAttachment->initialLayout,
@@ -464,14 +464,14 @@ namespace RHIVulkan {
             auto layout = layoutManager->GetFullLayout(vkTex->GetImage());
 			auto depthAttachment = renderTargrtInfo.getDepthAttachmentDescription();
             VkImageSubresourceRange range =
-                VulkanImageBarrierBuilder::MakeSubresourceRange(
+                VulkanPipelineBarrier::MakeSubresourceRange(
                     vkTex->GetAspectFlags(),
                     depth.MipIndex,
                     1,
                     depth.ArraySlice,
                     1);
             auto curLayout = layout->Get(depth.MipIndex, depth.ArraySlice);
-            barrierBuilder.TransitionLayout(
+            barrier.TransitionLayout(
                 vkTex->GetImage(),
                 curLayout,
                 depthAttachment->initialLayout,
@@ -483,7 +483,7 @@ namespace RHIVulkan {
         // ================================
         // Execute Barriers
         // ================================
-        barrierBuilder.Execute(cmdBuffer);
+        barrier.Execute(cmdBuffer);
         
         vkCmdBeginRenderPass(cmdBuffer->GetHandle(),&renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     }

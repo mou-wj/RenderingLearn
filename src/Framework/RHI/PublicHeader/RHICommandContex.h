@@ -3,6 +3,7 @@
 #include "RHIResource.h"
 #include "RHIShaderParameter.h"
 #include "RHICommandList.h"
+#include "RHITransition.h"
 
 namespace RHI
 {
@@ -32,7 +33,7 @@ namespace RHI
 
         virtual void RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SamplerIndex, RHIShaderResourceView* SRV) = 0;
 
-        virtual void RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIUniformBuffer* Buffer) = 0;
+        virtual void RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIBuffer* Buffer) = 0;
         virtual void RHISetShaderParameters(RHIShader* Shader, const std::vector<uint8_t>& InParametersData, const std::vector<RHIShaderUniformParameter>& InParameters, const std::vector<RHIShaderResourceParameter>& InResourceParameters) = 0;
 
         virtual void RHISetShaderParameter(RHIShader* Shader, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) = 0;
@@ -75,6 +76,12 @@ namespace RHI
         virtual void EndFrame() = 0;
         virtual void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) = 0;
         virtual void EndRenderPass() = 0;
+
+        // ========================
+        // Transitions
+        // ========================
+        virtual void RHIBeginTransitions(std::vector<const RHITransition*> Transitions) = 0;
+        virtual void RHIEndTransitions(std::vector<const RHITransition*> Transitions) = 0;
 
     protected:
         RHICommandList CommandList; // ָ��ǰ�����б�
