@@ -161,6 +161,12 @@ void RHICommandList::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) {
 void RHICommandList::EndRenderPass() {
     CommandContex->EndRenderPass();
 }
+void RHICommandList::BeginTransitions(std::vector<const RHITransition*> Transitions) {
+    CommandContex->BeginTransitions(Transitions);
+}
+void RHICommandList::EndTransitions(std::vector<const RHITransition*> Transitions) {
+    CommandContex->EndTransitions(Transitions);
+}
 
 
 void RHICommandList::Merge(std::shared_ptr<RHICommandList> other) {

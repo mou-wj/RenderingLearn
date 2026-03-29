@@ -190,7 +190,7 @@ namespace RHIVulkan {
             return VK_DESCRIPTOR_TYPE_SAMPLER;
 
         case ESPIRVShaderResourceType::SampledImage:
-            return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // 或 VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE 根据需求
+            return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; // 不使用 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER 根据需求
 
         case ESPIRVShaderResourceType::StorageImage:
             return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;

@@ -75,7 +75,11 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
         memoryManager->Free(Allocation);
     }
 
-    DefaultLayout = DetermineDefaultLayout(desc.Usage);
+    VkImageLayout defaultLayout;
+    ERHIResourceAccess defaultAccess;
+    DetermineDefaultLayout(desc.Usage, defaultLayout, defaultAccess);
+    DefaultLayout = defaultLayout;
+    SetAccess(defaultAccess);
 
     auto vkCommandContex = VulkanCommandContext::CastFrom(device->GetGlobalCommandContext());
     auto commandList = vkCommandContex->GetCommandList();
@@ -111,8 +115,11 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, V
         true,                                    // use identity swizzle)
         usage
     );
-
-    DefaultLayout = DetermineDefaultLayout(desc.Usage);
+    VkImageLayout defaultLayout;
+    ERHIResourceAccess defaultAccess;
+    DetermineDefaultLayout(desc.Usage, defaultLayout, defaultAccess);
+    DefaultLayout = defaultLayout;
+    SetAccess(defaultAccess);
     auto vkCommandContex = VulkanCommandContext::CastFrom(device->GetGlobalCommandContext());
     auto commandList = vkCommandContex->GetCommandList();
 
@@ -181,40 +188,105 @@ void VulkanTexture::InitialImageState(VulkanCommandContext* context, VkImageLayo
     vulkanContex->GetCommandBufferManager()->EndAndSubmitUploadCommandBuffer(cmdBuffer);
 
 }
-
-VkImageLayout VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags)
+void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImageLayout& OutLayout, ERHIResourceAccess& OutAccess)
 {
-    // 1️⃣ 优先考虑 Presentable (swapchain)
+    // --- 0. 初始默认值 ---
+    OutLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    OutAccess = ERHIResourceAccess::Undefined;
+
+    // --- 1. 优先级最高：呈现 (Swapchain) ---
+    // Swapchain 图像在 Vulkan 中非常特殊，必须处于 PRESENT 布局才能交给窗口系统
     if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::Presentable))
     {
-        // Swapchain image 创建后默认 undefined
-        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        OutLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        OutAccess = ERHIResourceAccess::Present;
+        return;
     }
 
-    // 2️⃣ DepthStencil 图像
+    // --- 2. 手机端优化：Memoryless (Tile Memory Only) ---
+    // Memoryless 通常只用于 Transient 的 Depth 或 Color Attachment
+    // 它们不需要从显存 Load，也不需要 Store 到显存，因此初始状态必须是 Attachment
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::Memoryless))
+    {
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::DepthStencil))
+        {
+            OutLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            OutAccess = ERHIResourceAccess::DSVWrite;
+        }
+        else
+        {
+            OutLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            OutAccess = ERHIResourceAccess::RTV;
+        }
+        return;
+    }
+
+    // --- 3. 读写冲突处理：UAV (Storage Image) ---
+    // 如果一个资源被标记为 UAV，无论它是否也是 ShaderResource，
+    // 在初始状态下为了通用性，通常映射到 GENERAL 布局
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::UAV))
+    {
+        OutLayout = VK_IMAGE_LAYOUT_GENERAL;
+        OutAccess = ERHIResourceAccess::UAVMask;
+        return;
+    }
+
+    // --- 4. CPU 回读 (Readback) ---
+    // CPU Readback 资源通常由底层 Buffer 支撑或者是线性布局的 Image
+    // 在 Vulkan 中，这类需要映射内存读取的资源建议使用 GENERAL
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CPUReadback))
+    {
+        OutLayout = VK_IMAGE_LAYOUT_GENERAL;
+        OutAccess = ERHIResourceAccess::CPURead;
+        return;
+    }
+
+    // --- 5. 标准附件路径 (RenderTarget / DepthStencil) ---
     if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::DepthStencil))
     {
-        return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        OutLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        OutAccess = ERHIResourceAccess::DSVWrite;
+        return;
     }
 
-    // 3️⃣ RenderTarget 图像
     if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::RenderTarget))
     {
-        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        OutLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        OutAccess = ERHIResourceAccess::RTV;
+        return;
     }
 
-    // 4️⃣ UAV / CPU 可访问 / CopySrc / CopyDst
-    if (EnumHasAnyFlags(Flags,
-        ERHITextureCreateFlags::UAV |
-        ERHITextureCreateFlags::CPUReadback |
-        ERHITextureCreateFlags::CopySrc |
-        ERHITextureCreateFlags::CopyDest))
+    // --- 6. 拷贝路径 ---
+    // 如果资源的主要意图是作为拷贝目标（例如上传贴图数据）
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CopyDest))
     {
-        return VK_IMAGE_LAYOUT_GENERAL;
+        OutLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        OutAccess = ERHIResourceAccess::CopyDest;
+        return;
     }
 
-    // 5️⃣ 默认 layout
-    return VK_IMAGE_LAYOUT_UNDEFINED;
+    // --- 7. 只读贴图路径 (SRV) ---
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::ShaderResource))
+    {
+        // 如果是 Dynamic 的，可能意味着它会频繁更新
+        // 但初始状态下依然建议进入只读，等待第一次 RHIUpdate 触发转换
+        OutLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        OutAccess = ERHIResourceAccess::SRVMask;
+        return;
+    }
+
+    // --- 8. 拷贝源 ---
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CopySrc))
+    {
+        OutLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        OutAccess = ERHIResourceAccess::CopySrc;
+        return;
+    }
+
+    // --- 9. 兜底：Undefined ---
+    // 没有任何明确用途标志时，保持 Undefined
+    OutLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    OutAccess = ERHIResourceAccess::Undefined;
 }
 
 // Vulkan Buffer
@@ -250,6 +322,7 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     
     // Bind memory to buffer
     vkBindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
+    SetAccess(DetermineDefaultAccess(Desc.Usage));
 }
 
 VulkanBuffer::~VulkanBuffer() {
@@ -261,6 +334,64 @@ VulkanBuffer::~VulkanBuffer() {
     }
 
     memoryManager->Free(Allocation);
+}
+
+ERHIResourceAccess VulkanBuffer::DetermineDefaultAccess(ERHIBufferUsageFlags Usage)
+{
+    // 1️⃣ 优先处理 Staging Buffer (CPU 上传)
+    // 这类 Buffer 通常是 Host Visible 的，初始状态用于 CPU 写入数据
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Staging))
+    {
+        return ERHIResourceAccess::CPURead; // 或者定义一个 CPUWrite，通常 CPURead 涵盖了 Host 访问
+    }
+
+    // 2️⃣ 传输目标 (通常用于初始同步数据)
+    // 如果 Buffer 创建是为了接收来自 Staging 的拷贝
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::TransferDst))
+    {
+        return ERHIResourceAccess::CopyDest;
+    }
+
+    // 3️⃣ UAV (随机读写)
+    // 如果 Buffer 明确支持 UnorderedAccess
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::UnorderedAccess))
+    {
+        return ERHIResourceAccess::UAVMask;
+    }
+
+    // 4️⃣ 只读资源 (SRV / Constant / Vertex / Index / Indirect)
+    // 这些状态在 Vulkan 中通常可以共存，且都属于只读语义
+    ERHIResourceAccess ReadAccess = ERHIResourceAccess::Unknown;
+
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Vertex | ERHIBufferUsageFlags::Index))
+    {
+        ReadAccess |= ERHIResourceAccess::VertexOrIndexBuffer;
+    }
+
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Constant | ERHIBufferUsageFlags::ShaderResource))
+    {
+        // 对于 Buffer，SRV 通常涵盖了 Constant 和 Structured 的读取
+        ReadAccess |= ERHIResourceAccess::SRVMask;
+    }
+
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Indirect))
+    {
+        ReadAccess |= ERHIResourceAccess::IndirectArgs;
+    }
+
+    if (ReadAccess != ERHIResourceAccess::Unknown)
+    {
+        return ReadAccess;
+    }
+
+    // 5️⃣ 传输源
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::TransferSrc))
+    {
+        return ERHIResourceAccess::CopySrc;
+    }
+
+    // 6️⃣ 默认兜底
+    return ERHIResourceAccess::Undefined;
 }
 
 void VulkanBuffer::AttachView(VulkanViewBase* view)
@@ -367,11 +498,14 @@ void VulkanShaderResourceView::CreateBufferView(
     if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlags::Texel))
     {
         VkDeviceSize range = (SRVInfo.NumElements * SRVInfo.Stride);
-        BufferViewObj.Create(Device, buffer->GetHandle(), Format, SRVInfo.Offset, range);
+        BufferView.Create(Device, buffer->GetHandle(), Format, SRVInfo.Offset, range);
         DescriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
     }
     else
     {
+		BufferView.Buffer = buffer->GetHandle();
+        BufferView.Offset = SRVInfo.Offset;
+        BufferView.Size = (SRVInfo.NumElements * SRVInfo.Stride);
         // 如果没有 Texel 标志，默认使用 STORAGE_BUFFER 类型
         DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     }
@@ -392,14 +526,14 @@ VulkanShaderResourceView::~VulkanShaderResourceView()
     DestroyView();
 }
 
-VkImageView VulkanShaderResourceView::GetImageView() const
+const VulkanTextureView& VulkanShaderResourceView::GetTextureView() const
 {
-    return TextureView.View;
+    return TextureView;
 }
 
-VkBufferView VulkanShaderResourceView::GetBufferView() const
+const VulkanBufferView& VulkanShaderResourceView::GetBufferView() const
 {
-    return BufferViewObj.View;
+    return BufferView;
 }
 
 void VulkanShaderResourceView::Invalidate()
@@ -411,9 +545,9 @@ void VulkanShaderResourceView::Invalidate()
     }
 
     // 销毁 BufferView
-    if (BufferViewObj.View != VK_NULL_HANDLE)
+    if (BufferView.View != VK_NULL_HANDLE)
     {
-        BufferViewObj.Destroy(Device);
+        BufferView.Destroy(Device);
     }
 }
 
@@ -510,11 +644,14 @@ void VulkanUnorderedAccessView::CreateBufferView(
     if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlags::Texel))
     {
         VkDeviceSize range = (UAVInfo.NumElements * UAVInfo.Stride);
-        BufferViewObj.Create(Device, buffer->GetHandle(), Format, UAVInfo.Offset, range);
+        BufferView.Create(Device, buffer->GetHandle(), Format, UAVInfo.Offset, range);
         DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
     }
     else
     {
+        BufferView.Buffer = buffer->GetHandle();
+        BufferView.Offset = UAVInfo.Offset;
+        BufferView.Size = (UAVInfo.NumElements * UAVInfo.Stride);
         // 如果没有 Texel 标志，默认使用 STORAGE_BUFFER 类型
         DescriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     }
@@ -535,14 +672,15 @@ VulkanUnorderedAccessView::~VulkanUnorderedAccessView()
     DestroyView();
 }
 
-VkImageView VulkanUnorderedAccessView::GetImageView() const
+
+const VulkanTextureView& VulkanUnorderedAccessView::GetTextureView() const
 {
-    return TextureView.View;
+    return TextureView;
 }
 
-VkBufferView VulkanUnorderedAccessView::GetBufferView() const
+const VulkanBufferView& VulkanUnorderedAccessView::GetBufferView() const
 {
-    return BufferViewObj.View;
+    return BufferView;
 }
 
 void VulkanUnorderedAccessView::Invalidate()
@@ -554,9 +692,9 @@ void VulkanUnorderedAccessView::Invalidate()
     }
 
     // 销毁 BufferView
-    if (BufferViewObj.View != VK_NULL_HANDLE)
+    if (BufferView.View != VK_NULL_HANDLE)
     {
-        BufferViewObj.Destroy(Device);
+        BufferView.Destroy(Device);
     }
 }
 

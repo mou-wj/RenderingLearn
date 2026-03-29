@@ -216,7 +216,7 @@ public:
 	RHITransition& operator=(const RHITransition&) = delete;
 
 	// 只有特定的 Factory (RHI/RDG) 能调用构造
-	RHITransition(uint32_t SrcPipelines, uint32_t DstPipelines)
+	RHITransition(uint32_t SrcPipelines = static_cast<uint32_t>(ERHIPipeline::Graphics), uint32_t DstPipelines = static_cast<uint32_t>(ERHIPipeline::Graphics))
 		: PendingBegin(SrcPipelines)
 		, PendingEnd(DstPipelines)
 	{

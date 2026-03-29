@@ -51,7 +51,8 @@ public:
             return;
 
         auto& cmdList = cmdContext->GetCommandList();
-
+        char* transitionMem = new char[G_RHITransition_TotalSize];
+        RHITransition* transition = new(transitionMem) RHITransition();
         // ========================
         // 执行计算着色器 (4 次迭代)
         // ========================
@@ -81,6 +82,45 @@ public:
                 cbData.bFlipBufferHorizontal = 1;
             }
             cmdList.UpdateBuffer(ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
+
+            // 创建资源转化
+
+
+            // 用于追踪这一帧创建的 Transition，方便统一清理
+            std::vector<RHI::RHITransition*> FrameTransitions;
+
+
+            // 1. 准备 Transition 描述信息
+            RHI::RHITransitionCreateInfo transInfo;
+            transInfo.SrcPipelines = RHI::ERHIPipeline::Graphics;
+            transInfo.DstPipelines = RHI::ERHIPipeline::Graphics;
+
+            transInfo.TransitionInfos.emplace_back(
+                TestBuffer.get(),
+                TestBuffer->GetAccess(),
+                RHI::ERHIResourceAccess::SRVCompute
+            );
+
+            // 设置资源转换：InputTexture (CopyDest -> SRV)
+            transInfo.TransitionInfos.emplace_back(
+                TestTexture.get(),
+                TestTexture->GetAccess(),
+                RHI::ERHIResourceAccess::SRVCompute
+            );
+            // 设置资源转换：OutputTexture (Unknown -> UAV)
+            transInfo.TransitionInfos.emplace_back(
+                OutputTextureUAV.get(),
+                OutputTexture->GetAccess(),
+                RHI::ERHIResourceAccess::UAVCompute
+            );
+            transInfo.TransitionInfos.emplace_back(
+                OutputBufferUAV.get(),
+                OutputBuffer->GetAccess(),
+                RHI::ERHIResourceAccess::UAVCompute
+            );
+            
+            api->RHICreateTransition(transition, transInfo);
+
 
             std::optional<ShaderParameterAllocation> alloc;
             // 设置 ComputeConstants 作为 UniformBuffer
@@ -165,6 +205,9 @@ public:
                 computeParams.ResourceParameters.push_back(bufUavParam);
             }
 
+            cmdList.BeginTransitions({ transition });
+            cmdList.EndTransitions({ transition });
+
             // 设置批量参数
             cmdList.SetBatchedShaderParameters(ComputeShader.get(), computeParams);
 
@@ -176,7 +219,7 @@ public:
             // 提交命令
             auto ptcmdlist = api->FinalizeCommandContex(cmdContext);
             api->SubmitPlatformCommandLists({ ptcmdlist });
-
+			api->RHIReleaseTransition(transition);
             cmdList.Clear();
         }
     }
@@ -377,7 +420,7 @@ private:
         RHI::RHIBufferDesc outputBufDesc;
         outputBufDesc.Size = sizeof(glm::vec4);
         outputBufDesc.Usage = RHI::ERHIBufferUsageFlags::UnorderedAccess;
-        OutputBuffer = api->CreateBuffer(outputBufDesc);
+        OutputBuffer = api->CreateBuffer(outputBufDesc);    
 
         // 创建输出缓冲区的 UAV
         RHI::RHIBufferUAVCreateInfo bufUavDesc;

@@ -88,6 +88,7 @@ void VulkanQueue::Submit(VulkanCommandBuffer* CmdBuffer, uint32_t NumSignalSemap
     device_->GetStagingManager()->GarbageCollect();
     CmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
     CmdBuffer->GetImageLayoutManager()->Clear();
+    imageLayoutManager_.PrintLayoutInfo();
 }
 
 void VulkanQueue::WaitIdle() const

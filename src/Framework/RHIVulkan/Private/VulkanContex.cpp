@@ -389,7 +389,7 @@ void VulkanCommandContext::EndRenderPass()
     device->GetRenderPassManager()->EndRenderPass(commandBuffer);
 }
 
-void VulkanCommandContext::RHIBeginTransitions(std::vector<const RHITransition*> Transitions)
+void VulkanCommandContext::BeginTransitions(std::vector<const RHITransition*> Transitions)
 {
     for (const RHITransition* transition : Transitions)
 	{
@@ -401,14 +401,15 @@ void VulkanCommandContext::RHIBeginTransitions(std::vector<const RHITransition*>
 	}
 }
 
-void VulkanCommandContext::RHIEndTransitions(std::vector<const RHITransition*> Transitions)
+void VulkanCommandContext::EndTransitions(std::vector<const RHITransition*> Transitions)
 {
 	for (const RHITransition* transition : Transitions)
 	{
-		const VulkanPipelineBarrier* pipelineBarrier = transition->GetPrivateData<VulkanPipelineBarrier>();
+		VulkanPipelineBarrier* pipelineBarrier = transition->GetPrivateData<VulkanPipelineBarrier>();
 		if (pipelineBarrier)
 		{
-			
+			auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+			pipelineBarrier->Execute(commandBuffer);
 		}
 	}
 }

@@ -415,14 +415,6 @@ enum class ERHIShaderFrequency
         
     };
 
-    enum class ERHIPipelineType
-    {
-        Unknown = 0,
-        Graphics,
-        Compute,
-        RayTracing
-    };
-
     // For transitions
     enum class ERHIPipeline : uint8_t
     {
@@ -550,13 +542,7 @@ enum class ERHIShaderFrequency
     // ---------------------------
     // Buffer Unordered Access View
     // ---------------------------
-    struct RHI_API RHIBufferUAVCreateInfo
-    {
-        uint64_t Offset = 0;        // 起始字节偏移
-        uint64_t NumElements = 0;   // 元素数量
-        uint32_t Stride = 0;        // 每个元素字节数
-        ERHIFormat Format = ERHIFormat::Unknown;
-    };
+    using RHIBufferUAVCreateInfo = RHIBufferSRVCreateInfo;
 
 
     enum class EVerdorId

@@ -57,8 +57,7 @@ namespace RHIVulkan {
         {
             AllocateIfNeeded(i, sets[i]);
         }
-
-        UpdateIfDirty();
+        
 
         // 更新global uniform buffer的绑定
         for (const auto& bufferPair : PackedUniformBuffersByFrequency)
@@ -81,6 +80,9 @@ namespace RHIVulkan {
                     buffer.Num());
             }
         }
+
+        UpdateIfDirty();
+
 
         std::vector<VkDescriptorSet> vkSets;
         vkSets.reserve(sets.size());

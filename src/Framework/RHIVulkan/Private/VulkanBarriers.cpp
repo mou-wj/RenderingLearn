@@ -306,7 +306,26 @@ namespace RHIVulkan {
 	{
         Remove(image);
 	}
-
+#ifdef DEBUG_INFO
+	void VulkanImageLayoutManager::PrintLayoutInfo()
+	{
+		for (const auto& pair : Layouts)
+		{
+			VkImage image = pair.first;
+			const VulkanImageLayout& layout = pair.second;
+			printf("Image: %p, MainLayout: %d, IsUniform: %d\n", image, layout.GetMainLayout(), layout.IsUniform());
+			//
+			for (uint32_t i = 0; i < layout.GetNumMips(); ++i)
+			{
+				for (uint32_t j = 0; j < layout.GetNumLayers(); ++j)
+				{
+					VkImageLayout subLayout = layout.Get(i, j);
+					printf("  Mip %d, Layer %d: Layout %d\n", i, j, subLayout);
+				}
+			}
+		}
+	}
+#endif
 	void VulkanPipelineBarrier::Push(const VkImageMemoryBarrier& barrier)
 	{
 		ImageBarriers.push_back(barrier);
@@ -435,6 +454,28 @@ namespace RHIVulkan {
 		}
 	}
 
+	void VulkanPipelineBarrier::TransitionAccess(VkImage image, ERHIResourceAccess oldAccess, ERHIResourceAccess newAccess, const VkImageSubresourceRange& range)
+	{
+		if (oldAccess != newAccess)
+		{
+			VkImageLayout oldLayout = DetermineImageLayout(oldAccess);
+            VkImageLayout newLayout = DetermineImageLayout(newAccess);
+			VkAccessFlags srcAccess, dstAccess;
+			VkPipelineStageFlags srcStage, dstStage;
+			GetVulkanBarrierMasksByLayout(oldLayout, srcAccess, srcStage);
+			GetVulkanBarrierMasksByLayout(newLayout, dstAccess, dstStage);
+
+			VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+			b.image = image;
+			b.oldLayout = oldLayout; // Access 转换不涉及布局变化
+			b.newLayout = newLayout;
+			b.subresourceRange = range;
+			b.srcAccessMask = srcAccess;
+			b.dstAccessMask = dstAccess;
+			Push(b);
+		}
+	}
+
 	void VulkanPipelineBarrier::Execute(
 		VulkanCommandBuffer* cmd)
 	{
@@ -478,5 +519,87 @@ namespace RHIVulkan {
 		Range.layerCount = layerCount;
 		return Range;
 	}
+
+	VkImageLayout DetermineImageLayout(ERHIResourceAccess access, bool bIsDepthStencil)
+	{
+		// 1. 无效/初始状态
+		if (access == ERHIResourceAccess::Unknown || access == ERHIResourceAccess::Undefined)
+		{
+			return VK_IMAGE_LAYOUT_UNDEFINED;
+		}
+
+		// 2. 呈现状态 (Swapchain)
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::Present))
+		{
+			return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		}
+
+		// 3. 渲染附件 (RTV / DSV)
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::RTV))
+		{
+			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::DSVWrite))
+		{
+			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		}
+
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::DSVRead))
+		{
+			// 如果是深度图只读（用于 Shader 采样），通常使用这个布局
+			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		}
+
+		// 4. 可随机读写状态 (UAV)
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::UAVMask))
+		{
+			// UAV 在 Vulkan 中最稳健的选择是 GENERAL
+			return VK_IMAGE_LAYOUT_GENERAL;
+		}
+
+		// 5. 只读采样状态 (SRV)
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::SRVMask))
+		{
+			if (bIsDepthStencil)
+			{
+				// 深度图作为 SRV 采样时，必须使用专用的只读布局
+				return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			}
+			return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+
+		// 6. 拷贝/传输状态
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::CopyDest))
+		{
+			return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		}
+
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::CopySrc))
+		{
+			return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		}
+
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::ResolveDst))
+		{
+			// Resolve 目标在 Vulkan 中通常也是 Color Attachment 布局
+			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+
+		// 7. 其他特殊状态
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::ShadingRateSource))
+		{
+			return VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
+		}
+
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::CPURead))
+		{
+			return VK_IMAGE_LAYOUT_GENERAL;
+		}
+
+		// 兜底返回 GENERAL 虽安全但性能低，建议根据需求调整
+		return VK_IMAGE_LAYOUT_GENERAL;
+	}
+
 
 }

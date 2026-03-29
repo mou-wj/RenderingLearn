@@ -121,7 +121,7 @@ namespace RHIVulkan {
 
             set.Writer.WriteImage(
                 binding,
-                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 texture->GetImageView(),
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -136,7 +136,7 @@ namespace RHIVulkan {
 			auto& set = Sets[setIndex];
 			set.Writer.WriteImage(
 				binding,
-				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				VK_DESCRIPTOR_TYPE_SAMPLER,
 				VK_NULL_HANDLE,
 				VK_IMAGE_LAYOUT_UNDEFINED);
 			set.bDirty = true;
@@ -160,14 +160,27 @@ namespace RHIVulkan {
                 set.Writer.WriteImage(
                     binding,
                     srv->GetDescriptorType(),
-                    srv->GetImageView(),
+                    srv->GetTextureView().View,
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             }
             else
             {
-                set.Writer.WriteUniformTexelBuffer(
-                    binding,
-                    srv->GetBufferView());
+                auto hasBufferView = srv->GetBufferView().View != VK_NULL_HANDLE;
+                if (!hasBufferView) {
+                    set.Writer.WriteBuffer(
+						binding,
+                        srv->GetDescriptorType(),
+                        srv->GetBufferView().Buffer,
+                        srv->GetBufferView().Offset,
+                        srv->GetBufferView().Size);
+				}
+                else
+                {
+                    set.Writer.WriteTexelBuffer(
+                        binding,
+                        srv->GetDescriptorType(),
+                        srv->GetBufferView().View);
+                }
             }
 
             set.bDirty = true;
@@ -191,14 +204,26 @@ namespace RHIVulkan {
                 set.Writer.WriteImage(
                     binding,
                     uav->GetDescriptorType(),
-                    uav->GetImageView(),
+                    uav->GetTextureView().View,
                     VK_IMAGE_LAYOUT_GENERAL);
             }
             else
             {
-                set.Writer.WriteStorageTexelBuffer(
-                    binding,
-                    uav->GetBufferView());
+                auto hasBufferView = uav->GetBufferView().View  != VK_NULL_HANDLE;
+                if (!hasBufferView) {
+					set.Writer.WriteBuffer(
+						binding,
+                        uav->GetDescriptorType(),
+                        uav->GetBufferView().Buffer,
+                        uav->GetBufferView().Offset,
+                        uav->GetBufferView().Size);
+                }
+                else {
+                    set.Writer.WriteTexelBuffer(
+                        binding,
+                        uav->GetDescriptorType(),
+                        uav->GetBufferView().View);
+                }
             }
 
             set.bDirty = true;

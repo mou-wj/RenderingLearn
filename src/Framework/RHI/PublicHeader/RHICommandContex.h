@@ -80,12 +80,12 @@ namespace RHI
         // ========================
         // Transitions
         // ========================
-        virtual void RHIBeginTransitions(std::vector<const RHITransition*> Transitions) = 0;
-        virtual void RHIEndTransitions(std::vector<const RHITransition*> Transitions) = 0;
+        virtual void BeginTransitions(std::vector<const RHITransition*> Transitions) = 0;
+        virtual void EndTransitions(std::vector<const RHITransition*> Transitions) = 0;
 
     protected:
         RHICommandList CommandList; // ָ��ǰ�����б�
-        ERHIPipelineType PipelineType;
+        ERHIPipeline Pipeline;
     };
 
     using RHICommandContexSP = std::shared_ptr<RHICommandContex>;

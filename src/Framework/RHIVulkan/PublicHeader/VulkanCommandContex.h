@@ -72,8 +72,8 @@ public:
     void EndFrame() override;
     void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) override;
     void EndRenderPass() override;
-    void RHIBeginTransitions(std::vector<const RHITransition*> Transitions) override;
-    void RHIEndTransitions(std::vector<const RHITransition*> Transitions) override;
+    void BeginTransitions(std::vector<const RHITransition*> Transitions) override;
+    void EndTransitions(std::vector<const RHITransition*> Transitions) override;
 
 
     VulkanQueue* GetQueue() const { return queue; }

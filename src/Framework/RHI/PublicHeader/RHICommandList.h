@@ -8,6 +8,7 @@ namespace RHI {
 
     class RHICommandContex; // 统一后的 Contex
     class RHICommandList;
+    class RHITransition;
 
     // -----------------------------
     // 命令基类
@@ -117,6 +118,9 @@ namespace RHI {
         void EndFrame();
         void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
         void EndRenderPass();
+
+        void BeginTransitions(std::vector<const RHITransition*> Transitions);
+        void EndTransitions(std::vector<const RHITransition*> Transitions);
 
         void Merge(std::shared_ptr<RHICommandList> other);
 

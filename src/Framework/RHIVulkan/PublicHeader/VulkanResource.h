@@ -101,6 +101,8 @@ struct VulkanBufferView
         , Buffer(VK_NULL_HANDLE)
         , ViewId(0)
         , Format(VK_FORMAT_UNDEFINED)
+        , Size(0)
+        , Offset(0)
     {
     }
 
@@ -123,6 +125,8 @@ struct VulkanBufferView
         ViewInfo.format = Format;
         ViewInfo.offset = Offset;
         ViewInfo.range = Size;
+        this->Size = Size;
+        this->Offset = Offset;
 
         VkResult Result = vkCreateBufferView(Device->GetHandle(), &ViewInfo, nullptr, &View);
         assert(Result == VK_SUCCESS && "Failed to create VkBufferView");
@@ -152,6 +156,8 @@ public:
     VkBuffer Buffer;
     uint32_t ViewId;
     VkFormat Format;
+    VkDeviceSize Size;
+    VkDeviceSize Offset;
 };
 
 class VulkanViewBase{
@@ -180,7 +186,7 @@ public:
     void AttachView(VulkanViewBase* view);
     void DetachView(VulkanViewBase* view);
 private:
-    VkImageLayout DetermineDefaultLayout(ERHITextureCreateFlags Flags);
+    void DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImageLayout &Layout,ERHIResourceAccess &Access);
 
     VkImage Image = VK_NULL_HANDLE;
     VulkanTextureView DefaltView;
@@ -209,6 +215,7 @@ public:
     void DetachView(VulkanViewBase* view);
 
 private:
+    ERHIResourceAccess DetermineDefaultAccess(ERHIBufferUsageFlags Usage);
     VkBuffer Buffer = VK_NULL_HANDLE;
     VkDeviceSize Size = 0;
     VulkanDevice* Device = nullptr;
@@ -231,8 +238,8 @@ public:
     ~VulkanShaderResourceView() override;
 
     // Vulkan 句柄访问
-    VkImageView GetImageView() const;
-    VkBufferView GetBufferView() const;
+    const VulkanTextureView& GetTextureView() const;
+    const VulkanBufferView& GetBufferView() const;
 
     // 元信息查询
     bool IsTexture() const { return ResourceType == EResourceType::Texture; }
@@ -259,7 +266,7 @@ private:
 
     // 存储 view 对象（而非原生句柄）
     VulkanTextureView TextureView;
-    VulkanBufferView BufferViewObj;
+    VulkanBufferView BufferView;
 
     // 类型信息
     enum class EResourceType { Texture, Buffer } ResourceType;
@@ -290,8 +297,8 @@ public:
     ~VulkanUnorderedAccessView() override;
 
     // Vulkan 句柄访问
-    VkImageView GetImageView() const;
-    VkBufferView GetBufferView() const;
+    const VulkanTextureView& GetTextureView() const;
+    const VulkanBufferView& GetBufferView() const;
 
     bool IsTexture() const { return ResourceType == EResourceType::Texture; }
     bool IsBuffer() const { return ResourceType == EResourceType::Buffer; }
@@ -317,7 +324,7 @@ private:
 
     // 存储 view 对象（而非原生句柄）
     VulkanTextureView TextureView;
-    VulkanBufferView BufferViewObj;
+    VulkanBufferView BufferView;
 
     enum class EResourceType { Texture, Buffer } ResourceType;
     VkFormat Format = VK_FORMAT_UNDEFINED;

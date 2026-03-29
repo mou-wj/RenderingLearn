@@ -187,30 +187,17 @@ namespace RHIVulkan {
             Writes.push_back(write);
             Dirty = true;
         }
-        void WriteUniformTexelBuffer(uint32_t binding, VkBufferView view)
+        void WriteTexelBuffer(uint32_t binding, VkDescriptorType type, VkBufferView view)
         {
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             write.dstBinding = binding;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+            write.descriptorType = type;
             write.descriptorCount = 1;
             BufferViews.push_back(view);
             write.pTexelBufferView = &BufferViews.back();
             Writes.push_back(write);
             Dirty = true;
         }
-
-        void WriteStorageTexelBuffer(uint32_t binding, VkBufferView view)
-        {
-            VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-            write.dstBinding = binding;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-            write.descriptorCount = 1;
-            BufferViews.push_back(view);
-            write.pTexelBufferView = &BufferViews.back();
-            Writes.push_back(write);
-            Dirty = true;
-        }
-
 
         void Update(VkDevice device, VkDescriptorSet set)
         {
@@ -229,9 +216,9 @@ namespace RHIVulkan {
 
     private:
         std::vector<VkWriteDescriptorSet> Writes;
-        std::vector<VkDescriptorImageInfo> ImageInfos;
-        std::vector<VkDescriptorBufferInfo> BufferInfos;
-        std::vector<VkBufferView> BufferViews;
+        std::deque<VkDescriptorImageInfo> ImageInfos;
+        std::deque<VkDescriptorBufferInfo> BufferInfos;
+        std::deque<VkBufferView> BufferViews;
         bool Dirty = false;
     };
 

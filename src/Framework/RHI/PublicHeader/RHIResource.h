@@ -34,7 +34,8 @@ public:
     }
 
     virtual ~RHIViewableResource() = default;
-
+    ERHIResourceAccess GetAccess() const { return TrackedAccess; }
+    void SetAccess(ERHIResourceAccess access) { TrackedAccess = access; }
 
 protected:
     // 可以存放一些用于View管理的内部信息，比如引用计数、GPU handle 等
@@ -82,6 +83,7 @@ protected:
 class RHI_API RHIResourceView {
 public:
     explicit RHIResourceView(RHIViewableResource* Resource) : Resource(Resource) {}
+    RHIViewableResource* GetResource() const { return Resource; }
 private:
     RHIViewableResource* Resource = nullptr;
 };

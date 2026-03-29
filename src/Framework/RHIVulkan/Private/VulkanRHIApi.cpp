@@ -402,6 +402,8 @@ RHICommandContex* VulkanRHIApi::GetDefualtCommandContex()
 
 void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo)
 {
+    
+
     if (!Transition)
         return;
 
@@ -419,23 +421,19 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
             VulkanTexture* vulkanTexture = static_cast<VulkanTexture*>(transitionInfo.Texture);
             if (!vulkanTexture)
                 continue;
+            ERHIResourceAccess accessBefore = transitionInfo.AccessBefore;
+            ERHIResourceAccess accessAfter = transitionInfo.AccessAfter;
 
-            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            VkAccessFlags oldAccessMask = 0;
-            VkPipelineStageFlags oldStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkImageLayout oldLayout = DetermineImageLayout(accessBefore);
+            VkImageLayout newLayout = DetermineImageLayout(accessAfter);
 
-            if (transitionInfo.AccessBefore != ERHIResourceAccess::Unknown)
+            if (accessBefore == accessAfter)
             {
-                //GetVulkanBarrierInfo(true, transitionInfo.AccessBefore, oldLayout, oldAccessMask, oldStageMask);
+                continue;
             }
 
-            VkImageLayout newLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            VkAccessFlags newAccessMask = 0;
-            VkPipelineStageFlags newStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-
-            //GetVulkanBarrierInfo(true, transitionInfo.AccessAfter, newLayout, newAccessMask, newStageMask);
-
-            VkImageSubresourceRange subresourceRange{};
+			auto textureDesc = vulkanTexture->GetDesc();
+			VkImageSubresourceRange subresourceRange{};
             subresourceRange.aspectMask = vulkanTexture->GetAspectFlags();
             subresourceRange.baseMipLevel = transitionInfo.MipIndex != RHISubresourceRange::kAllSubresources ? transitionInfo.MipIndex : 0;
             subresourceRange.levelCount = transitionInfo.MipIndex != RHISubresourceRange::kAllSubresources ? 1 : vulkanTexture->GetDesc().MipLevels;
@@ -444,6 +442,36 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
 
             pipelineBarrier->TransitionLayout(vulkanTexture->GetImage(), oldLayout, newLayout, subresourceRange);
         }
+		else if (transitionInfo.Type == RHITransitionInfo::EType::UAV) {
+			VulkanUnorderedAccessView* vulkanUAV = static_cast<VulkanUnorderedAccessView*>(transitionInfo.UAV);
+			if (!vulkanUAV) continue;
+
+			if (vulkanUAV->IsTexture())
+			{
+				// 1. 从 UAV 句柄中提取底层的 Texture 指针
+				// 注意：这里需要你的 UAV 类提供获取 Resource 的接口
+				VulkanTexture* vulkanTexture = static_cast<VulkanTexture*>(vulkanUAV->GetResource());
+
+				// 2. 提取 UAV 定义的子资源范围
+				// 这一点非常重要！UAV 可能只覆盖了某一个 Mip 或 Layer
+				VkImageSubresourceRange subresourceRange{};
+				subresourceRange.aspectMask = vulkanTexture->GetAspectFlags();
+				subresourceRange.baseMipLevel = vulkanUAV->GetBaseMipLevel();
+				subresourceRange.levelCount = vulkanUAV->GetMipLevelCount();
+				subresourceRange.baseArrayLayer = vulkanUAV->GetBaseArrayLayer();
+				subresourceRange.layerCount = vulkanUAV->GetLayerCount();
+
+				pipelineBarrier->TransitionAccess(vulkanTexture->GetImage(), transitionInfo.AccessBefore, transitionInfo.AccessAfter, subresourceRange);
+
+			}
+			else if (vulkanUAV->IsBuffer())
+			{
+				VulkanBuffer* vulkanBuffer = static_cast<VulkanBuffer*>(vulkanUAV->GetResource());
+
+				// Buffer 不需要 Layout，直接记录 Access 变化用于生成 VkBufferMemoryBarrier
+
+			}
+		}
         else if (transitionInfo.Type == RHITransitionInfo::EType::Buffer)
         {
             // VulkanPipelineBarrier 当前仅支持图像屏障；Buffer 屏障可在后续补全。

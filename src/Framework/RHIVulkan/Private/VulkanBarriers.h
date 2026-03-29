@@ -1,7 +1,10 @@
 #pragma once
 #include "vulkan/vulkan.h"
+#include "RHIDefine.h"
 #include <unordered_map>
 namespace RHIVulkan {
+	VkImageLayout DetermineImageLayout(RHI::ERHIResourceAccess access,bool bIsDepthStencil = false);
+
 	class VulkanCommandBuffer;
 	class VulkanTexture;
 	class VulkanImageLayout
@@ -63,7 +66,9 @@ namespace RHIVulkan {
 
 		void NotifyDeletedImage(VkImage image);
 
-
+#ifdef DEBUG_INFO
+		void PrintLayoutInfo();
+#endif
 	private:
 		std::unordered_map<VkImage, VulkanImageLayout> Layouts;
 		VulkanImageLayoutManager* Fallback = nullptr;
@@ -85,6 +90,12 @@ namespace RHIVulkan {
 			VkImage image,
 			const VulkanImageLayout& oldLayout,
 			VkImageLayout newLayout,
+			const VkImageSubresourceRange& range);
+
+		void TransitionAccess(
+			VkImage image,
+			RHI::ERHIResourceAccess oldAccess,
+			RHI::ERHIResourceAccess newAccess,
 			const VkImageSubresourceRange& range);
 
 
