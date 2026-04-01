@@ -8,7 +8,8 @@
 namespace RHIVulkan{
     using namespace RHI;
 class VulkanDevice;
-
+class VulkanQueue;
+class VulkanPresentExecutor;
 
 class RHIVULKAN_API VulkanRHIApi : public RHIApi
 {
@@ -64,20 +65,16 @@ public:
     RHIAnyHitShaderSP CreateAnyHitShader(const std::vector<char>& shaderSourceCode) override;
     RHIIntersectionShaderSP CreateIntersectionShader(const std::vector<char>& shaderSourceCode) override;
     RHICallableShaderSP CreateCallableShader(const std::vector<char>& shaderSourceCode) override;
-    RHIFenceSP CreateFence() override;
-    RHIViewportSP CreateViewport(void* inWindowHandle, uint32_t w, uint32_t h, ERHIFormat format) override;
-    RHITextureSP GetViewportBackBuffer(RHIViewport* viewport) override;
+    RHISwapchainSP CreateSwapchain(void* inWindowHandle, uint32_t w, uint32_t h, ERHIFormat format) override;
     RHISamplerSP CreateSampler(const RHISamplerDesc& desc) override;
 
-    RHICommandContex* GetDefualtCommandContex() override;
+    RHIQueue* GetQueue(EQueueType Type) override;
+    RHIPresentExecutor* GetPresentExecutor() override;
 
     void RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo) override;
     void RHIReleaseTransition(RHITransition* Transition) override;
 
     RHITransientResourceManagerSP CreateTransientResourceManager() override;
-
-    virtual RHIPlatformCommandList* FinalizeCommandContex(RHICommandContex* contex) override;
-    virtual void SubmitPlatformCommandLists(std::vector<RHIPlatformCommandList*> cmdLists) override;
 private:
 	VkPhysicalDevice PickPhysicalDevice();
 
@@ -97,6 +94,9 @@ private:
     // 其他 Vulkan 资源管理结构
 	VulkanDevice* Device = nullptr;
 	VkPhysicalDevice PhysicalDevice = nullptr;
+    VulkanQueue* GraphicsRHIQueue = nullptr;
+    VulkanQueue* ComputeRHIQueue = nullptr;
+    VulkanPresentExecutor* PresentExecutor = nullptr;
 };
 
 

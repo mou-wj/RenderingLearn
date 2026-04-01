@@ -415,10 +415,10 @@ private:
 };
 
 // Vulkan Fence
-class VulkanFence : public RHIFence {
+class VulkanFence {
 public:
     VulkanFence(VulkanDevice* device);
-    ~VulkanFence() override;
+    ~VulkanFence();
 
     // 新增：判断Fence是否已完成
     bool IsSignaled() const;
@@ -463,15 +463,16 @@ class VulkanSemaphore;
 class VulkanCommandContext;
 class VulkanCommandBuffer;
 class VulkanQueue;
-// Vulkan Viewport (Swapchain)
-class VulkanViewport : public RHIViewport {
+// Vulkan RHISwapchain implementation
+class VulkanRHISwapchain : public RHISwapchain {
 public:
-    VulkanViewport(VulkanDevice* device, uint32_t width, uint32_t height, void* windowHandle, ERHIFormat format);
-    ~VulkanViewport() override;
+    VulkanRHISwapchain(VulkanDevice* device, uint32_t width, uint32_t height, void* windowHandle, ERHIFormat format);
+    ~VulkanRHISwapchain() override;
 
     VulkanSwapchain* GetSwapchain() const { return Swapchain; }
+    RHISwapchainSlot AcquireNextSlot() override;
+    void Resize(uint32_t Width, uint32_t Height) override;
     void Present(VulkanCommandContext* context, VulkanCommandBuffer* commandBuffer,VulkanQueue* queue,VulkanQueue* presentQueue);
-    virtual void Tick() override;
     VulkanTextureSP GetBackTexture();
 
 private:

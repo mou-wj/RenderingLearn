@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <vector>
 #include <memory>
 #include <list>
@@ -6,12 +7,15 @@
 
 namespace RHI {
 
-    class RHICommandContex; // Í³Ò»ºóµÄ Contex
+    using RHICmdBuffer = uint64_t;
+
+    class RHIComputeContext;
+    class RHICommandContext;
     class RHICommandList;
     class RHITransition;
 
     // -----------------------------
-    // ÃüÁî»ùÀà
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     // -----------------------------
     struct RHI_API RHICommandBase
     {
@@ -20,7 +24,7 @@ namespace RHI {
     };
 
     // -----------------------------
-    // ¾ßÌåÃüÁî
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     // -----------------------------
     struct RHI_API RHICommandDispatch : public RHICommandBase
     {
@@ -46,15 +50,15 @@ namespace RHI {
 
 
     // -----------------------------
-    // Í³Ò»µÄÃüÁîÁÐ±í
+    // Í³Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½
     // -----------------------------
     class RHI_API RHICommandList
     {
     public:
-        explicit RHICommandList(RHICommandContex* context);
+        explicit RHICommandList(RHIComputeContext* context);
         virtual ~RHICommandList();
 
-        // Ìí¼ÓÃüÁî
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         template<typename T, typename... Args>
         void AddCommand(Args&&... args)
         {
@@ -69,26 +73,27 @@ namespace RHI {
             }
         }
 
-        // Ö´ÐÐËùÓÐÃüÁî
+        // Ö´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         virtual void ExecuteAll();
         void Clear();
 
         void SetImmediate(bool bImmediate);
         bool IsImmediate() const;
 
-        void SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
+        void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
+        void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
         void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size);
         //
         void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);
 
         // -----------------
-        // Compute ½Ó¿Ú
+        // Compute ï¿½Ó¿ï¿½
         // -----------------
         void Dispatch(uint32_t x, uint32_t y, uint32_t z);
         void CopyTexture(RHITexture* src, RHITexture* dst,const RHICopyTextureDesc& copyDesc);
 
         // -----------------
-        // Graphics ½Ó¿Ú
+        // Graphics ï¿½Ó¿ï¿½
         // -----------------
         void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset);
         void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
@@ -100,22 +105,20 @@ namespace RHI {
             uint32_t firstVertex = 0, uint32_t firstInstance = 0);
 
         // -----------------
-        // RayTracing ½Ó¿Ú
+        // RayTracing ï¿½Ó¿ï¿½
         // -----------------
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1);
 
         // -----------------
-        // »ñÈ¡°ó¶¨µÄ Context
+        // ï¿½ï¿½È¡ï¿½ó¶¨µï¿½ Context
         // -----------------
-        RHICommandContex* GetCommandContex() const;
+        RHIComputeContext* GetCommandContex() const;
 
         // -----------------
-        // Óò½Ó¿Ú
+        // ï¿½ï¿½Ó¿ï¿½
         // -----------------
-        void BeginDrawingViewport(RHIViewport* Viewport, RHITexture* RenderTargetRHI);
-        void EndDrawingViewport(RHIViewport* Viewport, bool bPresent);
-        void BeginFrame();
-        void EndFrame();
+        void Begin();
+        RHICmdBuffer End();
         void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
         void EndRenderPass();
 
@@ -127,7 +130,7 @@ namespace RHI {
     protected:
         bool immediate = false;
         std::list<std::shared_ptr<RHICommandBase>> commands;
-        RHICommandContex* CommandContex = nullptr;
+        RHIComputeContext* CommandContex = nullptr;
 
         friend struct RHICommandDispatch;
         friend struct RHICommandDraw;
@@ -137,7 +140,7 @@ namespace RHI {
 
 
     // -----------------------------
-    // ÀàÐÍ±ðÃû
+    // ï¿½ï¿½ï¿½Í±ï¿½ï¿½ï¿½
     // -----------------------------
     using RHICommandListSP = std::shared_ptr<RHICommandList>;
 

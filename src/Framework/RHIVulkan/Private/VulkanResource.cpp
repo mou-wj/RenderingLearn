@@ -705,15 +705,15 @@ void VulkanUnorderedAccessView::DestroyView()
 
 
 
-// Vulkan Viewport (Swapchain)
-VulkanViewport::VulkanViewport(VulkanDevice* device, uint32_t width, uint32_t height, void* windowHandle, ERHIFormat format)
-    : RHIViewport(), Device(device), WindowHandle(windowHandle),Width(width),Height(height),Format(format) 
+// Vulkan RHISwapchain
+VulkanRHISwapchain::VulkanRHISwapchain(VulkanDevice* device, uint32_t width, uint32_t height, void* windowHandle, ERHIFormat format)
+    : Device(device), WindowHandle(windowHandle),Width(width),Height(height),Format(format)
 {
 
 
     if (!WindowHandle)
     {
-		LOG_ERROR("VulkanViewport: Invalid window handle");
+        LOG_ERROR("VulkanRHISwapchain: Invalid window handle");
     }
     CreateSwapchain();
     acquireSemaphores.resize(swapchainImages_.size());
@@ -724,14 +724,14 @@ VulkanViewport::VulkanViewport(VulkanDevice* device, uint32_t width, uint32_t he
     }
 }
 
-VulkanViewport::~VulkanViewport() {
+VulkanRHISwapchain::~VulkanRHISwapchain() {
     VkDevice device = Device->GetHandle();
 
     DestroySwapchain();
 
 }
 
-void VulkanViewport::Present(VulkanCommandContext* context, VulkanCommandBuffer* commandBuffer, VulkanQueue* queue, VulkanQueue* presentQueue)
+void VulkanRHISwapchain::Present(VulkanCommandContext* context, VulkanCommandBuffer* commandBuffer, VulkanQueue* queue, VulkanQueue* presentQueue)
 {
     assert(queue == presentQueue);//先假定相等
     //转换布局
@@ -763,11 +763,24 @@ void VulkanViewport::Present(VulkanCommandContext* context, VulkanCommandBuffer*
 
 }
 
-void VulkanViewport::Tick()
+RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
 {
+    RHISwapchain::RHISwapchainSlot slot{};
+    auto backTexture = GetBackTexture();
+    slot.Texture = backTexture.get();
+    slot.ReadySync = nullptr;
+    return slot;
 }
 
-VulkanTextureSP VulkanViewport::GetBackTexture()
+void VulkanRHISwapchain::Resize(uint32_t inWidth, uint32_t inHeight)
+{
+    Width = inWidth;
+    Height = inHeight;
+    DestroySwapchain();
+    CreateSwapchain();
+}
+
+VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
 {
     if (currentBackBufferIndex != -1) {
         return backBufferTextures[currentBackBufferIndex];
@@ -784,7 +797,7 @@ VulkanTextureSP VulkanViewport::GetBackTexture()
     return backBufferTextures[currentBackBufferIndex];
 }
 
-void VulkanViewport::CreateSwapchain()
+void VulkanRHISwapchain::CreateSwapchain()
 {
     VulkanSwapchain::SwapchainDesc swapchainDesc = {};
     swapchainDesc.windowHandle = WindowHandle;
@@ -814,7 +827,7 @@ void VulkanViewport::CreateSwapchain()
 
 }
 
-void VulkanViewport::DestroySwapchain()
+void VulkanRHISwapchain::DestroySwapchain()
 {
     delete Swapchain;
     backBufferTextures.clear();

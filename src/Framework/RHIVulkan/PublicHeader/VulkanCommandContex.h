@@ -23,28 +23,14 @@ class VulkanCommandBufferManager;
 // -------------------------------------------------------------------------------------------------
 // Vulkan Graphics Context
 // -------------------------------------------------------------------------------------------------
-class RHIVULKAN_API VulkanCommandContext : public RHICommandContex
+class RHIVULKAN_API VulkanCommandContext : public RHICommandContext
 {
 public:
-    inline static VulkanCommandContext* CastFrom(RHICommandContex* context);
+    inline static VulkanCommandContext* CastFrom(RHIComputeContext* context);
     VulkanCommandContext(VulkanDevice* device, VulkanQueue* queue);
     virtual ~VulkanCommandContext();
-    void RHISetShaderTexture(RHIShader* Shader, uint32_t TextureIndex, RHITexture* Texture) override;
-
-    void RHISetShaderSampler(RHIShader* Shader, uint32_t SamplerIndex, RHISampler* NewState) override;
-
-    void RHISetUAVParameter(RHIShader* Shader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV) override;
-
-
-    void RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SRVIndex, RHIShaderResourceView* SRV) override;
-
-    void RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIBuffer* Buffer) override;
-
-    void RHISetShaderParameters(RHIShader* Shader, const std::vector<uint8_t>& InParametersData, const std::vector<RHIShaderUniformParameter>& InParameters, const std::vector<RHIShaderResourceParameter>& InResourceParameters) override;
-
-    void RHISetShaderParameter(RHIShader* Shader, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) override;
-
-    void SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& parameter) override;
+    void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& parameter) override;
+    void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& parameter) override;
 
     // Compute接口
     void SetComputePipelineState(RHIComputePipelineState* pipelineState) override;
@@ -66,10 +52,8 @@ public:
     void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) override;
 
     // 域
-    void BeginDrawingViewport(RHIViewport* Viewport, RHITexture* RenderTargetRHI) override;
-    void EndDrawingViewport(RHIViewport* Viewport, bool bPresent) override;
-    void BeginFrame() override;
-    void EndFrame() override;
+    void Begin() override;
+    RHICmdBuffer End() override;
     void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) override;
     void EndRenderPass() override;
     void BeginTransitions(std::vector<const RHITransition*> Transitions) override;
@@ -82,6 +66,12 @@ public:
 	VulkanLooseUniformDataUploader* GetLooseUniformDataUploader() const { return LooseUniformDataUploader; }
 
 private:
+    void SetShaderTextureInternal(RHIShader* shader, uint32_t textureIndex, RHITexture* texture);
+    void SetShaderSamplerInternal(RHIShader* shader, uint32_t samplerIndex, RHISampler* sampler);
+    void SetShaderUAVInternal(RHIShader* shader, uint32_t uavIndex, RHIUnorderedAccessView* uav);
+    void SetShaderSRVInternal(RHIShader* shader, uint32_t srvIndex, RHIShaderResourceView* srv);
+    void SetShaderUniformBufferInternal(RHIShader* shader, uint32_t bufferIndex, RHIBuffer* buffer);
+
     VulkanDevice* device;
     VulkanQueue* queue;
     VulkanCommandBufferManager* commandBufferManager;

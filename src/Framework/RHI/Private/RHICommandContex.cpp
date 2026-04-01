@@ -4,7 +4,7 @@
 
 namespace RHI
 {
-	RHICommandContex::RHICommandContex() : CommandList(this)
+	RHIComputeContext::RHIComputeContext() : CommandList(this)
 	{
 		CommandList.SetImmediate(true);
 	}

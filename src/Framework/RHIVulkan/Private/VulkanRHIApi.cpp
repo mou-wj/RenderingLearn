@@ -16,12 +16,12 @@
 #include "RHIPipelineStateCache.h"
 #include "VulkanBarriers.h"
 #include "RHITransition.h"
+#include "VulkanSwapchain.h"
+#include "VulkanQueue.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
 using namespace  RHI;
 namespace RHIVulkan{
-    
-
 
 // 析构函数实现
     VulkanRHIApi::~VulkanRHIApi()
@@ -84,6 +84,12 @@ bool VulkanRHIApi::Init()
 		return false;
 	}
 	Device = device;
+	GraphicsRHIQueue = Device->GetGraphicsQueue();
+	GraphicsRHIQueue->InitContextPool(EQueueType::Graphics, 2);
+	VulkanQueue* computeQ = Device->GetComputeQueue() ? Device->GetComputeQueue() : Device->GetGraphicsQueue();
+	ComputeRHIQueue = computeQ;
+	ComputeRHIQueue->InitContextPool(EQueueType::Compute, 1);
+	PresentExecutor = new VulkanPresentExecutor(GraphicsRHIQueue);
 
 	// 1. 确定头大小
 	uint32_t HeaderSize = sizeof(RHITransition);
@@ -111,7 +117,13 @@ void VulkanRHIApi::Shutdown()
 {
 	RHI::RHIPipelineStateCache::ClearAll();
 
+	GraphicsRHIQueue = nullptr;
+	ComputeRHIQueue = nullptr;
+	delete PresentExecutor;
+	PresentExecutor = nullptr;
+
 	delete Device;
+	Device = nullptr;
 
     // 销毁Vulkan实例和其他资源
     if (Instance != VK_NULL_HANDLE)
@@ -369,22 +381,9 @@ RHICallableShaderSP VulkanRHIApi::CreateCallableShader(const std::vector<char>& 
 }
 
 
-RHIFenceSP VulkanRHIApi::CreateFence()
+RHISwapchainSP VulkanRHIApi::CreateSwapchain(void* inWindowHandle, uint32_t w, uint32_t h, ERHIFormat format)
 {
-    // 创建Vulkan同步围栏
-    return nullptr; // 暂时返回nullptr
-}
-
-RHIViewportSP VulkanRHIApi::CreateViewport(void* inWindowHandle, uint32_t w, uint32_t h, ERHIFormat format)
-{
-    // 创建Vulkan视口
-    return std::make_shared<VulkanViewport>(Device,w,h,inWindowHandle,format); // 暂时返回nullptr
-}
-
-RHITextureSP VulkanRHIApi::GetViewportBackBuffer(RHIViewport* viewport)
-{
-	auto vulkanViewport = static_cast<VulkanViewport*>(viewport);
-	return std::dynamic_pointer_cast<RHITexture>(vulkanViewport->GetBackTexture());
+	return std::make_shared<VulkanRHISwapchain>(Device, w, h, inWindowHandle, format);
 }
 
 RHISamplerSP VulkanRHIApi::CreateSampler(const RHISamplerDesc& desc)
@@ -393,11 +392,22 @@ RHISamplerSP VulkanRHIApi::CreateSampler(const RHISamplerDesc& desc)
     return std::make_shared<VulkanSampler>(Device,desc); // 暂时返回nullptr
 }
 
-// 创建上下文接口实现
-RHICommandContex* VulkanRHIApi::GetDefualtCommandContex()
+RHIQueue* VulkanRHIApi::GetQueue(EQueueType Type)
 {
-    // 创建Vulkan图形上下文
-    return Device->GetGlobalCommandContext(); // 暂时返回nullptr
+	switch (Type)
+	{
+	case EQueueType::Graphics:
+		return Device ? Device->GetGraphicsQueue() : nullptr;
+	case EQueueType::Compute:
+		return Device ? (Device->GetComputeQueue() ? Device->GetComputeQueue() : Device->GetGraphicsQueue()) : nullptr;
+	default:
+		return nullptr;
+	}
+}
+
+RHIPresentExecutor* VulkanRHIApi::GetPresentExecutor()
+{
+	return PresentExecutor;
 }
 
 void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo)
@@ -499,30 +509,6 @@ RHITransientResourceManagerSP VulkanRHIApi::CreateTransientResourceManager()
 {
 	return std::make_shared<VulkanTransientResourceManager>(Device);
 }
-
-struct VulkanPlatformCommandList : public RHIPlatformCommandList {
-		VulkanCommandContext* CommandContext;
-};
-
-RHIPlatformCommandList* VulkanRHIApi::FinalizeCommandContex(RHICommandContex* contex)
-{
-    // 创建Vulkan图形上下文
-	VulkanPlatformCommandList* platformCommandList = new VulkanPlatformCommandList();
-    platformCommandList->CommandContext = dynamic_cast<VulkanCommandContext*>(contex);
-	return platformCommandList;
-}
-
-void VulkanRHIApi::SubmitPlatformCommandLists(std::vector<RHIPlatformCommandList*> cmdLists)
-{
-	for (auto& cmdList : cmdLists) {
-		VulkanPlatformCommandList* vulkanCmdList = dynamic_cast<VulkanPlatformCommandList*>(cmdList);
-		if (vulkanCmdList && vulkanCmdList->CommandContext) {
-			vulkanCmdList->CommandContext->GetCommandBufferManager()->SubmitActiveCommandBuffer();
-		}
-		delete vulkanCmdList; // 提交后删除命令列表
-	}
-}
-
 
 VkPhysicalDevice VulkanRHIApi::PickPhysicalDevice() {
 	// 选择合适的物理设备

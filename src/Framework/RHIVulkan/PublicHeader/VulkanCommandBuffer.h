@@ -91,6 +91,7 @@ public:
 
     // 获取一个可用的命令缓冲区（如有空闲则复用，否则新分配）
     VulkanCommandBuffer* GetActiveCommandBuffer(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+	VulkanCommandBuffer* EndActiveCommandBuffer();
 	void SubmitActiveCommandBuffer(uint32_t NumSignalSemaphores = 0, VulkanSemaphore* SignalSemaphores = nullptr);
 
 

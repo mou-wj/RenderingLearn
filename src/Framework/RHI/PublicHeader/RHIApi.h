@@ -71,21 +71,17 @@ public:
     virtual RHIIntersectionShaderSP CreateIntersectionShader(const std::vector<char>& shaderSourceCode) = 0;
     virtual RHICallableShaderSP CreateCallableShader(const std::vector<char>& shaderSourceCode) = 0;
 
-    virtual RHIFenceSP CreateFence() = 0;
-    virtual RHIViewportSP CreateViewport(void* inWindowHandle,uint32_t w,uint32_t h,ERHIFormat format) = 0;
-    virtual RHITextureSP GetViewportBackBuffer(RHIViewport* viewport) = 0;
+    virtual RHISwapchainSP CreateSwapchain(void* inWindowHandle,uint32_t w,uint32_t h,ERHIFormat format) = 0;
     virtual RHISamplerSP CreateSampler(const RHISamplerDesc& desc) = 0;
 
-    virtual RHICommandContex* GetDefualtCommandContex() = 0;
+    virtual RHIQueue* GetQueue(EQueueType Type) = 0;
+    virtual RHIPresentExecutor* GetPresentExecutor() = 0;
 
     virtual void RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo) = 0;
     virtual void RHIReleaseTransition(RHITransition* Transition) = 0;
 
     virtual RHITransientResourceManagerSP CreateTransientResourceManager() = 0;
     
-    virtual RHIPlatformCommandList* FinalizeCommandContex(RHICommandContex* contex) = 0;
-    virtual void SubmitPlatformCommandLists(std::vector<RHIPlatformCommandList*> cmdLists) = 0;
-
     
  
 };

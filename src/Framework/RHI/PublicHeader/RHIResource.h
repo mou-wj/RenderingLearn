@@ -123,8 +123,16 @@ protected:
     ERHIShaderFrequency ShaderType = ERHIShaderFrequency::Unknown; // 着色器类型
 };
 
+class RHI_API RHIGraphicShader : public RHIShader
+{
+public:
+    
+protected:
+    
+};
+
 // 顶点着色器
-class RHI_API RHIVertexShader : public RHIShader
+class RHI_API RHIVertexShader : public RHIGraphicShader
 {
 public:
     RHIVertexShader() {
@@ -135,7 +143,7 @@ public:
 };
 
 // 片元/像素着色器
-class RHI_API RHIFragmentShader : public RHIShader
+class RHI_API RHIFragmentShader : public RHIGraphicShader
 {
 public:
     RHIFragmentShader() {
@@ -146,7 +154,7 @@ public:
 };
 
 // 几何着色器
-class RHI_API RHIGeometryShader : public RHIShader
+class RHI_API RHIGeometryShader : public RHIGraphicShader
 {
 public:
     RHIGeometryShader() {
@@ -168,7 +176,7 @@ public:
 };
 
 // 细分控制着色器
-class RHI_API RHITessControlShader : public RHIShader
+class RHI_API RHITessControlShader : public RHIGraphicShader
 {
 public:
     RHITessControlShader() {
@@ -179,7 +187,7 @@ public:
 };
 
 // 细分评估着色器
-class RHI_API RHITessEvalShader : public RHIShader
+class RHI_API RHITessEvalShader : public RHIGraphicShader
 {
 public:
     RHITessEvalShader() {
@@ -190,7 +198,7 @@ public:
 };
 
 // Mesh Shader
-class RHI_API RHIMeshShader : public RHIShader
+class RHI_API RHIMeshShader : public RHIGraphicShader
 {
 public:
     RHIMeshShader() {
@@ -201,7 +209,7 @@ public:
 };
 
 // Task Shader
-class RHI_API RHITaskShader : public RHIShader
+class RHI_API RHITaskShader : public RHIGraphicShader
 {
 public:
     RHITaskShader() {
@@ -325,28 +333,6 @@ private:
     RHIDepthStencilStateDesc desc;
 };
 
-// Fence资源
-class RHI_API RHIFence : public RHIResource
-{
-public:
-    RHIFence() : RHIResource(ERHIResourceType::Fence) {}
-    virtual ~RHIFence() = default;
-};
-
-// 视口/交换链资源
-class RHI_API RHIViewport : public RHIResource
-{
-public:
-
-
-    RHIViewport() : RHIResource(ERHIResourceType::Viewport) {}
-    virtual ~RHIViewport() = default;
-    virtual void Tick() = 0;
-
-private:
-    // 可扩展swapchain、backbuffer等管理接口
-};
-
 // 采样器资源
 class RHI_API RHISampler : public RHIResource
 {
@@ -389,9 +375,6 @@ using RHIIntersectionShaderSP = std::shared_ptr<RHIIntersectionShader>;
 using RHICallableShaderSP = std::shared_ptr<RHICallableShader>;
 
 
-
-using RHIFenceSP = std::shared_ptr<RHIFence>;
-using RHIViewportSP = std::shared_ptr<RHIViewport>;
 using RHISamplerSP = std::shared_ptr<RHISampler>;
 using RHIVertexDescStateSP = std::shared_ptr<RHIVertexDescState>;
 using RHIRasterizerStateSP = std::shared_ptr<RHIRasterizerState>;

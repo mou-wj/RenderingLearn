@@ -5,7 +5,7 @@
 #include "VulkanDescriptorSets.h"
 
 namespace RHIVulkan {
-    VulkanCommandContext* VulkanCommandContext::CastFrom(RHICommandContex* context)
+    VulkanCommandContext* VulkanCommandContext::CastFrom(RHIComputeContext* context)
     {
         return dynamic_cast<VulkanCommandContext*>(context);
     }
@@ -31,7 +31,7 @@ VulkanCommandContext::~VulkanCommandContext() {
     delete LooseUniformDataUploader;
 }
 
-void VulkanCommandContext::RHISetShaderTexture(RHIShader* Shader, uint32_t TextureIndex, RHITexture* Texture)
+void VulkanCommandContext::SetShaderTextureInternal(RHIShader* Shader, uint32_t TextureIndex, RHITexture* Texture)
 {
 	auto shaderType = Shader->GetShaderType();
 	VulkanTexture* vulkanTexture = static_cast<VulkanTexture*>(Texture);
@@ -69,7 +69,7 @@ void VulkanCommandContext::RHISetShaderTexture(RHIShader* Shader, uint32_t Textu
     }
 }
 
-void VulkanCommandContext::RHISetShaderSampler(RHIShader* Shader, uint32_t SamplerIndex, RHISampler* NewState)
+void VulkanCommandContext::SetShaderSamplerInternal(RHIShader* Shader, uint32_t SamplerIndex, RHISampler* NewState)
 {
     auto shaderType = Shader->GetShaderType();
     // 假设你有 VulkanSampler 对象
@@ -94,7 +94,7 @@ void VulkanCommandContext::RHISetShaderSampler(RHIShader* Shader, uint32_t Sampl
     }
 }
 
-void VulkanCommandContext::RHISetUAVParameter(RHIShader* Shader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV)
+void VulkanCommandContext::SetShaderUAVInternal(RHIShader* Shader, uint32_t UAVIndex, RHIUnorderedAccessView* UAV)
 {
     auto shaderType = Shader->GetShaderType();
     VulkanUnorderedAccessView* vulkanUAV = static_cast<VulkanUnorderedAccessView*>(UAV);
@@ -120,7 +120,7 @@ void VulkanCommandContext::RHISetUAVParameter(RHIShader* Shader, uint32_t UAVInd
 }
 
 
-void VulkanCommandContext::RHISetShaderResourceViewParameter(RHIShader* Shader, uint32_t SRVIndex, RHIShaderResourceView* SRV)
+void VulkanCommandContext::SetShaderSRVInternal(RHIShader* Shader, uint32_t SRVIndex, RHIShaderResourceView* SRV)
 {
     auto shaderType = Shader->GetShaderType();
     VulkanShaderResourceView* vulkanSRV = static_cast<VulkanShaderResourceView*>(SRV);
@@ -144,7 +144,7 @@ void VulkanCommandContext::RHISetShaderResourceViewParameter(RHIShader* Shader, 
     }
 }
 
-void VulkanCommandContext::RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t BufferIndex, RHIBuffer* Buffer)
+void VulkanCommandContext::SetShaderUniformBufferInternal(RHIShader* Shader, uint32_t BufferIndex, RHIBuffer* Buffer)
 {
     auto shaderType = Shader->GetShaderType();
     VulkanBuffer* vulkanBuffer = static_cast<VulkanBuffer*>(Buffer);
@@ -167,65 +167,88 @@ void VulkanCommandContext::RHISetShaderUniformBuffer(RHIShader* Shader, uint32_t
         break;
     }
 }
-void VulkanCommandContext::RHISetShaderParameters(RHIShader* Shader, const std::vector<uint8_t>& InParametersData, const std::vector<RHIShaderUniformParameter>& InParameters, const std::vector<RHIShaderResourceParameter>& InResourceParameters)
+void VulkanCommandContext::SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& parameter)
 {
-    // 遍历 UniformBuffer 参数
-    for (const auto& param : InParameters)
-    {
-        RHISetShaderParameter(Shader, param.BufferIndex, param.BaseIndex, param.Size, InParametersData.data() + param.Offset);
-    }
+    auto shaderType = shader->GetShaderType();
 
-    // 遍历 SRV/UAV/Texture 参数
-    for (const auto& res : InResourceParameters)
-    {
-        switch (res.Type)
+	for (const auto& uniformParam : parameter.UniformParameters)
+	{
+		const uint8_t* valuePtr = parameter.Data.data() + uniformParam.Offset;
+        if (shaderType == RHI::ERHIShaderFrequency::Compute)
         {
-        case RHIShaderResourceParameter::EType::Texture:
-            RHISetShaderTexture(Shader, res.Index, res.GetResourceAs<RHITexture>());
-            break;
-        case RHIShaderResourceParameter::EType::SRV:
-            RHISetShaderResourceViewParameter(Shader, res.Index, res.GetResourceAs<RHIShaderResourceView>());
-            break;
-        case RHIShaderResourceParameter::EType::UAV:
-            RHISetUAVParameter(Shader, res.Index, res.GetResourceAs<RHIUnorderedAccessView>());
-            break;
-        case RHIShaderResourceParameter::EType::Sampler:
-            RHISetShaderSampler(Shader, res.Index, res.GetResourceAs<RHISampler>());
-            break;
-        case RHIShaderResourceParameter::EType::UniformBuffer:
-            RHISetShaderUniformBuffer(Shader, res.Index, res.GetResourceAs<RHIBuffer>());
+			PendingCompute->SetShaderParameter(shaderType, uniformParam.BaseIndex, uniformParam.Size, valuePtr);
+		}
+	}
+
+	for (const auto& resourceParam : parameter.ResourceParameters)
+	{
+		switch (resourceParam.Type)
+		{
+		case RHIShaderResourceParameter::EType::Texture:
+            SetShaderTextureInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHITexture>());
+			break;
+		case RHIShaderResourceParameter::EType::SRV:
+            SetShaderSRVInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHIShaderResourceView>());
+			break;
+		case RHIShaderResourceParameter::EType::UAV:
+            SetShaderUAVInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHIUnorderedAccessView>());
+			break;
+		case RHIShaderResourceParameter::EType::Sampler:
+            SetShaderSamplerInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHISampler>());
+			break;
+		case RHIShaderResourceParameter::EType::UniformBuffer:
+            SetShaderUniformBufferInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHIBuffer>());
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+void VulkanCommandContext::SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& parameter)
+{
+    auto shaderType = shader->GetShaderType();
+
+    for (const auto& uniformParam : parameter.UniformParameters)
+    {
+        const uint8_t* valuePtr = parameter.Data.data() + uniformParam.Offset;
+        switch (shaderType)
+        {
+        case RHI::ERHIShaderFrequency::Vertex:
+        case RHI::ERHIShaderFrequency::Fragment:
+        case RHI::ERHIShaderFrequency::Geometry:
+        case RHI::ERHIShaderFrequency::Mesh:
+        case RHI::ERHIShaderFrequency::Task:
+            PendingGfx->SetShaderParameter(shaderType, uniformParam.BaseIndex, uniformParam.Size, valuePtr);
             break;
         default:
             break;
         }
     }
-}
 
-void VulkanCommandContext::RHISetShaderParameter(RHIShader* Shader, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue)
-{
-    auto shaderType = Shader->GetShaderType();
-    switch (shaderType)
+    for (const auto& resourceParam : parameter.ResourceParameters)
     {
-    case RHI::ERHIShaderFrequency::Vertex:
-    case RHI::ERHIShaderFrequency::Fragment:
-    case RHI::ERHIShaderFrequency::Geometry:
-    case RHI::ERHIShaderFrequency::Mesh:
-    case RHI::ERHIShaderFrequency::Task:
-        PendingGfx->SetShaderParameter(shaderType, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
-        break;
-
-    case RHI::ERHIShaderFrequency::Compute:
-        PendingCompute->SetShaderParameter(shaderType, BaseIndex, NumBytes, reinterpret_cast<const uint8_t*>(NewValue));
-        break;
-
-    default:
-        break;
+        switch (resourceParam.Type)
+        {
+        case RHIShaderResourceParameter::EType::Texture:
+            SetShaderTextureInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHITexture>());
+            break;
+        case RHIShaderResourceParameter::EType::SRV:
+            SetShaderSRVInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHIShaderResourceView>());
+            break;
+        case RHIShaderResourceParameter::EType::UAV:
+            SetShaderUAVInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHIUnorderedAccessView>());
+            break;
+        case RHIShaderResourceParameter::EType::Sampler:
+            SetShaderSamplerInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHISampler>());
+            break;
+        case RHIShaderResourceParameter::EType::UniformBuffer:
+            SetShaderUniformBufferInternal(shader, resourceParam.Index, resourceParam.GetResourceAs<RHIBuffer>());
+            break;
+        default:
+            break;
+        }
     }
-}
-
-void VulkanCommandContext::SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& parameter)
-{
-	RHISetShaderParameters(shader, parameter.Data, parameter.UniformParameters, parameter.ResourceParameters);
 }
 
 void VulkanCommandContext::SetComputePipelineState(RHIComputePipelineState* pipelineState) {
@@ -355,27 +378,22 @@ void VulkanCommandContext::TraceRays(uint32_t width, uint32_t height, uint32_t d
 
 }
 
-void VulkanCommandContext::BeginDrawingViewport(RHIViewport* Viewport, RHITexture* RenderTargetRHI)
+void VulkanCommandContext::Begin()
 {
-
+    commandBufferManager->GetActiveCommandBuffer();
 }
-void VulkanCommandContext::EndDrawingViewport(RHIViewport* Viewport, bool bPresent)
-{
-    VulkanViewport* vulkanViewport = dynamic_cast<VulkanViewport*>(Viewport);
-    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
-
-	vulkanViewport->Present(this, commandBuffer, device->GetGraphicsQueue(), device->GetPresentQueue());
-}
-void VulkanCommandContext::BeginFrame()
-{
-
-}
-void VulkanCommandContext::EndFrame()
+RHICmdBuffer VulkanCommandContext::End()
 {
     device->GetDescriptorSetManager()->GarbageCollect();
     commandBufferManager->GarbageCollect();
     device->ReleaseDeferredResources();
 
+    auto commandBuffer = commandBufferManager->EndActiveCommandBuffer();
+    if (!commandBuffer)
+    {
+        return 0;
+    }
+    return reinterpret_cast<RHICmdBuffer>(commandBuffer);
 }
 void VulkanCommandContext::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo)
 {

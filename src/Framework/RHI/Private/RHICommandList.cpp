@@ -23,7 +23,12 @@ void RHICommandDraw::Execute(RHICommandList& cmdList)
 {
     auto* commandList = dynamic_cast<RHICommandList*>(&cmdList);
     if (commandList && commandList->GetCommandContex())
-        commandList->GetCommandContex()->Draw(VertexCount, InstanceCount, FirstVertex, FirstInstance);
+    {
+        if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(commandList->GetCommandContex()))
+        {
+            graphicsContext->Draw(VertexCount, InstanceCount, FirstVertex, FirstInstance);
+        }
+    }
 }
 
 // ---------------- RHICommandTraceRays ----------------
@@ -33,8 +38,13 @@ RHICommandTraceRays::RHICommandTraceRays(uint32_t w, uint32_t h, uint32_t d)
 void RHICommandTraceRays::Execute(RHICommandList& cmdList)
 {
     auto* commandList = dynamic_cast<RHICommandList*>(&cmdList);
-    if (commandList && commandList->GetCommandContex())
-        commandList->GetCommandContex()->TraceRays(Width, Height, Depth);
+    if (commandList)
+    {
+        if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(commandList->GetCommandContex()))
+        {
+            graphicsContext->TraceRays(Width, Height, Depth);
+        }
+    }
 }
 
 
@@ -74,7 +84,7 @@ void RHICommandList::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopy
 }
 
 // ---------------- RHICommandList ----------------
-RHICommandList::RHICommandList(RHICommandContex* contex)
+RHICommandList::RHICommandList(RHIComputeContext* contex)
     : CommandContex(contex)
 {
 }
@@ -83,7 +93,7 @@ RHICommandList::~RHICommandList()
 {
 }
 
-RHICommandContex* RHICommandList::GetCommandContex() const
+RHIComputeContext* RHICommandList::GetCommandContex() const
 {
     return CommandContex;
 }
@@ -91,20 +101,25 @@ RHICommandContex* RHICommandList::GetCommandContex() const
 
 void RHICommandList::SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset)
 {
-    if (CommandContex)
-        CommandContex->SetStreamSource(streamIndex, VertexBuffer, Offset);
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->SetStreamSource(streamIndex, VertexBuffer, Offset);
 }
 
 void RHICommandList::SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState)
 {
-    if (CommandContex)
-        CommandContex->SetGraphicPipelineState(pipelineState);
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->SetGraphicPipelineState(pipelineState);
 }
 
 
-void RHICommandList::SetBatchedShaderParameters(RHIShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter) {
+void RHICommandList::SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter) {
     if (CommandContex)
         CommandContex->SetBatchedShaderParameters(shader, bacthedShaderParameter);
+}
+
+void RHICommandList::SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter) {
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->SetBatchedShaderParameters(shader, bacthedShaderParameter);
 }
 void RHICommandList::UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size) {
     if (GRHIApi) {
@@ -119,47 +134,41 @@ void RHICommandList::UpdateBuffer(RHIBuffer* buffer, const void* data, const RHI
 
 void RHICommandList::SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth)
 {
-    if (CommandContex)
-        CommandContex->SetViewport(x,y, w,h, minDepth, maxDepth);
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->SetViewport(x,y, w,h, minDepth, maxDepth);
 }
 void RHICommandList::SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) {
-	if (CommandContex)
-		CommandContex->SetScissor(x, y, w, h);
+	if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+		graphicsContext->SetScissor(x, y, w, h);
 }
 
 void RHICommandList::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 {
-    if (CommandContex)
-        CommandContex->Draw(vertexCount, instanceCount, firstVertex, firstInstance);
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->Draw(vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void RHICommandList::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
 {
-    if (CommandContex)
-        CommandContex->TraceRays(width, height, depth);
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->TraceRays(width, height, depth);
 }
 
-void RHICommandList::BeginDrawingViewport(RHIViewport* Viewport, RHITexture* RenderTargetRHI)
+void RHICommandList::Begin()
 {
-    CommandContex->BeginDrawingViewport(Viewport, RenderTargetRHI);
+    CommandContex->Begin();
 }
-void RHICommandList::EndDrawingViewport(RHIViewport* Viewport, bool bPresent)
+RHICmdBuffer RHICommandList::End()
 {
-    CommandContex->EndDrawingViewport(Viewport, bPresent);
-}
-void RHICommandList::BeginFrame()
-{
-    CommandContex->BeginFrame();
-}
-void RHICommandList::EndFrame()
-{
-    CommandContex->EndFrame();
+    return CommandContex->End();
 }
 void RHICommandList::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) {
-    CommandContex->BeginRenderPass(renderPassInfo);
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->BeginRenderPass(renderPassInfo);
 }
 void RHICommandList::EndRenderPass() {
-    CommandContex->EndRenderPass();
+    if (auto* graphicsContext = dynamic_cast<RHICommandContext*>(CommandContex))
+        graphicsContext->EndRenderPass();
 }
 void RHICommandList::BeginTransitions(std::vector<const RHITransition*> Transitions) {
     CommandContex->BeginTransitions(Transitions);

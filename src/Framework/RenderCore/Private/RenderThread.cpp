@@ -15,8 +15,8 @@ void RenderThread::Start() {
     if (bRunning.load()) return;
     bRunning.store(true);
     WorkerThread = std::thread(&RenderThread::ThreadFunc, this);
-    //´´½¨ImmediateCommandContex
-    ImmediateCommandContex = RHI::GRHIApi->GetDefualtCommandContex();
+    ImmediateQueue = RHI::GRHIApi ? RHI::GRHIApi->GetQueue(RHI::EQueueType::Graphics) : nullptr;
+    ImmediateCommandContex = ImmediateQueue ? ImmediateQueue->AcquireCommandContext() : nullptr;
 }
 
 void RenderThread::Stop() {
@@ -40,11 +40,11 @@ void RenderThread::EnqueueCommand(const RenderCommand& cmd) {
 }
 
 void RenderThread::ExecuteSync(const RenderCommand& cmd) {
-    // 1. ´´½¨Ò»¸ö promise ºÍ¹ØÁªµÄ future
+    // 1. ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ promise ï¿½Í¹ï¿½ï¿½ï¿½ï¿½ï¿½ future
     std::promise<void> promise;
     std::future<void> future = promise.get_future();
 
-    // 2. °ü×°Ô­Ê¼ÃüÁî£¬ÔÚÖ´ÐÐÍêºóÉèÖÃ promise
+    // 2. ï¿½ï¿½×°Ô­Ê¼ï¿½ï¿½ï¿½î£¬ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ promise
     RenderCommand wrappedCmd = cmd;
     auto originalExecute = cmd.Execute;
 
@@ -52,14 +52,14 @@ void RenderThread::ExecuteSync(const RenderCommand& cmd) {
         if (originalExecute) {
             originalExecute(commandList);
         }
-        // äÖÈ¾ÈÎÎñÖ´ÐÐÍê±Ï£¬Í¨ÖªµÈ´ýÏß³Ì
+        // ï¿½ï¿½È¾ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½Ï£ï¿½Í¨Öªï¿½È´ï¿½ï¿½ß³ï¿½
         promise.set_value();
         };
 
-    // 3. Èë¶ÓÖ´ÐÐ
+    // 3. ï¿½ï¿½ï¿½Ö´ï¿½ï¿½
     EnqueueCommand(wrappedCmd);
 
-    // 4. ×èÈûµ±Ç°Ïß³Ì£¬Ö±µ½äÖÈ¾Ïß³Ìµ÷ÓÃÁË set_value()
+    // 4. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½ß³Ì£ï¿½Ö±ï¿½ï¿½ï¿½ï¿½È¾ï¿½ß³Ìµï¿½ï¿½ï¿½ï¿½ï¿½ set_value()
     future.wait();
 }
 
@@ -78,8 +78,16 @@ void RenderThread::ThreadFunc() {
             }
         }
         if (cmd.Execute) {
+            if (!ImmediateCommandContex || !ImmediateQueue)
+            {
+                continue;
+            }
+            ImmediateCommandContex->Begin();
             cmd.Execute(ImmediateCommandContex->GetCommandList());
             ImmediateCommandContex->GetCommandList().ExecuteAll();
+            RHI::RHICmdBuffer cmdBuffer = ImmediateCommandContex->End();
+            RHI::RHISyncPoint* syncPoint = ImmediateQueue->Submit(cmdBuffer);
+            delete syncPoint;
             ImmediateCommandContex->GetCommandList().Clear();
         }
         CmdFinishCV.notify_one();

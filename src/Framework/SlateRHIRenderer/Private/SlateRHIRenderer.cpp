@@ -12,19 +12,20 @@ namespace SlateRHIRenderer {
 	}
 	void SlateRHIRenderer::Render(Slate::Window* window) {
 		auto slateViewport = Viewports[window];
-		auto rhiViewport = slateViewport.ViewportRHI;
-		auto presentTexture =  GRHIApi->GetViewportBackBuffer(rhiViewport.get());
-		//½«³¡¾°µÄÄÚÈÝ»æÖÆµ½presentTextureÉÏ
+		auto rhiSwapchain = slateViewport.SwapchainRHI;
+		auto slot = rhiSwapchain->AcquireNextSlot();
+		auto presentTexture = slot.Texture;
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý»ï¿½ï¿½Æµï¿½presentTextureï¿½ï¿½
 		auto& windowWidget = window->GetWidgets();
 		for (auto& widget : windowWidget) {
 			auto widgetTeture = static_cast<RHI::RHITexture*>(widget.Viewport->GetViewportRenderTargetTexture());
-			//»æÖÆ
+			//ï¿½ï¿½ï¿½ï¿½
 
 		
 		}
 		
-		//»æÖÆoverlayµÈUIÄÚÈÝµ½presentTextureÉÏ
-		EnqueueRenderCommand("Present", [presentTexture, rhiViewport](RHI::RHICommandList& cmd) {
+		//ï¿½ï¿½ï¿½ï¿½overlayï¿½ï¿½UIï¿½ï¿½ï¿½Ýµï¿½presentTextureï¿½ï¿½
+		EnqueueRenderCommand("Present", [presentTexture, rhiSwapchain](RHI::RHICommandList& cmd) {
 
 		
 
@@ -37,7 +38,7 @@ namespace SlateRHIRenderer {
 		WindowViewportInfo viewportInfo;
 		auto windowHandle = window->GetNativeHandle();
 		auto framebufferSize = window->GetFramebufferSize();
-		viewportInfo.ViewportRHI = GRHIApi->CreateViewport(windowHandle, framebufferSize.x, framebufferSize.y, ERHIFormat::R8G8B8A8_UNorm);
+		viewportInfo.SwapchainRHI = GRHIApi->CreateSwapchain(windowHandle, framebufferSize.x, framebufferSize.y, ERHIFormat::R8G8B8A8_UNorm);
 
 		Viewports[window] = viewportInfo;
 

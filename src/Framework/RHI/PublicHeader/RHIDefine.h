@@ -151,8 +151,6 @@ enum class ERHIResourceType
     RasterizerState,
     ColorBlendState,
     DepthStencilState,
-    Fence,
-    Viewport,
     Sampler,
     // ...可扩展
     ShaderResourceView,

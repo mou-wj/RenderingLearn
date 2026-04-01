@@ -193,7 +193,10 @@ namespace RenderCore {
             RHI::RHIApi* api = GRHIApi;
             if (!api) return;
 
-            RHI::RHICommandContex* ctx = api->GetDefualtCommandContex();
+            RHI::RHIQueue* queue = api->GetQueue(RHI::EQueueType::Graphics);
+            if (!queue) return;
+
+            RHI::RHIComputeContext* ctx = queue->AcquireCommandContext();
             if (!ctx) return;
 
             RHI::RHICommandListSP cmdListSP = std::make_shared<RHICommandList>(ctx);

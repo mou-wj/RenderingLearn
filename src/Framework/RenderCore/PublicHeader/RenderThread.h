@@ -61,7 +61,8 @@ private:
     std::mutex QueueMutex;
     std::condition_variable QueueCV;
     std::condition_variable CmdFinishCV;
-    RHI::RHICommandContex* ImmediateCommandContex;
+    RHI::RHIQueue* ImmediateQueue = nullptr;
+    RHI::RHIComputeContext* ImmediateCommandContex = nullptr;
 };
 
 

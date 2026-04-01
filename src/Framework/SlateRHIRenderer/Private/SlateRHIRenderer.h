@@ -2,6 +2,7 @@
 #include "SlateRenderer.h"
 #include "SlateViewport.h"
 #include "RHIResource.h"
+#include "RHICommandContex.h"
 #include "Window.h"
 #include <map>
 namespace SlateRHIRenderer {
@@ -15,7 +16,7 @@ namespace SlateRHIRenderer {
 	};
 
 	struct WindowViewportInfo {
-		RHI::RHIViewportSP ViewportRHI;
+		RHI::RHISwapchainSP SwapchainRHI;
 	};
 
 	class SlateRHIRenderer : public Slate::SlateRenderer {

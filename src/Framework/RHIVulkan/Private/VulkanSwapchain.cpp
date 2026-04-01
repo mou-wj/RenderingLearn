@@ -130,9 +130,18 @@ namespace RHIVulkan {
         VkQueue queueHandle = presentQueue->GetHandle();
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        VkSemaphore waitSemaphore = drawDoneSemaphore->GetHandle();
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &waitSemaphore;
+        VkSemaphore waitSemaphore = VK_NULL_HANDLE;
+        if (drawDoneSemaphore)
+        {
+            waitSemaphore = drawDoneSemaphore->GetHandle();
+            presentInfo.waitSemaphoreCount = 1;
+            presentInfo.pWaitSemaphores = &waitSemaphore;
+        }
+        else
+        {
+            presentInfo.waitSemaphoreCount = 0;
+            presentInfo.pWaitSemaphores = nullptr;
+        }
 
         VkSwapchainKHR swapChains[] = { swapchain_ };
         presentInfo.swapchainCount = 1;

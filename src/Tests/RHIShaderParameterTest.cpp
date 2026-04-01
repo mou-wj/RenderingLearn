@@ -46,7 +46,11 @@ public:
         if (!api || !ComputePipelineState)
             return;
 
-        auto* cmdContext = api->GetDefualtCommandContex();
+        auto* queue = api->GetQueue(RHI::EQueueType::Compute);
+        if (!queue)
+            return;
+
+        auto* cmdContext = queue->AcquireCommandContext();
         if (!cmdContext)
             return;
 
@@ -59,6 +63,7 @@ public:
         for (int iteration = 0; iteration < 4; ++iteration)
         {
             cmdList.SetImmediate(true);
+            cmdList.Begin();
 
             // 设置计算管线状态
             auto* context = cmdList.GetCommandContex();
@@ -217,8 +222,9 @@ public:
             cmdList.ExecuteAll();
 
             // 提交命令
-            auto ptcmdlist = api->FinalizeCommandContex(cmdContext);
-            api->SubmitPlatformCommandLists({ ptcmdlist });
+			RHI::RHICmdBuffer cmdBuffer = cmdList.End();
+			RHI::RHISyncPoint* syncPoint = queue->Submit(cmdBuffer);
+			delete syncPoint;
 			api->RHIReleaseTransition(transition);
             cmdList.Clear();
         }
@@ -359,11 +365,18 @@ private:
             0xFF, 0xFF, 0xFF, 0xFF,
         };
 
-        auto* cmdContext = api->GetDefualtCommandContex();
+        auto* queue = api->GetQueue(RHI::EQueueType::Compute);
+        if (!queue)
+            return;
+        auto* cmdContext = queue->AcquireCommandContext();
         auto& cmdList = cmdContext->GetCommandList();
         cmdList.SetImmediate(true);
+        cmdList.Begin();
         api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHITextureRegion::Create2DRegion(2, 2));
         cmdList.ExecuteAll();
+        RHI::RHICmdBuffer textureUploadCmd = cmdList.End();
+        RHI::RHISyncPoint* textureUploadSync = queue->Submit(textureUploadCmd);
+        delete textureUploadSync;
 
         // 采样器
         RHI::RHISamplerDesc samplerDesc;
@@ -383,8 +396,12 @@ private:
 
         glm::vec4 bufferData = glm::vec4(0.25f, 0.5f, 0.75f, 1.0f);
         cmdList.SetImmediate(true);
+        cmdList.Begin();
         cmdList.UpdateBuffer(TestBuffer.get(), &bufferData, { 0, sizeof(bufferData) });
         cmdList.ExecuteAll();
+        RHI::RHICmdBuffer bufferUploadCmd = cmdList.End();
+        RHI::RHISyncPoint* bufferUploadSync = queue->Submit(bufferUploadCmd);
+        delete bufferUploadSync;
 
         RHI::RHIBufferSRVCreateInfo bufSrvDesc;
         bufSrvDesc.Offset = 0;
@@ -438,11 +455,18 @@ private:
 
         // 初始化常量缓冲数据（第一次运行：不翻转）
         ComputeShaderConstants cbData = { 0, 0, 0, 0 };
-        auto* cmdContext = api->GetDefualtCommandContex();
+        auto* queue = api->GetQueue(RHI::EQueueType::Compute);
+        if (!queue)
+            return;
+        auto* cmdContext = queue->AcquireCommandContext();
         auto& cmdList = cmdContext->GetCommandList();
         cmdList.SetImmediate(true);
+        cmdList.Begin();
         cmdList.UpdateBuffer(ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
         cmdList.ExecuteAll();
+        RHI::RHICmdBuffer cbUploadCmd = cmdList.End();
+        RHI::RHISyncPoint* cbUploadSync = queue->Submit(cbUploadCmd);
+        delete cbUploadSync;
 
         // 创建计算管线状态
         RHI::RHIComputePipelineStateDesc computeDesc;

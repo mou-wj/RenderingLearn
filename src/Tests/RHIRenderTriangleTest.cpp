@@ -48,8 +48,8 @@ public:
         // 4. 创建管线状态
         CreatePipelineState(api);
 
-        // 5. 创建渲染视口
-        CreateViewport(api);
+        // 5. 创建交换链
+        CreateSwapchain(api);
 
         // 6. 创建深度缓冲区
         CreateRenderTarget(api);
@@ -67,8 +67,13 @@ public:
             return;
         }
 
-        // 获取默认命令上下文
-        auto* cmdContext = api->GetDefualtCommandContex();
+        auto* queue = api->GetQueue(RHI::EQueueType::Graphics);
+        if (!queue)
+        {
+            return;
+        }
+
+        auto* cmdContext = queue->AcquireCommandContext();
         if (!cmdContext)
         {
             return;
@@ -96,27 +101,31 @@ public:
             cmdList.SetViewport(0,0,512,512,0,1);
             cmdList.SetScissor(0, 0, 512, 512);
 
-            auto backTexture = GRHIApi->GetViewportBackBuffer(Viewport.get());
+            auto swapchainSlot = Swapchain->AcquireNextSlot();
+            auto* backTexture = swapchainSlot.Texture;
+            if (!backTexture)
+            {
+                continue;
+            }
 
             RHIRenderPassInfo passInfo;
-            passInfo.RenderTargets.Bound(TriangleGraphicsPipelineState->GetDesc().attachmentDesc, backTexture.get(), depthStencilTexture.get());
+            passInfo.RenderTargets.Bound(TriangleGraphicsPipelineState->GetDesc().attachmentDesc, backTexture, depthStencilTexture.get());
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[0] = 1;
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[3] = 1;
 			passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;
             passInfo.RenderArea.Width = FrameWidth;
             passInfo.RenderArea.Height = FrameHeight;
-            cmdList.BeginFrame();
-            cmdList.BeginDrawingViewport(Viewport.get(), nullptr);
+            cmdList.Begin();
             cmdList.BeginRenderPass(passInfo);
             // 绘制三角形 (3个顶点, 1个实例)
             cmdList.Draw(3, 1, 0, 0);
             cmdList.EndRenderPass();
-            cmdList.EndDrawingViewport(Viewport.get(), true);
-            cmdList.EndFrame();
             // 执行所有命令
             cmdList.ExecuteAll();
-            auto ptcmdlist = GRHIApi->FinalizeCommandContex(cmdContext);
-            GRHIApi->SubmitPlatformCommandLists({ ptcmdlist });
+            RHI::RHICmdBuffer cmdBuffer = cmdList.End();
+            RHI::RHISyncPoint* syncPoint = queue->Submit(cmdBuffer);
+            delete syncPoint;
+            GRHIApi->GetPresentExecutor()->Present(Swapchain.get());
             cmdList.Clear();
         }
     }
@@ -133,7 +142,7 @@ public:
         TriangleGraphicsPipelineState.reset();
         VertexDescState.reset();
         depthStencilTexture.reset();
-		Viewport.reset();
+        Swapchain.reset();
 		Window.reset();
         auto* api = RHI::GRHIApi;
         if (!api)
@@ -153,7 +162,7 @@ private:
     RHI::RHIFragmentShaderSP FragmentShader;
     RHI::RHIGraphicsPipelineStateSP TriangleGraphicsPipelineState;
     RHI::RHIVertexDescStateSP VertexDescState;
-    RHI::RHIViewportSP Viewport;
+    RHI::RHISwapchainSP Swapchain;
     Slate::WindowSP Window;
     int WindiwWidth = 512;
     int WindowHeight = 512;
@@ -183,11 +192,20 @@ private:
         VertexBuffer = api->CreateBuffer(bufferDesc);
 
         // 将顶点数据拷贝到缓冲区
-		auto commandContext = api->GetDefualtCommandContex();
+		auto* queue = api->GetQueue(RHI::EQueueType::Graphics);
+		if (!queue)
+		{
+			return;
+		}
+		auto commandContext = queue->AcquireCommandContext();
         auto& commandList = commandContext->GetCommandList();
         commandList.SetImmediate(true);
+        commandContext->Begin();
         commandList.UpdateBuffer(VertexBuffer.get(), vertices, { 0, sizeof(vertices) });
         commandList.ExecuteAll();
+        RHI::RHICmdBuffer cmdBuffer = commandList.End();
+        RHI::RHISyncPoint* syncPoint = queue->Submit(cmdBuffer);
+        delete syncPoint;
 
     }
 
@@ -359,17 +377,17 @@ private:
         TriangleGraphicsPipelineState = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
     }
 
-	void CreateViewport(RHI::RHIApi* api)
+    void CreateSwapchain(RHI::RHIApi* api)
 	{
         // 
         Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIRenderTriangleTest");
         Window->Show();
-		// 创建渲染视口
+        // 创建交换链
 		void* windowHandle = Window->GetNativeHandle(); // 获取窗口句柄的函数
 		uint32_t width = WindiwWidth;
 		uint32_t height = WindowHeight;
 		ERHIFormat format = ERHIFormat::B8G8R8A8_UNorm;
-        Viewport = api->CreateViewport(windowHandle, width, height, format);
+        Swapchain = api->CreateSwapchain(windowHandle, width, height, format);
         auto frameSize = Window->GetFramebufferSize();
         FrameWidth = frameSize.x;
         FrameHeight = frameSize.y;

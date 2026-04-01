@@ -200,12 +200,24 @@ VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkComman
 
 void VulkanCommandBufferManager::SubmitActiveCommandBuffer(uint32_t NumSignalSemaphores, VulkanSemaphore* SignalSemaphores)
 {
-	if (!ActiveCommandBuffer) return;
-	ActiveCommandBuffer->End();
+	VulkanCommandBuffer* commandBuffer = EndActiveCommandBuffer();
+	if (!commandBuffer) return;
 
-	commandContext->GetQueue()->Submit(ActiveCommandBuffer, NumSignalSemaphores, SignalSemaphores);
+	commandContext->GetQueue()->SubmitCommandBuffer(commandBuffer, NumSignalSemaphores, SignalSemaphores);
 	// ⚠️ 不立刻 Reset，等 Fence 完成后由外部回收
-	ActiveCommandBuffer = nullptr;
+}
+
+VulkanCommandBuffer* VulkanCommandBufferManager::EndActiveCommandBuffer()
+{
+    if (!ActiveCommandBuffer)
+    {
+        return nullptr;
+    }
+
+    ActiveCommandBuffer->End();
+    VulkanCommandBuffer* completedCommandBuffer = ActiveCommandBuffer;
+    ActiveCommandBuffer = nullptr;
+    return completedCommandBuffer;
 }
 
 void VulkanCommandBufferManager::Reset()
@@ -234,7 +246,7 @@ void VulkanCommandBufferManager::EndAndSubmitUploadCommandBuffer(VulkanCommandBu
 
     cmd->End();
     
-    commandContext->GetQueue()->Submit(cmd);
+    commandContext->GetQueue()->SubmitCommandBuffer(cmd);
 
     // ⚠️ 不立刻 Reset，等 Fence 完成后由外部回收
     ActiveUploadCommandBuffer = nullptr;
