@@ -75,7 +75,7 @@ namespace Engine{
         desc.Width = Width;
         desc.Height = Height;
         desc.Format = ERHIFormat::R8G8B8A8_UNorm;
-        desc.Usage = ERHITextureCreateFlags::RenderTarget;
+        desc.Usage = ERHITextureCreateFlag::RenderTarget;
         desc.MipLevels = 1;
         desc.ArraySize = 1;
         desc.SampleCount = 1;

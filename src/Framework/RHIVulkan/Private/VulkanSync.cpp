@@ -1,4 +1,5 @@
 #include "VulkanSync.h"
+#include "VulkanFuncWrapper.h"
 #include <stdexcept>
 
 namespace RHIVulkan{
@@ -32,7 +33,7 @@ namespace RHIVulkan{
     VulkanEventManager::~VulkanEventManager() {
         std::lock_guard<std::mutex> lock(mutex_);
         pool_ = {};
-        managedObjects_ = {}; // ËùÓÐ shared_ptr ×Ô¶¯Îö¹¹
+        managedObjects_ = {}; // ï¿½ï¿½ï¿½ï¿½ shared_ptr ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½
     }
 
     std::shared_ptr<VulkanEvent> VulkanEventManager::Acquire() {
@@ -44,7 +45,7 @@ namespace RHIVulkan{
             return evt;
         }
 
-        // ³Ø¿ÕÊ±´´½¨ÐÂ¶ÔÏó£¬²¢¼ÓÈë managedObjects
+        // ï¿½Ø¿ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½Â¶ï¿½ï¿½ó£¬²ï¿½ï¿½ï¿½ï¿½ï¿½ managedObjects
         auto evt = std::make_shared<VulkanEvent>(device_);
         managedObjects_.push_back(evt);
         return evt;
@@ -84,7 +85,7 @@ namespace RHIVulkan{
         std::lock_guard<std::mutex> lock(mutex_);
         pool_ = {};
         for (auto sem : managedObjects_) {
-            delete sem; // ËùÓÐ¶ÔÏóÎö¹¹
+            delete sem; // ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         }
         managedObjects_.clear();
     }
@@ -97,7 +98,7 @@ namespace RHIVulkan{
             return sem;
         }
 
-        // ³Ø¿ÕÊ±´´½¨ÐÂ¶ÔÏó²¢¼ÓÈë¹ÜÀíÁÐ±í
+        // ï¿½Ø¿ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½Â¶ï¿½ï¿½ó²¢¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½
         VulkanSemaphore* sem = new VulkanSemaphore(device_);
         managedObjects_.push_back(sem);
         return sem;
@@ -109,5 +110,282 @@ namespace RHIVulkan{
         pool_.push(sem);
     }
 
+// -------------------------------------------------------------------------------------------------
+// VulkanFence Implementation
+// -------------------------------------------------------------------------------------------------
+
+VulkanFence::VulkanFence(VulkanDevice* device)
+{
+    Device = device;
+    VkDevice vkDevice = Device->GetHandle();
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = 0;
+    if (vkCreateFence(vkDevice, &fenceInfo, nullptr, &Fence) != VK_SUCCESS) {
+        // Handle error
+    }
+}
+
+VulkanFence::~VulkanFence()
+{
+    if (Fence) {
+        vkDestroyFence(Device->GetHandle(), Fence, nullptr);
+        Fence = VK_NULL_HANDLE;
+    }
+}
+
+bool VulkanFence::IsSignaled() const
+{
+    if (!Fence || !Device) return false;
+    VkResult result = vkGetFenceStatus(Device->GetHandle(), Fence);
+    return result == VK_SUCCESS;
+}
+
+void VulkanFence::Reset()
+{
+    if (!Fence || !Device) return;
+    ResetFences(Device->GetHandle(), 1, &Fence);
+}
+
+void VulkanFence::Wait()
+{
+    if (!Fence || !Device) return;
+    WaitForFences(Device->GetHandle(), 1, &Fence, VK_TRUE, UINT64_MAX);
+}
+
+// -------------------------------------------------------------------------------------------------
+// VulkanFenceManager Implementation
+// -------------------------------------------------------------------------------------------------
+
+VulkanFenceManager::VulkanFenceManager(VulkanDevice* deviceIn)
+    : device(deviceIn)
+{
+}
+
+VulkanFenceManager::~VulkanFenceManager()
+{
+    allFences.clear();
+    availableFences.clear();
+    pendingFences.clear();
+}
+
+VulkanFence* VulkanFenceManager::AcquireFence()
+{
+    if (!availableFences.empty())
+    {
+        VulkanFence* fence = availableFences.front();
+        availableFences.pop_front();
+        return fence;
+    }
+
+    auto newFence = std::make_unique<VulkanFence>(device);
+    VulkanFence* ptr = newFence.get();
+    allFences.push_back(std::move(newFence));
+    return ptr;
+}
+
+void VulkanFenceManager::ReleaseFence(VulkanFence* fence)
+{
+    if (fence)
+    {
+        pendingFences.push_back(fence);
+    }
+}
+
+void VulkanFenceManager::GarbageCollect()
+{
+    size_t count = pendingFences.size();
+    for (size_t i = 0; i < count; ++i)
+    {
+        VulkanFence* fence = pendingFences.front();
+        pendingFences.pop_front();
+
+        if (fence->IsSignaled())
+        {
+            availableFences.push_back(fence);
+        }
+        else
+        {
+            pendingFences.push_back(fence);
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// VulkanRHISyncPointManager Implementation
+// -------------------------------------------------------------------------------------------------
+
+VulkanRHISyncPointManager::VulkanRHISyncPointManager(VulkanDevice* device)
+    : Device(device)
+{
+}
+
+VulkanRHISyncPointManager::~VulkanRHISyncPointManager()
+{
+    WaitAndRecycleAll();
+    std::lock_guard<std::mutex> lock(Mutex);
+    PendingSyncPoints.clear();
+    FreeSyncPoints.clear();
+    AllSyncPoints.clear();
+}
+
+RHI::RHISyncPoint* VulkanRHISyncPointManager::Acquire(RHI::EQueueType queueType, VulkanFence* fence)
+{
+    std::lock_guard<std::mutex> lock(Mutex);
+    GarbageCollect_NoLock();
+
+    RHI::RHISyncPoint* syncPoint = nullptr;
+    if (!FreeSyncPoints.empty())
+    {
+        syncPoint = FreeSyncPoints.back();
+        FreeSyncPoints.pop_back();
+    }
+    else
+    {
+        auto newSyncPoint = std::make_unique<VulkanRHISyncPoint>();
+        syncPoint = newSyncPoint.get();
+        AllSyncPoints.push_back(std::move(newSyncPoint));
+    }
+
+    if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
+    {
+        vulkanSyncPoint->Activate(queueType, fence, NextValue++, this);
+    }
+    PendingSyncPoints.push_back(syncPoint);
+    return syncPoint;
+}
+
+void VulkanRHISyncPointManager::GarbageCollect()
+{
+    std::lock_guard<std::mutex> lock(Mutex);
+    GarbageCollect_NoLock();
+}
+
+void VulkanRHISyncPointManager::TryRecycle(RHI::RHISyncPoint* syncPoint)
+{
+    if (!syncPoint)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(Mutex);
+    if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
+    {
+        if (!vulkanSyncPoint->bPending)
+        {
+            return;
+        }
+
+        if (!vulkanSyncPoint->Fence || vulkanSyncPoint->Fence->IsSignaled())
+        {
+            Recycle_NoLock(syncPoint);
+        }
+    }
+}
+
+void VulkanRHISyncPointManager::WaitAndRecycleAll()
+{
+    std::lock_guard<std::mutex> lock(Mutex);
+    for (RHI::RHISyncPoint* syncPoint : PendingSyncPoints)
+    {
+        if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
+        {
+            if (vulkanSyncPoint && vulkanSyncPoint->Fence)
+            {
+                vulkanSyncPoint->Fence->Wait();
+            }
+            if (vulkanSyncPoint)
+            {
+                vulkanSyncPoint->bPending = false;
+                vulkanSyncPoint->Fence = nullptr;
+                vulkanSyncPoint->Owner = this;
+                FreeSyncPoints.push_back(syncPoint);
+            }
+        }
+    }
+    PendingSyncPoints.clear();
+}
+
+void VulkanRHISyncPointManager::GarbageCollect_NoLock()
+{
+    for (auto it = PendingSyncPoints.begin(); it != PendingSyncPoints.end();)
+    {
+        RHI::RHISyncPoint* syncPoint = *it;
+        bool reached = false;
+        if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
+        {
+            reached = !vulkanSyncPoint || !vulkanSyncPoint->Fence || vulkanSyncPoint->Fence->IsSignaled();
+        }
+        
+        if (reached)
+        {
+            if (syncPoint)
+            {
+                if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
+                {
+                    vulkanSyncPoint->bPending = false;
+                    vulkanSyncPoint->Fence = nullptr;
+                    vulkanSyncPoint->Owner = this;
+                }
+                FreeSyncPoints.push_back(syncPoint);
+            }
+            it = PendingSyncPoints.erase(it);
+            continue;
+        }
+        ++it;
+    }
+}
+
+void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncPoint* syncPoint)
+{
+    auto it = std::find(PendingSyncPoints.begin(), PendingSyncPoints.end(), syncPoint);
+    if (it != PendingSyncPoints.end())
+    {
+        PendingSyncPoints.erase(it);
+    }
+
+    if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
+    {
+        vulkanSyncPoint->bPending = false;
+        vulkanSyncPoint->Fence = nullptr;
+        vulkanSyncPoint->Owner = this;
+    }
+    FreeSyncPoints.push_back(syncPoint);
+}
+
+// -------------------------------------------------------------------------------------------------
+// VulkanRHISyncPoint Implementation
+// -------------------------------------------------------------------------------------------------
+
+void VulkanRHISyncPoint::Activate(RHI::EQueueType queueType, VulkanFence* inFence, uint64_t inValue, VulkanRHISyncPointManager* inOwner)
+{
+    Owner = inOwner;
+    Fence = inFence;
+    bPending = true;
+    Type = queueType;
+    Value = inValue;
+}
+
+bool VulkanRHISyncPoint::IsReached() const
+{
+    const bool reached = Fence ? Fence->IsSignaled() : true;
+    if (reached && Owner)
+    {
+        Owner->TryRecycle(const_cast<VulkanRHISyncPoint*>(this));
+    }
+    return reached;
+}
+
+void VulkanRHISyncPoint::Wait() const
+{
+    if (Fence)
+    {
+        Fence->Wait();
+    }
+    if (Owner)
+    {
+        Owner->TryRecycle(const_cast<VulkanRHISyncPoint*>(this));
+    }
+}
 
 }

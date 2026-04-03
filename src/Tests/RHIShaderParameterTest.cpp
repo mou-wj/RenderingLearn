@@ -97,8 +97,6 @@ public:
 
             // 1. 准备 Transition 描述信息
             RHI::RHITransitionCreateInfo transInfo;
-            transInfo.SrcPipelines = RHI::ERHIPipeline::Graphics;
-            transInfo.DstPipelines = RHI::ERHIPipeline::Graphics;
 
             transInfo.TransitionInfos.emplace_back(
                 TestBuffer.get(),
@@ -223,8 +221,7 @@ public:
 
             // 提交命令
 			RHI::RHICmdBuffer cmdBuffer = cmdList.End();
-			RHI::RHISyncPoint* syncPoint = queue->Submit(cmdBuffer);
-			delete syncPoint;
+            queue->Submit(cmdBuffer);
 			api->RHIReleaseTransition(transition);
             cmdList.Clear();
         }
@@ -355,7 +352,7 @@ private:
         texDesc.Width = 2;
         texDesc.Height = 2;
         texDesc.Format = RHI::ERHIFormat::R8G8B8A8_UNorm;
-        texDesc.Usage = RHI::ERHITextureCreateFlags::ShaderResource | RHI::ERHITextureCreateFlags::CopyDest;
+        texDesc.Usage = RHI::ERHITextureCreateFlag::ShaderResource | RHI::ERHITextureCreateFlag::CopyDest;
         TestTexture = api->CreateTexture(texDesc);
 
         uint8_t texData[16] = {
@@ -375,8 +372,7 @@ private:
         api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHITextureRegion::Create2DRegion(2, 2));
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer textureUploadCmd = cmdList.End();
-        RHI::RHISyncPoint* textureUploadSync = queue->Submit(textureUploadCmd);
-        delete textureUploadSync;
+        queue->Submit(textureUploadCmd);
 
         // 采样器
         RHI::RHISamplerDesc samplerDesc;
@@ -391,7 +387,7 @@ private:
         // 创建一个简单的 Buffer，用于测试 SRV/UAV 绑定
         RHI::RHIBufferDesc bufDesc;
         bufDesc.Size = sizeof(glm::vec4);
-        bufDesc.Usage = RHI::ERHIBufferUsageFlags::ShaderResource | RHI::ERHIBufferUsageFlags::UnorderedAccess | RHI::ERHIBufferUsageFlags::TransferDst;
+        bufDesc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::UnorderedAccess | RHI::ERHIBufferUsageFlag::TransferDst;
         TestBuffer = api->CreateBuffer(bufDesc);
 
         glm::vec4 bufferData = glm::vec4(0.25f, 0.5f, 0.75f, 1.0f);
@@ -400,8 +396,7 @@ private:
         cmdList.UpdateBuffer(TestBuffer.get(), &bufferData, { 0, sizeof(bufferData) });
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer bufferUploadCmd = cmdList.End();
-        RHI::RHISyncPoint* bufferUploadSync = queue->Submit(bufferUploadCmd);
-        delete bufferUploadSync;
+        queue->Submit(bufferUploadCmd);
 
         RHI::RHIBufferSRVCreateInfo bufSrvDesc;
         bufSrvDesc.Offset = 0;
@@ -425,7 +420,7 @@ private:
         outputTexDesc.Width = 2;
         outputTexDesc.Height = 2;
         outputTexDesc.Format = RHI::ERHIFormat::R8G8B8A8_UNorm;
-        outputTexDesc.Usage = RHI::ERHITextureCreateFlags::UAV;
+        outputTexDesc.Usage = RHI::ERHITextureCreateFlag::UAV;
         OutputTexture = api->CreateTexture(outputTexDesc);
 
         // 创建输出纹理的 UAV
@@ -436,7 +431,7 @@ private:
         // 创建输出缓冲区（UAV）
         RHI::RHIBufferDesc outputBufDesc;
         outputBufDesc.Size = sizeof(glm::vec4);
-        outputBufDesc.Usage = RHI::ERHIBufferUsageFlags::UnorderedAccess;
+        outputBufDesc.Usage = RHI::ERHIBufferUsageFlag::UnorderedAccess;
         OutputBuffer = api->CreateBuffer(outputBufDesc);    
 
         // 创建输出缓冲区的 UAV
@@ -450,7 +445,7 @@ private:
         // 创建常量缓冲
         RHI::RHIBufferDesc cbDesc;
         cbDesc.Size = sizeof(ComputeShaderConstants);
-        cbDesc.Usage = RHI::ERHIBufferUsageFlags::Constant | RHI::ERHIBufferUsageFlags::TransferDst;
+        cbDesc.Usage = RHI::ERHIBufferUsageFlag::Constant | RHI::ERHIBufferUsageFlag::TransferDst;
         ConstantBuffer = api->CreateBuffer(cbDesc);
 
         // 初始化常量缓冲数据（第一次运行：不翻转）
@@ -465,8 +460,7 @@ private:
         cmdList.UpdateBuffer(ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer cbUploadCmd = cmdList.End();
-        RHI::RHISyncPoint* cbUploadSync = queue->Submit(cbUploadCmd);
-        delete cbUploadSync;
+        queue->Submit(cbUploadCmd);
 
         // 创建计算管线状态
         RHI::RHIComputePipelineStateDesc computeDesc;

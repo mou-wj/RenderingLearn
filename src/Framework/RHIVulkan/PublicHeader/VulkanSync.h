@@ -1,12 +1,16 @@
 #pragma once
-#include "VUlkanDevice.h"
-#include "VulkanResource.h"
+#include "VulkanDevice.h"
+#include "RHICommandContex.h"
 #include <queue>
 #include <mutex>
+#include <deque>
+#include <vector>
+#include <memory>
 
 namespace RHIVulkan{
 
 class VulkanDevice;
+class VulkanCommandBuffer;
 class VulkanEvent : public std::enable_shared_from_this<VulkanEvent> {
 public:
     VulkanEvent(VulkanDevice* device);
@@ -34,10 +38,10 @@ public:
 private:
     VulkanDevice* device_;
 
-    // ³Ø£º¿ÕÏÐ¿É¸´ÓÃ¶ÔÏó
+    // ï¿½Ø£ï¿½ï¿½ï¿½ï¿½Ð¿É¸ï¿½ï¿½Ã¶ï¿½ï¿½ï¿½
     std::queue<std::shared_ptr<VulkanEvent>> pool_;
 
-    // ¹ÜÀíËùÓÐ´´½¨µÄ¶ÔÏó£¨ÓÃÓÚÎö¹¹ºÍµ÷ÊÔ£©
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Íµï¿½ï¿½Ô£ï¿½
     std::vector<std::shared_ptr<VulkanEvent>> managedObjects_;
 
     std::mutex mutex_;
@@ -68,13 +72,90 @@ public:
 private:
     VulkanDevice* device_;
 
-    // ³Ø£º¿ÕÏÐ¶ÔÏó
+    // ï¿½Ø£ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½ï¿½
     std::queue<VulkanSemaphore*> pool_;
 
-    // ¹ÜÀíËùÓÐ´´½¨¶ÔÏó
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     std::vector<VulkanSemaphore*> managedObjects_;
 
     std::mutex mutex_;
+};
+
+// Vulkan Fence
+class VulkanFence {
+public:
+    VulkanFence(VulkanDevice* device);
+    ~VulkanFence();
+    VkFence GetHandle() const { return Fence; }
+
+    bool IsSignaled() const;
+    void Reset();
+    void Wait();
+private:
+    VkFence Fence = VK_NULL_HANDLE;
+    VulkanDevice* Device = nullptr;
+};
+
+class VulkanFenceManager
+{
+public:
+    VulkanFenceManager(VulkanDevice* device);
+    ~VulkanFenceManager();
+
+    VulkanFence* AcquireFence();
+    void ReleaseFence(VulkanFence* fence);
+    void GarbageCollect();
+
+private:
+    VulkanDevice* device = nullptr;
+    std::vector<std::unique_ptr<VulkanFence>> allFences;
+    std::deque<VulkanFence*> availableFences;
+    std::deque<VulkanFence*> pendingFences;
+};
+
+// Vulkan RHI-level Sync Point Manager
+class RHIVULKAN_API VulkanRHISyncPointManager
+{
+public:
+    explicit VulkanRHISyncPointManager(VulkanDevice* device);
+    ~VulkanRHISyncPointManager();
+
+    // Acquire a sync point for the given fence (fence is managed by device's FenceManager)
+    RHI::RHISyncPoint* Acquire(RHI::EQueueType queueType, VulkanFence* fence);
+    void GarbageCollect();
+    void TryRecycle(RHI::RHISyncPoint* syncPoint);
+    void WaitAndRecycleAll();
+
+private:
+    friend class VulkanRHISyncPoint;
+    
+    void GarbageCollect_NoLock();
+    void Recycle_NoLock(RHI::RHISyncPoint* syncPoint);
+
+    VulkanDevice* Device = nullptr;
+    uint64_t NextValue = 1;
+    std::vector<std::unique_ptr<RHI::RHISyncPoint>> AllSyncPoints;
+    std::vector<RHI::RHISyncPoint*> FreeSyncPoints;
+    std::vector<RHI::RHISyncPoint*> PendingSyncPoints;
+    std::mutex Mutex;
+};
+
+// Vulkan RHI-level Sync Point (backed by VulkanFence from device)
+class RHIVULKAN_API VulkanRHISyncPoint final : public RHI::RHISyncPoint
+{
+public:
+    VulkanRHISyncPoint() = default;
+
+    bool IsReached() const override;
+    void Wait() const override;
+
+private:
+    friend class VulkanRHISyncPointManager;
+    void Activate(RHI::EQueueType queueType, VulkanFence* inFence, uint64_t inValue, VulkanRHISyncPointManager* inOwner);
+
+    VulkanRHISyncPointManager* Owner = nullptr;
+    VulkanFence* Fence = nullptr;
+    bool bPending = false;
 };
 
 }

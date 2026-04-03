@@ -172,21 +172,13 @@ struct RHI_API RHITransitionInfo : public RHISubresourceRange
 
 struct RHI_API RHITransitionCreateInfo
 {
-	RHITransitionCreateInfo() = default;
-
 	RHITransitionCreateInfo(
-		ERHIPipeline InSrcPipelines,
-		ERHIPipeline InDstPipelines,
 		ERHITransitionCreateFlags InFlags = ERHITransitionCreateFlags::None,
 		std::vector<RHITransitionInfo> InTransitionInfos = {})
-		: SrcPipelines(InSrcPipelines)
-		, DstPipelines(InDstPipelines)
-		, Flags(InFlags)
+		: Flags(InFlags)
 		, TransitionInfos(std::move(InTransitionInfos))
 	{}
 
-	ERHIPipeline SrcPipelines = ERHIPipeline::None;
-	ERHIPipeline DstPipelines = ERHIPipeline::None;
 	ERHITransitionCreateFlags Flags = ERHITransitionCreateFlags::None;
 	std::vector<RHITransitionInfo> TransitionInfos;
 };
@@ -204,49 +196,47 @@ struct RHI_API RHITrackedAccessInfo
 	ERHIResourceAccess Access = ERHIResourceAccess::Unknown;
 };
 
-// È«¾Ö±äÁ¿£¬ÓÉ RHI ÔÚ³õÊ¼»¯Ê±Ìî³ä
+// È«ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ RHI ï¿½Ú³ï¿½Ê¼ï¿½ï¿½Ê±ï¿½ï¿½ï¿½
 extern RHI_API uint32_t G_RHITransition_TotalSize;
 extern RHI_API uint32_t G_RHITransition_PrivateDataOffset;
 
 struct RHI_API RHITransition
 {
 public:
-	// ½ûÖ¹¿½±´ºÍÒÆ¶¯
+	// ï¿½ï¿½Ö¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¶ï¿½
 	RHITransition(const RHITransition&) = delete;
 	RHITransition& operator=(const RHITransition&) = delete;
 
-	// Ö»ÓĞÌØ¶¨µÄ Factory (RHI/RDG) ÄÜµ÷ÓÃ¹¹Ôì
-	RHITransition(uint32_t SrcPipelines = static_cast<uint32_t>(ERHIPipeline::Graphics), uint32_t DstPipelines = static_cast<uint32_t>(ERHIPipeline::Graphics))
-		: PendingBegin(SrcPipelines)
-		, PendingEnd(DstPipelines)
+	// Ö»ï¿½ï¿½ï¿½Ø¶ï¿½ï¿½ï¿½ Factory (RHI/RDG) ï¿½Üµï¿½ï¿½Ã¹ï¿½ï¿½ï¿½
+	RHITransition()
+		: bPendingBegin(true)
+		, bPendingEnd(true)
 	{
 	}
 
-	// »ñÈ¡Ë½ÓĞÊı¾İµÄÎ¨Ò»°²È«Èë¿Ú
+	// ï¿½ï¿½È¡Ë½ï¿½ï¿½ï¿½ï¿½ï¿½İµï¿½Î¨Ò»ï¿½ï¿½È«ï¿½ï¿½ï¿½
 	template <typename T>
 	inline T* GetPrivateData() const
 	{
-		// Ö±½Ó¸ù¾İ³õÊ¼»¯Ê±¼ÆËãºÃµÄÆ«ÒÆÁ¿Ìø×ª£¬ĞÔÄÜ×î¸ß
+		// Ö±ï¿½Ó¸ï¿½ï¿½İ³ï¿½Ê¼ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½Ãµï¿½Æ«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(this) + G_RHITransition_PrivateDataOffset);
 	}
 
-	// ·µ»Ø true ±íÊ¾µ±Ç°Ïß³ÌÊÇ¸Ã½×¶Î×îºóÒ»¸öµ½´ïµÄ£¬¸ºÔğ´¥·¢ÎïÀí Barrier
-	inline bool MarkBegin(uint32_t PipelineBit) const
+	// ï¿½ï¿½ï¿½ï¿½ true ï¿½ï¿½Ê¾ï¿½ï¿½Ç°ï¿½ß³ï¿½ï¿½Ç¸Ã½×¶ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ğ´¥·ï¿½ï¿½ï¿½ï¿½ï¿½ Barrier
+	inline bool MarkBegin() const
 	{
-		uint32_t Previous = PendingBegin.fetch_and(~PipelineBit, std::memory_order_acq_rel);
-		return (Previous == PipelineBit);
+		return bPendingBegin.exchange(false, std::memory_order_acq_rel);
 	}
 
-	inline bool MarkEnd(uint32_t PipelineBit) const
+	inline bool MarkEnd() const
 	{
-		uint32_t Previous = PendingEnd.fetch_and(~PipelineBit, std::memory_order_acq_rel);
-		return (Previous == PipelineBit);
+		return bPendingEnd.exchange(false, std::memory_order_acq_rel);
 	}
 
 private:
-	// Ê¹ÓÃ 32 Î»ÑÚÂëÒÔÖ§³Ö¸´ÔÓµÄÒì²½ Pipeline ×éºÏ
-	mutable std::atomic<uint32_t> PendingBegin;
-	mutable std::atomic<uint32_t> PendingEnd;
+	// å•æ¬¡ Begin/End è§¦å‘æ ‡è®°
+	mutable std::atomic<bool> bPendingBegin;
+	mutable std::atomic<bool> bPendingEnd;
 };
 
 } // namespace RHI

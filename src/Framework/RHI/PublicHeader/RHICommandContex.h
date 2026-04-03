@@ -93,12 +93,6 @@ namespace RHI
     using RHIComputeContextSP = std::shared_ptr<RHIComputeContext>;
     using RHICommandContextSP = std::shared_ptr<RHICommandContext>;
 
-enum class EQueueType{
-    Graphics,
-    Compute,
-    Transfer
-};
-
 class RHISyncPoint {
 public:
     virtual ~RHISyncPoint() = default;
@@ -136,7 +130,7 @@ class RHI_API RHIPresentExecutor
 {
 public:
     virtual ~RHIPresentExecutor() = default;
-    virtual void Present(RHISwapchain* Swapchain) = 0;
+    virtual void Present(RHISwapchain* Swapchain, RHISyncPoint* WaitSyncPoint = nullptr) = 0;
 };
 
 class RHIQueue {

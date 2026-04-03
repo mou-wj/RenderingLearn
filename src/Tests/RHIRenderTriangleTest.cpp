@@ -123,9 +123,8 @@ public:
             // 执行所有命令
             cmdList.ExecuteAll();
             RHI::RHICmdBuffer cmdBuffer = cmdList.End();
-            RHI::RHISyncPoint* syncPoint = queue->Submit(cmdBuffer);
-            delete syncPoint;
-            GRHIApi->GetPresentExecutor()->Present(Swapchain.get());
+            RHI::RHISyncPoint* presentSyncPoint = queue->Submit(cmdBuffer);
+            GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentSyncPoint);
             cmdList.Clear();
         }
     }
@@ -186,7 +185,7 @@ private:
         // 创建顶点缓冲区描述
         RHI::RHIBufferDesc bufferDesc;
         bufferDesc.Size = sizeof(vertices);
-        bufferDesc.Usage = RHI::ERHIBufferUsageFlags::Vertex | RHI::ERHIBufferUsageFlags::TransferDst;
+        bufferDesc.Usage = RHI::ERHIBufferUsageFlag::Vertex | RHI::ERHIBufferUsageFlag::TransferDst;
 
         // 创建缓冲区
         VertexBuffer = api->CreateBuffer(bufferDesc);
@@ -204,8 +203,7 @@ private:
         commandList.UpdateBuffer(VertexBuffer.get(), vertices, { 0, sizeof(vertices) });
         commandList.ExecuteAll();
         RHI::RHICmdBuffer cmdBuffer = commandList.End();
-        RHI::RHISyncPoint* syncPoint = queue->Submit(cmdBuffer);
-        delete syncPoint;
+        queue->Submit(cmdBuffer);
 
     }
 
@@ -400,7 +398,7 @@ private:
         depthTargetDesc.Width = FrameWidth;
         depthTargetDesc.Height = FrameHeight;
         depthTargetDesc.Format = RHI::ERHIFormat::D32_Float;
-        depthTargetDesc.Usage = RHI::ERHITextureCreateFlags::DepthStencil;
+        depthTargetDesc.Usage = RHI::ERHITextureCreateFlag::DepthStencil;
         depthStencilTexture = api->CreateTexture(depthTargetDesc);
 
     }

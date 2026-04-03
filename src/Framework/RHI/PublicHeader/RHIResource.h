@@ -458,6 +458,7 @@ struct RHIGraphicAttachmentDesc {
 // Graphics Pipeline
 struct RHI_API RHIGraphicsPipelineStateDesc
 {
+    EQueueType InitialQueueType = EQueueType::Graphics;
     RHIGraphicShaderStageDesc shaderStages;
     // 可扩展其它管线相关状态引用，如顶点描述、光栅化、混合、深度模板等
     RHIVertexDescState* vertexDescState = nullptr; // 顶点描述状态
@@ -485,6 +486,7 @@ protected:
 // Compute Pipeline
 struct RHI_API RHIComputePipelineStateDesc
 {
+    EQueueType InitialQueueType = EQueueType::Compute;
     RHIComputeShader* computeShader;// 指向Compute Shader
     // 可扩展Compute管线特有参数
 };
@@ -503,6 +505,7 @@ protected:
 // RayTracing Pipeline
 struct RHI_API RHIRayTracingPipelineStateDesc
 {
+    EQueueType InitialQueueType = EQueueType::Graphics;
     // 可扩展RayTracing管线特有参数
 };
 

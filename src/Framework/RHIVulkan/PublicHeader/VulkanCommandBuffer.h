@@ -98,10 +98,6 @@ public:
     // 重置所有池
     void Reset();
 
-    // -------- Upload 专用接口 --------
-    VulkanCommandBuffer* BeginUploadCommandBuffer();
-    void EndAndSubmitUploadCommandBuffer(VulkanCommandBuffer* cmd);
-
     void GarbageCollect();
 
 private:
@@ -109,7 +105,6 @@ private:
     VulkanCommandBuffer* Allocate(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
     VulkanCommandBuffer* ActiveCommandBuffer = nullptr;
-    VulkanCommandBuffer* ActiveUploadCommandBuffer = nullptr;
     VulkanDevice* device = nullptr;
     VulkanCommandContext* commandContext = nullptr;
     std::unordered_map<uint32_t, std::unique_ptr<VulkanCommandBufferPool>> Pools;

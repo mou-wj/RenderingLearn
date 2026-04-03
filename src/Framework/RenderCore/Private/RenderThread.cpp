@@ -86,8 +86,7 @@ void RenderThread::ThreadFunc() {
             cmd.Execute(ImmediateCommandContex->GetCommandList());
             ImmediateCommandContex->GetCommandList().ExecuteAll();
             RHI::RHICmdBuffer cmdBuffer = ImmediateCommandContex->End();
-            RHI::RHISyncPoint* syncPoint = ImmediateQueue->Submit(cmdBuffer);
-            delete syncPoint;
+            ImmediateQueue->Submit(cmdBuffer);
             ImmediateCommandContex->GetCommandList().Clear();
         }
         CmdFinishCV.notify_one();

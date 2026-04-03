@@ -101,7 +101,7 @@ namespace RHIVulkan {
 		}
 
 		// --- д���֧ ---
-		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::RTV))
+		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::RenderTargetView))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			OutAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -335,7 +335,9 @@ namespace RHIVulkan {
 		VkImage image,
 		VkImageLayout oldLayout,
 		VkImageLayout newLayout,
-		const VkImageSubresourceRange& range)
+		const VkImageSubresourceRange& range,
+		uint32_t srcQueueFamilyIndex,
+		uint32_t dstQueueFamilyIndex)
 	{
 		VkAccessFlags srcAccess, dstAccess;
 		VkPipelineStageFlags srcStage, dstStage;
@@ -352,6 +354,8 @@ namespace RHIVulkan {
 			b.subresourceRange = range;
 			b.srcAccessMask = srcAccess;
 			b.dstAccessMask = dstAccess;
+			b.srcQueueFamilyIndex = srcQueueFamilyIndex;
+			b.dstQueueFamilyIndex = dstQueueFamilyIndex;
 			Push(b);
 		}
 	}
@@ -360,7 +364,9 @@ namespace RHIVulkan {
 		VkImage image,
 		const VulkanImageLayout& oldLayout,
 		VkImageLayout newLayout,
-		const VkImageSubresourceRange& range)
+		const VkImageSubresourceRange& range,
+		uint32_t srcQueueFamilyIndex,
+		uint32_t dstQueueFamilyIndex)
 	{
 		// 如果所有 subresource 都有相同的布局
 		if (oldLayout.IsUniform())
@@ -382,6 +388,8 @@ namespace RHIVulkan {
 				b.subresourceRange = range;
 				b.srcAccessMask = srcAccess;
 				b.dstAccessMask = dstAccess;
+				b.srcQueueFamilyIndex = srcQueueFamilyIndex;
+				b.dstQueueFamilyIndex = dstQueueFamilyIndex;
 				Push(b);
 			}
 		}
@@ -449,12 +457,20 @@ namespace RHIVulkan {
 				b.subresourceRange = subRange;
 				b.srcAccessMask = srcAccess;
 				b.dstAccessMask = dstAccess;
+				b.srcQueueFamilyIndex = srcQueueFamilyIndex;
+				b.dstQueueFamilyIndex = dstQueueFamilyIndex;
 				Push(b);
 			}
 		}
 	}
 
-	void VulkanPipelineBarrier::TransitionAccess(VkImage image, ERHIResourceAccess oldAccess, ERHIResourceAccess newAccess, const VkImageSubresourceRange& range)
+	void VulkanPipelineBarrier::TransitionAccess(
+		VkImage image,
+		ERHIResourceAccess oldAccess,
+		ERHIResourceAccess newAccess,
+		const VkImageSubresourceRange& range,
+		uint32_t srcQueueFamilyIndex,
+		uint32_t dstQueueFamilyIndex)
 	{
 		if (oldAccess != newAccess)
 		{
@@ -472,6 +488,8 @@ namespace RHIVulkan {
 			b.subresourceRange = range;
 			b.srcAccessMask = srcAccess;
 			b.dstAccessMask = dstAccess;
+			b.srcQueueFamilyIndex = srcQueueFamilyIndex;
+			b.dstQueueFamilyIndex = dstQueueFamilyIndex;
 			Push(b);
 		}
 	}
@@ -535,7 +553,7 @@ namespace RHIVulkan {
 		}
 
 		// 3. 渲染附件 (RTV / DSV)
-		if (EnumHasAnyFlags(access, ERHIResourceAccess::RTV))
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::RenderTargetView))
 		{
 			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		}

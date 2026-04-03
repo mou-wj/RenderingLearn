@@ -2,13 +2,8 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
-// 一个简易版的 UE 风格宏
-#define ENUM_CLASS_FLAGS(Enum) \
-    inline Enum operator|(Enum a, Enum b) { return static_cast<Enum>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b)); } \
-    inline Enum& operator|=(Enum& a, Enum b) { a = a | b; return a; } \
-    inline Enum operator&(Enum a, Enum b) { return static_cast<Enum>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b)); } \
-    inline bool EnumHasAnyFlags(Enum Flags, Enum Contains) { return (static_cast<uint32_t>(Flags) & static_cast<uint32_t>(Contains)) != 0; }
-
+#include <type_traits>
+#include "Flags.h"
 
 
 namespace RHI
@@ -94,7 +89,7 @@ enum class ERHIResourceAccess
     // --- 读写语义 (Read-Write) ---
     UAVGraphics = 1 << 11, // 图形管线随机读写 (Storage Image/Buffer)
     UAVCompute = 1 << 12, // 计算管线随机读写
-    RTV = 1 << 13, // 颜色附件写入
+    RenderTargetView = 1 << 13, // 颜色附件写入
     CopyDest = 1 << 14, // 拷贝操作的目的 (Transfer Dst)
     ResolveDst = 1 << 15, // 多重采样 Resolve 的目的
     DSVWrite = 1 << 16, // 深度/模板写入
@@ -114,13 +109,21 @@ enum class ERHIResourceAccess
     ReadableMask = ReadOnlyExclusiveMask | DSVRead | UAVMask,
 
     // 可写状态掩码
-    WritableMask = RTV | UAVMask | DSVWrite | CopyDest | ResolveDst | BVHWrite
+    WritableMask = RenderTargetView | UAVMask | DSVWrite | CopyDest | ResolveDst | BVHWrite
 };
 // 使用宏
-ENUM_CLASS_FLAGS(ERHIResourceAccess);
+ENUM_CLASS_FLAGS(ERHIResourceAccess, ERHIResourceAccessFlags);
 
 enum class ERHIFilter { Nearest, Linear };
 enum class ERHIAddressMode { Repeat, ClampToEdge, MirrorClampToEdge, MirrorRepeat };
+
+// Resource's original owning queue type.
+enum class EQueueType
+{
+    Graphics,
+    Compute,
+    Transfer
+};
 
 // 资源类型
 enum class ERHIResourceType
@@ -224,7 +227,7 @@ enum class ERHIShaderFrequency
     };
 
     // 纹理用途标志（可组合使用）
-    enum class ERHITextureCreateFlags : uint32_t
+    enum class ERHITextureCreateFlag : uint32_t
     {
         None = 0,
         ShaderResource = 1ull << 0,  // 可作为采样贴图 (SRV)
@@ -243,7 +246,8 @@ enum class ERHIShaderFrequency
         CopyDest = 1ull << 9,  // 可作为拷贝目的
     };
     // 使用宏
-    ENUM_CLASS_FLAGS(ERHITextureCreateFlags);
+    
+    ENUM_CLASS_FLAGS(ERHITextureCreateFlag, ERHITextureCreateFlags);
 
     // 纹理描述结构体
     struct RHI_API RHITextureDesc
@@ -257,10 +261,11 @@ enum class ERHIShaderFrequency
         ERHITextureType Type = ERHITextureType::Texture2D;   // 纹理类型
         uint32_t SampleCount = 1;            // 多重采样数量
         uint32_t SampleQuality = 0;          // 多重采样质量
-        ERHITextureCreateFlags Usage = ERHITextureCreateFlags::None; // 纹理用途
+        ERHITextureCreateFlags Usage = ERHITextureCreateFlag::None; // 纹理用途
         bool bGenerateMips = false;          // 是否生成Mip贴图
         bool bCPUAccessible = false;         // CPU是否可访问
         const void* InitialData = nullptr;   // 初始数据
+        EQueueType InitialQueueType = EQueueType::Graphics; // 初始所属队列
         const char* DebugName = nullptr;     // 调试名称
 
     };
@@ -273,7 +278,7 @@ enum class ERHIShaderFrequency
         uint32_t MipLevelCount = 1;          // Mip级别数量
         uint32_t ArraySlice = 0;             // 起始数组切片
         uint32_t ArraySliceCount = 1;        // 数组切片数量
-        ERHITextureCreateFlags Flags = ERHITextureCreateFlags::ShaderResource; // 视图用途
+        ERHITextureCreateFlags Flags = ERHITextureCreateFlag::ShaderResource; // 视图用途
     };
 
 
@@ -281,7 +286,7 @@ enum class ERHIShaderFrequency
     //缓冲区相关描述
 
     // 缓冲区用途标志（可组合使用）
-    enum class ERHIBufferUsageFlags
+    enum class ERHIBufferUsageFlag
     {
         None = 0,
         // ---------- Buffer 类型 ----------
@@ -300,15 +305,16 @@ enum class ERHIShaderFrequency
         TransferDst = 1 << 19, // 传输目标
     };
     // 使用宏
-    ENUM_CLASS_FLAGS(ERHIBufferUsageFlags);
+    ENUM_CLASS_FLAGS(ERHIBufferUsageFlag, ERHIBufferUsageFlags);
 
     // 缓冲区描述结构体
     struct RHI_API RHIBufferDesc
     {
         uint64_t Size = 0;                   // 缓冲区大小（字节）
         uint32_t Stride = 0;                 // 结构化缓冲区的元素大小
-        ERHIBufferUsageFlags Usage = ERHIBufferUsageFlags::None; // 缓冲区用途
+        ERHIBufferUsageFlags Usage = ERHIBufferUsageFlag::None; // 缓冲区用途
         bool bCPUAccessible = false;         // CPU是否可访问
+        EQueueType InitialQueueType = EQueueType::Graphics; // 初始所属队列
         const char* DebugName = nullptr;     // 调试名称
     };
 
@@ -317,7 +323,7 @@ enum class ERHIShaderFrequency
     {
         uint64_t Offset = 0;                 // 视图起始偏移
         uint64_t Size = 0;                   // 视图大小
-        ERHIBufferUsageFlags Usage = ERHIBufferUsageFlags::None; // 视图用途
+        ERHIBufferUsageFlags Usage = ERHIBufferUsageFlag::None; // 视图用途
     };
 
 
@@ -413,7 +419,7 @@ enum class ERHIShaderFrequency
         
     };
 
-    // For transitions
+    // Pipeline stage bitmask (kept for pipeline/stage semantics, not queue ownership).
     enum class ERHIPipeline : uint8_t
     {
         None = 0,
@@ -421,7 +427,8 @@ enum class ERHIShaderFrequency
         AsyncCompute = 1 << 1,
         Num = 2
     };
-    ENUM_CLASS_FLAGS(ERHIPipeline)
+    using ERHIPipelineFlags = TFlags<ERHIPipeline>;
+    ENUM_CLASS_FLAGS(ERHIPipeline, ERHIPipelineFlags)
 
     enum class EResourceTransitionFlags : uint8_t
     {
@@ -429,14 +436,16 @@ enum class ERHIShaderFrequency
         MaintainCompression = 1 << 0,
         Discard = 1 << 1,
     };
-    ENUM_CLASS_FLAGS(EResourceTransitionFlags)
+    using EResourceTransitionFlagsFlags = TFlags<EResourceTransitionFlags>;
+    ENUM_CLASS_FLAGS(EResourceTransitionFlags, EResourceTransitionFlagsFlags)
 
     enum class ERHITransitionCreateFlags : uint8_t
     {
         None = 0,
         NoSplit = 1 << 0,
     };
-    ENUM_CLASS_FLAGS(ERHITransitionCreateFlags)
+    using ERHITransitionCreateFlagsFlags = TFlags<ERHITransitionCreateFlags>;
+    ENUM_CLASS_FLAGS(ERHITransitionCreateFlags, ERHITransitionCreateFlagsFlags)
 
     // 类似 UE 的 EPrimitiveType，用于描述顶点绘制拓扑
     enum class EPrimitiveTopology : uint8_t

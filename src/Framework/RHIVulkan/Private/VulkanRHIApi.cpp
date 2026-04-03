@@ -88,7 +88,15 @@ bool VulkanRHIApi::Init()
 	GraphicsRHIQueue->InitContextPool(EQueueType::Graphics, 2);
 	VulkanQueue* computeQ = Device->GetComputeQueue() ? Device->GetComputeQueue() : Device->GetGraphicsQueue();
 	ComputeRHIQueue = computeQ;
-	ComputeRHIQueue->InitContextPool(EQueueType::Compute, 1);
+	if (ComputeRHIQueue != GraphicsRHIQueue)
+	{
+		ComputeRHIQueue->InitContextPool(EQueueType::Compute, 1);
+	}
+	VulkanQueue* transferQ = Device->GetTransferQueue() ? Device->GetTransferQueue() : Device->GetGraphicsQueue();
+	if (transferQ != GraphicsRHIQueue && transferQ != ComputeRHIQueue)
+	{
+		transferQ->InitContextPool(EQueueType::Transfer, 1);
+	}
 	PresentExecutor = new VulkanPresentExecutor(GraphicsRHIQueue);
 
 	// 1. 确定头大小
@@ -400,6 +408,20 @@ RHIQueue* VulkanRHIApi::GetQueue(EQueueType Type)
 		return Device ? Device->GetGraphicsQueue() : nullptr;
 	case EQueueType::Compute:
 		return Device ? (Device->GetComputeQueue() ? Device->GetComputeQueue() : Device->GetGraphicsQueue()) : nullptr;
+	case EQueueType::Transfer:
+		if (!Device)
+		{
+			return nullptr;
+		}
+		if (Device->GetTransferQueue())
+		{
+			return Device->GetTransferQueue();
+		}
+		if (Device->GetComputeQueue())
+		{
+			return Device->GetComputeQueue();
+		}
+		return Device->GetGraphicsQueue();
 	default:
 		return nullptr;
 	}
@@ -424,6 +446,79 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
     // placement new 确保私有数据对象被构造
     new (pipelineBarrier) VulkanPipelineBarrier();
 
+	auto ResolveQueueFamilyIndex = [this](EQueueType queueType) -> uint32_t
+	{
+		if (!Device)
+		{
+			return VK_QUEUE_FAMILY_IGNORED;
+		}
+		switch (queueType)
+		{
+		case EQueueType::Graphics:
+			return Device->GetGraphicsQueue() ? Device->GetGraphicsQueue()->GetFamilyIndex() : VK_QUEUE_FAMILY_IGNORED;
+		case EQueueType::Compute:
+			if (Device->GetComputeQueue())
+			{
+				return Device->GetComputeQueue()->GetFamilyIndex();
+			}
+			return Device->GetGraphicsQueue() ? Device->GetGraphicsQueue()->GetFamilyIndex() : VK_QUEUE_FAMILY_IGNORED;
+		case EQueueType::Transfer:
+			if (Device->GetTransferQueue())
+			{
+				return Device->GetTransferQueue()->GetFamilyIndex();
+			}
+			if (Device->GetComputeQueue())
+			{
+				return Device->GetComputeQueue()->GetFamilyIndex();
+			}
+			return Device->GetGraphicsQueue() ? Device->GetGraphicsQueue()->GetFamilyIndex() : VK_QUEUE_FAMILY_IGNORED;
+		default:
+			return VK_QUEUE_FAMILY_IGNORED;
+		}
+	};
+
+	auto ResolveQueueTypeFromAccess = [](ERHIResourceAccess access) -> EQueueType
+	{
+		if (access == ERHIResourceAccess::Unknown || access == ERHIResourceAccess::Undefined)
+		{
+			return EQueueType::Graphics;
+		}
+
+		const ERHIResourceAccessFlags accessFlags(access);
+
+		const bool hasCompute =
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::SRVCompute) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::UAVCompute);
+
+		const bool hasGraphics =
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::SRVGraphics) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::UAVGraphics) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::RenderTargetView) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::DSVRead) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::DSVWrite) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::Present) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::VertexOrIndexBuffer) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::IndirectArgs);
+
+		const bool hasTransfer =
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::CopySrc) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::CopyDest) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveSrc) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveDst);
+
+		if (hasTransfer && !hasCompute && !hasGraphics)
+		{
+			return EQueueType::Transfer;
+		}
+
+		if (hasCompute && !hasGraphics)
+		{
+			return EQueueType::Compute;
+		}
+
+		return EQueueType::Graphics;
+	};
+
     for (const auto& transitionInfo : CreateInfo.TransitionInfos)
     {
         if (transitionInfo.Type == RHITransitionInfo::EType::Texture)
@@ -442,6 +537,16 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
                 continue;
             }
 
+			const EQueueType srcQueueType = ResolveQueueTypeFromAccess(accessBefore);
+			const EQueueType dstQueueType = ResolveQueueTypeFromAccess(accessAfter);
+			const uint32_t srcQueueFamilyIndex = ResolveQueueFamilyIndex(srcQueueType);
+			const uint32_t dstQueueFamilyIndex = ResolveQueueFamilyIndex(dstQueueType);
+			const bool crossQueueOwnership = srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED
+				&& dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED
+				&& srcQueueFamilyIndex != dstQueueFamilyIndex;
+			const uint32_t barrierSrcQueueFamily = crossQueueOwnership ? srcQueueFamilyIndex : VK_QUEUE_FAMILY_IGNORED;
+			const uint32_t barrierDstQueueFamily = crossQueueOwnership ? dstQueueFamilyIndex : VK_QUEUE_FAMILY_IGNORED;
+
 			auto textureDesc = vulkanTexture->GetDesc();
 			VkImageSubresourceRange subresourceRange{};
             subresourceRange.aspectMask = vulkanTexture->GetAspectFlags();
@@ -450,7 +555,7 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
             subresourceRange.baseArrayLayer = transitionInfo.ArraySlice != RHISubresourceRange::kAllSubresources ? transitionInfo.ArraySlice : 0;
             subresourceRange.layerCount = transitionInfo.ArraySlice != RHISubresourceRange::kAllSubresources ? 1 : vulkanTexture->GetDesc().ArraySize;
 
-            pipelineBarrier->TransitionLayout(vulkanTexture->GetImage(), oldLayout, newLayout, subresourceRange);
+			pipelineBarrier->TransitionLayout(vulkanTexture->GetImage(), oldLayout, newLayout, subresourceRange, barrierSrcQueueFamily, barrierDstQueueFamily);
         }
 		else if (transitionInfo.Type == RHITransitionInfo::EType::UAV) {
 			VulkanUnorderedAccessView* vulkanUAV = static_cast<VulkanUnorderedAccessView*>(transitionInfo.UAV);
@@ -471,7 +576,17 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
 				subresourceRange.baseArrayLayer = vulkanUAV->GetBaseArrayLayer();
 				subresourceRange.layerCount = vulkanUAV->GetLayerCount();
 
-				pipelineBarrier->TransitionAccess(vulkanTexture->GetImage(), transitionInfo.AccessBefore, transitionInfo.AccessAfter, subresourceRange);
+				const EQueueType srcQueueType = ResolveQueueTypeFromAccess(transitionInfo.AccessBefore);
+				const EQueueType dstQueueType = ResolveQueueTypeFromAccess(transitionInfo.AccessAfter);
+				const uint32_t srcQueueFamilyIndex = ResolveQueueFamilyIndex(srcQueueType);
+				const uint32_t dstQueueFamilyIndex = ResolveQueueFamilyIndex(dstQueueType);
+				const bool crossQueueOwnership = srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED
+					&& dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED
+					&& srcQueueFamilyIndex != dstQueueFamilyIndex;
+				const uint32_t barrierSrcQueueFamily = crossQueueOwnership ? srcQueueFamilyIndex : VK_QUEUE_FAMILY_IGNORED;
+				const uint32_t barrierDstQueueFamily = crossQueueOwnership ? dstQueueFamilyIndex : VK_QUEUE_FAMILY_IGNORED;
+
+				pipelineBarrier->TransitionAccess(vulkanTexture->GetImage(), transitionInfo.AccessBefore, transitionInfo.AccessAfter, subresourceRange, barrierSrcQueueFamily, barrierDstQueueFamily);
 
 			}
 			else if (vulkanUAV->IsBuffer())

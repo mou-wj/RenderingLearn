@@ -9,7 +9,6 @@
 #include "VulkanMemory.h"
 #include "RHICommandList.h"
 #include "VulkanCommandBuffer.h"
-#include "VulkanBarriers.h"
 #include "VulkanFuncWrapper.h"
 
 
@@ -90,43 +89,20 @@ struct VulkanCommandUpdateTexture : public RHICommandBase
     VkBufferImageCopy copyRegion{};
     VulkanCommandUpdateTexture(VulkanTexture* texture, std::shared_ptr<VulkanStagingBuffer> buffer, VkBufferImageCopy region) : texture(texture), staging(buffer) , copyRegion(region){}
     void Execute(RHICommandList& cmdList) override {
-
         auto contex = cmdList.GetCommandContex();
         VulkanCommandContext* vulkanContex = dynamic_cast<VulkanCommandContext*>(contex);
-        // 2. 获取一个可用命令缓冲区
-        VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->BeginUploadCommandBuffer();
-
-        VulkanPipelineBarrier barrier;
-        VkImageSubresourceRange transientRegion = VulkanPipelineBarrier::MakeSubresourceRange(copyRegion.imageSubresource.aspectMask,
-            copyRegion.imageSubresource.mipLevel,
-            1, copyRegion.imageSubresource.baseArrayLayer,
-            copyRegion.imageSubresource.layerCount);
-        auto layout = cmdBuffer->GetImageLayoutManager()->GetFullLayout(texture->GetImage());
-
-		barrier.TransitionLayout(
-			texture->GetImage(),
-            *layout,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            transientRegion
-		);
-        barrier.Execute(cmdBuffer);
-        //记录当前的修改待提交
-        cmdBuffer->GetImageLayoutManager()->SetLayout(texture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, transientRegion);
-
+        // 使用active命令缓冲区，隐式layout转换由调用方通过RHI Transition系统显式处理
+        VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->GetActiveCommandBuffer();
 
         CmdCopyBufferToImage(
-            cmdBuffer->GetHandle(), // Vulkan 命令缓冲区
-            staging->GetHandle(), // staging buffer
-            texture->GetImage(), // 目标纹理
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, // 假设已经是 transfer dst layout
+            cmdBuffer->GetHandle(),
+            staging->GetHandle(),
+            texture->GetImage(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
             &copyRegion
         );
-        vulkanContex->GetCommandBufferManager()->EndAndSubmitUploadCommandBuffer(cmdBuffer);
         vulkanContex->GetDevice()->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
-        vulkanContex->GetDevice()->GetStagingManager()->OnCommandBufferSubmitted(cmdBuffer);
-
-        
     }
 };
 
@@ -148,11 +124,9 @@ struct VulkanCommandUpdateBuffer : public RHICommandBase
         auto context = cmdList.GetCommandContex();
         VulkanCommandContext* vulkanContext = dynamic_cast<VulkanCommandContext*>(context);
 
-        // 1. 获取 upload command buffer
         VulkanCommandBuffer* cmdBuffer =
-            vulkanContext->GetCommandBufferManager()->BeginUploadCommandBuffer();
+            vulkanContext->GetCommandBufferManager()->GetActiveCommandBuffer();
 
-        // 2. 执行 copy
         vkCmdCopyBuffer(
             cmdBuffer->GetHandle(),
             staging->GetHandle(),
@@ -161,32 +135,7 @@ struct VulkanCommandUpdateBuffer : public RHICommandBase
             &copyRegion
         );
 
-        // 3. 提交 command buffer
-        vulkanContext->GetCommandBufferManager()->EndAndSubmitUploadCommandBuffer(cmdBuffer);
-
-        // 4. staging 生命周期绑定到 cmdBuffer
         vulkanContext->GetDevice()->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
-        vulkanContext->GetDevice()->GetStagingManager()->OnCommandBufferSubmitted(cmdBuffer);
-    }
-};
-
-
-struct RHIVULKAN_API VulkanCommandInitializeImageState : public RHICommandBase
-{
-    VulkanTexture* texture;
-    VkImageLayout InitialLayout;
-    bool onlyUpdateImageLayout;
-    
-    VulkanCommandInitializeImageState(VulkanTexture* texture, VkImageLayout InitialLayout, bool onUpdateImageLayout) : texture(texture), InitialLayout(InitialLayout), onlyUpdateImageLayout(onlyUpdateImageLayout) {}
-    void Execute(RHICommandList& cmdList) override {
-        if (onlyUpdateImageLayout) {
-            
-        }
-        else {
-            auto commmandContex = cmdList.GetCommandContex();
-            VulkanCommandContext* vulkanContex = VulkanCommandContext::CastFrom(commmandContex);
-            texture->InitialImageState(vulkanContex, InitialLayout);
-        }
     }
 };
 

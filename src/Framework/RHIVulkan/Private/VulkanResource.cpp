@@ -13,6 +13,30 @@
 using namespace Core;
 namespace RHIVulkan{
 
+static VulkanQueue* ResolveInitialQueue(VulkanDevice* device, EQueueType queueType)
+{
+    if (!device)
+    {
+        return nullptr;
+    }
+
+    switch (queueType)
+    {
+    case EQueueType::Graphics:
+        return device->GetGraphicsQueue();
+    case EQueueType::Compute:
+        return device->GetComputeQueue() ? device->GetComputeQueue() : device->GetGraphicsQueue();
+    case EQueueType::Transfer:
+        if (device->GetTransferQueue())
+        {
+            return device->GetTransferQueue();
+        }
+        return device->GetComputeQueue() ? device->GetComputeQueue() : device->GetGraphicsQueue();
+    default:
+        return device->GetGraphicsQueue();
+    }
+}
+
    
 // Vulkan Texture
 VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
@@ -35,7 +59,8 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = TransformTextureUsageFlagsFrom(desc.Usage); // TODO: Support other usages
 	std::vector<uint32_t> queueFamilyIndices;
-    queueFamilyIndices.push_back(Device->GetGraphicsQueue()->GetFamilyIndex());
+    VulkanQueue* initialQueue = ResolveInitialQueue(Device, desc.InitialQueueType);
+    queueFamilyIndices.push_back(initialQueue ? initialQueue->GetFamilyIndex() : Device->GetGraphicsQueue()->GetFamilyIndex());
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
 	imageInfo.pQueueFamilyIndices = queueFamilyIndices.data();
@@ -74,24 +99,6 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
         DestroyImage(vkDevice, Image);
         memoryManager->Free(Allocation);
     }
-
-    VkImageLayout defaultLayout;
-    ERHIResourceAccess defaultAccess;
-    DetermineDefaultLayout(desc.Usage, defaultLayout, defaultAccess);
-    DefaultLayout = defaultLayout;
-    SetAccess(defaultAccess);
-
-    auto vkCommandContex = VulkanCommandContext::CastFrom(device->GetGlobalCommandContext());
-    auto commandList = vkCommandContex->GetCommandList();
-
-    //转换imagelayout
-    if (!Core::IsInRenderThread()) {
-        InitialImageState(vkCommandContex, DefaultLayout);
-    }
-    else {
-        commandList.AddCommand<VulkanCommandInitializeImageState>(this, DefaultLayout,true);
-    }
-
 }
 
 VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, VkImage image)
@@ -115,21 +122,6 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, V
         true,                                    // use identity swizzle)
         usage
     );
-    VkImageLayout defaultLayout;
-    ERHIResourceAccess defaultAccess;
-    DetermineDefaultLayout(desc.Usage, defaultLayout, defaultAccess);
-    DefaultLayout = defaultLayout;
-    SetAccess(defaultAccess);
-    auto vkCommandContex = VulkanCommandContext::CastFrom(device->GetGlobalCommandContext());
-    auto commandList = vkCommandContex->GetCommandList();
-
-    //转换imagelayout
-    if (!Core::IsInRenderThread()) {
-        InitialImageState(vkCommandContex, DefaultLayout);
-    }
-    else {
-        commandList.AddCommand<VulkanCommandInitializeImageState>(this, DefaultLayout, false);
-    }
 }
 
 VulkanTexture::~VulkanTexture() {
@@ -162,32 +154,6 @@ void VulkanTexture::DetachView(VulkanViewBase* view)
     }
 }
 
-void VulkanTexture::InitialImageState(VulkanCommandContext* context, VkImageLayout layout)
-{
-    VulkanCommandContext* vulkanContex = context;
-    // 2. 获取一个可用命令缓冲区
-    VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->BeginUploadCommandBuffer();
-    auto vkFormat = TransformFormatFrom(Desc.Format);
-    auto imageFlags = GetImageAspectFlags(vkFormat);
-    //更新tracked image layout
-    auto cmdImageLayoutMgr = cmdBuffer->GetImageLayoutManager();
-    cmdImageLayoutMgr->SetFullLayout(this, layout);
-    VulkanPipelineBarrier barrier;
-    VkImageSubresourceRange transientRegion = VulkanPipelineBarrier::MakeSubresourceRange(imageFlags,
-        0,
-        Desc.MipLevels, 
-        0,
-        Desc.ArraySize);
-    barrier.TransitionLayout(
-        Image,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        layout,
-        transientRegion
-    );
-    barrier.Execute(cmdBuffer);
-    vulkanContex->GetCommandBufferManager()->EndAndSubmitUploadCommandBuffer(cmdBuffer);
-
-}
 void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImageLayout& OutLayout, ERHIResourceAccess& OutAccess)
 {
     // --- 0. 初始默认值 ---
@@ -196,7 +162,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
 
     // --- 1. 优先级最高：呈现 (Swapchain) ---
     // Swapchain 图像在 Vulkan 中非常特殊，必须处于 PRESENT 布局才能交给窗口系统
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::Presentable))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::Presentable))
     {
         OutLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         OutAccess = ERHIResourceAccess::Present;
@@ -206,9 +172,9 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     // --- 2. 手机端优化：Memoryless (Tile Memory Only) ---
     // Memoryless 通常只用于 Transient 的 Depth 或 Color Attachment
     // 它们不需要从显存 Load，也不需要 Store 到显存，因此初始状态必须是 Attachment
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::Memoryless))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::Memoryless))
     {
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::DepthStencil))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::DepthStencil))
         {
             OutLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             OutAccess = ERHIResourceAccess::DSVWrite;
@@ -216,7 +182,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
         else
         {
             OutLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            OutAccess = ERHIResourceAccess::RTV;
+            OutAccess = ERHIResourceAccess::RenderTargetView;
         }
         return;
     }
@@ -224,7 +190,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     // --- 3. 读写冲突处理：UAV (Storage Image) ---
     // 如果一个资源被标记为 UAV，无论它是否也是 ShaderResource，
     // 在初始状态下为了通用性，通常映射到 GENERAL 布局
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::UAV))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::UAV))
     {
         OutLayout = VK_IMAGE_LAYOUT_GENERAL;
         OutAccess = ERHIResourceAccess::UAVMask;
@@ -234,7 +200,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     // --- 4. CPU 回读 (Readback) ---
     // CPU Readback 资源通常由底层 Buffer 支撑或者是线性布局的 Image
     // 在 Vulkan 中，这类需要映射内存读取的资源建议使用 GENERAL
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CPUReadback))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CPUReadback))
     {
         OutLayout = VK_IMAGE_LAYOUT_GENERAL;
         OutAccess = ERHIResourceAccess::CPURead;
@@ -242,23 +208,23 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     }
 
     // --- 5. 标准附件路径 (RenderTarget / DepthStencil) ---
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::DepthStencil))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::DepthStencil))
     {
         OutLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         OutAccess = ERHIResourceAccess::DSVWrite;
         return;
     }
 
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::RenderTarget))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::RenderTarget))
     {
         OutLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        OutAccess = ERHIResourceAccess::RTV;
+        OutAccess = ERHIResourceAccess::RenderTargetView;
         return;
     }
 
     // --- 6. 拷贝路径 ---
     // 如果资源的主要意图是作为拷贝目标（例如上传贴图数据）
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CopyDest))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopyDest))
     {
         OutLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         OutAccess = ERHIResourceAccess::CopyDest;
@@ -266,7 +232,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     }
 
     // --- 7. 只读贴图路径 (SRV) ---
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::ShaderResource))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::ShaderResource))
     {
         // 如果是 Dynamic 的，可能意味着它会频繁更新
         // 但初始状态下依然建议进入只读，等待第一次 RHIUpdate 触发转换
@@ -276,7 +242,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     }
 
     // --- 8. 拷贝源 ---
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CopySrc))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopySrc))
     {
         OutLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         OutAccess = ERHIResourceAccess::CopySrc;
@@ -303,7 +269,8 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
 	auto usageFlags = TransformBufferUsageFlagsFrom(Desc.Usage);
     bufferInfo.usage = usageFlags; // TODO: Support other usages
     std::vector<uint32_t> queueFamilyIndices;
-    queueFamilyIndices.push_back(Device->GetGraphicsQueue()->GetFamilyIndex());
+    VulkanQueue* initialQueue = ResolveInitialQueue(Device, desc.InitialQueueType);
+    queueFamilyIndices.push_back(initialQueue ? initialQueue->GetFamilyIndex() : Device->GetGraphicsQueue()->GetFamilyIndex());
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     bufferInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
     bufferInfo.pQueueFamilyIndices = queueFamilyIndices.data();
@@ -340,52 +307,52 @@ ERHIResourceAccess VulkanBuffer::DetermineDefaultAccess(ERHIBufferUsageFlags Usa
 {
     // 1️⃣ 优先处理 Staging Buffer (CPU 上传)
     // 这类 Buffer 通常是 Host Visible 的，初始状态用于 CPU 写入数据
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Staging))
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Staging))
     {
         return ERHIResourceAccess::CPURead; // 或者定义一个 CPUWrite，通常 CPURead 涵盖了 Host 访问
     }
 
     // 2️⃣ 传输目标 (通常用于初始同步数据)
     // 如果 Buffer 创建是为了接收来自 Staging 的拷贝
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::TransferDst))
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::TransferDst))
     {
         return ERHIResourceAccess::CopyDest;
     }
 
     // 3️⃣ UAV (随机读写)
     // 如果 Buffer 明确支持 UnorderedAccess
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::UnorderedAccess))
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::UnorderedAccess))
     {
         return ERHIResourceAccess::UAVMask;
     }
 
     // 4️⃣ 只读资源 (SRV / Constant / Vertex / Index / Indirect)
     // 这些状态在 Vulkan 中通常可以共存，且都属于只读语义
-    ERHIResourceAccess ReadAccess = ERHIResourceAccess::Unknown;
+    ERHIResourceAccessFlags ReadAccess;
 
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Vertex | ERHIBufferUsageFlags::Index))
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Vertex | ERHIBufferUsageFlag::Index))
     {
         ReadAccess |= ERHIResourceAccess::VertexOrIndexBuffer;
     }
 
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Constant | ERHIBufferUsageFlags::ShaderResource))
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Constant | ERHIBufferUsageFlag::ShaderResource))
     {
         // 对于 Buffer，SRV 通常涵盖了 Constant 和 Structured 的读取
         ReadAccess |= ERHIResourceAccess::SRVMask;
     }
 
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::Indirect))
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Indirect))
     {
         ReadAccess |= ERHIResourceAccess::IndirectArgs;
     }
 
-    if (ReadAccess != ERHIResourceAccess::Unknown)
+    if (!ReadAccess.IsEmpty())
     {
-        return ReadAccess;
+        return ReadAccess.ToEnum();
     }
 
     // 5️⃣ 传输源
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlags::TransferSrc))
+    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::TransferSrc))
     {
         return ERHIResourceAccess::CopySrc;
     }
@@ -495,7 +462,7 @@ void VulkanShaderResourceView::CreateBufferView(
     Format = TransformFormatFrom(SRVInfo.Format);
 
     // 只有当 Buffer 的 usage 包含 Texel 标志时才创建 BufferView
-    if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlags::Texel))
+    if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlag::Texel))
     {
         VkDeviceSize range = (SRVInfo.NumElements * SRVInfo.Stride);
         BufferView.Create(Device, buffer->GetHandle(), Format, SRVInfo.Offset, range);
@@ -641,7 +608,7 @@ void VulkanUnorderedAccessView::CreateBufferView(
     Format = TransformFormatFrom(UAVInfo.Format);
 
     // 只有当 Buffer 的 usage 包含 Texel 标志时才创建 BufferView
-    if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlags::Texel))
+    if (EnumHasAnyFlags(buffer->GetDesc().Usage, ERHIBufferUsageFlag::Texel))
     {
         VkDeviceSize range = (UAVInfo.NumElements * UAVInfo.Stride);
         BufferView.Create(Device, buffer->GetHandle(), Format, UAVInfo.Offset, range);
@@ -733,34 +700,14 @@ VulkanRHISwapchain::~VulkanRHISwapchain() {
 
 void VulkanRHISwapchain::Present(VulkanCommandContext* context, VulkanCommandBuffer* commandBuffer, VulkanQueue* queue, VulkanQueue* presentQueue)
 {
-    assert(queue == presentQueue);//先假定相等
-    //转换布局
-    auto backBufferTexture = backBufferTextures[currentBackBufferIndex];
-	auto layout = commandBuffer->GetImageLayoutManager()->GetFullLayout(backBufferTexture->GetImage());
-    VulkanPipelineBarrier barrier;
-    VkImageSubresourceRange transientRegion = VulkanPipelineBarrier::MakeSubresourceRange(backBufferTexture->GetAspectFlags(),
-        0,
-        1,
-        0,
-        1);
-    auto curLayout = layout->Get(0, 0);
-    barrier.TransitionLayout(
-        backBufferTexture->GetImage(),
-        curLayout,
-        backBufferTexture->GetDefaultLayout(),
-        transientRegion
-    );
-    barrier.Execute(commandBuffer);
-    commandBuffer->GetImageLayoutManager()->SetFullLayout(backBufferTexture.get(), backBufferTexture->GetDefaultLayout());
-
+    assert(queue == presentQueue);
     commandBuffer->AddWaitSemaphores(VkPipelineStageFlagBits::VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { acquireSemaphores[currentIndex]});
     commandBuffer->AddSignalSemaphores({ backBufferRenderDoneSemaphores[currentIndex] });
     context->GetCommandBufferManager()->SubmitActiveCommandBuffer();
-    Swapchain->Present(presentQueue,backBufferRenderDoneSemaphores[currentIndex]);
+    Swapchain->Present(presentQueue, backBufferRenderDoneSemaphores[currentIndex]);
     currentIndex++;
 	currentIndex %= swapchainImages_.size();
     currentBackBufferIndex = -1;
-
 }
 
 RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
@@ -816,7 +763,7 @@ void VulkanRHISwapchain::CreateSwapchain()
     ERHITextureType Type = ERHITextureType::Texture2D;   // 纹理类型
     uint32_t SampleCount = 1;            // 多重采样数量
     uint32_t SampleQuality = 0;          // 多重采样质量
-    textureDesc.Usage = ERHITextureCreateFlags::RenderTarget | ERHITextureCreateFlags::Presentable; // 纹理用途
+    textureDesc.Usage = ERHITextureCreateFlag::RenderTarget | ERHITextureCreateFlag::Presentable; // 纹理用途
     auto imageCount = swapchainImages_.size();
     for (int i = 0; i < imageCount; i++) {
 
@@ -981,113 +928,6 @@ VulkanDepthStencilState::VulkanDepthStencilState(VulkanDevice* device, const RHI
 
 VulkanDepthStencilState::~VulkanDepthStencilState()
 {
-}
-
-
-VulkanFence::VulkanFence(VulkanDevice* device)
-{
-	Device = device;
-	VkDevice vkDevice = Device->GetHandle();
-	VkFenceCreateInfo fenceInfo{};
-	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fenceInfo.flags = 0; // 初始状态为已信号
-	if (vkCreateFence(vkDevice, &fenceInfo, nullptr, &Fence) != VK_SUCCESS) {
-
-	}
-    bool isSignaled = IsSignaled();
-    int a = 10;
-}
-
-VulkanFence::~VulkanFence()
-{
-	if (Fence) {
-		vkDestroyFence(Device->GetHandle(), Fence, nullptr);
-		Fence = VK_NULL_HANDLE;
-	}
-}
-
-// ----------------------------
-// Fence
-// ----------------------------
-bool VulkanFence::IsSignaled() const
-{
-    if (!Fence || !Device) return false;
-    VkResult result = vkGetFenceStatus(Device->GetHandle(), Fence);
-    return result == VK_SUCCESS;
-}
-
-void VulkanFence::Reset()
-{
-    if (!Fence || !Device) return;
-    ResetFences(Device->GetHandle(), 1, &Fence);
-}
-
-void VulkanFence::Wait()
-{
-	if (!Fence || !Device) return;
-	WaitForFences(Device->GetHandle(), 1, &Fence, VK_TRUE, UINT64_MAX);
-}
-
-
-VulkanFenceManager::VulkanFenceManager(VulkanDevice* deviceIn)
-    : device(deviceIn)
-{
-}
-
-VulkanFenceManager::~VulkanFenceManager()
-{
-    allFences.clear();
-    availableFences.clear();
-    pendingFences.clear();
-}
-
-VulkanFence* VulkanFenceManager::AcquireFence()
-{
-    // 优先复用空闲 fence
-    if (!availableFences.empty())
-    {
-        VulkanFence* fence = availableFences.front();
-        availableFences.pop_front();
-        //fence->Reset();
-        return fence;
-    }
-
-    // 没有空闲 fence，创建新的
-    auto newFence = std::make_unique<VulkanFence>(device);
-    VulkanFence* ptr = newFence.get();
-    allFences.push_back(std::move(newFence));
-    return ptr;
-}
-
-// 提交 fence 后标记为 pending
-void VulkanFenceManager::ReleaseFence(VulkanFence* fence)
-{
-    if (fence)
-    {
-        pendingFences.push_back(fence);
-    }
-}
-
-// 检查 fence 是否完成，回收空闲池
-void VulkanFenceManager::GarbageCollect()
-{
-    size_t count = pendingFences.size();
-    for (size_t i = 0; i < count; ++i)
-    {
-        VulkanFence* fence = pendingFences.front();
-        pendingFences.pop_front();
-
-        if (fence->IsSignaled())
-        {
-            // fence 已完成，回收到 available
-            availableFences.push_back(fence);
-        }
-        else
-        {
-            // fence 还没完成，放回 pending
-            pendingFences.push_back(fence);
-        }
-    }
 }
 
 // Vulkan Ring Buffer Implementation

@@ -92,7 +92,7 @@ private:
 struct RENDERCORE_API RenderGraphBufferDesc {
     std::string Name;          // Buffer name
     uint32_t Size = 0;         // Size of the buffer in bytes
-    ERHIBufferUsageFlags Usage = ERHIBufferUsageFlags::None; // Buffer flags (e.g., vertex, index, constant)
+    ERHIBufferUsageFlags Usage = ERHIBufferUsageFlag::None; // Buffer flags (e.g., vertex, index, constant)
 };
 
 class RENDERCORE_API RenderGraphBuffer : public RenderGraphResource

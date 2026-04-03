@@ -83,20 +83,26 @@ namespace RHIVulkan {
 			VkImage image,
 			VkImageLayout oldLayout,
 			VkImageLayout newLayout,
-			const VkImageSubresourceRange& range);
+			const VkImageSubresourceRange& range,
+			uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
 
 
 		void TransitionLayout(
 			VkImage image,
 			const VulkanImageLayout& oldLayout,
 			VkImageLayout newLayout,
-			const VkImageSubresourceRange& range);
+			const VkImageSubresourceRange& range,
+			uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
 
 		void TransitionAccess(
 			VkImage image,
 			RHI::ERHIResourceAccess oldAccess,
 			RHI::ERHIResourceAccess newAccess,
-			const VkImageSubresourceRange& range);
+			const VkImageSubresourceRange& range,
+			uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED);
 
 
 		void Execute(VulkanCommandBuffer* cmd);

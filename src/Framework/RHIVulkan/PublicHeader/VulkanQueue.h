@@ -4,12 +4,13 @@
 #include "VulkanDevice.h"
 #include "VulkanBarriers.h"
 #include "VulkanCommandBuffer.h"
+#include "VulkanSync.h"
 #include <vector>
+#include <memory>
 #include <mutex>
 
 namespace RHIVulkan{
 
-    // 前向声明以避免循环依赖
 class VulkanDevice;
 class VulkanSemaphore;
 class VulkanCommandContext;
@@ -64,24 +65,9 @@ class RHIVULKAN_API VulkanPresentExecutor final : public RHI::RHIPresentExecutor
 {
 public:
     explicit VulkanPresentExecutor(VulkanQueue* queue);
-    void Present(RHI::RHISwapchain* Swapchain) override;
+    void Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncPoint* WaitSyncPoint = nullptr) override;
 private:
     VulkanQueue* Queue = nullptr;
-};
-
-// -------------------------------------------------------------------------------------------------
-// RHI-level sync point backed by a VulkanFence
-// -------------------------------------------------------------------------------------------------
-class RHIVULKAN_API VulkanRHISyncPoint final : public RHI::RHISyncPoint
-{
-public:
-    VulkanRHISyncPoint(RHI::EQueueType queueType, VulkanFence* inFence);
-
-    bool IsReached() const override;
-    void Wait() const override;
-
-private:
-    VulkanFence* Fence = nullptr;
 };
 
 }

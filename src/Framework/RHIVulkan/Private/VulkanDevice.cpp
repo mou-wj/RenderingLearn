@@ -39,6 +39,7 @@ VulkanDevice::VulkanDevice(VulkanRHIApi* rhiApi,
 	shaderManager_ = new VulkanShaderManager(this);
 	pipelineLayoutCache_ = new VulkanPipelineLayoutCache(this);
     semaphoreManager_ = new VulkanSemaphoreManager(this);
+    syncPointManager_ = new VulkanRHISyncPointManager(this);
     deferredDeleteQueue_ = new VulkanDeferredDeleteQueue(this);
 }
 
@@ -237,6 +238,13 @@ void VulkanDevice::Destroy()
     {
         delete semaphoreManager_;
         semaphoreManager_ = nullptr;
+    }
+
+    if (syncPointManager_ != nullptr)
+    {
+        syncPointManager_->WaitAndRecycleAll();
+        delete syncPointManager_;
+        syncPointManager_ = nullptr;
     }
 
     if (pipelineLayoutCache_ != nullptr)

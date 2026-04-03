@@ -50,40 +50,40 @@ namespace RHIVulkan {
     {
         VkImageUsageFlags Usage = 0;
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::ShaderResource))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::ShaderResource))
         {
             // sampled image / combined image sampler
             Usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::RenderTarget))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::RenderTarget))
         {
             // color attachment
             Usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::UAV))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::UAV))
         {
             // storage image
             Usage |= VK_IMAGE_USAGE_STORAGE_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::DepthStencil))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::DepthStencil))
         {
             Usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CopySrc))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopySrc))
         {
             Usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::CopyDest))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopyDest))
         {
             Usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlags::Presentable))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::Presentable))
         {
             // swapchain images *must* have this
             Usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -256,45 +256,45 @@ namespace RHIVulkan {
         VkBufferUsageFlags usage = 0;
 
         // 1. 基础类型（显式指定的用途）
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Vertex))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::Vertex))
             usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Index))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::Index))
             usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Constant))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::Constant))
             usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Indirect))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::Indirect))
             usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 
         // 2. 存储/结构化类型 (UAV/SRV 的物理载体)
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Structured | ERHIBufferUsageFlags::RawBuffer))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::Structured | ERHIBufferUsageFlag::RawBuffer))
             usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
         // 3. 处理 SRV / UAV (重点改进)
         // 如果是 UAV，必须开启 STORAGE 位
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::UnorderedAccess))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::UnorderedAccess))
         {
             usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Texel))
+            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::Texel))
                 usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
         }
 
         // 如果是 SRV，且不是 Constant，通常也需要作为 Storage 或 Texel 访问
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::ShaderResource))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::ShaderResource))
         {
             usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::Texel))
+            if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::Texel))
                 usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
             // 注意：有些架构下 StructuredBuffer 的 SRV 也要走 STORAGE_BUFFER_BIT
         }
 
         // 4. 数据传输
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferSrc | ERHIBufferUsageFlags::Staging))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::TransferSrc | ERHIBufferUsageFlag::Staging))
             usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlags::TransferDst | ERHIBufferUsageFlags::Staging))
+        if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::TransferDst | ERHIBufferUsageFlag::Staging))
             usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
         return usage;

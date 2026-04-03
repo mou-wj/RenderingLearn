@@ -23,6 +23,7 @@ class VulkanDescriptorSetLayoutManager;
 class VulkanDescriptorSetManager;
 class VulkanShaderManager;
 class VulkanPipelineLayoutCache;
+class VulkanRHISyncPointManager;
 
 // 延迟删除队列 - 用于延迟删除Vulkan对象
 class VulkanDeferredDeleteQueue
@@ -122,6 +123,7 @@ public:
     VulkanDescriptorSetManager* GetDescriptorSetManager() const { return descriptorSetManager_; }
 	VulkanShaderManager* GetShaderManager() const { return shaderManager_; }
     VulkanPipelineLayoutCache* GetPipelineLayoutCache() const { return pipelineLayoutCache_; }
+    VulkanRHISyncPointManager* GetSyncPointManager() const { return syncPointManager_; }
 
     // 延迟删除资源接口
     void EnqueueRenderPassForDeletion(VkRenderPass RenderPass);
@@ -169,6 +171,7 @@ private:
     VulkanDescriptorSetManager* descriptorSetManager_;
     VulkanShaderManager* shaderManager_;
     VulkanPipelineLayoutCache* pipelineLayoutCache_;
+    VulkanRHISyncPointManager* syncPointManager_ = nullptr;
     VulkanDeferredDeleteQueue* deferredDeleteQueue_ = nullptr;
 };
 

@@ -228,30 +228,6 @@ void VulkanCommandBufferManager::Reset()
     }
 }
 
-VulkanCommandBuffer* VulkanCommandBufferManager::BeginUploadCommandBuffer()
-{
-    if (ActiveUploadCommandBuffer)
-        return ActiveUploadCommandBuffer;
-
-    ActiveUploadCommandBuffer = Allocate(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-
-    ActiveUploadCommandBuffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(ActiveUploadCommandBuffer);
-    return ActiveUploadCommandBuffer;
-}
-
-void VulkanCommandBufferManager::EndAndSubmitUploadCommandBuffer(VulkanCommandBuffer* cmd)
-{
-    if (!cmd) return;
-
-    cmd->End();
-    
-    commandContext->GetQueue()->SubmitCommandBuffer(cmd);
-
-    // ⚠️ 不立刻 Reset，等 Fence 完成后由外部回收
-    ActiveUploadCommandBuffer = nullptr;
-}
-
 void VulkanCommandBufferManager::GarbageCollect()
 {
 	for (auto it = ManagedBuffers.begin(); it != ManagedBuffers.end();)

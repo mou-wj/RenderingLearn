@@ -165,12 +165,12 @@ RenderTexture* CreateTexture(const std::string& Path)
 
 	desc.Type = ERHITextureType::Texture2D;
 	desc.SampleCount = 1;
-	desc.Usage = ERHITextureCreateFlags::ShaderResource;
+	desc.Usage = ERHITextureCreateFlag::ShaderResource;
 
 	// 如果需要生成 Mips，确保 Usage 包含相应的 Flag (如 RenderTarget 或 UAV，取决于 RHI 实现)
 	desc.bGenerateMips = false;
 
-	desc.Usage |= ERHITextureCreateFlags::ShaderResource; // 很多 RHI 生成 Mip 需要 RT 权限
+	// 如果后续需要组合更多Usage，请通过 ERHITextureCreateFlagsFlags 组合后再 ToEnum() 赋值。
 
 
 	desc.InitialData = pixels; // 传入 stbi 的内存指针

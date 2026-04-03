@@ -104,8 +104,8 @@ struct RENDERCORE_API PoolRenderTargetDesc
     // ----------------------
     // 3. 用途（ImageUsage / BindFlags）
     // ----------------------
-    RHI::ERHITextureCreateFlags Usage = RHI::ERHITextureCreateFlags::None;
-
+    RHI::ERHITextureCreateFlags Usage = RHI::ERHITextureCreateFlag::None;
+   
     // ----------------------
     // 4. Clear（RHI 级）
     // ----------------------

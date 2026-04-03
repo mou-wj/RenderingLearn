@@ -179,8 +179,6 @@ public:
 	VkImageAspectFlags GetAspectFlags() const { return ImageAspectFlags; }
 	VulkanAllocation& GetAllocation() { return Allocation; }
 
-    void InitialImageState(VulkanCommandContext* context, VkImageLayout layout);
-	VkImageLayout GetDefaultLayout() const { return DefaultLayout; }
 
     // View management
     void AttachView(VulkanViewBase* view);
@@ -194,7 +192,6 @@ private:
     VulkanDevice* Device = nullptr;
     VulkanAllocation Allocation;
     bool owner = true;
-    VkImageLayout DefaultLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	VkImageAspectFlags ImageAspectFlags = 0;
 
     std::vector<VulkanViewBase*> views;
@@ -413,50 +410,6 @@ private:
     VkSampler Sampler = VK_NULL_HANDLE;
     VulkanDevice* Device = nullptr;
 };
-
-// Vulkan Fence
-class VulkanFence {
-public:
-    VulkanFence(VulkanDevice* device);
-    ~VulkanFence();
-
-    // 新增：判断Fence是否已完成
-    bool IsSignaled() const;
-    void Reset();
-    void Wait();
-private:
-    VkFence Fence = VK_NULL_HANDLE;
-    VulkanDevice* Device = nullptr;
-};
-
-class VulkanFenceManager
-{
-public:
-    VulkanFenceManager(VulkanDevice* device);
-    ~VulkanFenceManager();
-
-    // 获取一个可用 fence
-    VulkanFence* AcquireFence();
-
-    // 标记 fence 已使用（通常提交命令后）
-    void ReleaseFence(VulkanFence* fence);
-
-    // 检查 fence 并回收已完成的 fence
-    void GarbageCollect();
-
-private:
-    VulkanDevice* device = nullptr;
-
-    // 所有 fence 对象
-    std::vector<std::unique_ptr<VulkanFence>> allFences;
-
-    // 空闲 fence 可供分配
-    std::deque<VulkanFence*> availableFences;
-
-    // 已提交 fence，等待 GPU 完成
-    std::deque<VulkanFence*> pendingFences;
-};
-
 
 class VulkanSwapchain;
 class VulkanSemaphore;

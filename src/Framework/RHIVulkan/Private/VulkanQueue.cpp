@@ -7,8 +7,13 @@
 #include "VulkanFuncWrapper.h"
 #include <stdexcept>
 #include <cassert>
+#include <algorithm>
 
-namespace RHIVulkan{
+namespace RHIVulkan {
+
+// -------------------------------------------------------------------------------------------------
+// VulkanQueue
+// -------------------------------------------------------------------------------------------------
 
 VulkanQueue::VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyIndex)
     : device_(device), queue_(queue), familyIndex_(familyIndex)
@@ -75,12 +80,11 @@ void VulkanQueue::SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t N
         }
     }
 
-    //添加commandbuffer的signal semaphore
     auto commandBufferSignalSemaphores = CmdBuffer->SignalSemaphores;
-    for (auto& semaphore : commandBufferSignalSemaphores) {
+    for (auto& semaphore : commandBufferSignalSemaphores)
+    {
         signalSemaphoreHandles.push_back(semaphore->GetHandle());
     }
-
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -94,7 +98,13 @@ void VulkanQueue::SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t N
     submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphoreHandles.size());
     submitInfo.pSignalSemaphores = signalSemaphoreHandles.empty() ? nullptr : signalSemaphoreHandles.data();
 
-    if (!QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE))
+    if (device_->GetSyncPointManager())
+    {
+        device_->GetSyncPointManager()->GarbageCollect();
+    }
+
+    VkFence submitFence = CmdBuffer->GetFence() ? CmdBuffer->GetFence()->GetHandle() : VK_NULL_HANDLE;
+    if (!QueueSubmit(queue_, 1, &submitInfo, submitFence))
     {
         throw std::runtime_error("Failed to submit Vulkan command buffer");
     }
@@ -111,6 +121,11 @@ void VulkanQueue::WaitIdle()
     {
         throw std::runtime_error("Failed to wait for Vulkan queue to be idle!");
     }
+
+    if (device_ && device_->GetSyncPointManager())
+    {
+        device_->GetSyncPointManager()->GarbageCollect();
+    }
 }
 
 void VulkanQueue::InitContextPool(RHI::EQueueType type, uint32_t poolSize)
@@ -124,8 +139,6 @@ void VulkanQueue::InitContextPool(RHI::EQueueType type, uint32_t poolSize)
         FreeContexts_.push_back(ctx);
     }
 }
-
-// ---- RHI::RHIQueue overrides ----
 
 RHI::EQueueType VulkanQueue::GetType() const
 {
@@ -141,7 +154,7 @@ RHI::RHIComputeContext* VulkanQueue::AcquireCommandContext()
         FreeContexts_.pop_back();
         return ctx;
     }
-    // Pool exhausted — create a new context on demand
+
     VulkanCommandContext* ctx = new VulkanCommandContext(device_, this);
     AllContexts_.push_back(ctx);
     return ctx;
@@ -153,6 +166,7 @@ RHI::RHIComputeContext* VulkanQueue::ReleaseCommandContext(RHI::RHIComputeContex
     {
         return nullptr;
     }
+
     VulkanCommandContext* vulkanCtx = static_cast<VulkanCommandContext*>(Context);
     std::lock_guard<std::mutex> lock(ContextPoolMutex_);
     FreeContexts_.push_back(vulkanCtx);
@@ -168,12 +182,19 @@ RHI::RHISyncPoint* VulkanQueue::Submit(RHI::RHICmdBuffer CmdBuffer)
     }
 
     SubmitCommandBuffer(commandBuffer);
-    return new VulkanRHISyncPoint(QueueType_, commandBuffer->GetFence());
+    auto* syncPointManager = device_ ? device_->GetSyncPointManager() : nullptr;
+    return syncPointManager ? syncPointManager->Acquire(QueueType_, commandBuffer->GetFence()) : nullptr;
 }
 
 RHI::RHISyncPoint* VulkanQueue::Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHISyncPoint*>& WaitPoints)
 {
-    (void)WaitPoints;
+    for (RHI::RHISyncPoint* waitPoint : WaitPoints)
+    {
+        if (waitPoint && !waitPoint->IsReached())
+        {
+            waitPoint->Wait();
+        }
+    }
 
     RHI::RHISyncPoint* lastSyncPoint = nullptr;
     for (RHI::RHICmdBuffer cmdBuffer : Cmds)
@@ -193,39 +214,23 @@ VulkanPresentExecutor::VulkanPresentExecutor(VulkanQueue* queue)
 {
 }
 
-void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain)
+void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncPoint* WaitSyncPoint)
 {
     auto* vulkanSwapchain = dynamic_cast<VulkanRHISwapchain*>(Swapchain);
     if (!vulkanSwapchain || !Queue)
     {
         return;
     }
-    Queue->WaitIdle();
+
+    if (WaitSyncPoint)
+    {
+        WaitSyncPoint->Wait();
+    }
+    else
+    {
+        Queue->WaitIdle();
+    }
+
     vulkanSwapchain->GetSwapchain()->Present(Queue, nullptr);
 }
-
-// -------------------------------------------------------------------------------------------------
-// VulkanRHISyncPoint
-// -------------------------------------------------------------------------------------------------
-
-VulkanRHISyncPoint::VulkanRHISyncPoint(RHI::EQueueType queueType, VulkanFence* inFence)
-    : Fence(inFence)
-{
-    Type = queueType;
-    Value = reinterpret_cast<uint64_t>(inFence);
-}
-
-bool VulkanRHISyncPoint::IsReached() const
-{
-    return Fence ? Fence->IsSignaled() : true;
-}
-
-void VulkanRHISyncPoint::Wait() const
-{
-    if (Fence)
-    {
-        Fence->Wait();
-    }
-}
-
 }
