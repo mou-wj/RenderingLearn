@@ -25,7 +25,7 @@ namespace SlateRHIRenderer {
 		}
 		
 		//����overlay��UI���ݵ�presentTexture��
-		EnqueueRenderCommand("Present", [presentTexture, rhiSwapchain](RHI::RHICommandList& cmd) {
+		EnqueueRenderCommand("Present", [presentTexture, rhiSwapchain](RHI::RHIGraphicCommandList& cmd) {
 
 		
 

@@ -4,14 +4,16 @@
 #include <memory>
 #include <list>
 #include "RHIShaderParameter.h"
+#include "RHICommandContex.h"
 
 namespace RHI {
 
     using RHICmdBuffer = uint64_t;
 
-    class RHIComputeContext;
-    class RHICommandContext;
-    class RHICommandList;
+    class RHICommandListBase;
+    class RHITransferCommandList;
+    class RHIComputeCommandList;
+    class RHIGraphicCommandList;
     class RHITransition;
 
     // -----------------------------
@@ -20,7 +22,7 @@ namespace RHI {
     struct RHI_API RHICommandBase
     {
         virtual ~RHICommandBase() = default;
-        virtual void Execute(RHICommandList& cmdList) = 0;
+        virtual void Execute(RHICommandListBase& cmdList) = 0;
     };
 
     // -----------------------------
@@ -30,33 +32,127 @@ namespace RHI {
     {
         uint32_t X, Y, Z;
         RHICommandDispatch(uint32_t x, uint32_t y, uint32_t z);
-        void Execute(RHICommandList& cmdList) override;
+        void Execute(RHICommandListBase& cmdList) override;
     };
 
     struct RHI_API RHICommandDraw : public RHICommandBase
     {
         uint32_t VertexCount, InstanceCount, FirstVertex, FirstInstance;
         RHICommandDraw(uint32_t v, uint32_t i, uint32_t fv, uint32_t fi);
-        void Execute(RHICommandList& cmdList) override;
+        void Execute(RHICommandListBase& cmdList) override;
     };
 
     struct RHI_API RHICommandTraceRays : public RHICommandBase
     {
         uint32_t Width, Height, Depth;
         RHICommandTraceRays(uint32_t w, uint32_t h, uint32_t d);
-        void Execute(RHICommandList& cmdList) override;
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandCopyTexture : public RHICommandBase
+    {
+        RHITexture* Src = nullptr;
+        RHITexture* Dst = nullptr;
+        RHICopyTextureDesc CopyDesc{};
+        RHICommandCopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetComputePipelineState : public RHICommandBase
+    {
+        RHIComputePipelineState* PipelineState = nullptr;
+        explicit RHICommandSetComputePipelineState(RHIComputePipelineState* pipelineState);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetComputeShaderParameters : public RHICommandBase
+    {
+        RHIComputeShader* Shader = nullptr;
+        RHIBatchedShaderParameters Parameters{};
+        RHICommandSetComputeShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& parameters);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetGraphicShaderParameters : public RHICommandBase
+    {
+        RHIGraphicShader* Shader = nullptr;
+        RHIBatchedShaderParameters Parameters{};
+        RHICommandSetGraphicShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& parameters);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetStreamSource : public RHICommandBase
+    {
+        uint32_t StreamIndex = 0;
+        RHIBufferSP VertexBuffer;
+        uint32_t Offset = 0;
+        RHICommandSetStreamSource(uint32_t streamIndex, RHIBufferSP vertexBuffer, uint32_t offset);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetGraphicPipelineState : public RHICommandBase
+    {
+        RHIGraphicsPipelineState* PipelineState = nullptr;
+        explicit RHICommandSetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetViewport : public RHICommandBase
+    {
+        float X = 0.0f;
+        float Y = 0.0f;
+        float W = 0.0f;
+        float H = 0.0f;
+        float MinDepth = 0.0f;
+        float MaxDepth = 1.0f;
+        RHICommandSetViewport(float x, float y, float w, float h, float minDepth, float maxDepth);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetScissor : public RHICommandBase
+    {
+        int32_t X = 0;
+        int32_t Y = 0;
+        uint32_t W = 0;
+        uint32_t H = 0;
+        RHICommandSetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandBeginRenderPass : public RHICommandBase
+    {
+        RHIRenderPassInfo RenderPassInfo{};
+        explicit RHICommandBeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandEndRenderPass : public RHICommandBase
+    {
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetRayTracingPipelineState : public RHICommandBase
+    {
+        RHIRayTracingPipelineState* PipelineState = nullptr;
+        explicit RHICommandSetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandSetShaderTable : public RHICommandBase
+    {
+        void Execute(RHICommandListBase& cmdList) override;
     };
 
 
 
     // -----------------------------
-    // ͳһ�������б�
+    // ͳһ�������б�����
     // -----------------------------
-    class RHI_API RHICommandList
+    class RHI_API RHICommandListBase
     {
     public:
-        explicit RHICommandList(RHIComputeContext* context);
-        virtual ~RHICommandList();
+        explicit RHICommandListBase(RHIContextBase* context);
+        virtual ~RHICommandListBase();
 
         // ��������
         template<typename T, typename... Args>
@@ -80,68 +176,75 @@ namespace RHI {
         void SetImmediate(bool bImmediate);
         bool IsImmediate() const;
 
-        void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
-        void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& bacthedShaderParameter);
-        void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size);
-        //
-        void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);
-
-        // -----------------
-        // Compute �ӿ�
-        // -----------------
-        void Dispatch(uint32_t x, uint32_t y, uint32_t z);
-        void CopyTexture(RHITexture* src, RHITexture* dst,const RHICopyTextureDesc& copyDesc);
-
-        // -----------------
-        // Graphics �ӿ�
-        // -----------------
-        void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset);
-        void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
-
-        
-        void SetViewport(float x, float y, float w, float h, float minDepth,float maxDepth);
-        void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h);
-        void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
-            uint32_t firstVertex = 0, uint32_t firstInstance = 0);
-
-        // -----------------
-        // RayTracing �ӿ�
-        // -----------------
-        void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1);
-
-        // -----------------
-        // ��ȡ�󶨵� Context
-        // -----------------
-        RHIComputeContext* GetCommandContex() const;
+        RHIContextBase* GetContext() const;
+        // Backward-compatible accessor name.
+        RHIContextBase* GetCommandContex() const;
 
         // -----------------
         // ��ӿ�
         // -----------------
         void Begin();
         RHICmdBuffer End();
-        void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
-        void EndRenderPass();
 
         void BeginTransitions(std::vector<const RHITransition*> Transitions);
         void EndTransitions(std::vector<const RHITransition*> Transitions);
 
-        void Merge(std::shared_ptr<RHICommandList> other);
+        void Merge(const std::shared_ptr<RHICommandListBase>& other);
 
     protected:
         bool immediate = false;
         std::list<std::shared_ptr<RHICommandBase>> commands;
-        RHIComputeContext* CommandContex = nullptr;
+        RHIContextBase* Context = nullptr;
 
         friend struct RHICommandDispatch;
         friend struct RHICommandDraw;
         friend struct RHICommandTraceRays;
     };
 
+    class RHI_API RHITransferCommandList : public RHICommandListBase
+    {
+    public:
+        explicit RHITransferCommandList(RHITransferContext* context);
+        RHITransferContext* GetTransferContext() const;
+        void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
+    };
 
+    class RHI_API RHIComputeCommandList : public RHICommandListBase
+    {
+    public:
+        explicit RHIComputeCommandList(RHIComputeContex* context);
+        RHIComputeContex* GetComputeContext() const;
+        void SetComputePipelineState(RHIComputePipelineState* pipelineState);
+        void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& batchedShaderParameter);
+        void Dispatch(uint32_t x, uint32_t y, uint32_t z);
+    };
+
+    class RHI_API RHIGraphicCommandList : public RHICommandListBase
+    {
+    public:
+        explicit RHIGraphicCommandList(RHIGraphicContex* context);
+        RHIGraphicContex* GetGraphicContext() const;
+
+        void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& batchedShaderParameter);
+        void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset);
+        void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
+        void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth);
+        void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h);
+        void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
+            uint32_t firstVertex = 0, uint32_t firstInstance = 0);
+        void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
+        void EndRenderPass();
+        void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState);
+        void SetShaderTable();
+        void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1);
+    };
 
     // -----------------------------
     // ���ͱ���
     // -----------------------------
-    using RHICommandListSP = std::shared_ptr<RHICommandList>;
+    using RHICommandListBaseSP = std::shared_ptr<RHICommandListBase>;
+    using RHITransferCommandListSP = std::shared_ptr<RHITransferCommandList>;
+    using RHIComputeCommandListSP = std::shared_ptr<RHIComputeCommandList>;
+    using RHIGraphicCommandListSP = std::shared_ptr<RHIGraphicCommandList>;
 
 } // namespace WR::RHI

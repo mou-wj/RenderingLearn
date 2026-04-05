@@ -165,7 +165,7 @@ RHIBufferSP VulkanRHIApi::CreateBuffer(const RHIBufferDesc& desc)
 
 
 
-void VulkanRHIApi::UpdateTexture(RHICommandList& cmdList, RHITexture* texture, const void* data,const RHITextureRegion& region)
+void VulkanRHIApi::UpdateTexture(RHICommandListBase& cmdList, RHITexture* texture, const void* data,const RHITextureRegion& region)
 {
 	if (!texture || !data)
 		return;
@@ -205,7 +205,7 @@ void VulkanRHIApi::UpdateTexture(RHICommandList& cmdList, RHITexture* texture, c
 	
 
 }
-void VulkanRHIApi::UpdateBuffer(RHICommandList& cmdList, RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
+void VulkanRHIApi::UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
 {
 	if (!buffer || !data)
 		return;

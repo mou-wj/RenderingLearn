@@ -289,7 +289,6 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     
     // Bind memory to buffer
     vkBindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
-    SetAccess(DetermineDefaultAccess(Desc.Usage));
 }
 
 VulkanBuffer::~VulkanBuffer() {
@@ -301,64 +300,6 @@ VulkanBuffer::~VulkanBuffer() {
     }
 
     memoryManager->Free(Allocation);
-}
-
-ERHIResourceAccess VulkanBuffer::DetermineDefaultAccess(ERHIBufferUsageFlags Usage)
-{
-    // 1️⃣ 优先处理 Staging Buffer (CPU 上传)
-    // 这类 Buffer 通常是 Host Visible 的，初始状态用于 CPU 写入数据
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Staging))
-    {
-        return ERHIResourceAccess::CPURead; // 或者定义一个 CPUWrite，通常 CPURead 涵盖了 Host 访问
-    }
-
-    // 2️⃣ 传输目标 (通常用于初始同步数据)
-    // 如果 Buffer 创建是为了接收来自 Staging 的拷贝
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::TransferDst))
-    {
-        return ERHIResourceAccess::CopyDest;
-    }
-
-    // 3️⃣ UAV (随机读写)
-    // 如果 Buffer 明确支持 UnorderedAccess
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::UnorderedAccess))
-    {
-        return ERHIResourceAccess::UAVMask;
-    }
-
-    // 4️⃣ 只读资源 (SRV / Constant / Vertex / Index / Indirect)
-    // 这些状态在 Vulkan 中通常可以共存，且都属于只读语义
-    ERHIResourceAccessFlags ReadAccess;
-
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Vertex | ERHIBufferUsageFlag::Index))
-    {
-        ReadAccess |= ERHIResourceAccess::VertexOrIndexBuffer;
-    }
-
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Constant | ERHIBufferUsageFlag::ShaderResource))
-    {
-        // 对于 Buffer，SRV 通常涵盖了 Constant 和 Structured 的读取
-        ReadAccess |= ERHIResourceAccess::SRVMask;
-    }
-
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::Indirect))
-    {
-        ReadAccess |= ERHIResourceAccess::IndirectArgs;
-    }
-
-    if (!ReadAccess.IsEmpty())
-    {
-        return ReadAccess.ToEnum();
-    }
-
-    // 5️⃣ 传输源
-    if (EnumHasAnyFlags(Usage, ERHIBufferUsageFlag::TransferSrc))
-    {
-        return ERHIResourceAccess::CopySrc;
-    }
-
-    // 6️⃣ 默认兜底
-    return ERHIResourceAccess::Undefined;
 }
 
 void VulkanBuffer::AttachView(VulkanViewBase* view)

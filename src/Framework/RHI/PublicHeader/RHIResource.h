@@ -27,19 +27,12 @@ protected:
 class RHI_API RHIViewableResource : public RHIResource
 {
 public:
-    explicit RHIViewableResource(ERHIResourceType type,ERHIResourceAccess access = ERHIResourceAccess::Unknown)
+    explicit RHIViewableResource(ERHIResourceType type)
         : RHIResource(type)
-        , TrackedAccess(access)
     {
     }
 
     virtual ~RHIViewableResource() = default;
-    ERHIResourceAccess GetAccess() const { return TrackedAccess; }
-    void SetAccess(ERHIResourceAccess access) { TrackedAccess = access; }
-
-protected:
-    // 可以存放一些用于View管理的内部信息，比如引用计数、GPU handle 等
-    ERHIResourceAccess TrackedAccess;
 };
 // 纹理资源
 class RHI_API RHITexture : public RHIViewableResource

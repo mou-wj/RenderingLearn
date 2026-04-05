@@ -178,7 +178,7 @@ RenderTexture* CreateTexture(const std::string& Path)
 
 	RenderCore::RenderTexture* outTexture = nullptr;
 
-	ExecuteSync("Create Texture", [&outTexture, &desc, pixels](RHI::RHICommandList& commandList) {
+	ExecuteSync("Create Texture", [&outTexture, &desc, pixels](RHI::RHIGraphicCommandList& commandList) {
 
 		// 3. 调用 RHI 创建纹理
 		RHITextureSP texture = GRHIApi->CreateTexture(desc);

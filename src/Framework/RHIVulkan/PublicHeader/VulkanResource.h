@@ -212,7 +212,6 @@ public:
     void DetachView(VulkanViewBase* view);
 
 private:
-    ERHIResourceAccess DetermineDefaultAccess(ERHIBufferUsageFlags Usage);
     VkBuffer Buffer = VK_NULL_HANDLE;
     VkDeviceSize Size = 0;
     VulkanDevice* Device = nullptr;

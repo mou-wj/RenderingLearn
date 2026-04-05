@@ -99,11 +99,11 @@ namespace RenderCore {
         //} // while
     }
 
-    void BarrierBatchBegin::Execute(RHICommandList& commandList)
+    void BarrierBatchBegin::Execute(RHI::RHIGraphicCommandList& commandList)
     {
     }
 
-    void BarrierBatchEnd::Execute(RHICommandList& commandList)
+    void BarrierBatchEnd::Execute(RHI::RHIGraphicCommandList& commandList)
     {
     }
 

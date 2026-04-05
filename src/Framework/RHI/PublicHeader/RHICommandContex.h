@@ -2,63 +2,45 @@
 
 #include "RHIResource.h"
 #include "RHIShaderParameter.h"
-#include "RHICommandList.h"
 #include "RHITransition.h"
 
 namespace RHI
 {
     using RHICmdBuffer = uint64_t;
 
-    // Base transfer context interface: copy operations, transitions, begin/end recording.
-    // Does not contain data — implementors must provide GetCommandList().
-    class RHI_API RHITransferContext
+    class RHI_API RHIContextBase
     {
     public:
-        virtual ~RHITransferContext() = default;
-        virtual RHICommandList& GetCommandList() = 0;
+        virtual ~RHIContextBase() = default;
         virtual void Begin() = 0;
         virtual RHICmdBuffer End() = 0;
-        virtual void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) = 0;
         virtual void BeginTransitions(std::vector<const RHITransition*> Transitions) = 0;
         virtual void EndTransitions(std::vector<const RHITransition*> Transitions) = 0;
     };
 
-    // Compute context: inherits the transfer interface, owns CommandList/Pipeline data,
-    // and adds compute dispatch capability.
-    class RHI_API RHIComputeContext : public RHITransferContext
+    class RHI_API RHITransferContext : public virtual RHIContextBase
     {
     public:
-        RHIComputeContext();
-        virtual ~RHIComputeContext() = default;
+        virtual ~RHITransferContext() = default;
+        virtual void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) = 0;
+    };
+
+    class RHI_API RHIComputeContex : public virtual RHIContextBase
+    {
+    public:
+        virtual ~RHIComputeContex() = default;
         // ========================
         // Compute �ӿ�
         // ========================
         virtual void SetComputePipelineState(RHIComputePipelineState* pipelineState) = 0;
         virtual void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& parameter) = 0;
-
-
         virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
-        // ========================
-        // Command List
-        // ========================
-        RHICommandList& GetCommandList() override { return CommandList; }
-
-        virtual void Begin() = 0;
-        virtual RHICmdBuffer End() = 0;
-
-    protected:
-        RHICommandList CommandList; // ָ��ǰ�����б�
-        ERHIPipeline Pipeline;
     };
 
-    // Compute context + graphics extensions.
-    class RHI_API RHICommandContext : public RHIComputeContext
+    class RHI_API RHIGraphicContex : public virtual RHIContextBase
     {
     public:
-        RHICommandContext() = default;
-        virtual ~RHICommandContext() = default;
-
-        using RHIComputeContext::SetBatchedShaderParameters;
+        virtual ~RHIGraphicContex() = default;
         virtual void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& parameter) = 0;
 
         // ========================
@@ -85,10 +67,22 @@ namespace RHI
         virtual void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) = 0;
     };
 
+    // Combined context keeps compatibility with existing backends that implement
+    // transfer + compute + graphic capabilities in one object.
+    class RHI_API RHICommandContext : public RHITransferContext, public RHIComputeContex, public RHIGraphicContex
+    {
+    public:
+        virtual ~RHICommandContext() = default;
+    };
+
+    // Backward-compatible aliases.
+    using RHIComputeContext = RHIComputeContex;
+
     // Backward-compatible alias for the original type name.
     using RHICommandContex = RHICommandContext;
 
     using RHICommandContexSP = std::shared_ptr<RHICommandContex>;
+    using RHIContextBaseSP = std::shared_ptr<RHIContextBase>;
     using RHITransferContextSP = std::shared_ptr<RHITransferContext>;
     using RHIComputeContextSP = std::shared_ptr<RHIComputeContext>;
     using RHICommandContextSP = std::shared_ptr<RHICommandContext>;
@@ -139,8 +133,8 @@ public:
 
     virtual EQueueType GetType() const { return Type; };
 
-    virtual RHIComputeContext* AcquireCommandContext() = 0;
-    virtual RHIComputeContext* ReleaseCommandContext(RHIComputeContext* Context) = 0;
+    virtual RHIContextBase* AcquireCommandContext() = 0;
+    virtual RHIContextBase* ReleaseCommandContext(RHIContextBase* Context) = 0;
 
     // 提交指令包，并返回一个新的同步点
     virtual RHISyncPoint* Submit(RHICmdBuffer CmdBuffer) = 0;

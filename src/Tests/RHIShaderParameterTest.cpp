@@ -6,10 +6,61 @@
 #include "RHIPipelineStateCache.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <unordered_map>
 
 using namespace RenderCore;
 
 namespace Test {
+
+namespace {
+std::unordered_map<const RHI::RHIViewableResource*, RHI::ERHIResourceAccess> GTrackedResourceAccess;
+
+void TransitionResource(
+    RHI::RHIApi* api,
+    RHI::RHICommandListBase& cmdList,
+    RHI::RHIViewableResource* resource,
+    RHI::ERHIResourceAccess targetAccess)
+{
+    if (!api || !resource)
+    {
+        return;
+    }
+
+    const auto it = GTrackedResourceAccess.find(resource);
+    const RHI::ERHIResourceAccess currentAccess =
+        it != GTrackedResourceAccess.end() ? it->second : RHI::ERHIResourceAccess::Unknown;
+
+    if (currentAccess == targetAccess)
+    {
+        return;
+    }
+
+    std::vector<RHI::RHITransitionInfo> infos;
+    if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
+    {
+        infos.emplace_back(texture, currentAccess, targetAccess);
+    }
+    else if (auto* buffer = dynamic_cast<RHI::RHIBuffer*>(resource))
+    {
+        infos.emplace_back(buffer, currentAccess, targetAccess);
+    }
+    else
+    {
+        return;
+    }
+
+    char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+    auto* transition = new(transitionMem) RHI::RHITransition();
+    api->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+
+    cmdList.BeginTransitions({ transition });
+    cmdList.EndTransitions({ transition });
+
+    GTrackedResourceAccess[resource] = targetAccess;
+    api->RHIReleaseTransition(transition);
+    delete[] transitionMem;
+}
+}
 
 // 常量缓冲结构体
 struct ComputeShaderConstants
@@ -54,9 +105,10 @@ public:
         if (!cmdContext)
             return;
 
-        auto& cmdList = cmdContext->GetCommandList();
-        char* transitionMem = new char[G_RHITransition_TotalSize];
-        RHITransition* transition = new(transitionMem) RHITransition();
+        auto* computeContext = dynamic_cast<RHI::RHIComputeContex*>(cmdContext);
+        if (!computeContext)
+            return;
+        RHI::RHIComputeCommandList cmdList(computeContext);
         // ========================
         // 执行计算着色器 (4 次迭代)
         // ========================
@@ -66,11 +118,7 @@ public:
             cmdList.Begin();
 
             // 设置计算管线状态
-            auto* context = cmdList.GetCommandContex();
-            if (context)
-            {
-                context->SetComputePipelineState(ComputePipelineState.get());
-            }
+            cmdList.SetComputePipelineState(ComputePipelineState.get());
 
             // 准备计算着色器参数
             RHI::RHIBatchedShaderParameters computeParams;
@@ -86,43 +134,15 @@ public:
                 cbData.bFlipTextureVertical = 1;
                 cbData.bFlipBufferHorizontal = 1;
             }
-            cmdList.UpdateBuffer(ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
 
-            // 创建资源转化
+            TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::CopyDest);
+            api->UpdateBuffer(cmdList, ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
+            TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
 
-
-            // 用于追踪这一帧创建的 Transition，方便统一清理
-            std::vector<RHI::RHITransition*> FrameTransitions;
-
-
-            // 1. 准备 Transition 描述信息
-            RHI::RHITransitionCreateInfo transInfo;
-
-            transInfo.TransitionInfos.emplace_back(
-                TestBuffer.get(),
-                TestBuffer->GetAccess(),
-                RHI::ERHIResourceAccess::SRVCompute
-            );
-
-            // 设置资源转换：InputTexture (CopyDest -> SRV)
-            transInfo.TransitionInfos.emplace_back(
-                TestTexture.get(),
-                TestTexture->GetAccess(),
-                RHI::ERHIResourceAccess::SRVCompute
-            );
-            // 设置资源转换：OutputTexture (Unknown -> UAV)
-            transInfo.TransitionInfos.emplace_back(
-                OutputTextureUAV.get(),
-                OutputTexture->GetAccess(),
-                RHI::ERHIResourceAccess::UAVCompute
-            );
-            transInfo.TransitionInfos.emplace_back(
-                OutputBufferUAV.get(),
-                OutputBuffer->GetAccess(),
-                RHI::ERHIResourceAccess::UAVCompute
-            );
-            
-            api->RHICreateTransition(transition, transInfo);
+            TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
+            TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRVCompute);
+            TransitionResource(api, cmdList, OutputTexture.get(), RHI::ERHIResourceAccess::UAVCompute);
+            TransitionResource(api, cmdList, OutputBuffer.get(), RHI::ERHIResourceAccess::UAVCompute);
 
 
             std::optional<ShaderParameterAllocation> alloc;
@@ -208,9 +228,6 @@ public:
                 computeParams.ResourceParameters.push_back(bufUavParam);
             }
 
-            cmdList.BeginTransitions({ transition });
-            cmdList.EndTransitions({ transition });
-
             // 设置批量参数
             cmdList.SetBatchedShaderParameters(ComputeShader.get(), computeParams);
 
@@ -222,7 +239,6 @@ public:
             // 提交命令
 			RHI::RHICmdBuffer cmdBuffer = cmdList.End();
             queue->Submit(cmdBuffer);
-			api->RHIReleaseTransition(transition);
             cmdList.Clear();
         }
     }
@@ -366,10 +382,17 @@ private:
         if (!queue)
             return;
         auto* cmdContext = queue->AcquireCommandContext();
-        auto& cmdList = cmdContext->GetCommandList();
+        if (!cmdContext)
+            return;
+        auto* computeContext = dynamic_cast<RHI::RHIComputeContex*>(cmdContext);
+        if (!computeContext)
+            return;
+        RHI::RHIComputeCommandList cmdList(computeContext);
         cmdList.SetImmediate(true);
         cmdList.Begin();
+        TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::CopyDest);
         api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHITextureRegion::Create2DRegion(2, 2));
+        TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRVCompute);
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer textureUploadCmd = cmdList.End();
         queue->Submit(textureUploadCmd);
@@ -393,7 +416,9 @@ private:
         glm::vec4 bufferData = glm::vec4(0.25f, 0.5f, 0.75f, 1.0f);
         cmdList.SetImmediate(true);
         cmdList.Begin();
-        cmdList.UpdateBuffer(TestBuffer.get(), &bufferData, { 0, sizeof(bufferData) });
+        TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::CopyDest);
+        api->UpdateBuffer(cmdList, TestBuffer.get(), &bufferData, { 0, sizeof(bufferData) });
+        TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer bufferUploadCmd = cmdList.End();
         queue->Submit(bufferUploadCmd);
@@ -454,10 +479,17 @@ private:
         if (!queue)
             return;
         auto* cmdContext = queue->AcquireCommandContext();
-        auto& cmdList = cmdContext->GetCommandList();
+        if (!cmdContext)
+            return;
+        auto* computeContext = dynamic_cast<RHI::RHIComputeContex*>(cmdContext);
+        if (!computeContext)
+            return;
+        RHI::RHIComputeCommandList cmdList(computeContext);
         cmdList.SetImmediate(true);
         cmdList.Begin();
-        cmdList.UpdateBuffer(ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
+        TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::CopyDest);
+        api->UpdateBuffer(cmdList, ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
+        TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer cbUploadCmd = cmdList.End();
         queue->Submit(cbUploadCmd);

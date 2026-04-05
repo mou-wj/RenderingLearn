@@ -328,7 +328,7 @@ public:
     void* Paramters = nullptr;
     ShaderParametersMetadata ContentMetaData;
     // Set shader parameters into command list for the given shader
-    void SetShaderParameters(RHI::RHICommandList& cmdList, const ShaderSP& shader,ShaderParameterBindingInfo* bindingInfo) const
+    void SetShaderParameters(RHI::RHICommandListBase& cmdList, const ShaderSP& shader,ShaderParameterBindingInfo* bindingInfo) const
     {
         if (!Paramters || !shader)
             return;

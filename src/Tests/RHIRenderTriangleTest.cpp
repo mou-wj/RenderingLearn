@@ -6,8 +6,59 @@
 #include "RHIPipelineStateCache.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <unordered_map>
 using namespace RenderCore;
 namespace Test {
+
+namespace {
+std::unordered_map<const RHI::RHIViewableResource*, RHI::ERHIResourceAccess> GTrackedResourceAccess;
+
+void TransitionResource(
+    RHI::RHIApi* api,
+    RHI::RHICommandListBase& cmdList,
+    RHI::RHIViewableResource* resource,
+    RHI::ERHIResourceAccess targetAccess)
+{
+    if (!api || !resource)
+    {
+        return;
+    }
+
+    const auto it = GTrackedResourceAccess.find(resource);
+    const RHI::ERHIResourceAccess currentAccess =
+        it != GTrackedResourceAccess.end() ? it->second : RHI::ERHIResourceAccess::Unknown;
+
+    if (currentAccess == targetAccess)
+    {
+        return;
+    }
+
+    std::vector<RHI::RHITransitionInfo> infos;
+    if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
+    {
+        infos.emplace_back(texture, currentAccess, targetAccess);
+    }
+    else if (auto* buffer = dynamic_cast<RHI::RHIBuffer*>(resource))
+    {
+        infos.emplace_back(buffer, currentAccess, targetAccess);
+    }
+    else
+    {
+        return;
+    }
+
+    char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+    auto* transition = new(transitionMem) RHI::RHITransition();
+    api->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+
+    cmdList.BeginTransitions({ transition });
+    cmdList.EndTransitions({ transition });
+
+    GTrackedResourceAccess[resource] = targetAccess;
+    api->RHIReleaseTransition(transition);
+    delete[] transitionMem;
+}
+}
 
 // 简单的顶点结构体
 struct SimpleVertex
@@ -79,7 +130,12 @@ public:
             return;
         }
 
-        auto& cmdList = cmdContext->GetCommandList();
+        auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(cmdContext);
+        if (!graphicContext)
+        {
+            return;
+        }
+        RHI::RHIGraphicCommandList cmdList(graphicContext);
         int i = 0;
         while (true) {
             i++;
@@ -116,10 +172,17 @@ public:
             passInfo.RenderArea.Width = FrameWidth;
             passInfo.RenderArea.Height = FrameHeight;
             cmdList.Begin();
+
+            TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::RenderTargetView);
+            TransitionResource(api, cmdList, depthStencilTexture.get(), RHI::ERHIResourceAccess::DSVWrite);
+
             cmdList.BeginRenderPass(passInfo);
             // 绘制三角形 (3个顶点, 1个实例)
             cmdList.Draw(3, 1, 0, 0);
             cmdList.EndRenderPass();
+
+            TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::Present);
+
             // 执行所有命令
             cmdList.ExecuteAll();
             RHI::RHICmdBuffer cmdBuffer = cmdList.End();
@@ -197,10 +260,21 @@ private:
 			return;
 		}
 		auto commandContext = queue->AcquireCommandContext();
-        auto& commandList = commandContext->GetCommandList();
+        if (!commandContext)
+        {
+            return;
+        }
+        auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(commandContext);
+        if (!graphicContext)
+        {
+            return;
+        }
+        RHI::RHIGraphicCommandList commandList(graphicContext);
         commandList.SetImmediate(true);
         commandContext->Begin();
-        commandList.UpdateBuffer(VertexBuffer.get(), vertices, { 0, sizeof(vertices) });
+        TransitionResource(api, commandList, VertexBuffer.get(), RHI::ERHIResourceAccess::CopyDest);
+        api->UpdateBuffer(commandList, VertexBuffer.get(), vertices, { 0, sizeof(vertices) });
+        TransitionResource(api, commandList, VertexBuffer.get(), RHI::ERHIResourceAccess::VertexOrIndexBuffer);
         commandList.ExecuteAll();
         RHI::RHICmdBuffer cmdBuffer = commandList.End();
         queue->Submit(cmdBuffer);

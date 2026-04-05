@@ -183,19 +183,6 @@ struct RHI_API RHITransitionCreateInfo
 	std::vector<RHITransitionInfo> TransitionInfos;
 };
 
-struct RHI_API RHITrackedAccessInfo
-{
-	RHITrackedAccessInfo() = default;
-
-	RHITrackedAccessInfo(RHIViewableResource* InResource, ERHIResourceAccess InAccess)
-		: Resource(InResource)
-		, Access(InAccess)
-	{}
-
-	RHIViewableResource* Resource = nullptr;
-	ERHIResourceAccess Access = ERHIResourceAccess::Unknown;
-};
-
 // ȫ�ֱ������� RHI �ڳ�ʼ��ʱ���
 extern RHI_API uint32_t G_RHITransition_TotalSize;
 extern RHI_API uint32_t G_RHITransition_PrivateDataOffset;

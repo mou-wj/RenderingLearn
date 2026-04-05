@@ -15,9 +15,9 @@ namespace RenderCore {
 struct RENDERCORE_API RenderCommand
 {
     std::string Name;
-    std::function<void(RHI::RHICommandList&)> Execute;
+    std::function<void(RHI::RHIGraphicCommandList&)> Execute;
 
-    RenderCommand(const std::string& InName, std::function<void(RHI::RHICommandList&)> InFunc)
+    RenderCommand(const std::string& InName, std::function<void(RHI::RHIGraphicCommandList&)> InFunc)
         : Name(InName), Execute(std::move(InFunc)) {}
 };
 
@@ -27,11 +27,11 @@ RENDERCORE_API bool StopRenderThread();
 
 RENDERCORE_API void EnqueueRenderCommand(const RenderCommand& cmd);
 
-RENDERCORE_API void EnqueueRenderCommand(const std::string& cmdName, const std::function<void(RHI::RHICommandList&)>& cmdFunc);
+RENDERCORE_API void EnqueueRenderCommand(const std::string& cmdName, const std::function<void(RHI::RHIGraphicCommandList&)>& cmdFunc);
 
 RENDERCORE_API void ExecuteSync(const RenderCommand& cmd);
 
-RENDERCORE_API void ExecuteSync(const std::string& cmdName, const std::function<void(RHI::RHICommandList&)>& cmdFunc);
+RENDERCORE_API void ExecuteSync(const std::string& cmdName, const std::function<void(RHI::RHIGraphicCommandList&)>& cmdFunc);
 
 
 // 简化版渲染线程管理类
@@ -62,7 +62,7 @@ private:
     std::condition_variable QueueCV;
     std::condition_variable CmdFinishCV;
     RHI::RHIQueue* ImmediateQueue = nullptr;
-    RHI::RHIComputeContext* ImmediateCommandContex = nullptr;
+    RHI::RHIContextBase* ImmediateCommandContex = nullptr;
 };
 
 

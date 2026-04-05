@@ -22,7 +22,7 @@ public:
         transitions.push_back(transientInfo);
     }
 
-    void Execute(RHICommandList& commandList);
+    void Execute(RHI::RHIGraphicCommandList& commandList);
 
     const std::vector<RHITransitionInfo>& GetTransitions() const { return transitions; }
 
@@ -36,7 +36,7 @@ public:
         transitions.push_back(transientInfo);
     }
 
-    void Execute(RHICommandList& commandList);
+    void Execute(RHI::RHIGraphicCommandList& commandList);
 
     const std::vector<RHITransitionInfo>& GetTransitions() const { return transitions; }
 
@@ -74,7 +74,7 @@ public:
     const std::string& GetName() const { return Name; }
 
     // Execution
-    virtual void Execute(RHICommandList& commandList) = 0;
+    virtual void Execute(RHI::RHIGraphicCommandList& commandList) = 0;
 
     // Pass Info
     const RenderGraphPassInfo& GetPassInfo() const { return PassInfo; }
@@ -105,15 +105,15 @@ protected:
 class RENDERCORE_API RenderGraphLambdaPass : public RenderGraphPass
 {
 public:
-    RenderGraphLambdaPass(const std::string& name,  const RenderGraphPassInfo& info, std::function<void(RHICommandList&)>&& lambda) : RenderGraphPass(name, info), ExecuteFunction(std::forward<std::function<void(RHICommandList&)>>(lambda)) {}
+    RenderGraphLambdaPass(const std::string& name,  const RenderGraphPassInfo& info, std::function<void(RHI::RHIGraphicCommandList&)>&& lambda) : RenderGraphPass(name, info), ExecuteFunction(std::forward<std::function<void(RHI::RHIGraphicCommandList&)>>(lambda)) {}
     ~RenderGraphLambdaPass() override {}
 
-    void Execute(RHICommandList& commandList) override {
+    void Execute(RHI::RHIGraphicCommandList& commandList) override {
         ExecuteFunction(commandList);
     }
 
 private:
-    std::function<void(RHICommandList&)> ExecuteFunction;
+    std::function<void(RHI::RHIGraphicCommandList&)> ExecuteFunction;
 };
 
 using RenderGraphPassSP = std::shared_ptr<RenderGraphPass>;

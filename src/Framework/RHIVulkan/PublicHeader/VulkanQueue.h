@@ -41,8 +41,8 @@ public:
 
     // ---- RHI::RHIQueue overrides ----
     RHI::EQueueType GetType() const override;
-    RHI::RHIComputeContext* AcquireCommandContext() override;
-    RHI::RHIComputeContext* ReleaseCommandContext(RHI::RHIComputeContext* Context) override;
+    RHI::RHIContextBase* AcquireCommandContext() override;
+    RHI::RHIContextBase* ReleaseCommandContext(RHI::RHIContextBase* Context) override;
     RHI::RHISyncPoint* Submit(RHI::RHICmdBuffer CmdBuffer) override;
     RHI::RHISyncPoint* Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHISyncPoint*>& WaitPoints) override;
     void WaitIdle() override;

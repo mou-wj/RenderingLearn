@@ -33,7 +33,7 @@ public:
     ~RenderGraphBuilder();
 
     // Pass Management
-    RenderGraphPassSP AddPass(const std::string& name, const RenderGraphPassInfo& info, std::function<void(RHICommandList&)>&& lambda);
+    RenderGraphPassSP AddPass(const std::string& name, const RenderGraphPassInfo& info, std::function<void(RHI::RHIGraphicCommandList&)>&& lambda);
     void AddPassDependency(RenderGraphPass* pass, RenderGraphPass* passConsumer);
 
     // Resource Creation (Examples - Add more as needed)

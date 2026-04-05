@@ -1,4 +1,3 @@
-// VulkanContexts.h
 #pragma once
 
 #include "RHICommandContex.h"
@@ -11,87 +10,101 @@
 #include "VulkanCommandBuffer.h"
 #include "VulkanFuncWrapper.h"
 
-
 using namespace RHI;
 
 namespace RHIVulkan {
 class VulkanDescriptorSet;
 class VulkanCommandBufferManager;
+class VulkanQueue;
 
-
-// -------------------------------------------------------------------------------------------------
-// Vulkan Graphics Context
-// -------------------------------------------------------------------------------------------------
-class RHIVULKAN_API VulkanCommandContext : public RHICommandContext
+class RHIVULKAN_API VulkanCommandContext : public virtual RHI::RHIContextBase
 {
 public:
-    inline static VulkanCommandContext* CastFrom(RHIComputeContext* context);
     VulkanCommandContext(VulkanDevice* device, VulkanQueue* queue);
     virtual ~VulkanCommandContext();
-    void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& parameter) override;
-    void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& parameter) override;
 
-    // Compute接口
-    void SetComputePipelineState(RHIComputePipelineState* pipelineState) override;
-    void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
-    void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) override;
-
-    virtual void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) override;
-
-    // Graphics接口
-    void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState) override;
-    virtual void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth) override;
-    virtual void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) override;
-    void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) override;
-    void DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0) override;
-
-    // RayTracing接口
-    void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) override;
-    void SetShaderTable() override;
-    void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) override;
-
-    // 域
     void Begin() override;
     RHICmdBuffer End() override;
-    void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) override;
-    void EndRenderPass() override;
     void BeginTransitions(std::vector<const RHITransition*> Transitions) override;
     void EndTransitions(std::vector<const RHITransition*> Transitions) override;
-
 
     VulkanQueue* GetQueue() const { return queue; }
     VulkanCommandBufferManager* GetCommandBufferManager() const { return commandBufferManager; }
     VulkanDevice* GetDevice() const { return device; }
-	VulkanLooseUniformDataUploader* GetLooseUniformDataUploader() const { return LooseUniformDataUploader; }
+    VulkanLooseUniformDataUploader* GetLooseUniformDataUploader() const { return LooseUniformDataUploader; }
 
-private:
+protected:
     void SetShaderTextureInternal(RHIShader* shader, uint32_t textureIndex, RHITexture* texture);
     void SetShaderSamplerInternal(RHIShader* shader, uint32_t samplerIndex, RHISampler* sampler);
     void SetShaderUAVInternal(RHIShader* shader, uint32_t uavIndex, RHIUnorderedAccessView* uav);
     void SetShaderSRVInternal(RHIShader* shader, uint32_t srvIndex, RHIShaderResourceView* srv);
     void SetShaderUniformBufferInternal(RHIShader* shader, uint32_t bufferIndex, RHIBuffer* buffer);
 
-    VulkanDevice* device;
-    VulkanQueue* queue;
-    VulkanCommandBufferManager* commandBufferManager;
-
-    VulkanPendingGfxState*     PendingGfx;
-    VulkanPendingComputeState* PendingCompute;
-    VulkanLooseUniformDataUploader* LooseUniformDataUploader;
-
+    VulkanDevice* device = nullptr;
+    VulkanQueue* queue = nullptr;
+    VulkanCommandBufferManager* commandBufferManager = nullptr;
+    VulkanPendingGfxState* PendingGfx = nullptr;
+    VulkanPendingComputeState* PendingCompute = nullptr;
+    VulkanLooseUniformDataUploader* LooseUniformDataUploader = nullptr;
 };
 
+class RHIVULKAN_API VulkanTransferContext : public VulkanCommandContext, public RHI::RHITransferContext
+{
+public:
+    static VulkanTransferContext* CastFrom(RHITransferContext* context);
+
+    VulkanTransferContext(VulkanDevice* device, VulkanQueue* queue);
+    ~VulkanTransferContext() override = default;
+
+    void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) override;
+};
+
+class RHIVULKAN_API VulkanComputeContext : public VulkanCommandContext, public RHI::RHIComputeContex
+{
+public:
+    static VulkanComputeContext* CastFrom(RHIComputeContext* context);
+
+    VulkanComputeContext(VulkanDevice* device, VulkanQueue* queue);
+    ~VulkanComputeContext() override = default;
+
+    void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& parameter) override;
+    void SetComputePipelineState(RHIComputePipelineState* pipelineState) override;
+    void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
+};
+
+class RHIVULKAN_API VulkanGraphicContext : public VulkanCommandContext, public RHI::RHIGraphicContex
+{
+public:
+    static VulkanGraphicContext* CastFrom(RHI::RHIGraphicContex* context);
+
+    VulkanGraphicContext(VulkanDevice* device, VulkanQueue* queue);
+    ~VulkanGraphicContext() override = default;
+
+    void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& parameter) override;
+    void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) override;
+    void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState) override;
+    void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth) override;
+    void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) override;
+    void Draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) override;
+    void DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0) override;
+    void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) override;
+    void EndRenderPass() override;
+    void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) override;
+    void SetShaderTable() override;
+    void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) override;
+};
 
 struct VulkanCommandUpdateTexture : public RHICommandBase
 {
     VulkanTexture* texture;
     std::shared_ptr<VulkanStagingBuffer> staging;
     VkBufferImageCopy copyRegion{};
-    VulkanCommandUpdateTexture(VulkanTexture* texture, std::shared_ptr<VulkanStagingBuffer> buffer, VkBufferImageCopy region) : texture(texture), staging(buffer) , copyRegion(region){}
-    void Execute(RHICommandList& cmdList) override {
-        auto contex = cmdList.GetCommandContex();
-        VulkanCommandContext* vulkanContex = dynamic_cast<VulkanCommandContext*>(contex);
-        // 使用active命令缓冲区，隐式layout转换由调用方通过RHI Transition系统显式处理
+
+    VulkanCommandUpdateTexture(VulkanTexture* texture, std::shared_ptr<VulkanStagingBuffer> buffer, VkBufferImageCopy region)
+        : texture(texture), staging(buffer), copyRegion(region) {}
+
+    void Execute(RHICommandListBase& cmdList) override {
+        auto* vulkanContex = dynamic_cast<VulkanCommandContext*>(cmdList.GetCommandContex());
         VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->GetActiveCommandBuffer();
 
         CmdCopyBufferToImage(
@@ -119,10 +132,9 @@ struct VulkanCommandUpdateBuffer : public RHICommandBase
         : buffer(buffer), staging(stagingBuffer), copyRegion(region) {
     }
 
-    void Execute(RHICommandList& cmdList) override
+    void Execute(RHICommandListBase& cmdList) override
     {
-        auto context = cmdList.GetCommandContex();
-        VulkanCommandContext* vulkanContext = dynamic_cast<VulkanCommandContext*>(context);
+        auto* vulkanContext = dynamic_cast<VulkanCommandContext*>(cmdList.GetCommandContex());
 
         VulkanCommandBuffer* cmdBuffer =
             vulkanContext->GetCommandBufferManager()->GetActiveCommandBuffer();
@@ -138,7 +150,5 @@ struct VulkanCommandUpdateBuffer : public RHICommandBase
         vulkanContext->GetDevice()->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
     }
 };
-
-
 
 } // namespace WR::RHIVulkan

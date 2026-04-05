@@ -11,6 +11,22 @@
 
 namespace RHIVulkan {
 
+namespace {
+VulkanCommandContext* CreateQueueContext(VulkanDevice* device, VulkanQueue* queue, RHI::EQueueType queueType)
+{
+    switch (queueType)
+    {
+    case RHI::EQueueType::Transfer:
+        return new VulkanTransferContext(device, queue);
+    case RHI::EQueueType::Compute:
+        return new VulkanComputeContext(device, queue);
+    case RHI::EQueueType::Graphics:
+    default:
+        return new VulkanGraphicContext(device, queue);
+    }
+}
+}
+
 // -------------------------------------------------------------------------------------------------
 // VulkanQueue
 // -------------------------------------------------------------------------------------------------
@@ -134,7 +150,7 @@ void VulkanQueue::InitContextPool(RHI::EQueueType type, uint32_t poolSize)
     std::lock_guard<std::mutex> lock(ContextPoolMutex_);
     for (uint32_t i = 0; i < poolSize; ++i)
     {
-        VulkanCommandContext* ctx = new VulkanCommandContext(device_, this);
+        VulkanCommandContext* ctx = CreateQueueContext(device_, this, QueueType_);
         AllContexts_.push_back(ctx);
         FreeContexts_.push_back(ctx);
     }
@@ -145,7 +161,7 @@ RHI::EQueueType VulkanQueue::GetType() const
     return QueueType_;
 }
 
-RHI::RHIComputeContext* VulkanQueue::AcquireCommandContext()
+RHI::RHIContextBase* VulkanQueue::AcquireCommandContext()
 {
     std::lock_guard<std::mutex> lock(ContextPoolMutex_);
     if (!FreeContexts_.empty())
@@ -155,12 +171,12 @@ RHI::RHIComputeContext* VulkanQueue::AcquireCommandContext()
         return ctx;
     }
 
-    VulkanCommandContext* ctx = new VulkanCommandContext(device_, this);
+    VulkanCommandContext* ctx = CreateQueueContext(device_, this, QueueType_);
     AllContexts_.push_back(ctx);
     return ctx;
 }
 
-RHI::RHIComputeContext* VulkanQueue::ReleaseCommandContext(RHI::RHIComputeContext* Context)
+RHI::RHIContextBase* VulkanQueue::ReleaseCommandContext(RHI::RHIContextBase* Context)
 {
     if (!Context)
     {

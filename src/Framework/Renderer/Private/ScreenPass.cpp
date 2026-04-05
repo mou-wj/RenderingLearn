@@ -14,7 +14,7 @@ namespace Renderer {
 		
 		auto drawTexture = GShaderMap.GetShader(drawTextureShaderType,0);
 		auto fullScreenQuad = GShaderMap.GetShader(fullScreenQuadShaderType, 0);
-		//»ñÈ¡Ä¬ÈÏ¹ÜÏß×´Ì¬
+		//ï¿½ï¿½È¡Ä¬ï¿½Ï¹ï¿½ï¿½ï¿½×´Ì¬
 		RHIGraphicsPipelineStateDesc pipelineStateDesc;
 		pipelineStateDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(drawTexture->GetRHIShader().get());
         pipelineStateDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(fullScreenQuad->GetRHIShader().get());
@@ -26,7 +26,7 @@ namespace Renderer {
 		//info.ShaderParmeters = (const ScenePassShaderParameter*) & parameter;
 		//info.PassFlag = EPassFlag::Graphic;
 		//
-		//builder.AddPass("ScreenPass", info, [graphicStates,parameter, info, drawTextureShaderType, //fullScreenQuadShaderType, drawTexture](RHI::RHICommandList& cmdList) {
+		//builder.AddPass("ScreenPass", info, [graphicStates,parameter, info, drawTextureShaderType, //fullScreenQuadShaderType, drawTexture](RHI::RHIGraphicCommandList& cmdList) {
 		//	cmdList.SetGraphicPipelineState(graphicStates.get());
 		//	info.ShaderParmeters.SetShaderParameters(cmdList, drawTexture, drawTextureShaderType-//>ParameterBindingInfo);
 		//	cmdList.SetStreamSource(0, nullptr, 0);

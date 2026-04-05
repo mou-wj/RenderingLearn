@@ -20,7 +20,7 @@ namespace RenderCore {
         PasseSPs.clear();
     }
 
-    RenderGraphPassSP RenderGraphBuilder::AddPass(const std::string& name, const RenderGraphPassInfo& info, std::function<void(RHICommandList&)>&& lambda)
+    RenderGraphPassSP RenderGraphBuilder::AddPass(const std::string& name, const RenderGraphPassInfo& info, std::function<void(RHI::RHIGraphicCommandList&)>&& lambda)
     {
         auto pass = std::make_shared<RenderGraphLambdaPass>(name, info, std::move(lambda));
         PasseSPs.push_back(pass);
@@ -178,7 +178,7 @@ namespace RenderCore {
 
         std::vector<Core::TaskHandle> handles;
         handles.reserve(ParallelPasses.size());
-        std::vector<RHI::RHICommandListSP> RecordedCommansLists;
+        std::vector<RHI::RHIGraphicCommandListSP> RecordedCommansLists;
 		RecordedCommansLists.reserve(ParallelPasses.size());
         // For each parallel group, create one task that creates a command context/list
         // and executes each pass in the group sequentially: begin barriers, pass work, end barriers.
@@ -196,16 +196,19 @@ namespace RenderCore {
             RHI::RHIQueue* queue = api->GetQueue(RHI::EQueueType::Graphics);
             if (!queue) return;
 
-            RHI::RHIComputeContext* ctx = queue->AcquireCommandContext();
+            RHI::RHIContextBase* ctx = queue->AcquireCommandContext();
             if (!ctx) return;
 
-            RHI::RHICommandListSP cmdListSP = std::make_shared<RHICommandList>(ctx);
+            auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(ctx);
+            if (!graphicContext) return;
+
+            RHI::RHIGraphicCommandListSP cmdListSP = std::make_shared<RHI::RHIGraphicCommandList>(graphicContext);
             RecordedCommansLists.push_back(cmdListSP);
 
             auto handle = taskPool.AddTask([groupCopy = std::move(groupCopy), cmdListSP]() {
 
 
-                RHI::RHICommandList& cmdList = *cmdListSP;
+                RHI::RHIGraphicCommandList& cmdList = *cmdListSP;
 
                 for (auto* pass : groupCopy)
                 {
@@ -238,7 +241,7 @@ namespace RenderCore {
 
 
         // enqueue command
-        EnqueueRenderCommand("Execute Render Graph Builder", [RecordedCommansLists](RHI::RHICommandList& commandList) {
+        EnqueueRenderCommand("Execute Render Graph Builder", [RecordedCommansLists](RHI::RHIGraphicCommandList& commandList) {
             for (const auto& cmdList : RecordedCommansLists) {
                 if (cmdList) {
                     commandList.Merge(cmdList);

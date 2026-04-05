@@ -53,7 +53,7 @@ bool VulkanDevice::Init(const std::vector<const char*>& enabledLayers,
 {
     SelectQueueFamilies(physicalDevice_);
     CreateLogicalDevice(physicalDevice_, enabledExtensions, enabledLayers);
-    globalCommandContext_ = new VulkanCommandContext(this, graphicsQueue_);
+    globalCommandContext_ = new VulkanGraphicContext(this, graphicsQueue_);
     return true;
 }
 
