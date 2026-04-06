@@ -90,15 +90,23 @@ namespace RHIVulkan{
         managedObjects_.clear();
     }
 
-    VulkanSemaphore* VulkanSemaphoreManager::Acquire() {
+    VulkanSemaphore* VulkanSemaphoreManager::Acquire(bool requireUnsignaled) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!pool_.empty()) {
+
+        if (requireUnsignaled)
+        {
+            VulkanSemaphore* sem = new VulkanSemaphore(device_);
+            managedObjects_.push_back(sem);
+            return sem;
+        }
+
+        if (!pool_.empty())
+        {
             VulkanSemaphore* sem = pool_.front();
             pool_.pop();
             return sem;
         }
 
-        // �ؿ�ʱ�����¶��󲢼�������б�
         VulkanSemaphore* sem = new VulkanSemaphore(device_);
         managedObjects_.push_back(sem);
         return sem;
@@ -107,7 +115,20 @@ namespace RHIVulkan{
     void VulkanSemaphoreManager::Release(VulkanSemaphore* sem) {
         if (!sem) return;
         std::lock_guard<std::mutex> lock(mutex_);
-        pool_.push(sem);
+
+        if (pool_.size() >= MaxSemaphorePoolSize)
+        {
+            auto it = std::find(managedObjects_.begin(), managedObjects_.end(), sem);
+            if (it != managedObjects_.end())
+            {
+                managedObjects_.erase(it);
+            }
+            delete sem;
+        }
+        else
+        {
+            pool_.push(sem);
+        }
     }
 
 // -------------------------------------------------------------------------------------------------
@@ -229,7 +250,11 @@ VulkanRHISyncPointManager::~VulkanRHISyncPointManager()
     AllSyncPoints.clear();
 }
 
-RHI::RHISyncPoint* VulkanRHISyncPointManager::Acquire(RHI::EQueueType queueType, VulkanFence* fence)
+RHI::RHISyncPoint* VulkanRHISyncPointManager::Acquire(
+    RHI::EQueueType queueType,
+    VulkanFence* fence,
+    VulkanSemaphore* semaphore,
+    bool ownsSemaphore)
 {
     std::lock_guard<std::mutex> lock(Mutex);
     GarbageCollect_NoLock();
@@ -249,7 +274,7 @@ RHI::RHISyncPoint* VulkanRHISyncPointManager::Acquire(RHI::EQueueType queueType,
 
     if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
     {
-        vulkanSyncPoint->Activate(queueType, fence, NextValue++, this);
+        vulkanSyncPoint->Activate(queueType, fence, semaphore, ownsSemaphore, NextValue++, this);
     }
     PendingSyncPoints.push_back(syncPoint);
     return syncPoint;
@@ -276,7 +301,10 @@ void VulkanRHISyncPointManager::TryRecycle(RHI::RHISyncPoint* syncPoint)
             return;
         }
 
-        if (!vulkanSyncPoint->Fence || vulkanSyncPoint->Fence->IsSignaled())
+        const bool reachedByFence = vulkanSyncPoint->Fence && vulkanSyncPoint->Fence->IsSignaled();
+        const bool semaphoreOnly = !vulkanSyncPoint->Fence && vulkanSyncPoint->Semaphore;
+        const bool noFenceAndNoSemaphore = !vulkanSyncPoint->Fence && !vulkanSyncPoint->Semaphore;
+        if (reachedByFence || semaphoreOnly || noFenceAndNoSemaphore)
         {
             Recycle_NoLock(syncPoint);
         }
@@ -296,8 +324,14 @@ void VulkanRHISyncPointManager::WaitAndRecycleAll()
             }
             if (vulkanSyncPoint)
             {
+                if (vulkanSyncPoint->Semaphore && vulkanSyncPoint->bOwnsSemaphore)
+                {
+                    Device->GetSemaphoreManager()->Release(vulkanSyncPoint->Semaphore);
+                }
                 vulkanSyncPoint->bPending = false;
                 vulkanSyncPoint->Fence = nullptr;
+                vulkanSyncPoint->Semaphore = nullptr;
+                vulkanSyncPoint->bOwnsSemaphore = false;
                 vulkanSyncPoint->Owner = this;
                 FreeSyncPoints.push_back(syncPoint);
             }
@@ -314,7 +348,7 @@ void VulkanRHISyncPointManager::GarbageCollect_NoLock()
         bool reached = false;
         if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
         {
-            reached = !vulkanSyncPoint || !vulkanSyncPoint->Fence || vulkanSyncPoint->Fence->IsSignaled();
+            reached = !vulkanSyncPoint || (vulkanSyncPoint->Fence && vulkanSyncPoint->Fence->IsSignaled());
         }
         
         if (reached)
@@ -323,8 +357,14 @@ void VulkanRHISyncPointManager::GarbageCollect_NoLock()
             {
                 if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
                 {
+                    if (vulkanSyncPoint->Semaphore && vulkanSyncPoint->bOwnsSemaphore)
+                    {
+                        Device->GetSemaphoreManager()->Release(vulkanSyncPoint->Semaphore);
+                    }
                     vulkanSyncPoint->bPending = false;
                     vulkanSyncPoint->Fence = nullptr;
+                    vulkanSyncPoint->Semaphore = nullptr;
+                    vulkanSyncPoint->bOwnsSemaphore = false;
                     vulkanSyncPoint->Owner = this;
                 }
                 FreeSyncPoints.push_back(syncPoint);
@@ -346,8 +386,14 @@ void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncPoint* syncPoint)
 
     if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
     {
+        if (vulkanSyncPoint->Semaphore && vulkanSyncPoint->bOwnsSemaphore)
+        {
+            Device->GetSemaphoreManager()->Release(vulkanSyncPoint->Semaphore);
+        }
         vulkanSyncPoint->bPending = false;
         vulkanSyncPoint->Fence = nullptr;
+        vulkanSyncPoint->Semaphore = nullptr;
+        vulkanSyncPoint->bOwnsSemaphore = false;
         vulkanSyncPoint->Owner = this;
     }
     FreeSyncPoints.push_back(syncPoint);
@@ -357,10 +403,18 @@ void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncPoint* syncPoint)
 // VulkanRHISyncPoint Implementation
 // -------------------------------------------------------------------------------------------------
 
-void VulkanRHISyncPoint::Activate(RHI::EQueueType queueType, VulkanFence* inFence, uint64_t inValue, VulkanRHISyncPointManager* inOwner)
+void VulkanRHISyncPoint::Activate(
+    RHI::EQueueType queueType,
+    VulkanFence* inFence,
+    VulkanSemaphore* inSemaphore,
+    bool inOwnsSemaphore,
+    uint64_t inValue,
+    VulkanRHISyncPointManager* inOwner)
 {
     Owner = inOwner;
     Fence = inFence;
+    Semaphore = inSemaphore;
+    bOwnsSemaphore = inOwnsSemaphore;
     bPending = true;
     Type = queueType;
     Value = inValue;
@@ -368,7 +422,15 @@ void VulkanRHISyncPoint::Activate(RHI::EQueueType queueType, VulkanFence* inFenc
 
 bool VulkanRHISyncPoint::IsReached() const
 {
-    const bool reached = Fence ? Fence->IsSignaled() : true;
+    bool reached = false;
+    if (Fence)
+    {
+        reached = Fence->IsSignaled();
+    }
+    else if (!Semaphore)
+    {
+        reached = true;
+    }
     if (reached && Owner)
     {
         Owner->TryRecycle(const_cast<VulkanRHISyncPoint*>(this));

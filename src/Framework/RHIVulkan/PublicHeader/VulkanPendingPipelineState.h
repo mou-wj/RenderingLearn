@@ -581,6 +581,11 @@ namespace RHIVulkan {
             CurrentState->SetPackedGlobalParameter(frequency, BaseIndex, NumBytes, NewValue);
         }
 
+        bool HasPipeline() const
+        {
+            return CurrentPipeline != nullptr;
+        }
+
         void PrepareForDispatch(VulkanCommandBuffer* cmd)
         {
             CurrentPipeline->Bind(cmd);
@@ -726,6 +731,11 @@ namespace RHIVulkan {
             if (!CurrentState)
                 return;
             CurrentState->SetPackedGlobalParameter(frequency, BaseIndex, NumBytes, NewValue);
+        }
+
+        bool HasPipeline() const
+        {
+            return CurrentPipeline != nullptr;
         }
 
         // Dynamic states

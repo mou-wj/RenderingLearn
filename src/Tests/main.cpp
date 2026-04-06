@@ -4,7 +4,7 @@
 
 int main(int argc, char** argv)
 {
-    std::string testName = "RHIShaderParameterTest"; // 默认
+    std::string testName = "RHIRenderTriangleTest"; // 默认
     if (argc > 1)
         testName = argv[1];
 

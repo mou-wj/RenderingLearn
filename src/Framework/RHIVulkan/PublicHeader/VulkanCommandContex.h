@@ -31,21 +31,11 @@ public:
     VulkanQueue* GetQueue() const { return queue; }
     VulkanCommandBufferManager* GetCommandBufferManager() const { return commandBufferManager; }
     VulkanDevice* GetDevice() const { return device; }
-    VulkanLooseUniformDataUploader* GetLooseUniformDataUploader() const { return LooseUniformDataUploader; }
 
 protected:
-    void SetShaderTextureInternal(RHIShader* shader, uint32_t textureIndex, RHITexture* texture);
-    void SetShaderSamplerInternal(RHIShader* shader, uint32_t samplerIndex, RHISampler* sampler);
-    void SetShaderUAVInternal(RHIShader* shader, uint32_t uavIndex, RHIUnorderedAccessView* uav);
-    void SetShaderSRVInternal(RHIShader* shader, uint32_t srvIndex, RHIShaderResourceView* srv);
-    void SetShaderUniformBufferInternal(RHIShader* shader, uint32_t bufferIndex, RHIBuffer* buffer);
-
     VulkanDevice* device = nullptr;
     VulkanQueue* queue = nullptr;
     VulkanCommandBufferManager* commandBufferManager = nullptr;
-    VulkanPendingGfxState* PendingGfx = nullptr;
-    VulkanPendingComputeState* PendingCompute = nullptr;
-    VulkanLooseUniformDataUploader* LooseUniformDataUploader = nullptr;
 };
 
 class RHIVULKAN_API VulkanTransferContext : public VulkanCommandContext, public RHI::RHITransferContext
@@ -65,11 +55,18 @@ public:
     static VulkanComputeContext* CastFrom(RHIComputeContext* context);
 
     VulkanComputeContext(VulkanDevice* device, VulkanQueue* queue);
-    ~VulkanComputeContext() override = default;
+    ~VulkanComputeContext() override;
+
+    VulkanLooseUniformDataUploader* GetLooseUniformDataUploader() const { return LooseUniformDataUploader; }
 
     void SetBatchedShaderParameters(RHIComputeShader* shader, const RHIBatchedShaderParameters& parameter) override;
     void SetComputePipelineState(RHIComputePipelineState* pipelineState) override;
     void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
+
+private:
+    friend class VulkanCommandContext;
+    VulkanPendingComputeState* PendingCompute = nullptr;
+    VulkanLooseUniformDataUploader* LooseUniformDataUploader = nullptr;
 };
 
 class RHIVULKAN_API VulkanGraphicContext : public VulkanCommandContext, public RHI::RHIGraphicContex
@@ -78,7 +75,9 @@ public:
     static VulkanGraphicContext* CastFrom(RHI::RHIGraphicContex* context);
 
     VulkanGraphicContext(VulkanDevice* device, VulkanQueue* queue);
-    ~VulkanGraphicContext() override = default;
+    ~VulkanGraphicContext() override;
+
+    VulkanLooseUniformDataUploader* GetLooseUniformDataUploader() const { return LooseUniformDataUploader; }
 
     void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& parameter) override;
     void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) override;
@@ -92,6 +91,12 @@ public:
     void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) override;
     void SetShaderTable() override;
     void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) override;
+
+protected:
+private:
+    friend class VulkanCommandContext;
+    VulkanPendingGfxState* PendingGfx = nullptr;
+    VulkanLooseUniformDataUploader* LooseUniformDataUploader = nullptr;
 };
 
 struct VulkanCommandUpdateTexture : public RHICommandBase

@@ -66,13 +66,15 @@ public:
     VulkanSemaphoreManager(VulkanDevice* device);
     ~VulkanSemaphoreManager();
 
-    VulkanSemaphore* Acquire();
+    // requireUnsignaled=true: always create a new unsignaled semaphore.
+    // requireUnsignaled=false: reuse from pool when available.
+    VulkanSemaphore* Acquire(bool requireUnsignaled = false);
     void Release(VulkanSemaphore* sem);
 
 private:
     VulkanDevice* device_;
 
-    // �أ����ж���
+    static constexpr size_t MaxSemaphorePoolSize = 100;
     std::queue<VulkanSemaphore*> pool_;
 
     // �������д�������
@@ -121,7 +123,11 @@ public:
     ~VulkanRHISyncPointManager();
 
     // Acquire a sync point for the given fence (fence is managed by device's FenceManager)
-    RHI::RHISyncPoint* Acquire(RHI::EQueueType queueType, VulkanFence* fence);
+    RHI::RHISyncPoint* Acquire(
+        RHI::EQueueType queueType,
+        VulkanFence* fence,
+        VulkanSemaphore* semaphore = nullptr,
+        bool ownsSemaphore = false);
     void GarbageCollect();
     void TryRecycle(RHI::RHISyncPoint* syncPoint);
     void WaitAndRecycleAll();
@@ -148,13 +154,22 @@ public:
 
     bool IsReached() const override;
     void Wait() const override;
+    VulkanSemaphore* GetSemaphore() const { return Semaphore; }
 
 private:
     friend class VulkanRHISyncPointManager;
-    void Activate(RHI::EQueueType queueType, VulkanFence* inFence, uint64_t inValue, VulkanRHISyncPointManager* inOwner);
+    void Activate(
+        RHI::EQueueType queueType,
+        VulkanFence* inFence,
+        VulkanSemaphore* inSemaphore,
+        bool inOwnsSemaphore,
+        uint64_t inValue,
+        VulkanRHISyncPointManager* inOwner);
 
     VulkanRHISyncPointManager* Owner = nullptr;
     VulkanFence* Fence = nullptr;
+    VulkanSemaphore* Semaphore = nullptr;
+    bool bOwnsSemaphore = false;
     bool bPending = false;
 };
 

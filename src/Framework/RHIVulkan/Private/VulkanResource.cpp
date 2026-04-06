@@ -625,10 +625,9 @@ VulkanRHISwapchain::VulkanRHISwapchain(VulkanDevice* device, uint32_t width, uin
     }
     CreateSwapchain();
     acquireSemaphores.resize(swapchainImages_.size());
-    backBufferRenderDoneSemaphores.resize(swapchainImages_.size());
+    imagePresentWaitSyncPoints.resize(swapchainImages_.size(), nullptr);
     for (int i = 0; i < swapchainImages_.size(); i++) {
-        backBufferRenderDoneSemaphores[i] = device->GetSemaphoreManager()->Acquire();
-        acquireSemaphores[i] = device->GetSemaphoreManager()->Acquire();
+        acquireSemaphores[i] = device->GetSemaphoreManager()->Acquire(true);
     }
 }
 
@@ -639,16 +638,34 @@ VulkanRHISwapchain::~VulkanRHISwapchain() {
 
 }
 
-void VulkanRHISwapchain::Present(VulkanCommandContext* context, VulkanCommandBuffer* commandBuffer, VulkanQueue* queue, VulkanQueue* presentQueue)
+void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, RHI::RHISyncPoint* waitSyncPoint)
 {
-    assert(queue == presentQueue);
-    commandBuffer->AddWaitSemaphores(VkPipelineStageFlagBits::VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, { acquireSemaphores[currentIndex]});
-    commandBuffer->AddSignalSemaphores({ backBufferRenderDoneSemaphores[currentIndex] });
-    context->GetCommandBufferManager()->SubmitActiveCommandBuffer();
-    Swapchain->Present(presentQueue, backBufferRenderDoneSemaphores[currentIndex]);
-    currentIndex++;
-	currentIndex %= swapchainImages_.size();
+    if (currentBackBufferIndex == -1 || currentSemaphoreIndex == -1)
+    {
+        return;
+    }
+
+    VulkanSemaphore* presentWaitSemaphore = nullptr;
+    if (waitSyncPoint)
+    {
+        if (auto* vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(waitSyncPoint))
+        {
+            presentWaitSemaphore = vulkanSyncPoint->GetSemaphore();
+        }
+    }
+
+    Swapchain->Present(presentQueue, presentWaitSemaphore);
+
+    if (currentBackBufferIndex >= 0
+        && currentBackBufferIndex < static_cast<int>(imagePresentWaitSyncPoints.size()))
+    {
+        imagePresentWaitSyncPoints[currentBackBufferIndex] = waitSyncPoint;
+    }
+
+    currentIndex = (currentSemaphoreIndex + 1) % static_cast<int>(swapchainImages_.size());
+    currentSemaphoreIndex = -1;
     currentBackBufferIndex = -1;
+    currentReadySyncPoint = nullptr;
 }
 
 RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
@@ -656,7 +673,26 @@ RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
     RHISwapchain::RHISwapchainSlot slot{};
     auto backTexture = GetBackTexture();
     slot.Texture = backTexture.get();
-    slot.ReadySync = nullptr;
+    if (slot.Texture && currentSemaphoreIndex >= 0)
+    {
+        if (!currentReadySyncPoint)
+        {
+            auto* syncPointManager = Device ? Device->GetSyncPointManager() : nullptr;
+            if (syncPointManager)
+            {
+                currentReadySyncPoint = syncPointManager->Acquire(
+                    RHI::EQueueType::Graphics,
+                    nullptr,
+                    acquireSemaphores[currentSemaphoreIndex],
+                    false);
+            }
+        }
+        slot.ReadySync = currentReadySyncPoint;
+    }
+    else
+    {
+        slot.ReadySync = nullptr;
+    }
     return slot;
 }
 
@@ -678,15 +714,41 @@ VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
 		Device->GetGraphicsQueue()->WaitIdle();
     }
 
-    Swapchain->AcquireNextImage(acquireSemaphores[currentIndex], &currentBackBufferIndex);
+    currentSemaphoreIndex = currentIndex;
+    Swapchain->AcquireNextImage(acquireSemaphores[currentSemaphoreIndex], &currentBackBufferIndex);
     if (currentBackBufferIndex == -1) {
+        currentSemaphoreIndex = -1;
         return nullptr;
     }
+
+    if (currentBackBufferIndex >= 0
+        && currentBackBufferIndex < static_cast<int>(imagePresentWaitSyncPoints.size()))
+    {
+        RHI::RHISyncPoint*& presentWaitSyncPoint = imagePresentWaitSyncPoints[currentBackBufferIndex];
+        if (presentWaitSyncPoint)
+        {
+            if (!presentWaitSyncPoint->IsReached())
+            {
+                presentWaitSyncPoint->Wait();
+            }
+            if (auto* syncPointManager = Device ? Device->GetSyncPointManager() : nullptr)
+            {
+                syncPointManager->TryRecycle(presentWaitSyncPoint);
+            }
+            presentWaitSyncPoint = nullptr;
+        }
+    }
+
     return backBufferTextures[currentBackBufferIndex];
 }
 
 void VulkanRHISwapchain::CreateSwapchain()
 {
+    swapchainImages_.clear();
+    backBufferTextures.clear();
+    acquireSemaphores.clear();
+    imagePresentWaitSyncPoints.clear();
+
     VulkanSwapchain::SwapchainDesc swapchainDesc = {};
     swapchainDesc.windowHandle = WindowHandle;
     swapchainDesc.width = Width;
@@ -718,7 +780,14 @@ void VulkanRHISwapchain::CreateSwapchain()
 void VulkanRHISwapchain::DestroySwapchain()
 {
     delete Swapchain;
+    Swapchain = nullptr;
     backBufferTextures.clear();
+    acquireSemaphores.clear();
+    imagePresentWaitSyncPoints.clear();
+    currentBackBufferIndex = -1;
+    currentSemaphoreIndex = -1;
+    currentReadySyncPoint = nullptr;
+    currentIndex = 0;
 
 }
 

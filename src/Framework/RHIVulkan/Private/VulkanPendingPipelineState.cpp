@@ -11,7 +11,20 @@ namespace RHIVulkan {
         bool bWrapAroundDetected = false;
         uint64_t lastAllocationOffset = 0;
         
-        auto uploader = Context->GetLooseUniformDataUploader();
+        VulkanLooseUniformDataUploader* uploader = nullptr;
+        if (auto* computeContext = dynamic_cast<VulkanComputeContext*>(Context))
+        {
+            uploader = computeContext->GetLooseUniformDataUploader();
+        }
+        else if (auto* graphicContext = dynamic_cast<VulkanGraphicContext*>(Context))
+        {
+            uploader = graphicContext->GetLooseUniformDataUploader();
+        }
+
+        if (!uploader)
+        {
+            return;
+        }
         
         // 遍历每个shader frequency的PackedUniformBuffer
         for (auto& pair : PackedUniformBuffersByFrequency)

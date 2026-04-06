@@ -186,7 +186,7 @@ public:
             // 执行所有命令
             cmdList.ExecuteAll();
             RHI::RHICmdBuffer cmdBuffer = cmdList.End();
-            RHI::RHISyncPoint* presentSyncPoint = queue->Submit(cmdBuffer);
+            RHI::RHISyncPoint* presentSyncPoint = queue->Submit({ cmdBuffer }, { swapchainSlot.ReadySync });
             GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentSyncPoint);
             cmdList.Clear();
         }

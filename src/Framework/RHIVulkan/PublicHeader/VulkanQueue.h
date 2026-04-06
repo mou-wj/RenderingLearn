@@ -27,6 +27,7 @@ public:
 
     // Low-level Vulkan submit (used internally by command buffer manager)
     void SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t NumSignalSemaphores = 0, VulkanSemaphore* SignalSemaphores = nullptr);
+    void SubmitSignalSemaphore(VulkanSemaphore* SignalSemaphore);
 
     VkQueue GetHandle() const { return queue_; }
     uint32_t GetFamilyIndex() const { return familyIndex_; }

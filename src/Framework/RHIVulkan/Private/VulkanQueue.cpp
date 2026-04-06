@@ -131,6 +131,36 @@ void VulkanQueue::SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t N
     imageLayoutManager_.PrintLayoutInfo();
 }
 
+void VulkanQueue::SubmitSignalSemaphore(VulkanSemaphore* SignalSemaphore)
+{
+    if (!SignalSemaphore)
+    {
+        return;
+    }
+
+    VkSemaphore signalSemaphoreHandle = SignalSemaphore->GetHandle();
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 0;
+    submitInfo.pCommandBuffers = nullptr;
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitSemaphores = nullptr;
+    submitInfo.pWaitDstStageMask = nullptr;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &signalSemaphoreHandle;
+
+    if (device_->GetSyncPointManager())
+    {
+        device_->GetSyncPointManager()->GarbageCollect();
+    }
+
+    if (!QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE))
+    {
+        throw std::runtime_error("Failed to submit Vulkan signal semaphore");
+    }
+}
+
 void VulkanQueue::WaitIdle()
 {
     if (!QueueWaitIdle(queue_))
@@ -183,7 +213,7 @@ RHI::RHIContextBase* VulkanQueue::ReleaseCommandContext(RHI::RHIContextBase* Con
         return nullptr;
     }
 
-    VulkanCommandContext* vulkanCtx = static_cast<VulkanCommandContext*>(Context);
+    VulkanCommandContext* vulkanCtx = dynamic_cast<VulkanCommandContext*>(Context);
     std::lock_guard<std::mutex> lock(ContextPoolMutex_);
     FreeContexts_.push_back(vulkanCtx);
     return nullptr;
@@ -197,25 +227,60 @@ RHI::RHISyncPoint* VulkanQueue::Submit(RHI::RHICmdBuffer CmdBuffer)
         return nullptr;
     }
 
-    SubmitCommandBuffer(commandBuffer);
+    VulkanSemaphore* signalSemaphore = device_ ? device_->GetSemaphoreManager()->Acquire(true) : nullptr;
+    SubmitCommandBuffer(commandBuffer, signalSemaphore ? 1 : 0, signalSemaphore);
     auto* syncPointManager = device_ ? device_->GetSyncPointManager() : nullptr;
-    return syncPointManager ? syncPointManager->Acquire(QueueType_, commandBuffer->GetFence()) : nullptr;
+    return syncPointManager ? syncPointManager->Acquire(QueueType_, commandBuffer->GetFence(), signalSemaphore, signalSemaphore != nullptr) : nullptr;
 }
 
 RHI::RHISyncPoint* VulkanQueue::Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHISyncPoint*>& WaitPoints)
 {
+    std::vector<VulkanSemaphore*> waitSemaphores;
+    std::vector<RHI::RHISyncPoint*> consumedWaitSyncPoints;
     for (RHI::RHISyncPoint* waitPoint : WaitPoints)
     {
-        if (waitPoint && !waitPoint->IsReached())
+        if (!waitPoint)
+        {
+            continue;
+        }
+
+        if (auto* vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(waitPoint))
+        {
+            if (auto* semaphore = vulkanSyncPoint->GetSemaphore())
+            {
+                waitSemaphores.push_back(semaphore);
+                consumedWaitSyncPoints.push_back(waitPoint);
+                continue;
+            }
+        }
+
+        if (!waitPoint->IsReached())
         {
             waitPoint->Wait();
         }
     }
 
     RHI::RHISyncPoint* lastSyncPoint = nullptr;
-    for (RHI::RHICmdBuffer cmdBuffer : Cmds)
+    for (size_t cmdIndex = 0; cmdIndex < Cmds.size(); ++cmdIndex)
     {
+        RHI::RHICmdBuffer cmdBuffer = Cmds[cmdIndex];
+        if (cmdIndex == 0 && !waitSemaphores.empty())
+        {
+            auto* commandBuffer = reinterpret_cast<VulkanCommandBuffer*>(cmdBuffer);
+            if (commandBuffer)
+            {
+                commandBuffer->AddWaitSemaphores(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, waitSemaphores);
+            }
+        }
         lastSyncPoint = Submit(cmdBuffer);
+    }
+
+    if (auto* syncPointManager = device_ ? device_->GetSyncPointManager() : nullptr)
+    {
+        for (RHI::RHISyncPoint* syncPoint : consumedWaitSyncPoints)
+        {
+            syncPointManager->TryRecycle(syncPoint);
+        }
     }
 
     return lastSyncPoint;
@@ -238,15 +303,6 @@ void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncPo
         return;
     }
 
-    if (WaitSyncPoint)
-    {
-        WaitSyncPoint->Wait();
-    }
-    else
-    {
-        Queue->WaitIdle();
-    }
-
-    vulkanSwapchain->GetSwapchain()->Present(Queue, nullptr);
+    vulkanSwapchain->Present(Queue, WaitSyncPoint);
 }
 }
