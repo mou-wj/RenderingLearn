@@ -1,8 +1,68 @@
 #include "VulkanFuncWrapper.h"
 #include "Log.h"
 
-namespace RHIVulkan {
-    // ÄÚ²¿ºê£º¼ì²é VkResult
+namespace VKFunc {
+
+        // ---------------------------
+        // Descriptor Pool/Set Layout/Bind
+        // ---------------------------
+        bool ResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool) {
+                if (!device || descriptorPool == VK_NULL_HANDLE) {
+                        LOG_WARN("ResetDescriptorPool skipped: invalid handle");
+                        return false;
+                }
+                VkResult res = vkResetDescriptorPool(device, descriptorPool, 0);
+                if (res != VK_SUCCESS) {
+                        LOG_ERROR("vkResetDescriptorPool failed, VkResult=%d", res);
+                        return false;
+                }
+                return true;
+        }
+        
+        bool CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo*  pCreateInfo, VkDescriptorSetLayout*pSetLayout) {
+                if (!device || !pCreateInfo || !pSetLayout) {
+                        LOG_ERROR("CreateDescriptorSetLayout failed: invalidparameters");
+                        return false;
+                }
+                VkResult res = vkCreateDescriptorSetLayout(device, pCreateInfo,nullptr,     pSetLayout);
+                if (res != VK_SUCCESS) {
+                        LOG_ERROR("vkCreateDescriptorSetLayout failed, VkResult=%d",res);
+                        return false;
+                }
+                return true;
+        }
+        
+        void CmdBindDescriptorSets(
+                VkCommandBuffer commandBuffer,
+                VkPipelineBindPoint pipelineBindPoint,
+                VkPipelineLayout layout,
+                uint32_t firstSet,
+                uint32_t descriptorSetCount,
+                const VkDescriptorSet* pDescriptorSets,
+                uint32_t dynamicOffsetCount,
+                const uint32_t* pDynamicOffsets) {
+                vkCmdBindDescriptorSets(
+                        commandBuffer,
+                        pipelineBindPoint,
+                        layout,
+                        firstSet,
+                        descriptorSetCount,
+                        pDescriptorSets,
+                        dynamicOffsetCount,
+                        pDynamicOffsets);
+        }
+        void SetDebugName(VkDevice device, VkObjectType type, uint64_t handle, const char* name) {
+#ifdef DEBUG_INFO
+                VkDebugUtilsObjectNameInfoEXT nameInfo{};
+                nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+                nameInfo.objectType = type;
+                nameInfo.objectHandle = handle;
+                nameInfo.pObjectName = name;
+                auto setName = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT");
+                if (setName) setName(device, &nameInfo);
+#endif
+        }
+    // ï¿½Ú²ï¿½ï¿½ê£ºï¿½ï¿½ï¿½ VkResult
     // ---------------------------
 #define CHECK_RESULT(res, msg) \
         do { \
@@ -254,7 +314,7 @@ namespace RHIVulkan {
     // ---------------------------
     // Semaphore / Fence
     // ---------------------------
-    bool CreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, VkSemaphore* pSemaphore)
+    bool CreateSemaphore_(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, VkSemaphore* pSemaphore)
     {
 #ifdef DEBUG_INFO
         if (!device || !pCreateInfo || !pSemaphore) { LOG_ERROR("CreateSemaphore: null pointer"); return false; }

@@ -66,19 +66,19 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
 	imageInfo.pQueueFamilyIndices = queueFamilyIndices.data();
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    CreateImage(vkDevice, &imageInfo, &Image);
+    VKFunc::CreateImage(vkDevice, &imageInfo, &Image);
 
     // Get memory requirements
     VkMemoryRequirements memRequirements;
-    GetImageMemoryRequirements(vkDevice, Image, &memRequirements);
+    VKFunc::GetImageMemoryRequirements(vkDevice, Image, &memRequirements);
 
     // Allocate memory
     if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
-        DestroyImage(vkDevice, Image);
+        VKFunc::DestroyImage(vkDevice, Image);
     }
 
     // Bind memory to image
-    BindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
+    VKFunc::BindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
 
     // Create VkImageView
     bool viewSuccess = DefaltView.Create(
@@ -96,7 +96,7 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     );
 
     if (!viewSuccess) {
-        DestroyImage(vkDevice, Image);
+        VKFunc::DestroyImage(vkDevice, Image);
         memoryManager->Free(Allocation);
     }
 }
@@ -289,6 +289,18 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     
     // Bind memory to buffer
     vkBindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
+
+#ifdef DEBUG_INFO
+    std::string debugName;
+    if (Desc.DebugName) {
+        debugName = Desc.DebugName;
+    } else {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "VulkanBuffer:0x%llx", (unsigned long long)Buffer);
+        debugName = buf;
+    }
+    VKFunc::SetDebugName(vkDevice, VK_OBJECT_TYPE_BUFFER, (uint64_t)Buffer, debugName.c_str());
+#endif
 }
 
 VulkanBuffer::~VulkanBuffer() {
@@ -297,6 +309,9 @@ VulkanBuffer::~VulkanBuffer() {
 
     if (Buffer != VK_NULL_HANDLE) {
         Device->EnqueueBufferForDeletion(Buffer);
+    }
+    for (auto view : views) {
+        view->Invalidate();
     }
 
     memoryManager->Free(Allocation);
@@ -421,16 +436,18 @@ void VulkanShaderResourceView::CreateBufferView(
 
 VulkanShaderResourceView::~VulkanShaderResourceView()
 {
-    // Detach from resource
-    if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+    if (IsValid) 
     {
-        vulkanResource->DetachView(this);
+        // Detach from resource
+        if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+        {
+            vulkanResource->DetachView(this);
+        }
+        else if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
+        {
+            vulkanResource->DetachView(this);
+        }
     }
-    else if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
-    {
-        vulkanResource->DetachView(this);
-    }
-
     DestroyView();
 }
 
@@ -457,6 +474,7 @@ void VulkanShaderResourceView::Invalidate()
     {
         BufferView.Destroy(Device);
     }
+    IsValid = false;
 }
 
 void VulkanShaderResourceView::DestroyView()
@@ -567,14 +585,17 @@ void VulkanUnorderedAccessView::CreateBufferView(
 
 VulkanUnorderedAccessView::~VulkanUnorderedAccessView()
 {
-    // Detach from resource
-    if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+    if (IsValid)
     {
-        vulkanResource->DetachView(this);
-    }
-    else if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
-    {
-        vulkanResource->DetachView(this);
+        // Detach from resource
+        if (auto* vulkanResource = dynamic_cast<VulkanTexture*>(ResourcePtr))
+        {
+            vulkanResource->DetachView(this);
+        }
+        else if (auto* vulkanResource = dynamic_cast<VulkanBuffer*>(ResourcePtr))
+        {
+            vulkanResource->DetachView(this);
+        }
     }
 
     DestroyView();
@@ -604,6 +625,7 @@ void VulkanUnorderedAccessView::Invalidate()
     {
         BufferView.Destroy(Device);
     }
+    IsValid = true;
 }
 
 void VulkanUnorderedAccessView::DestroyView()
@@ -625,7 +647,7 @@ VulkanRHISwapchain::VulkanRHISwapchain(VulkanDevice* device, uint32_t width, uin
     }
     CreateSwapchain();
     acquireSemaphores.resize(swapchainImages_.size());
-    imagePresentWaitSyncPoints.resize(swapchainImages_.size(), nullptr);
+    imagePresentWaitDependencies.resize(swapchainImages_.size(), nullptr);
     for (int i = 0; i < swapchainImages_.size(); i++) {
         acquireSemaphores[i] = device->GetSemaphoreManager()->Acquire(true);
     }
@@ -638,7 +660,7 @@ VulkanRHISwapchain::~VulkanRHISwapchain() {
 
 }
 
-void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, RHI::RHISyncPoint* waitSyncPoint)
+void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, RHI::RHISyncDependency* waitDependency)
 {
     if (currentBackBufferIndex == -1 || currentSemaphoreIndex == -1)
     {
@@ -646,26 +668,26 @@ void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, RHI::RHISyncPoint* w
     }
 
     VulkanSemaphore* presentWaitSemaphore = nullptr;
-    if (waitSyncPoint)
+    if (waitDependency)
     {
-        if (auto* vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(waitSyncPoint))
+        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(waitDependency))
         {
-            presentWaitSemaphore = vulkanSyncPoint->GetSemaphore();
+            presentWaitSemaphore = vulkanDependency->GetSemaphore();
         }
     }
 
     Swapchain->Present(presentQueue, presentWaitSemaphore);
 
     if (currentBackBufferIndex >= 0
-        && currentBackBufferIndex < static_cast<int>(imagePresentWaitSyncPoints.size()))
+        && currentBackBufferIndex < static_cast<int>(imagePresentWaitDependencies.size()))
     {
-        imagePresentWaitSyncPoints[currentBackBufferIndex] = waitSyncPoint;
+        imagePresentWaitDependencies[currentBackBufferIndex] = waitDependency;
     }
 
     currentIndex = (currentSemaphoreIndex + 1) % static_cast<int>(swapchainImages_.size());
     currentSemaphoreIndex = -1;
     currentBackBufferIndex = -1;
-    currentReadySyncPoint = nullptr;
+    currentReadySyncDependency = nullptr;
 }
 
 RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
@@ -675,19 +697,18 @@ RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
     slot.Texture = backTexture.get();
     if (slot.Texture && currentSemaphoreIndex >= 0)
     {
-        if (!currentReadySyncPoint)
+        if (!currentReadySyncDependency)
         {
             auto* syncPointManager = Device ? Device->GetSyncPointManager() : nullptr;
             if (syncPointManager)
             {
-                currentReadySyncPoint = syncPointManager->Acquire(
+                currentReadySyncDependency = syncPointManager->AcquireDependency(
                     RHI::EQueueType::Graphics,
-                    nullptr,
                     acquireSemaphores[currentSemaphoreIndex],
                     false);
             }
         }
-        slot.ReadySync = currentReadySyncPoint;
+        slot.ReadySync = currentReadySyncDependency;
     }
     else
     {
@@ -709,10 +730,8 @@ VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
     if (currentBackBufferIndex != -1) {
         return backBufferTextures[currentBackBufferIndex];
     }
-	//这里在获取下一个有效image之前必须要保证currentIndex对应的acquiredSemaphores已经执行完毕，这种必须需要等待fence，但是直接使用commandbuffer的fence会由于fence由其他地方管理而导致这里不能有效等待，所以这里先进行没绘制完所有image后统一等待一次队列，后续再考虑怎么修改 >>  后续可以改成commandbuffer不再单独持有fence，添加commandbuffer的状态管理，改成每次提交命令时由外部传入一个fence，提交后外部负责等待和重置，这样就可以在这里直接等待对应的fence了
-    if (currentIndex == 0) {
-		Device->GetGraphicsQueue()->WaitIdle();
-    }
+	// 保守策略：Acquire 前确保上一帧的等待信号量已被消费，避免复用未完成的 acquire semaphore。
+	Device->GetGraphicsQueue()->WaitIdle();
 
     currentSemaphoreIndex = currentIndex;
     Swapchain->AcquireNextImage(acquireSemaphores[currentSemaphoreIndex], &currentBackBufferIndex);
@@ -722,20 +741,16 @@ VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
     }
 
     if (currentBackBufferIndex >= 0
-        && currentBackBufferIndex < static_cast<int>(imagePresentWaitSyncPoints.size()))
+        && currentBackBufferIndex < static_cast<int>(imagePresentWaitDependencies.size()))
     {
-        RHI::RHISyncPoint*& presentWaitSyncPoint = imagePresentWaitSyncPoints[currentBackBufferIndex];
-        if (presentWaitSyncPoint)
+        RHI::RHISyncDependency*& presentWaitDependency = imagePresentWaitDependencies[currentBackBufferIndex];
+        if (presentWaitDependency)
         {
-            if (!presentWaitSyncPoint->IsReached())
-            {
-                presentWaitSyncPoint->Wait();
-            }
             if (auto* syncPointManager = Device ? Device->GetSyncPointManager() : nullptr)
             {
-                syncPointManager->TryRecycle(presentWaitSyncPoint);
+                syncPointManager->TryRecycle(presentWaitDependency);
             }
-            presentWaitSyncPoint = nullptr;
+            presentWaitDependency = nullptr;
         }
     }
 
@@ -747,7 +762,7 @@ void VulkanRHISwapchain::CreateSwapchain()
     swapchainImages_.clear();
     backBufferTextures.clear();
     acquireSemaphores.clear();
-    imagePresentWaitSyncPoints.clear();
+    imagePresentWaitDependencies.clear();
 
     VulkanSwapchain::SwapchainDesc swapchainDesc = {};
     swapchainDesc.windowHandle = WindowHandle;
@@ -783,10 +798,10 @@ void VulkanRHISwapchain::DestroySwapchain()
     Swapchain = nullptr;
     backBufferTextures.clear();
     acquireSemaphores.clear();
-    imagePresentWaitSyncPoints.clear();
+    imagePresentWaitDependencies.clear();
     currentBackBufferIndex = -1;
     currentSemaphoreIndex = -1;
-    currentReadySyncPoint = nullptr;
+    currentReadySyncDependency = nullptr;
     currentIndex = 0;
 
 }
@@ -955,24 +970,30 @@ VulkanRingBuffer::VulkanRingBuffer(VulkanDevice* device, uint64_t totalSize, VkB
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VkBuffer buffer;
-    CreateBuffer(vkDevice, &bufferInfo, &buffer);
+    VKFunc::CreateBuffer(vkDevice, &bufferInfo, &buffer);
 
     // 获取内存需求
     VkMemoryRequirements memRequirements;
-    GetBufferMemoryRequirements(vkDevice, buffer, &memRequirements);
+    VKFunc::GetBufferMemoryRequirements(vkDevice, buffer, &memRequirements);
 
     // 分配内存
     if (!memoryManager->Allocate(memRequirements, memPropertyFlags, Allocation)) {
         LOG_ERROR("Failed to allocate memory for ring buffer");
-        DestroyBuffer(vkDevice, buffer);
+        VKFunc::DestroyBuffer(vkDevice, buffer);
         return;
     }
 
     // 绑定内存
-    BindBufferMemory(vkDevice, buffer, Allocation.GetMemory(), Allocation.GetOffset());
+    VKFunc::BindBufferMemory(vkDevice, buffer, Allocation.GetMemory(), Allocation.GetOffset());
 
     // 设置缓冲区句柄到分配对象
     Allocation.SetBufferHandle(buffer);
+
+#ifdef DEBUG_INFO
+    char buf[64];
+    snprintf(buf, sizeof(buf), "VulkanRingBuffer:0x%llx", (unsigned long long)buffer);
+    VKFunc::SetDebugName(vkDevice, VK_OBJECT_TYPE_BUFFER, (uint64_t)buffer, buf);
+#endif
 
 }
 
@@ -981,16 +1002,14 @@ VulkanRingBuffer::~VulkanRingBuffer()
     if (Allocation.GetMemory() != VK_NULL_HANDLE) {
         VkDevice vkDevice = Device->GetHandle();
         VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
-
-        // 取消映射（如果已映射）
-        if (Allocation.GetMappedPointer()) {
-			vkUnmapMemory(vkDevice, Allocation.GetMemory());
-        }
+        // Memory block mapping is owned by VulkanMemoryBlock.
+        // Do not unmap sub-allocations here, otherwise the same VkDeviceMemory
+        // may be unmapped multiple times across different resources.
 
         // 销毁缓冲区
         VkBuffer buffer = Allocation.GetBufferHandle();
         if (buffer != VK_NULL_HANDLE) {
-            DestroyBuffer(vkDevice, buffer);
+            VKFunc::DestroyBuffer(vkDevice, buffer);
         }
 
         // 释放内存

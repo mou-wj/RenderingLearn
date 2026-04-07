@@ -99,13 +99,50 @@ public:
     virtual void Wait() const = 0;      // CPU 阻塞等待
 };
 
+enum class ERHIPipelineStage
+{
+    None = 0,
+    TopOfPipe,
+    DrawIndirect,
+    VertexInput,
+    VertexShader,
+    FragmentShader,
+    EarlyFragmentTests,
+    LateFragmentTests,
+    ColorAttachmentOutput,
+    ComputeShader,
+    Transfer,
+    BottomOfPipe,
+    AllCommands
+};
+
+class RHISyncDependency {
+public:
+    virtual ~RHISyncDependency() = default;
+
+    EQueueType Type = EQueueType::Graphics;
+    uint64_t Value = 0;
+};
+
+struct RHIWaitInfo
+{
+    RHISyncDependency* Dependency = nullptr;
+    ERHIPipelineStage WaitStage = ERHIPipelineStage::AllCommands;
+};
+
+struct RHISubmitResult
+{
+    RHISyncPoint* Completion = nullptr;
+    RHISyncDependency* Dependency = nullptr;
+};
+
 class RHISwapchain {
 public:
     virtual ~RHISwapchain() = default;
 
     struct RHISwapchainSlot {
     RHITexture* Texture;    // 物理资源
-    RHISyncPoint* ReadySync; // 准入证
+    RHISyncDependency* ReadySync; // 准入证
     };
 
     // 关键：获取当前帧可以写入的纹理（不透明的 RHITexture）
@@ -124,7 +161,7 @@ class RHI_API RHIPresentExecutor
 {
 public:
     virtual ~RHIPresentExecutor() = default;
-    virtual void Present(RHISwapchain* Swapchain, RHISyncPoint* WaitSyncPoint = nullptr) = 0;
+    virtual void Present(RHISwapchain* Swapchain, RHISyncDependency* WaitDependency = nullptr) = 0;
 };
 
 class RHIQueue {
@@ -136,12 +173,12 @@ public:
     virtual RHIContextBase* AcquireCommandContext() = 0;
     virtual RHIContextBase* ReleaseCommandContext(RHIContextBase* Context) = 0;
 
-    // 提交指令包，并返回一个新的同步点
-    virtual RHISyncPoint* Submit(RHICmdBuffer CmdBuffer) = 0;
+    // 提交指令包，并返回完成点与可供后续等待的依赖对象
+    virtual RHISubmitResult Submit(RHICmdBuffer CmdBuffer) = 0;
 
     // 批量提交并处理跨队列等待
-    virtual RHISyncPoint* Submit(const std::vector<RHICmdBuffer>& Cmds, 
-                               const std::vector<RHISyncPoint*>& WaitPoints) = 0;
+    virtual RHISubmitResult Submit(const std::vector<RHICmdBuffer>& Cmds,
+                               const std::vector<RHIWaitInfo>& WaitInfos) = 0;
 
     // 强制刷新硬件队列
     virtual void WaitIdle() = 0;

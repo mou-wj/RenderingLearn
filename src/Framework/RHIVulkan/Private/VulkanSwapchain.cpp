@@ -161,7 +161,7 @@ namespace RHIVulkan {
     void VulkanSwapchain::AcquireNextImage(VulkanSemaphore* signalSemaphore, int* imageIndex)
     {
         uint32_t imageIndex_ = 0;
-        if (AcquireNextImageKHR(device_->GetHandle(), swapchain_, UINT64_MAX, signalSemaphore->GetHandle(), VK_NULL_HANDLE, &imageIndex_)) {
+        if (VKFunc::AcquireNextImageKHR(device_->GetHandle(), swapchain_, UINT64_MAX, signalSemaphore->GetHandle(), VK_NULL_HANDLE, &imageIndex_)) {
             *imageIndex = imageIndex_;
             currentImageIndex_ = imageIndex_;
         }

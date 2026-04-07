@@ -122,27 +122,35 @@ public:
     explicit VulkanRHISyncPointManager(VulkanDevice* device);
     ~VulkanRHISyncPointManager();
 
-    // Acquire a sync point for the given fence (fence is managed by device's FenceManager)
-    RHI::RHISyncPoint* Acquire(
+    // Acquire a completion point for the given fence (fence is managed by device's FenceManager)
+    RHI::RHISyncPoint* AcquireCompletion(
         RHI::EQueueType queueType,
-        VulkanFence* fence,
-        VulkanSemaphore* semaphore = nullptr,
+        VulkanFence* fence);
+    RHI::RHISyncDependency* AcquireDependency(
+        RHI::EQueueType queueType,
+        VulkanSemaphore* semaphore,
         bool ownsSemaphore = false);
     void GarbageCollect();
     void TryRecycle(RHI::RHISyncPoint* syncPoint);
+    void TryRecycle(RHI::RHISyncDependency* dependency);
     void WaitAndRecycleAll();
 
 private:
     friend class VulkanRHISyncPoint;
+    friend class VulkanRHISyncDependency;
     
     void GarbageCollect_NoLock();
     void Recycle_NoLock(RHI::RHISyncPoint* syncPoint);
+    void Recycle_NoLock(RHI::RHISyncDependency* dependency);
 
     VulkanDevice* Device = nullptr;
     uint64_t NextValue = 1;
     std::vector<std::unique_ptr<RHI::RHISyncPoint>> AllSyncPoints;
     std::vector<RHI::RHISyncPoint*> FreeSyncPoints;
     std::vector<RHI::RHISyncPoint*> PendingSyncPoints;
+    std::vector<std::unique_ptr<RHI::RHISyncDependency>> AllDependencies;
+    std::vector<RHI::RHISyncDependency*> FreeDependencies;
+    std::vector<RHI::RHISyncDependency*> PendingDependencies;
     std::mutex Mutex;
 };
 
@@ -154,20 +162,37 @@ public:
 
     bool IsReached() const override;
     void Wait() const override;
-    VulkanSemaphore* GetSemaphore() const { return Semaphore; }
 
 private:
     friend class VulkanRHISyncPointManager;
     void Activate(
         RHI::EQueueType queueType,
         VulkanFence* inFence,
+        uint64_t inValue,
+        VulkanRHISyncPointManager* inOwner);
+
+    VulkanRHISyncPointManager* Owner = nullptr;
+    VulkanFence* Fence = nullptr;
+    bool bPending = false;
+};
+
+class RHIVULKAN_API VulkanRHISyncDependency final : public RHI::RHISyncDependency
+{
+public:
+    VulkanRHISyncDependency() = default;
+
+    VulkanSemaphore* GetSemaphore() const { return Semaphore; }
+
+private:
+    friend class VulkanRHISyncPointManager;
+    void Activate(
+        RHI::EQueueType queueType,
         VulkanSemaphore* inSemaphore,
         bool inOwnsSemaphore,
         uint64_t inValue,
         VulkanRHISyncPointManager* inOwner);
 
     VulkanRHISyncPointManager* Owner = nullptr;
-    VulkanFence* Fence = nullptr;
     VulkanSemaphore* Semaphore = nullptr;
     bool bOwnsSemaphore = false;
     bool bPending = false;

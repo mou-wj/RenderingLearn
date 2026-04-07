@@ -6,6 +6,7 @@
 #include <cstring>
 #include "VulkanCommandBuffer.h"
 #include "VulkanSync.h"
+#include "VulkanFuncWrapper.h"
 namespace RHIVulkan{
    
 constexpr VkDeviceSize DEFAULT_BLOCK_SIZE = 64 * 1024 * 1024; // 64 MB
@@ -140,7 +141,13 @@ VulkanStagingBuffer::VulkanStagingBuffer(VulkanDevice* device, VulkanMemoryManag
 
 
     vkCreateBuffer(device_->GetHandle(), &bufferInfo, nullptr, &buffer_);
-
+#ifdef DEBUG_INFO
+    std::string debugName;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "VulkanStagingBuffer:0x%llx", (unsigned long long)buffer_);
+    debugName = buf;
+	VKFunc::SetDebugName(device_->GetHandle(), VK_OBJECT_TYPE_BUFFER, (uint64_t)buffer_, debugName.c_str());
+#endif
 
     // 查询 memory requirements
     VkMemoryRequirements memReq;

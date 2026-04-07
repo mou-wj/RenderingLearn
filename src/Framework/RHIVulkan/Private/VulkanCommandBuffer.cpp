@@ -29,7 +29,7 @@ void VulkanCommandBuffer::AllocateMemory()
     allocInfo.level = level;
     allocInfo.commandBufferCount = 1;
 
-    if (!AllocateCommandBuffers(device->GetHandle(), &allocInfo, &commandBuffer)) {
+    if (!VKFunc::AllocateCommandBuffers(device->GetHandle(), &allocInfo, &commandBuffer)) {
         throw std::runtime_error("Failed to allocate command buffer");
     }
 }
@@ -40,7 +40,7 @@ void VulkanCommandBuffer::Begin(VkCommandBufferUsageFlags usage)
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = usage;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+    if (!VKFunc::BeginCommandBuffer(commandBuffer, &beginInfo)) {
         throw std::runtime_error("Failed to begin command buffer");
     }
 
@@ -48,14 +48,19 @@ void VulkanCommandBuffer::Begin(VkCommandBufferUsageFlags usage)
 
 void VulkanCommandBuffer::End()
 {
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+    if (!VKFunc::EndCommandBuffer(commandBuffer)) {
         throw std::runtime_error("Failed to end command buffer");
     }
 }
 
 void VulkanCommandBuffer::Reset()
 {
-    vkResetCommandBuffer(commandBuffer, 0);
+    VKFunc::ResetCommandBuffer(commandBuffer, 0);
+    WaitFlags.clear();
+    WaitSemaphores.clear();
+    SubmittedWaitSemaphores.clear();
+    SignalSemaphores.clear();
+    imageLayoutManager.Clear();
 }
 
 void VulkanCommandBuffer::AddWaitSemaphores(VkPipelineStageFlags stage, const std::vector<VulkanSemaphore*>& semaphores)
@@ -89,7 +94,7 @@ VulkanCommandBufferPool::VulkanCommandBufferPool(VulkanDevice* device, uint32_t 
     poolInfo.queueFamilyIndex = queueFamily;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // 支持单个或整体 reset
 
-    vkCreateCommandPool(device->GetHandle(), &poolInfo, nullptr, &commandPool);
+    VKFunc::CreateCommandPool(device->GetHandle(), &poolInfo, &commandPool);
 }
 
 VulkanCommandBufferPool::~VulkanCommandBufferPool()
@@ -99,7 +104,7 @@ VulkanCommandBufferPool::~VulkanCommandBufferPool()
 
     if (commandPool != VK_NULL_HANDLE)
     {
-        vkDestroyCommandPool(device->GetHandle(), commandPool, nullptr);
+        VKFunc::DestroyCommandPool(device->GetHandle(), commandPool);
         commandPool = VK_NULL_HANDLE;
     }
 }
@@ -125,7 +130,7 @@ VulkanCommandBuffer* VulkanCommandBufferPool::AllocateCommandBuffer(VkCommandBuf
 void VulkanCommandBufferPool::Reset()
 {
     // 重置 Vulkan CommandPool，所有 CommandBuffer 自动重置
-    vkResetCommandPool(device->GetHandle(), commandPool, 0);
+    vkResetCommandPool(device->GetHandle(), commandPool, 0); // 若有VKFunc包装可替换
 
     // 所有 buffer 都回到可用池
     availableBuffers.clear();
@@ -140,6 +145,7 @@ void VulkanCommandBufferPool::Reset()
 VulkanCommandBufferManager::VulkanCommandBufferManager(VulkanDevice* device, VulkanCommandContext* commandContext)
     : device(device), commandContext(commandContext)
 {
+    Allocate(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 }
 
 VulkanCommandBufferManager::~VulkanCommandBufferManager()

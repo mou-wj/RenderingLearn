@@ -104,6 +104,12 @@ namespace RHIVulkan {
             vkSets.push_back(GetDescriptorSet(i));
 
         Device->GetDescriptorSetManager()->BindDescriptorSets(cmd, pipeline->GetLayout()->GetHandle(), pipelineBindingPoint, vkSets);
+        // 然后处理Descriptor的分配和更新
+        for (uint32_t i = 0; i < sets.size(); i++)
+        {
+            auto& set = Sets[i];
+            set.DescriptorSet = VK_NULL_HANDLE;
+        }
     }
 
 }

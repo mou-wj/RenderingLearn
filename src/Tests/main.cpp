@@ -4,7 +4,7 @@
 
 int main(int argc, char** argv)
 {
-    std::string testName = "RHIRenderTriangleTest"; // 默认
+    std::string testName = "RHIShaderParameterTest"; // 默认
     if (argc > 1)
         testName = argv[1];
 
@@ -15,10 +15,22 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    test->Setup();
+    try
+    {
+        test->Setup();
+        test->Run();
+        test->Teardown();
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Test failed with exception: " << ex.what() << std::endl;
+        return 1;
+    }
+    catch (...)
+    {
+        std::cerr << "Test failed with unknown exception" << std::endl;
+        return 1;
+    }
 
-    test->Run();
-
-    test->Teardown();
     return 0;
 }

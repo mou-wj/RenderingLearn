@@ -25,6 +25,40 @@ VulkanCommandContext* CreateQueueContext(VulkanDevice* device, VulkanQueue* queu
         return new VulkanGraphicContext(device, queue);
     }
 }
+
+VkPipelineStageFlags ToVkPipelineStage(RHI::ERHIPipelineStage stage)
+{
+    switch (stage)
+    {
+    case RHI::ERHIPipelineStage::TopOfPipe:
+        return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    case RHI::ERHIPipelineStage::DrawIndirect:
+        return VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    case RHI::ERHIPipelineStage::VertexInput:
+        return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+    case RHI::ERHIPipelineStage::VertexShader:
+        return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    case RHI::ERHIPipelineStage::FragmentShader:
+        return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    case RHI::ERHIPipelineStage::EarlyFragmentTests:
+        return VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    case RHI::ERHIPipelineStage::LateFragmentTests:
+        return VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    case RHI::ERHIPipelineStage::ColorAttachmentOutput:
+        return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    case RHI::ERHIPipelineStage::ComputeShader:
+        return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    case RHI::ERHIPipelineStage::Transfer:
+        return VK_PIPELINE_STAGE_TRANSFER_BIT;
+    case RHI::ERHIPipelineStage::BottomOfPipe:
+        return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    case RHI::ERHIPipelineStage::AllCommands:
+        return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    case RHI::ERHIPipelineStage::None:
+    default:
+        return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    }
+}
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -120,7 +154,7 @@ void VulkanQueue::SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t N
     }
 
     VkFence submitFence = CmdBuffer->GetFence() ? CmdBuffer->GetFence()->GetHandle() : VK_NULL_HANDLE;
-    if (!QueueSubmit(queue_, 1, &submitInfo, submitFence))
+    if (!VKFunc::QueueSubmit(queue_, 1, &submitInfo, submitFence))
     {
         throw std::runtime_error("Failed to submit Vulkan command buffer");
     }
@@ -128,6 +162,10 @@ void VulkanQueue::SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t N
     device_->GetStagingManager()->GarbageCollect();
     CmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
     CmdBuffer->GetImageLayoutManager()->Clear();
+    CmdBuffer->WaitFlags.clear();
+    CmdBuffer->WaitSemaphores.clear();
+    CmdBuffer->SubmittedWaitSemaphores.clear();
+    CmdBuffer->SignalSemaphores.clear();
     imageLayoutManager_.PrintLayoutInfo();
 }
 
@@ -155,7 +193,7 @@ void VulkanQueue::SubmitSignalSemaphore(VulkanSemaphore* SignalSemaphore)
         device_->GetSyncPointManager()->GarbageCollect();
     }
 
-    if (!QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE))
+    if (!VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE))
     {
         throw std::runtime_error("Failed to submit Vulkan signal semaphore");
     }
@@ -163,7 +201,7 @@ void VulkanQueue::SubmitSignalSemaphore(VulkanSemaphore* SignalSemaphore)
 
 void VulkanQueue::WaitIdle()
 {
-    if (!QueueWaitIdle(queue_))
+    if (!VKFunc::QueueWaitIdle(queue_))
     {
         throw std::runtime_error("Failed to wait for Vulkan queue to be idle!");
     }
@@ -219,48 +257,54 @@ RHI::RHIContextBase* VulkanQueue::ReleaseCommandContext(RHI::RHIContextBase* Con
     return nullptr;
 }
 
-RHI::RHISyncPoint* VulkanQueue::Submit(RHI::RHICmdBuffer CmdBuffer)
+RHI::RHISubmitResult VulkanQueue::Submit(RHI::RHICmdBuffer CmdBuffer)
 {
+    RHI::RHISubmitResult result{};
     VulkanCommandBuffer* commandBuffer = reinterpret_cast<VulkanCommandBuffer*>(CmdBuffer);
     if (!commandBuffer)
     {
-        return nullptr;
+        return result;
     }
 
     VulkanSemaphore* signalSemaphore = device_ ? device_->GetSemaphoreManager()->Acquire(true) : nullptr;
     SubmitCommandBuffer(commandBuffer, signalSemaphore ? 1 : 0, signalSemaphore);
     auto* syncPointManager = device_ ? device_->GetSyncPointManager() : nullptr;
-    return syncPointManager ? syncPointManager->Acquire(QueueType_, commandBuffer->GetFence(), signalSemaphore, signalSemaphore != nullptr) : nullptr;
+    if (!syncPointManager)
+    {
+        return result;
+    }
+
+    result.Completion = syncPointManager->AcquireCompletion(QueueType_, commandBuffer->GetFence());
+    result.Dependency = syncPointManager->AcquireDependency(QueueType_, signalSemaphore, signalSemaphore != nullptr);
+    return result;
 }
 
-RHI::RHISyncPoint* VulkanQueue::Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHISyncPoint*>& WaitPoints)
+RHI::RHISubmitResult VulkanQueue::Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos)
 {
+    RHI::RHISubmitResult result{};
     std::vector<VulkanSemaphore*> waitSemaphores;
-    std::vector<RHI::RHISyncPoint*> consumedWaitSyncPoints;
-    for (RHI::RHISyncPoint* waitPoint : WaitPoints)
+    std::vector<VkPipelineStageFlags> waitStages;
+    std::vector<RHI::RHISyncDependency*> consumedWaitDependencies;
+    for (const RHI::RHIWaitInfo& waitInfo : WaitInfos)
     {
-        if (!waitPoint)
+        if (!waitInfo.Dependency)
         {
             continue;
         }
 
-        if (auto* vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(waitPoint))
+        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(waitInfo.Dependency))
         {
-            if (auto* semaphore = vulkanSyncPoint->GetSemaphore())
+            if (auto* semaphore = vulkanDependency->GetSemaphore())
             {
                 waitSemaphores.push_back(semaphore);
-                consumedWaitSyncPoints.push_back(waitPoint);
+                waitStages.push_back(ToVkPipelineStage(waitInfo.WaitStage));
+                consumedWaitDependencies.push_back(waitInfo.Dependency);
                 continue;
             }
         }
-
-        if (!waitPoint->IsReached())
-        {
-            waitPoint->Wait();
-        }
     }
 
-    RHI::RHISyncPoint* lastSyncPoint = nullptr;
+    RHI::RHISubmitResult lastResult{};
     for (size_t cmdIndex = 0; cmdIndex < Cmds.size(); ++cmdIndex)
     {
         RHI::RHICmdBuffer cmdBuffer = Cmds[cmdIndex];
@@ -269,21 +313,25 @@ RHI::RHISyncPoint* VulkanQueue::Submit(const std::vector<RHI::RHICmdBuffer>& Cmd
             auto* commandBuffer = reinterpret_cast<VulkanCommandBuffer*>(cmdBuffer);
             if (commandBuffer)
             {
-                commandBuffer->AddWaitSemaphores(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, waitSemaphores);
+                for (size_t waitIndex = 0; waitIndex < waitSemaphores.size(); ++waitIndex)
+                {
+                    commandBuffer->AddWaitSemaphores(waitStages[waitIndex], { waitSemaphores[waitIndex] });
+                }
             }
         }
-        lastSyncPoint = Submit(cmdBuffer);
+        lastResult = Submit(cmdBuffer);
     }
 
     if (auto* syncPointManager = device_ ? device_->GetSyncPointManager() : nullptr)
     {
-        for (RHI::RHISyncPoint* syncPoint : consumedWaitSyncPoints)
+        for (RHI::RHISyncDependency* dependency : consumedWaitDependencies)
         {
-            syncPointManager->TryRecycle(syncPoint);
+            syncPointManager->TryRecycle(dependency);
         }
     }
 
-    return lastSyncPoint;
+    result = lastResult;
+    return result;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -295,7 +343,7 @@ VulkanPresentExecutor::VulkanPresentExecutor(VulkanQueue* queue)
 {
 }
 
-void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncPoint* WaitSyncPoint)
+void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncDependency* WaitDependency)
 {
     auto* vulkanSwapchain = dynamic_cast<VulkanRHISwapchain*>(Swapchain);
     if (!vulkanSwapchain || !Queue)
@@ -303,6 +351,6 @@ void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncPo
         return;
     }
 
-    vulkanSwapchain->Present(Queue, WaitSyncPoint);
+    vulkanSwapchain->Present(Queue, WaitDependency);
 }
 }

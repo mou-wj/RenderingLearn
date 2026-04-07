@@ -21,7 +21,7 @@ namespace RHIVulkan{
         createInfo.hwnd = (HWND)windowHandle;
         createInfo.hinstance = nullptr;
 
-        return CreateWin32SurfaceKHR(instance, &createInfo, surface);
+        return VKFunc::CreateWin32SurfaceKHR(instance, &createInfo, surface);
 #else
         Log::Error("Unsupported platform!");
         return false;

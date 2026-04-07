@@ -112,7 +112,7 @@ struct VulkanCommandUpdateTexture : public RHICommandBase
         auto* vulkanContex = dynamic_cast<VulkanCommandContext*>(cmdList.GetCommandContex());
         VulkanCommandBuffer* cmdBuffer = vulkanContex->GetCommandBufferManager()->GetActiveCommandBuffer();
 
-        CmdCopyBufferToImage(
+        VKFunc::CmdCopyBufferToImage(
             cmdBuffer->GetHandle(),
             staging->GetHandle(),
             texture->GetImage(),

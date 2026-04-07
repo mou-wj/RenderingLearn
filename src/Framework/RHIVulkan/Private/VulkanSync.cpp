@@ -63,13 +63,13 @@ namespace RHIVulkan{
     {
         VkSemaphoreCreateInfo info{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
         info.flags = 0;
-        vkCreateSemaphore(device_->GetHandle(), &info, nullptr, &semaphore_);
+        VKFunc::CreateSemaphore_(device_->GetHandle(), &info, &semaphore_);
     }
 
     VulkanSemaphore::~VulkanSemaphore()
     {
         if (semaphore_ != VK_NULL_HANDLE) {
-            vkDestroySemaphore(device_->GetHandle(), semaphore_, nullptr);
+            VKFunc::DestroySemaphore(device_->GetHandle(), semaphore_);
             semaphore_ = VK_NULL_HANDLE;
         }
     }
@@ -142,7 +142,7 @@ VulkanFence::VulkanFence(VulkanDevice* device)
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = 0;
-    if (vkCreateFence(vkDevice, &fenceInfo, nullptr, &Fence) != VK_SUCCESS) {
+    if (!VKFunc::CreateFence(vkDevice, &fenceInfo, &Fence)) {
         // Handle error
     }
 }
@@ -150,7 +150,7 @@ VulkanFence::VulkanFence(VulkanDevice* device)
 VulkanFence::~VulkanFence()
 {
     if (Fence) {
-        vkDestroyFence(Device->GetHandle(), Fence, nullptr);
+        VKFunc::DestroyFence(Device->GetHandle(), Fence);
         Fence = VK_NULL_HANDLE;
     }
 }
@@ -158,20 +158,20 @@ VulkanFence::~VulkanFence()
 bool VulkanFence::IsSignaled() const
 {
     if (!Fence || !Device) return false;
-    VkResult result = vkGetFenceStatus(Device->GetHandle(), Fence);
+    VkResult result = vkGetFenceStatus(Device->GetHandle(), Fence); // 若有VKFunc包装可替换
     return result == VK_SUCCESS;
 }
 
 void VulkanFence::Reset()
 {
     if (!Fence || !Device) return;
-    ResetFences(Device->GetHandle(), 1, &Fence);
+    VKFunc::ResetFences(Device->GetHandle(), 1, &Fence);
 }
 
 void VulkanFence::Wait()
 {
     if (!Fence || !Device) return;
-    WaitForFences(Device->GetHandle(), 1, &Fence, VK_TRUE, UINT64_MAX);
+    VKFunc::WaitForFences(Device->GetHandle(), 1, &Fence, VK_TRUE, UINT64_MAX);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -248,13 +248,14 @@ VulkanRHISyncPointManager::~VulkanRHISyncPointManager()
     PendingSyncPoints.clear();
     FreeSyncPoints.clear();
     AllSyncPoints.clear();
+    PendingDependencies.clear();
+    FreeDependencies.clear();
+    AllDependencies.clear();
 }
 
-RHI::RHISyncPoint* VulkanRHISyncPointManager::Acquire(
+RHI::RHISyncPoint* VulkanRHISyncPointManager::AcquireCompletion(
     RHI::EQueueType queueType,
-    VulkanFence* fence,
-    VulkanSemaphore* semaphore,
-    bool ownsSemaphore)
+    VulkanFence* fence)
 {
     std::lock_guard<std::mutex> lock(Mutex);
     GarbageCollect_NoLock();
@@ -274,10 +275,44 @@ RHI::RHISyncPoint* VulkanRHISyncPointManager::Acquire(
 
     if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
     {
-        vulkanSyncPoint->Activate(queueType, fence, semaphore, ownsSemaphore, NextValue++, this);
+        vulkanSyncPoint->Activate(queueType, fence, NextValue++, this);
     }
     PendingSyncPoints.push_back(syncPoint);
     return syncPoint;
+}
+
+RHI::RHISyncDependency* VulkanRHISyncPointManager::AcquireDependency(
+    RHI::EQueueType queueType,
+    VulkanSemaphore* semaphore,
+    bool ownsSemaphore)
+{
+    if (!semaphore)
+    {
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(Mutex);
+    GarbageCollect_NoLock();
+
+    RHI::RHISyncDependency* dependency = nullptr;
+    if (!FreeDependencies.empty())
+    {
+        dependency = FreeDependencies.back();
+        FreeDependencies.pop_back();
+    }
+    else
+    {
+        auto newDependency = std::make_unique<VulkanRHISyncDependency>();
+        dependency = newDependency.get();
+        AllDependencies.push_back(std::move(newDependency));
+    }
+
+    if (auto vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
+    {
+        vulkanDependency->Activate(queueType, semaphore, ownsSemaphore, NextValue++, this);
+    }
+    PendingDependencies.push_back(dependency);
+    return dependency;
 }
 
 void VulkanRHISyncPointManager::GarbageCollect()
@@ -302,12 +337,29 @@ void VulkanRHISyncPointManager::TryRecycle(RHI::RHISyncPoint* syncPoint)
         }
 
         const bool reachedByFence = vulkanSyncPoint->Fence && vulkanSyncPoint->Fence->IsSignaled();
-        const bool semaphoreOnly = !vulkanSyncPoint->Fence && vulkanSyncPoint->Semaphore;
-        const bool noFenceAndNoSemaphore = !vulkanSyncPoint->Fence && !vulkanSyncPoint->Semaphore;
-        if (reachedByFence || semaphoreOnly || noFenceAndNoSemaphore)
+        if (reachedByFence)
         {
             Recycle_NoLock(syncPoint);
         }
+    }
+}
+
+void VulkanRHISyncPointManager::TryRecycle(RHI::RHISyncDependency* dependency)
+{
+    if (!dependency)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(Mutex);
+    if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
+    {
+        if (!vulkanDependency->bPending)
+        {
+            return;
+        }
+
+        Recycle_NoLock(dependency);
     }
 }
 
@@ -324,20 +376,34 @@ void VulkanRHISyncPointManager::WaitAndRecycleAll()
             }
             if (vulkanSyncPoint)
             {
-                if (vulkanSyncPoint->Semaphore && vulkanSyncPoint->bOwnsSemaphore)
-                {
-                    Device->GetSemaphoreManager()->Release(vulkanSyncPoint->Semaphore);
-                }
                 vulkanSyncPoint->bPending = false;
                 vulkanSyncPoint->Fence = nullptr;
-                vulkanSyncPoint->Semaphore = nullptr;
-                vulkanSyncPoint->bOwnsSemaphore = false;
                 vulkanSyncPoint->Owner = this;
                 FreeSyncPoints.push_back(syncPoint);
             }
         }
     }
     PendingSyncPoints.clear();
+
+    for (RHI::RHISyncDependency* dependency : PendingDependencies)
+    {
+        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
+        {
+            if (vulkanDependency->Semaphore && vulkanDependency->bOwnsSemaphore)
+            {
+                if (auto* semaphoreManager = Device ? Device->GetSemaphoreManager() : nullptr)
+                {
+                    semaphoreManager->Release(vulkanDependency->Semaphore);
+                }
+            }
+            vulkanDependency->bPending = false;
+            vulkanDependency->Semaphore = nullptr;
+            vulkanDependency->bOwnsSemaphore = false;
+            vulkanDependency->Owner = this;
+            FreeDependencies.push_back(dependency);
+        }
+    }
+    PendingDependencies.clear();
 }
 
 void VulkanRHISyncPointManager::GarbageCollect_NoLock()
@@ -357,14 +423,8 @@ void VulkanRHISyncPointManager::GarbageCollect_NoLock()
             {
                 if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
                 {
-                    if (vulkanSyncPoint->Semaphore && vulkanSyncPoint->bOwnsSemaphore)
-                    {
-                        Device->GetSemaphoreManager()->Release(vulkanSyncPoint->Semaphore);
-                    }
                     vulkanSyncPoint->bPending = false;
                     vulkanSyncPoint->Fence = nullptr;
-                    vulkanSyncPoint->Semaphore = nullptr;
-                    vulkanSyncPoint->bOwnsSemaphore = false;
                     vulkanSyncPoint->Owner = this;
                 }
                 FreeSyncPoints.push_back(syncPoint);
@@ -372,6 +432,27 @@ void VulkanRHISyncPointManager::GarbageCollect_NoLock()
             it = PendingSyncPoints.erase(it);
             continue;
         }
+        ++it;
+    }
+
+    for (auto it = PendingDependencies.begin(); it != PendingDependencies.end();)
+    {
+        auto* dependency = *it;
+        if (!dependency)
+        {
+            it = PendingDependencies.erase(it);
+            continue;
+        }
+
+        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
+        {
+            if (!vulkanDependency->bPending)
+            {
+                it = PendingDependencies.erase(it);
+                continue;
+            }
+        }
+
         ++it;
     }
 }
@@ -386,17 +467,36 @@ void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncPoint* syncPoint)
 
     if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
     {
-        if (vulkanSyncPoint->Semaphore && vulkanSyncPoint->bOwnsSemaphore)
-        {
-            Device->GetSemaphoreManager()->Release(vulkanSyncPoint->Semaphore);
-        }
         vulkanSyncPoint->bPending = false;
         vulkanSyncPoint->Fence = nullptr;
-        vulkanSyncPoint->Semaphore = nullptr;
-        vulkanSyncPoint->bOwnsSemaphore = false;
         vulkanSyncPoint->Owner = this;
     }
     FreeSyncPoints.push_back(syncPoint);
+}
+
+void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncDependency* dependency)
+{
+    auto it = std::find(PendingDependencies.begin(), PendingDependencies.end(), dependency);
+    if (it != PendingDependencies.end())
+    {
+        PendingDependencies.erase(it);
+    }
+
+    if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
+    {
+        if (vulkanDependency->Semaphore && vulkanDependency->bOwnsSemaphore)
+        {
+            if (auto* semaphoreManager = Device ? Device->GetSemaphoreManager() : nullptr)
+            {
+                semaphoreManager->Release(vulkanDependency->Semaphore);
+            }
+        }
+        vulkanDependency->bPending = false;
+        vulkanDependency->Semaphore = nullptr;
+        vulkanDependency->bOwnsSemaphore = false;
+        vulkanDependency->Owner = this;
+    }
+    FreeDependencies.push_back(dependency);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -406,15 +506,11 @@ void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncPoint* syncPoint)
 void VulkanRHISyncPoint::Activate(
     RHI::EQueueType queueType,
     VulkanFence* inFence,
-    VulkanSemaphore* inSemaphore,
-    bool inOwnsSemaphore,
     uint64_t inValue,
     VulkanRHISyncPointManager* inOwner)
 {
     Owner = inOwner;
     Fence = inFence;
-    Semaphore = inSemaphore;
-    bOwnsSemaphore = inOwnsSemaphore;
     bPending = true;
     Type = queueType;
     Value = inValue;
@@ -426,10 +522,6 @@ bool VulkanRHISyncPoint::IsReached() const
     if (Fence)
     {
         reached = Fence->IsSignaled();
-    }
-    else if (!Semaphore)
-    {
-        reached = true;
     }
     if (reached && Owner)
     {
@@ -448,6 +540,21 @@ void VulkanRHISyncPoint::Wait() const
     {
         Owner->TryRecycle(const_cast<VulkanRHISyncPoint*>(this));
     }
+}
+
+void VulkanRHISyncDependency::Activate(
+    RHI::EQueueType queueType,
+    VulkanSemaphore* inSemaphore,
+    bool inOwnsSemaphore,
+    uint64_t inValue,
+    VulkanRHISyncPointManager* inOwner)
+{
+    Owner = inOwner;
+    Semaphore = inSemaphore;
+    bOwnsSemaphore = inOwnsSemaphore;
+    bPending = true;
+    Type = queueType;
+    Value = inValue;
 }
 
 }

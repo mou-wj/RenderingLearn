@@ -10,7 +10,23 @@
 #include <vulkan/vulkan_xlib.h>
 #include <X11/Xlib.h>
 #endif
-namespace RHIVulkan {
+namespace VKFunc {
+
+    // 新增补充接口声明
+    // Descriptor Pool
+    bool ResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool);
+    // Descriptor Set Layout
+    bool CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkDescriptorSetLayout* pSetLayout);
+    // Cmd Bind Descriptor Sets
+    void CmdBindDescriptorSets(
+        VkCommandBuffer commandBuffer,
+        VkPipelineBindPoint pipelineBindPoint,
+        VkPipelineLayout layout,
+        uint32_t firstSet,
+        uint32_t descriptorSetCount,
+        const VkDescriptorSet* pDescriptorSets,
+        uint32_t dynamicOffsetCount,
+        const uint32_t* pDynamicOffsets);
 
     // ---------------------------
     // Instance
@@ -62,7 +78,7 @@ namespace RHIVulkan {
     // ---------------------------
     // Synchronization
     // ---------------------------
-    bool CreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, VkSemaphore* pSemaphore);
+    bool CreateSemaphore_(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, VkSemaphore* pSemaphore);
     bool DestroySemaphore(VkDevice device, VkSemaphore semaphore);
 
     bool CreateFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo, VkFence* pFence);
@@ -128,7 +144,10 @@ namespace RHIVulkan {
     bool DeviceWaitIdle(VkDevice device);
     bool QueueWaitIdle(VkQueue queue);
 
-
-
+    // ---------------------------
+    // Debug Utils
+    // ---------------------------
+    // 设置Vulkan对象的调试名称
+    void SetDebugName(VkDevice device, VkObjectType type, uint64_t handle, const char* name);
 
 }

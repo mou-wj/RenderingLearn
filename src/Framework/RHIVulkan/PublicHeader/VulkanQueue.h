@@ -44,8 +44,8 @@ public:
     RHI::EQueueType GetType() const override;
     RHI::RHIContextBase* AcquireCommandContext() override;
     RHI::RHIContextBase* ReleaseCommandContext(RHI::RHIContextBase* Context) override;
-    RHI::RHISyncPoint* Submit(RHI::RHICmdBuffer CmdBuffer) override;
-    RHI::RHISyncPoint* Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHISyncPoint*>& WaitPoints) override;
+    RHI::RHISubmitResult Submit(RHI::RHICmdBuffer CmdBuffer) override;
+    RHI::RHISubmitResult Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
     void WaitIdle() override;
 
 private:
@@ -66,7 +66,7 @@ class RHIVULKAN_API VulkanPresentExecutor final : public RHI::RHIPresentExecutor
 {
 public:
     explicit VulkanPresentExecutor(VulkanQueue* queue);
-    void Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncPoint* WaitSyncPoint = nullptr) override;
+    void Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncDependency* WaitDependency) override;
 private:
     VulkanQueue* Queue = nullptr;
 };

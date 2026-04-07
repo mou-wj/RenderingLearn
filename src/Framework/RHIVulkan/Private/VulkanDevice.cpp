@@ -59,9 +59,9 @@ bool VulkanDevice::Init(const std::vector<const char*>& enabledLayers,
 
 void VulkanDevice::SelectQueueFamilies(VkPhysicalDevice physicalDevice)
 {
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+    VKFunc::GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
     std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
+    VKFunc::GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
 
     // Step 1: Try to find a queue family that supports all operations (Graphics + Compute + Transfer)
     for (uint32_t i = 0; i < queueFamilyCount; ++i)
@@ -173,37 +173,22 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
     createInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
     createInfo.ppEnabledLayerNames = layers.data();
 
-    CreateDevice(physicalDevice, &createInfo,&device_);
+    VKFunc::CreateDevice(physicalDevice, &createInfo,&device_);
     
     // 获取队列
     VkQueue graphicsQueue;
-    GetDeviceQueue(device_, graphicsQueueFamilyIndex_, 0, &graphicsQueue);
+    VKFunc::GetDeviceQueue(device_, graphicsQueueFamilyIndex_, 0, &graphicsQueue);
     VkQueue computeQueue;
-    GetDeviceQueue(device_, computeQueueFamilyIndex_, 0, &computeQueue);
+    VKFunc::GetDeviceQueue(device_, computeQueueFamilyIndex_, 0, &computeQueue);
     VkQueue transferQueue;
-    GetDeviceQueue(device_, transferQueueFamilyIndex_, 0, &transferQueue);
+    VKFunc::GetDeviceQueue(device_, transferQueueFamilyIndex_, 0, &transferQueue);
 
     graphicsQueue_ = new VulkanQueue(this, graphicsQueue, graphicsQueueFamilyIndex_);
-    if (computeQueueFamilyIndex_ == graphicsQueueFamilyIndex_)
-    {
-        computeQueue_ = graphicsQueue_;
-    }
-    else
-    {
-        computeQueue_ = new VulkanQueue(this, computeQueue, computeQueueFamilyIndex_);
-    }
-    if (transferQueueFamilyIndex_ == graphicsQueueFamilyIndex_)
-    {
-        transferQueue_ = graphicsQueue_;
-    }
-    else if (transferQueueFamilyIndex_ == computeQueueFamilyIndex_)
-    {
-        transferQueue_ = computeQueue_;
-    }
-    else
-    {
-        transferQueue_ = new VulkanQueue(this, transferQueue, transferQueueFamilyIndex_);
-    }
+	graphicsQueue_->InitContextPool(EQueueType::Graphics, 10);
+    computeQueue_  = new VulkanQueue(this, computeQueue, computeQueueFamilyIndex_);
+	computeQueue_->InitContextPool(EQueueType::Compute, 10);
+    transferQueue_ = new VulkanQueue(this, transferQueue, transferQueueFamilyIndex_);
+	transferQueue_->InitContextPool(EQueueType::Transfer, 5);
 }
 
 bool VulkanDevice::InitPresentQueue(VkSurfaceKHR Surface)
@@ -211,7 +196,7 @@ bool VulkanDevice::InitPresentQueue(VkSurfaceKHR Surface)
     auto CheckPresentSupport = [this](VulkanQueue* queue, VkSurfaceKHR surface)  {
         if (presentQueue_) return;
         VkBool32 surport = false;
-        GetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, queue->GetFamilyIndex(), surface, &surport);
+        VKFunc::GetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, queue->GetFamilyIndex(), surface, &surport);
         if (surport) {
             presentQueue_ = queue;
 			presentQueueFamilyIndex_ = queue->GetFamilyIndex();
@@ -226,7 +211,12 @@ bool VulkanDevice::InitPresentQueue(VkSurfaceKHR Surface)
 
 void VulkanDevice::Destroy()
 {
-    vkDeviceWaitIdle(device_);
+    if (device_ == VK_NULL_HANDLE)
+    {
+        return;
+    }
+
+    VKFunc::DeviceWaitIdle(device_);
 
     if (globalCommandContext_ != nullptr)
     {
@@ -234,18 +224,7 @@ void VulkanDevice::Destroy()
         globalCommandContext_ = nullptr;
     }
 
-    if (semaphoreManager_ != nullptr)
-    {
-        delete semaphoreManager_;
-        semaphoreManager_ = nullptr;
-    }
 
-    if (syncPointManager_ != nullptr)
-    {
-        syncPointManager_->WaitAndRecycleAll();
-        delete syncPointManager_;
-        syncPointManager_ = nullptr;
-    }
 
     if (pipelineLayoutCache_ != nullptr)
     {
@@ -277,27 +256,9 @@ void VulkanDevice::Destroy()
         renderPassManager_ = nullptr;
     }
 
-    if (fenceManager_ != nullptr)
-    {
-        delete fenceManager_;
-        fenceManager_ = nullptr;
-    }
-
-    if (stagingManager_ != nullptr)
-    {
-        delete stagingManager_;
-        stagingManager_ = nullptr;
-    }
-
-    if (memoryManager_ != nullptr)
-    {
-        delete memoryManager_;
-        memoryManager_ = nullptr;
-    }
 
 
-
-    
+  
     ReleaseDeferredResources();
 
     std::set<VulkanQueue*> uniqueQueues;
@@ -316,6 +277,12 @@ void VulkanDevice::Destroy()
     graphicsQueue_ = nullptr;
     presentQueue_ = nullptr;
 
+    if (stagingManager_ != nullptr)
+    {
+        delete stagingManager_;
+        stagingManager_ = nullptr;
+    }
+
     if (deferredDeleteQueue_ != nullptr)
     {
         deferredDeleteQueue_->Clear();
@@ -323,9 +290,37 @@ void VulkanDevice::Destroy()
         deferredDeleteQueue_ = nullptr;
     }
 
+
+
+
+    if (memoryManager_ != nullptr)
+    {
+        delete memoryManager_;
+        memoryManager_ = nullptr;
+    }
+
+    if (fenceManager_ != nullptr)
+    {
+        delete fenceManager_;
+        fenceManager_ = nullptr;
+    }
+
+    if (syncPointManager_ != nullptr)
+    {
+        syncPointManager_->WaitAndRecycleAll();
+        delete syncPointManager_;
+        syncPointManager_ = nullptr;
+    }
+
+    if (semaphoreManager_ != nullptr)
+    {
+        delete semaphoreManager_;
+        semaphoreManager_ = nullptr;
+    }
+
     if (device_ != VK_NULL_HANDLE)
     {
-        DestroyDevice(device_);
+        VKFunc::DestroyDevice(device_);
         device_ = VK_NULL_HANDLE;
     }
 }
@@ -364,13 +359,13 @@ void VulkanDeferredDeleteQueue::ReleaseResource(EResourceType Type, const FDefer
     switch (Type)
     {
     case EResourceType::RenderPass:
-        vkDestroyRenderPass(VulkanDevice, reinterpret_cast<VkRenderPass>(Entry.Handle), nullptr);
+        VKFunc::DestroyRenderPass(VulkanDevice, reinterpret_cast<VkRenderPass>(Entry.Handle));
         break;
     case EResourceType::Buffer:
-        vkDestroyBuffer(VulkanDevice, reinterpret_cast<VkBuffer>(Entry.Handle), nullptr);
+        VKFunc::DestroyBuffer(VulkanDevice, reinterpret_cast<VkBuffer>(Entry.Handle));
         break;
     case EResourceType::BufferView:
-        vkDestroyBufferView(VulkanDevice, reinterpret_cast<VkBufferView>(Entry.Handle), nullptr);
+        vkDestroyBufferView(VulkanDevice, reinterpret_cast<VkBufferView>(Entry.Handle), nullptr); // 若有VKFunc包装可替换
         break;
     case EResourceType::Image:
     {
@@ -380,23 +375,23 @@ void VulkanDeferredDeleteQueue::ReleaseResource(EResourceType Type, const FDefer
         device_->GetTransferQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
         device_->GetPresentQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
 
-        vkDestroyImage(VulkanDevice, Image, nullptr);
+        VKFunc::DestroyImage(VulkanDevice, Image);
         break;
     }
     case EResourceType::ImageView:
-        vkDestroyImageView(VulkanDevice, reinterpret_cast<VkImageView>(Entry.Handle), nullptr);
+        VKFunc::DestroyImageView(VulkanDevice, reinterpret_cast<VkImageView>(Entry.Handle));
         break;
     case EResourceType::Pipeline:
-        vkDestroyPipeline(VulkanDevice, reinterpret_cast<VkPipeline>(Entry.Handle), nullptr);
+        VKFunc::DestroyPipeline(VulkanDevice, reinterpret_cast<VkPipeline>(Entry.Handle));
         break;
     case EResourceType::Framebuffer:
-        vkDestroyFramebuffer(VulkanDevice, reinterpret_cast<VkFramebuffer>(Entry.Handle), nullptr);
+        VKFunc::DestroyFramebuffer(VulkanDevice, reinterpret_cast<VkFramebuffer>(Entry.Handle));
         break;
     case EResourceType::Sampler:
-        vkDestroySampler(VulkanDevice, reinterpret_cast<VkSampler>(Entry.Handle), nullptr);
+        vkDestroySampler(VulkanDevice, reinterpret_cast<VkSampler>(Entry.Handle), nullptr); // 若有VKFunc包装可替换
         break;
     case EResourceType::ShaderModule:
-        vkDestroyShaderModule(VulkanDevice, reinterpret_cast<VkShaderModule>(Entry.Handle), nullptr);
+        vkDestroyShaderModule(VulkanDevice, reinterpret_cast<VkShaderModule>(Entry.Handle), nullptr); // 若有VKFunc包装可替换
         break;
     default:
         break;

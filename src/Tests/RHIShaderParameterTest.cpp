@@ -6,6 +6,7 @@
 #include "RHIPipelineStateCache.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cstring>
 #include <unordered_map>
 
 using namespace RenderCore;
@@ -107,7 +108,10 @@ public:
 
         auto* computeContext = dynamic_cast<RHI::RHIComputeContex*>(cmdContext);
         if (!computeContext)
+        {
+            queue->ReleaseCommandContext(cmdContext);
             return;
+        }
         RHI::RHIComputeCommandList cmdList(computeContext);
         // ========================
         // 执行计算着色器 (4 次迭代)
@@ -161,6 +165,8 @@ public:
             uint32_t bExtraParam1Value = (iteration == 1) ? 1 : 0; // 示例
 
             size_t dataOffset = 0;
+            std::optional<size_t> extraParamOffset;
+            std::optional<size_t> extraParam1Offset;
             if (alloc = ParameterMap.FindParameterAllocation("bExtraParam"))
             {
                 RHI::RHIShaderUniformParameter param;
@@ -169,6 +175,7 @@ public:
                 param.Offset = dataOffset;
                 param.Size = alloc->Size;
                 computeParams.UniformParameters.push_back(param);
+                extraParamOffset = dataOffset;
                 dataOffset += alloc->Size;
             }
 
@@ -180,13 +187,20 @@ public:
                 param.Offset = dataOffset;
                 param.Size = alloc->Size;
                 computeParams.UniformParameters.push_back(param);
+                extraParam1Offset = dataOffset;
                 dataOffset += alloc->Size;
             }
 
             // 设置 Data
             computeParams.Data.resize(dataOffset);
-            memcpy(computeParams.Data.data(), &bExtraParamValue, sizeof(uint32_t));
-            memcpy(computeParams.Data.data() + sizeof(uint32_t), &bExtraParam1Value, sizeof(uint32_t));
+            if (extraParamOffset && (*extraParamOffset + sizeof(uint32_t) <= computeParams.Data.size()))
+            {
+                std::memcpy(computeParams.Data.data() + *extraParamOffset, &bExtraParamValue, sizeof(uint32_t));
+            }
+            if (extraParam1Offset && (*extraParam1Offset + sizeof(uint32_t) <= computeParams.Data.size()))
+            {
+                std::memcpy(computeParams.Data.data() + *extraParam1Offset, &bExtraParam1Value, sizeof(uint32_t));
+            }
 
             // 设置资源参数：纹理 SRV
             if (TestTextureSRV && (alloc = ParameterMap.FindParameterAllocation("InputTexture")))
@@ -241,6 +255,9 @@ public:
             queue->Submit(cmdBuffer);
             cmdList.Clear();
         }
+
+        queue->WaitIdle();
+        queue->ReleaseCommandContext(cmdContext);
     }
 
     void Teardown() override
@@ -258,12 +275,18 @@ public:
         OutputBuffer.reset();
         OutputBufferUAV.reset();
         ConstantBuffer.reset();
+        GTrackedResourceAccess.clear();
 
         auto* api = RHI::GRHIApi;
         if (!api)
             return;
 
         api->Shutdown();
+        delete api;
+        RHI::GRHIApi = nullptr;
+
+        delete RenderCore::GShaderCompilationCache;
+        RenderCore::GShaderCompilationCache = nullptr;
     }
 
 private:
@@ -386,7 +409,10 @@ private:
             return;
         auto* computeContext = dynamic_cast<RHI::RHIComputeContex*>(cmdContext);
         if (!computeContext)
+        {
+            queue->ReleaseCommandContext(cmdContext);
             return;
+        }
         RHI::RHIComputeCommandList cmdList(computeContext);
         cmdList.SetImmediate(true);
         cmdList.Begin();
@@ -422,6 +448,8 @@ private:
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer bufferUploadCmd = cmdList.End();
         queue->Submit(bufferUploadCmd);
+        queue->WaitIdle();
+        queue->ReleaseCommandContext(cmdContext);
 
         RHI::RHIBufferSRVCreateInfo bufSrvDesc;
         bufSrvDesc.Offset = 0;
@@ -483,7 +511,10 @@ private:
             return;
         auto* computeContext = dynamic_cast<RHI::RHIComputeContex*>(cmdContext);
         if (!computeContext)
+        {
+            queue->ReleaseCommandContext(cmdContext);
             return;
+        }
         RHI::RHIComputeCommandList cmdList(computeContext);
         cmdList.SetImmediate(true);
         cmdList.Begin();
@@ -493,6 +524,8 @@ private:
         cmdList.ExecuteAll();
         RHI::RHICmdBuffer cbUploadCmd = cmdList.End();
         queue->Submit(cbUploadCmd);
+        queue->WaitIdle();
+        queue->ReleaseCommandContext(cmdContext);
 
         // 创建计算管线状态
         RHI::RHIComputePipelineStateDesc computeDesc;

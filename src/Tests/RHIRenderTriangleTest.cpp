@@ -136,9 +136,8 @@ public:
             return;
         }
         RHI::RHIGraphicCommandList cmdList(graphicContext);
-        int i = 0;
-        while (true) {
-            i++;
+        constexpr int kMaxFrames = 300;
+        for (int frameIndex = 0; frameIndex < kMaxFrames; ++frameIndex) {
             // 设置为即时执行模式
             cmdList.SetImmediate(true);
 
@@ -186,10 +185,17 @@ public:
             // 执行所有命令
             cmdList.ExecuteAll();
             RHI::RHICmdBuffer cmdBuffer = cmdList.End();
-            RHI::RHISyncPoint* presentSyncPoint = queue->Submit({ cmdBuffer }, { swapchainSlot.ReadySync });
-            GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentSyncPoint);
+            std::vector<RHI::RHIWaitInfo> waitInfos;
+            if (swapchainSlot.ReadySync)
+            {
+                waitInfos.push_back({ swapchainSlot.ReadySync, RHI::ERHIPipelineStage::ColorAttachmentOutput });
+            }
+            RHI::RHISubmitResult submitResult = queue->Submit({ cmdBuffer }, waitInfos);
+            GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), submitResult.Dependency);
             cmdList.Clear();
         }
+
+        queue->WaitIdle();
     }
 
     // ==========================================

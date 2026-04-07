@@ -1,5 +1,6 @@
 #include "VulkanDescriptorSets.h"
 #include "VulkanCommandBuffer.h"
+#include "VulkanFuncWrapper.h"
 #include <stdexcept>
 namespace RHIVulkan {
         //------------------------------------------------------------
@@ -41,7 +42,7 @@ namespace RHIVulkan {
     {
         if (Pool != VK_NULL_HANDLE)
         {
-            vkDestroyDescriptorPool(Device->GetHandle(), Pool, nullptr);
+            VKFunc::DestroyDescriptorPool(Device->GetHandle(), Pool);
             Pool = VK_NULL_HANDLE;
         }
     }
@@ -67,7 +68,7 @@ namespace RHIVulkan {
         info.maxSets = MaxDescriptorSets;
         info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
-        if (vkCreateDescriptorPool(Device->GetHandle(), &info, nullptr, &Pool) != VK_SUCCESS)
+        if (!VKFunc::CreateDescriptorPool(Device->GetHandle(), &info, &Pool))
         {
             throw std::runtime_error("Failed to create VulkanDescriptorPool");
         }
@@ -85,8 +86,7 @@ namespace RHIVulkan {
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &layout;
 
-        VkResult res = vkAllocateDescriptorSets(Device->GetHandle(), &allocInfo, &outSet);
-        if (res == VK_SUCCESS)
+        if (VKFunc::AllocateDescriptorSets(Device->GetHandle(), &allocInfo, &outSet))
         {
             ++AllocatedCount;
             return true;
@@ -98,7 +98,7 @@ namespace RHIVulkan {
     {
         if (Pool != VK_NULL_HANDLE)
         {
-            vkResetDescriptorPool(Device->GetHandle(), Pool, 0);
+            VKFunc::ResetDescriptorPool(Device->GetHandle(), Pool);
             AllocatedCount = 0;
         }
     }
@@ -170,7 +170,7 @@ namespace RHIVulkan {
         layoutInfo.pBindings = bindings.data();
 
         VkDescriptorSetLayout layout;
-        if (vkCreateDescriptorSetLayout(Device->GetHandle(), &layoutInfo, nullptr, &layout) != VK_SUCCESS)
+        if (!VKFunc::CreateDescriptorSetLayout(Device->GetHandle(), &layoutInfo, &layout))
             throw std::runtime_error("Failed to create VkDescriptorSetLayout");
 
         LayoutMap[hash] = layout;
@@ -233,7 +233,7 @@ namespace RHIVulkan {
         info.CmdBuffer = cmdBuffer;
         info.pendingSets = descriptorSets;
         PendingFreeSetInfos.push_back(std::move(info));
-        vkCmdBindDescriptorSets(
+        VKFunc::CmdBindDescriptorSets(
             cmdBuffer->GetHandle(),
             VK_PIPELINE_BIND_POINT_COMPUTE,
             layout,
