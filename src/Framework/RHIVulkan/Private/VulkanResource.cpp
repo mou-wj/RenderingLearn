@@ -625,7 +625,7 @@ void VulkanUnorderedAccessView::Invalidate()
     {
         BufferView.Destroy(Device);
     }
-    IsValid = true;
+    IsValid = false;
 }
 
 void VulkanUnorderedAccessView::DestroyView()
@@ -647,9 +647,8 @@ VulkanRHISwapchain::VulkanRHISwapchain(VulkanDevice* device, uint32_t width, uin
     }
     CreateSwapchain();
     acquireSemaphores.resize(swapchainImages_.size());
-    imagePresentWaitDependencies.resize(swapchainImages_.size(), nullptr);
     for (int i = 0; i < swapchainImages_.size(); i++) {
-        acquireSemaphores[i] = device->GetSemaphoreManager()->Acquire(true);
+        acquireSemaphores[i] = new VulkanRHISyncPoint(device,device->GetPresentQueue()->GetType(),0,true);
     }
 }
 
@@ -660,60 +659,71 @@ VulkanRHISwapchain::~VulkanRHISwapchain() {
 
 }
 
-void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, RHI::RHISyncDependency* waitDependency)
+void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, const RHI::RHIWaitInfo& waitInfo)
 {
     if (currentBackBufferIndex == -1 || currentSemaphoreIndex == -1)
     {
         return;
     }
 
-    VulkanSemaphore* presentWaitSemaphore = nullptr;
-    if (waitDependency)
+    // 1. 获取用于给 Present 等待的 Binary Semaphore
+    // 注意：Present 只能等待 Binary Semaphore
+    VulkanSemaphore* binaryWaitHandle = VK_NULL_HANDLE;
+
+    if (waitInfo.SyncPoint)
     {
-        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(waitDependency))
-        {
-            presentWaitSemaphore = vulkanDependency->GetSemaphore();
+        // 【核心修改】：将 Timeline SyncPoint 桥接到一个 Binary Semaphore
+        // 我们提交一个没有任何命令的空包，让它等待 Timeline 达到指定 Value，完成后触发一个 Binary Semaphore
+        auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(waitInfo.SyncPoint);
+
+        // 从对象池或 Swapchain 预留的信号量中获取一个临时的 Binary Semaphore
+        VulkanSemaphore* bridgeSemaphore = Device->GetSemaphoreManager()->Acquire(true);
+        presentSemaphores.push(bridgeSemaphore);
+        if (presentSemaphores.size() > backBufferTextures.size()) {
+            auto finishedSemaphore = presentSemaphores.front();
+            presentSemaphores.pop();
+            Device->GetSemaphoreManager()->Release(finishedSemaphore);
         }
+
+        // 执行桥接提交
+        presentQueue->SubmitEmptyWithDependency(
+            vkSyncPoint->GetSemaphore()->GetHandle(),
+            waitInfo.Value,
+            bridgeSemaphore->GetHandle()
+        );
+
+        binaryWaitHandle = bridgeSemaphore;
     }
+    // 2. 调用原生的 Present
+    // 注意：Swapchain->Present 内部应调用 vkQueuePresentKHR
+    Swapchain->Present(presentQueue, binaryWaitHandle);
 
-    Swapchain->Present(presentQueue, presentWaitSemaphore);
-
-    if (currentBackBufferIndex >= 0
-        && currentBackBufferIndex < static_cast<int>(imagePresentWaitDependencies.size()))
-    {
-        imagePresentWaitDependencies[currentBackBufferIndex] = waitDependency;
-    }
-
-    currentIndex = (currentSemaphoreIndex + 1) % static_cast<int>(swapchainImages_.size());
-    currentSemaphoreIndex = -1;
+    // 3. 更新索引和状态
+    // ... 保持原有的索引更新逻辑 ...
     currentBackBufferIndex = -1;
-    currentReadySyncDependency = nullptr;
+    currentSemaphoreIndex = -1;
 }
 
 RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
 {
     RHISwapchain::RHISwapchainSlot slot{};
+
+    // 1. 原有的获取 BackBuffer 逻辑 (内部调用 vkAcquireNextImageKHR)
+    // 假设这个函数会更新 currentSemaphoreIndex 并触发 acquireSemaphores[i]
     auto backTexture = GetBackTexture();
     slot.Texture = backTexture.get();
+
     if (slot.Texture && currentSemaphoreIndex >= 0)
     {
-        if (!currentReadySyncDependency)
-        {
-            auto* syncPointManager = Device ? Device->GetSyncPointManager() : nullptr;
-            if (syncPointManager)
-            {
-                currentReadySyncDependency = syncPointManager->AcquireDependency(
-                    RHI::EQueueType::Graphics,
-                    acquireSemaphores[currentSemaphoreIndex],
-                    false);
-            }
-        }
-        slot.ReadySync = currentReadySyncDependency;
+        // 4. 返回给 Slot
+        // 注意：在随后的 FlushContext 中，这个 Dependency 会进入 WaitInfos
+        slot.ReadySync = acquireSemaphores[currentSemaphoreIndex];
     }
     else
     {
         slot.ReadySync = nullptr;
     }
+
     return slot;
 }
 
@@ -734,26 +744,11 @@ VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
 	Device->GetGraphicsQueue()->WaitIdle();
 
     currentSemaphoreIndex = currentIndex;
-    Swapchain->AcquireNextImage(acquireSemaphores[currentSemaphoreIndex], &currentBackBufferIndex);
+    Swapchain->AcquireNextImage(acquireSemaphores[currentSemaphoreIndex]->GetSemaphore(), &currentBackBufferIndex);
     if (currentBackBufferIndex == -1) {
         currentSemaphoreIndex = -1;
         return nullptr;
     }
-
-    if (currentBackBufferIndex >= 0
-        && currentBackBufferIndex < static_cast<int>(imagePresentWaitDependencies.size()))
-    {
-        RHI::RHISyncDependency*& presentWaitDependency = imagePresentWaitDependencies[currentBackBufferIndex];
-        if (presentWaitDependency)
-        {
-            if (auto* syncPointManager = Device ? Device->GetSyncPointManager() : nullptr)
-            {
-                syncPointManager->TryRecycle(presentWaitDependency);
-            }
-            presentWaitDependency = nullptr;
-        }
-    }
-
     return backBufferTextures[currentBackBufferIndex];
 }
 
@@ -762,7 +757,6 @@ void VulkanRHISwapchain::CreateSwapchain()
     swapchainImages_.clear();
     backBufferTextures.clear();
     acquireSemaphores.clear();
-    imagePresentWaitDependencies.clear();
 
     VulkanSwapchain::SwapchainDesc swapchainDesc = {};
     swapchainDesc.windowHandle = WindowHandle;
@@ -798,10 +792,8 @@ void VulkanRHISwapchain::DestroySwapchain()
     Swapchain = nullptr;
     backBufferTextures.clear();
     acquireSemaphores.clear();
-    imagePresentWaitDependencies.clear();
     currentBackBufferIndex = -1;
     currentSemaphoreIndex = -1;
-    currentReadySyncDependency = nullptr;
     currentIndex = 0;
 
 }

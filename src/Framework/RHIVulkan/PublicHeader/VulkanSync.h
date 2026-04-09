@@ -51,14 +51,21 @@ private:
 
 class VulkanSemaphore : public std::enable_shared_from_this<VulkanSemaphore> {
 public:
-    VulkanSemaphore(VulkanDevice* device);
+    VulkanSemaphore(VulkanDevice* device,bool isBinary = false,uint64_t initialValue = 0);
     ~VulkanSemaphore();
 
     VkSemaphore GetHandle() const;
+    bool IsBinary() const { return isBinary_; }
+    // 获取当前 GPU 已经执行到的数值
+    uint64_t GetCurrentValue();
+    // CPU 端阻塞等待直到达到某个值
+    void Wait(uint64_t Value, uint64_t TimeoutNS = UINT64_MAX);
 
 private:
     VulkanDevice* device_;
     VkSemaphore semaphore_;
+    bool isBinary_ = false;
+    uint64_t value_ = 0;
 };
 
 class VulkanSemaphoreManager {
@@ -115,87 +122,26 @@ private:
     std::deque<VulkanFence*> pendingFences;
 };
 
-// Vulkan RHI-level Sync Point Manager
-class RHIVULKAN_API VulkanRHISyncPointManager
-{
-public:
-    explicit VulkanRHISyncPointManager(VulkanDevice* device);
-    ~VulkanRHISyncPointManager();
 
-    // Acquire a completion point for the given fence (fence is managed by device's FenceManager)
-    RHI::RHISyncPoint* AcquireCompletion(
-        RHI::EQueueType queueType,
-        VulkanFence* fence);
-    RHI::RHISyncDependency* AcquireDependency(
-        RHI::EQueueType queueType,
-        VulkanSemaphore* semaphore,
-        bool ownsSemaphore = false);
-    void GarbageCollect();
-    void TryRecycle(RHI::RHISyncPoint* syncPoint);
-    void TryRecycle(RHI::RHISyncDependency* dependency);
-    void WaitAndRecycleAll();
+// Vulkan RHI-level Sync Point (based on VkTimelineSemaphore)
+class RHIVULKAN_API VulkanRHISyncPoint final : public RHI::RHISyncPoint {
+public:
+    VulkanRHISyncPoint(VulkanDevice* device, RHI::EQueueType queueType, uint64_t initialValue = 0,bool isBinary = false);
+    ~VulkanRHISyncPoint();
+
+    // 获取当前 GPU 已经执行到的数值
+    uint64_t GetCurrentValue() override;
+    // CPU 端阻塞等待直到达到某个值
+    void Wait(uint64_t Value, uint64_t TimeoutNS = UINT64_MAX) override;
+
+    // 获取VkSemaphore句柄（如有需要跨API用）
+    VulkanSemaphore* GetSemaphore() const { return semaphore_; }
+
+    bool IsBinary() const { return semaphore_->IsBinary(); }
+
 
 private:
-    friend class VulkanRHISyncPoint;
-    friend class VulkanRHISyncDependency;
-    
-    void GarbageCollect_NoLock();
-    void Recycle_NoLock(RHI::RHISyncPoint* syncPoint);
-    void Recycle_NoLock(RHI::RHISyncDependency* dependency);
-
-    VulkanDevice* Device = nullptr;
-    uint64_t NextValue = 1;
-    std::vector<std::unique_ptr<RHI::RHISyncPoint>> AllSyncPoints;
-    std::vector<RHI::RHISyncPoint*> FreeSyncPoints;
-    std::vector<RHI::RHISyncPoint*> PendingSyncPoints;
-    std::vector<std::unique_ptr<RHI::RHISyncDependency>> AllDependencies;
-    std::vector<RHI::RHISyncDependency*> FreeDependencies;
-    std::vector<RHI::RHISyncDependency*> PendingDependencies;
-    std::mutex Mutex;
+    VulkanDevice* device_ = nullptr;
+    VulkanSemaphore* semaphore_ = nullptr;
 };
-
-// Vulkan RHI-level Sync Point (backed by VulkanFence from device)
-class RHIVULKAN_API VulkanRHISyncPoint final : public RHI::RHISyncPoint
-{
-public:
-    VulkanRHISyncPoint() = default;
-
-    bool IsReached() const override;
-    void Wait() const override;
-
-private:
-    friend class VulkanRHISyncPointManager;
-    void Activate(
-        RHI::EQueueType queueType,
-        VulkanFence* inFence,
-        uint64_t inValue,
-        VulkanRHISyncPointManager* inOwner);
-
-    VulkanRHISyncPointManager* Owner = nullptr;
-    VulkanFence* Fence = nullptr;
-    bool bPending = false;
-};
-
-class RHIVULKAN_API VulkanRHISyncDependency final : public RHI::RHISyncDependency
-{
-public:
-    VulkanRHISyncDependency() = default;
-
-    VulkanSemaphore* GetSemaphore() const { return Semaphore; }
-
-private:
-    friend class VulkanRHISyncPointManager;
-    void Activate(
-        RHI::EQueueType queueType,
-        VulkanSemaphore* inSemaphore,
-        bool inOwnsSemaphore,
-        uint64_t inValue,
-        VulkanRHISyncPointManager* inOwner);
-
-    VulkanRHISyncPointManager* Owner = nullptr;
-    VulkanSemaphore* Semaphore = nullptr;
-    bool bOwnsSemaphore = false;
-    bool bPending = false;
-};
-
 }

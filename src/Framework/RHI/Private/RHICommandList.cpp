@@ -248,9 +248,12 @@ void RHICommandListBase::Begin()
     }
 }
 
-RHICmdBuffer RHICommandListBase::End()
+void RHICommandListBase::End()
 {
-    return Context ? Context->End() : 0;
+    if (Context)
+    {
+        Context->End();
+    }
 }
 
 void RHICommandListBase::BeginTransitions(std::vector<const RHITransition*> Transitions)

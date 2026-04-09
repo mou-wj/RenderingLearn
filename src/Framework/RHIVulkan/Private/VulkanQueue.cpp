@@ -65,9 +65,10 @@ VkPipelineStageFlags ToVkPipelineStage(RHI::ERHIPipelineStage stage)
 // VulkanQueue
 // -------------------------------------------------------------------------------------------------
 
-VulkanQueue::VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyIndex)
-    : device_(device), queue_(queue), familyIndex_(familyIndex)
+VulkanQueue::VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyIndex,EQueueType queueType)
+	: device_(device), queue_(queue), familyIndex_(familyIndex), QueueType_(queueType)
 {
+    SubmitSyncPoint_ = new VulkanRHISyncPoint(device, queueType);
 }
 
 VulkanQueue::~VulkanQueue()
@@ -80,125 +81,6 @@ VulkanQueue::~VulkanQueue()
     FreeContexts_.clear();
 }
 
-void VulkanQueue::SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t NumSignalSemaphores, VulkanSemaphore* SignalSemaphores)
-{
-    if (!CmdBuffer)
-    {
-        throw std::runtime_error("VulkanQueue::SubmitCommandBuffer: CmdBuffer is null");
-    }
-
-    VkCommandBuffer cmdBufferHandle = CmdBuffer->GetHandle();
-
-    auto& waitFlags = CmdBuffer->WaitFlags;
-    auto& waitSemaphores = CmdBuffer->WaitSemaphores;
-
-    std::vector<VkSemaphore> waitSemaphoreHandles;
-    std::vector<VkPipelineStageFlags> waitStageMasks;
-
-    if (!waitSemaphores.empty())
-    {
-        size_t count = waitSemaphores.size();
-        waitSemaphoreHandles.reserve(count);
-        waitStageMasks.reserve(count);
-
-        for (size_t i = 0; i < count; ++i)
-        {
-            VulkanSemaphore* semaphore = waitSemaphores[i];
-            if (!semaphore)
-            {
-                continue;
-            }
-
-            waitSemaphoreHandles.push_back(semaphore->GetHandle());
-
-            VkPipelineStageFlags stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-            if (i < waitFlags.size())
-            {
-                stage = waitFlags[i];
-            }
-            waitStageMasks.push_back(stage);
-        }
-    }
-
-    std::vector<VkSemaphore> signalSemaphoreHandles;
-    if (NumSignalSemaphores > 0 && SignalSemaphores)
-    {
-        signalSemaphoreHandles.reserve(NumSignalSemaphores);
-        for (uint32_t i = 0; i < NumSignalSemaphores; ++i)
-        {
-            signalSemaphoreHandles.push_back(SignalSemaphores[i].GetHandle());
-        }
-    }
-
-    auto commandBufferSignalSemaphores = CmdBuffer->SignalSemaphores;
-    for (auto& semaphore : commandBufferSignalSemaphores)
-    {
-        signalSemaphoreHandles.push_back(semaphore->GetHandle());
-    }
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &cmdBufferHandle;
-
-    submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphoreHandles.size());
-    submitInfo.pWaitSemaphores = waitSemaphoreHandles.empty() ? nullptr : waitSemaphoreHandles.data();
-    submitInfo.pWaitDstStageMask = waitStageMasks.empty() ? nullptr : waitStageMasks.data();
-
-    submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphoreHandles.size());
-    submitInfo.pSignalSemaphores = signalSemaphoreHandles.empty() ? nullptr : signalSemaphoreHandles.data();
-
-    if (device_->GetSyncPointManager())
-    {
-        device_->GetSyncPointManager()->GarbageCollect();
-    }
-
-    VkFence submitFence = CmdBuffer->GetFence() ? CmdBuffer->GetFence()->GetHandle() : VK_NULL_HANDLE;
-    if (!VKFunc::QueueSubmit(queue_, 1, &submitInfo, submitFence))
-    {
-        throw std::runtime_error("Failed to submit Vulkan command buffer");
-    }
-
-    device_->GetStagingManager()->GarbageCollect();
-    CmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
-    CmdBuffer->GetImageLayoutManager()->Clear();
-    CmdBuffer->WaitFlags.clear();
-    CmdBuffer->WaitSemaphores.clear();
-    CmdBuffer->SubmittedWaitSemaphores.clear();
-    CmdBuffer->SignalSemaphores.clear();
-    imageLayoutManager_.PrintLayoutInfo();
-}
-
-void VulkanQueue::SubmitSignalSemaphore(VulkanSemaphore* SignalSemaphore)
-{
-    if (!SignalSemaphore)
-    {
-        return;
-    }
-
-    VkSemaphore signalSemaphoreHandle = SignalSemaphore->GetHandle();
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 0;
-    submitInfo.pCommandBuffers = nullptr;
-    submitInfo.waitSemaphoreCount = 0;
-    submitInfo.pWaitSemaphores = nullptr;
-    submitInfo.pWaitDstStageMask = nullptr;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &signalSemaphoreHandle;
-
-    if (device_->GetSyncPointManager())
-    {
-        device_->GetSyncPointManager()->GarbageCollect();
-    }
-
-    if (!VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE))
-    {
-        throw std::runtime_error("Failed to submit Vulkan signal semaphore");
-    }
-}
-
 void VulkanQueue::WaitIdle()
 {
     if (!VKFunc::QueueWaitIdle(queue_))
@@ -206,15 +88,10 @@ void VulkanQueue::WaitIdle()
         throw std::runtime_error("Failed to wait for Vulkan queue to be idle!");
     }
 
-    if (device_ && device_->GetSyncPointManager())
-    {
-        device_->GetSyncPointManager()->GarbageCollect();
-    }
 }
 
-void VulkanQueue::InitContextPool(RHI::EQueueType type, uint32_t poolSize)
+void VulkanQueue::InitContextPool(uint32_t poolSize)
 {
-    QueueType_ = type;
     std::lock_guard<std::mutex> lock(ContextPoolMutex_);
     for (uint32_t i = 0; i < poolSize; ++i)
     {
@@ -257,81 +134,119 @@ RHI::RHIContextBase* VulkanQueue::ReleaseCommandContext(RHI::RHIContextBase* Con
     return nullptr;
 }
 
-RHI::RHISubmitResult VulkanQueue::Submit(RHI::RHICmdBuffer CmdBuffer)
+RHI::RHIFence VulkanQueue::FlushContext(RHI::RHIContextBase* contextBase)
 {
-    RHI::RHISubmitResult result{};
-    VulkanCommandBuffer* commandBuffer = reinterpret_cast<VulkanCommandBuffer*>(CmdBuffer);
-    if (!commandBuffer)
-    {
-        return result;
-    }
-
-    VulkanSemaphore* signalSemaphore = device_ ? device_->GetSemaphoreManager()->Acquire(true) : nullptr;
-    SubmitCommandBuffer(commandBuffer, signalSemaphore ? 1 : 0, signalSemaphore);
-    auto* syncPointManager = device_ ? device_->GetSyncPointManager() : nullptr;
-    if (!syncPointManager)
-    {
-        return result;
-    }
-
-    result.Completion = syncPointManager->AcquireCompletion(QueueType_, commandBuffer->GetFence());
-    result.Dependency = syncPointManager->AcquireDependency(QueueType_, signalSemaphore, signalSemaphore != nullptr);
-    return result;
+    return FlushContext({ contextBase }, {});
 }
 
-RHI::RHISubmitResult VulkanQueue::Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos)
+RHI::RHIFence VulkanQueue::FlushContext(const std::vector<RHI::RHIContextBase*>& Contexts, const std::vector<RHI::RHIWaitInfo>& WaitInfos)
 {
-    RHI::RHISubmitResult result{};
-    std::vector<VulkanSemaphore*> waitSemaphores;
+    // 1. 准备所有的 Wait 信息 (Timeline Semaphore 模式)
+    std::vector<VkSemaphore> waitHandles;
+    std::vector<uint64_t> waitValues;
     std::vector<VkPipelineStageFlags> waitStages;
-    std::vector<RHI::RHISyncDependency*> consumedWaitDependencies;
-    for (const RHI::RHIWaitInfo& waitInfo : WaitInfos)
-    {
-        if (!waitInfo.Dependency)
-        {
-            continue;
-        }
 
-        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(waitInfo.Dependency))
-        {
-            if (auto* semaphore = vulkanDependency->GetSemaphore())
-            {
-                waitSemaphores.push_back(semaphore);
-                waitStages.push_back(ToVkPipelineStage(waitInfo.WaitStage));
-                consumedWaitDependencies.push_back(waitInfo.Dependency);
-                continue;
-            }
+    for (const auto& waitInfo : WaitInfos)
+    {
+        if (!waitInfo.SyncPoint) continue;
+
+        auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(waitInfo.SyncPoint);
+		bool isBinary = vkSyncPoint->IsBinary();
+        if (isBinary)
+		{
+			// Binary Semaphore 直接等待即可，无需 Value
+			waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
+			waitValues.push_back(0); 
+			
         }
+        else {
+            waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
+            waitValues.push_back(waitInfo.Value); // 关键：使用 WaitInfo 指定的 Value
+        }
+        waitStages.push_back(ToVkPipelineStage(waitInfo.WaitStage));
     }
 
-    RHI::RHISubmitResult lastResult{};
-    for (size_t cmdIndex = 0; cmdIndex < Cmds.size(); ++cmdIndex)
+    // 2. 确定本次提交的 Signal Value (自增)
+    // 假设 SubmitSyncPoint_ 是当前 Queue 对应的时间轴信号量
+    uint64_t signalValue = ++currentTimelineValue_;
+
+    // 3. 收集所有的 Command Buffers
+    std::vector<VkCommandBuffer> cmdHandles;
+    std::vector<VulkanCommandBuffer*> cmdBuffers;
+    for (auto* context : Contexts)
     {
-        RHI::RHICmdBuffer cmdBuffer = Cmds[cmdIndex];
-        if (cmdIndex == 0 && !waitSemaphores.empty())
-        {
-            auto* commandBuffer = reinterpret_cast<VulkanCommandBuffer*>(cmdBuffer);
-            if (commandBuffer)
-            {
-                for (size_t waitIndex = 0; waitIndex < waitSemaphores.size(); ++waitIndex)
-                {
-                    commandBuffer->AddWaitSemaphores(waitStages[waitIndex], { waitSemaphores[waitIndex] });
-                }
-            }
+        VulkanCommandContext* vkCtx = dynamic_cast<VulkanCommandContext*>(context);
+        auto recorededCmdBuffer = vkCtx->GetRecordedCommandBuffer();
+        if (recorededCmdBuffer) {
+            cmdHandles.push_back(recorededCmdBuffer->GetHandle());
+            cmdBuffers.push_back(recorededCmdBuffer);
         }
-        lastResult = Submit(cmdBuffer);
+
     }
 
-    if (auto* syncPointManager = device_ ? device_->GetSyncPointManager() : nullptr)
-    {
-        for (RHI::RHISyncDependency* dependency : consumedWaitDependencies)
-        {
-            syncPointManager->TryRecycle(dependency);
-        }
-    }
+    // 4. 执行底层提交 (这里建议直接调用 vkQueueSubmit 或封装好的提交接口)
+    // 注意：需要使用 VkTimelineSemaphoreSubmitInfo 链入 pNext
+    VkTimelineSemaphoreSubmitInfo timelineInfo{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+    timelineInfo.waitSemaphoreValueCount = waitValues.size();
+    timelineInfo.pWaitSemaphoreValues = waitValues.data();
+    timelineInfo.signalSemaphoreValueCount = 1;
+    timelineInfo.pSignalSemaphoreValues = &signalValue;
 
-    result = lastResult;
+    VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    submitInfo.pNext = &timelineInfo;
+    submitInfo.waitSemaphoreCount = waitHandles.size();
+    submitInfo.pWaitSemaphores = waitHandles.data();
+    submitInfo.pWaitDstStageMask = waitStages.data();
+    submitInfo.commandBufferCount = cmdHandles.size();
+    submitInfo.pCommandBuffers = cmdHandles.data();
+    submitInfo.signalSemaphoreCount = 1;
+    VkSemaphore signalHandle = SubmitSyncPoint_->GetSemaphore()->GetHandle();
+    submitInfo.pSignalSemaphores = &signalHandle;
+
+    vkQueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+
+    device_->GetStagingManager()->GarbageCollect();
+    for (auto cmdBuffer : cmdBuffers) 
+    {
+        cmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
+        cmdBuffer->GetImageLayoutManager()->Clear();
+
+    }
+    imageLayoutManager_.PrintLayoutInfo();
+
+    // 5. 资源回收与状态更新
+    device_->ReleaseDeferredResources();
+
+    // 6. 返回 Fence：它本质上是同步点和数值的组合
+    RHI::RHIFence result{};
+    result.Point = SubmitSyncPoint_;
+    result.Value = signalValue;
+
     return result;
+
+}
+
+void VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue, VkSemaphore binarySignal)
+{
+    VkTimelineSemaphoreSubmitInfo timelineInfo{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+    timelineInfo.waitSemaphoreValueCount = 1;
+    timelineInfo.pWaitSemaphoreValues = &waitValue;
+
+    VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    submitInfo.pNext = &timelineInfo;
+
+    // 等待 Timeline
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &timelineWait;
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    submitInfo.pWaitDstStageMask = &waitStage;
+
+    // 触发 Binary
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &binarySignal;
+
+    // 提交空命令
+    vkQueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -343,7 +258,7 @@ VulkanPresentExecutor::VulkanPresentExecutor(VulkanQueue* queue)
 {
 }
 
-void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncDependency* WaitDependency)
+void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, const RHI::RHIWaitInfo& WaitDependency)
 {
     auto* vulkanSwapchain = dynamic_cast<VulkanRHISwapchain*>(Swapchain);
     if (!vulkanSwapchain || !Queue)
@@ -351,6 +266,6 @@ void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncDe
         return;
     }
 
-    vulkanSwapchain->Present(Queue, WaitDependency);
+    //vulkanSwapchain->Present(Queue, WaitDependency);
 }
 }

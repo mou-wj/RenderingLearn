@@ -251,8 +251,8 @@ public:
             cmdList.ExecuteAll();
 
             // 提交命令
-			RHI::RHICmdBuffer cmdBuffer = cmdList.End();
-            queue->Submit(cmdBuffer);
+			cmdList.End();
+            queue->FlushContext(computeContext);
             cmdList.Clear();
         }
 
@@ -420,8 +420,8 @@ private:
         api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHITextureRegion::Create2DRegion(2, 2));
         TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRVCompute);
         cmdList.ExecuteAll();
-        RHI::RHICmdBuffer textureUploadCmd = cmdList.End();
-        queue->Submit(textureUploadCmd);
+        cmdList.End();
+        queue->FlushContext(computeContext);
 
         // 采样器
         RHI::RHISamplerDesc samplerDesc;
@@ -446,8 +446,8 @@ private:
         api->UpdateBuffer(cmdList, TestBuffer.get(), &bufferData, { 0, sizeof(bufferData) });
         TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
         cmdList.ExecuteAll();
-        RHI::RHICmdBuffer bufferUploadCmd = cmdList.End();
-        queue->Submit(bufferUploadCmd);
+        cmdList.End();
+        queue->FlushContext(computeContext);
         queue->WaitIdle();
         queue->ReleaseCommandContext(cmdContext);
 
@@ -522,8 +522,8 @@ private:
         api->UpdateBuffer(cmdList, ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
         TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
         cmdList.ExecuteAll();
-        RHI::RHICmdBuffer cbUploadCmd = cmdList.End();
-        queue->Submit(cbUploadCmd);
+        cmdList.End();
+        queue->FlushContext(computeContext);
         queue->WaitIdle();
         queue->ReleaseCommandContext(cmdContext);
 

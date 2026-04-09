@@ -19,15 +19,12 @@ class RHIVULKAN_API VulkanQueue : public RHI::RHIQueue
 {
 public:
     VulkanQueue() = default;
-    VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyIndex);
+    VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyIndex, EQueueType type
+    );
     ~VulkanQueue() override;
 
     // Initialize the context pool for this queue. poolSize contexts will be pre-created.
-    void InitContextPool(RHI::EQueueType type, uint32_t poolSize = 1);
-
-    // Low-level Vulkan submit (used internally by command buffer manager)
-    void SubmitCommandBuffer(VulkanCommandBuffer* CmdBuffer, uint32_t NumSignalSemaphores = 0, VulkanSemaphore* SignalSemaphores = nullptr);
-    void SubmitSignalSemaphore(VulkanSemaphore* SignalSemaphore);
+    void InitContextPool(uint32_t poolSize = 1);
 
     VkQueue GetHandle() const { return queue_; }
     uint32_t GetFamilyIndex() const { return familyIndex_; }
@@ -44,8 +41,9 @@ public:
     RHI::EQueueType GetType() const override;
     RHI::RHIContextBase* AcquireCommandContext() override;
     RHI::RHIContextBase* ReleaseCommandContext(RHI::RHIContextBase* Context) override;
-    RHI::RHISubmitResult Submit(RHI::RHICmdBuffer CmdBuffer) override;
-    RHI::RHISubmitResult Submit(const std::vector<RHI::RHICmdBuffer>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
+    RHI::RHIFence FlushContext(RHI::RHIContextBase* context) override;
+    RHI::RHIFence FlushContext(const std::vector<RHI::RHIContextBase*>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
+    void SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue, VkSemaphore binarySignal);
     void WaitIdle() override;
 
 private:
@@ -56,6 +54,8 @@ private:
     RHI::EQueueType QueueType_ = RHI::EQueueType::Graphics;
     std::vector<VulkanCommandContext*> AllContexts_;  // owns all pooled contexts
     std::vector<VulkanCommandContext*> FreeContexts_; // contexts available for acquire
+    VulkanRHISyncPoint* SubmitSyncPoint_ = nullptr; // 用于跨提交等待的时间线信号量
+    uint64_t currentTimelineValue_ = 0;
     std::mutex ContextPoolMutex_;
 };
 
@@ -66,7 +66,7 @@ class RHIVULKAN_API VulkanPresentExecutor final : public RHI::RHIPresentExecutor
 {
 public:
     explicit VulkanPresentExecutor(VulkanQueue* queue);
-    void Present(RHI::RHISwapchain* Swapchain, RHI::RHISyncDependency* WaitDependency) override;
+    void Present(RHI::RHISwapchain* Swapchain, const RHI::RHIWaitInfo& Waitinfo) override;
 private:
     VulkanQueue* Queue = nullptr;
 };

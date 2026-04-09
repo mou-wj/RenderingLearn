@@ -91,8 +91,8 @@ void RenderThread::ThreadFunc() {
             ImmediateCommandContex->Begin();
             cmd.Execute(immediateCommandList);
             immediateCommandList.ExecuteAll();
-            RHI::RHICmdBuffer cmdBuffer = ImmediateCommandContex->End();
-            ImmediateQueue->Submit(cmdBuffer);
+            ImmediateCommandContex->End();
+            ImmediateQueue->FlushContext(ImmediateCommandContex);
             immediateCommandList.Clear();
         }
         CmdFinishCV.notify_one();

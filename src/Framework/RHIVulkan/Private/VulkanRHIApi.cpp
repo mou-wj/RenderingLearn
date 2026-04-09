@@ -84,20 +84,7 @@ bool VulkanRHIApi::Init()
 		return false;
 	}
 	Device = device;
-	GraphicsRHIQueue = Device->GetGraphicsQueue();
-	GraphicsRHIQueue->InitContextPool(EQueueType::Graphics, 2);
-	VulkanQueue* computeQ = Device->GetComputeQueue() ? Device->GetComputeQueue() : Device->GetGraphicsQueue();
-	ComputeRHIQueue = computeQ;
-	if (ComputeRHIQueue != GraphicsRHIQueue)
-	{
-		ComputeRHIQueue->InitContextPool(EQueueType::Compute, 1);
-	}
-	VulkanQueue* transferQ = Device->GetTransferQueue() ? Device->GetTransferQueue() : Device->GetGraphicsQueue();
-	if (transferQ != GraphicsRHIQueue && transferQ != ComputeRHIQueue)
-	{
-		transferQ->InitContextPool(EQueueType::Transfer, 1);
-	}
-	PresentExecutor = new VulkanPresentExecutor(GraphicsRHIQueue);
+	PresentExecutor = new VulkanPresentExecutor(Device->GetPresentQueue());
 
 	// 1. 确定头大小
 	uint32_t HeaderSize = sizeof(RHITransition);
@@ -125,8 +112,6 @@ void VulkanRHIApi::Shutdown()
 {
 	RHI::RHIPipelineStateCache::ClearAll();
 
-	GraphicsRHIQueue = nullptr;
-	ComputeRHIQueue = nullptr;
 	delete PresentExecutor;
 	PresentExecutor = nullptr;
 

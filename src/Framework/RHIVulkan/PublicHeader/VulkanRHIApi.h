@@ -94,8 +94,6 @@ private:
     // 其他 Vulkan 资源管理结构
 	VulkanDevice* Device = nullptr;
 	VkPhysicalDevice PhysicalDevice = nullptr;
-    VulkanQueue* GraphicsRHIQueue = nullptr;
-    VulkanQueue* ComputeRHIQueue = nullptr;
     VulkanPresentExecutor* PresentExecutor = nullptr;
 };
 

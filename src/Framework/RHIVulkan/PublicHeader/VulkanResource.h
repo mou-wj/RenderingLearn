@@ -414,6 +414,7 @@ private:
 
 class VulkanSwapchain;
 class VulkanSemaphore;
+class VulkanRHISyncPoint;
 class VulkanCommandContext;
 class VulkanCommandBuffer;
 class VulkanQueue;
@@ -426,7 +427,7 @@ public:
     VulkanSwapchain* GetSwapchain() const { return Swapchain; }
     RHISwapchainSlot AcquireNextSlot() override;
     void Resize(uint32_t Width, uint32_t Height) override;
-    void Present(VulkanQueue* presentQueue, RHI::RHISyncDependency* waitDependency = nullptr);
+    void Present(VulkanQueue* presentQueue, const RHI::RHIWaitInfo& waitInfo);
     VulkanTextureSP GetBackTexture();
 
 private:
@@ -441,12 +442,11 @@ private:
     ERHIFormat Format;
 
     std::vector<VulkanTextureSP> backBufferTextures; // 所有 backbuffers
-    std::vector<VulkanSemaphore*> acquireSemaphores;
-    std::vector<RHI::RHISyncDependency*> imagePresentWaitDependencies;
+    std::vector<VulkanRHISyncPoint*> acquireSemaphores;
+    std::queue<VulkanSemaphore*> presentSemaphores;
     int currentBackBufferIndex = -1;  // 渲染用
     int currentIndex = 0; // Present用
     int currentSemaphoreIndex = -1; // 当前已Acquire但未Present的信号量槽位
-    RHI::RHISyncDependency* currentReadySyncDependency = nullptr; // 当前已Acquire槽位对应的ReadySync
     std::vector<VkImage> swapchainImages_;
 };
 

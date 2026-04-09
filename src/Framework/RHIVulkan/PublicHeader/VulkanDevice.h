@@ -123,7 +123,6 @@ public:
     VulkanDescriptorSetManager* GetDescriptorSetManager() const { return descriptorSetManager_; }
 	VulkanShaderManager* GetShaderManager() const { return shaderManager_; }
     VulkanPipelineLayoutCache* GetPipelineLayoutCache() const { return pipelineLayoutCache_; }
-    VulkanRHISyncPointManager* GetSyncPointManager() const { return syncPointManager_; }
 
     // 延迟删除资源接口
     void EnqueueRenderPassForDeletion(VkRenderPass RenderPass);
@@ -171,7 +170,6 @@ private:
     VulkanDescriptorSetManager* descriptorSetManager_;
     VulkanShaderManager* shaderManager_;
     VulkanPipelineLayoutCache* pipelineLayoutCache_;
-    VulkanRHISyncPointManager* syncPointManager_ = nullptr;
     VulkanDeferredDeleteQueue* deferredDeleteQueue_ = nullptr;
 };
 

@@ -56,33 +56,7 @@ void VulkanCommandBuffer::End()
 void VulkanCommandBuffer::Reset()
 {
     VKFunc::ResetCommandBuffer(commandBuffer, 0);
-    WaitFlags.clear();
-    WaitSemaphores.clear();
-    SubmittedWaitSemaphores.clear();
-    SignalSemaphores.clear();
     imageLayoutManager.Clear();
-}
-
-void VulkanCommandBuffer::AddWaitSemaphores(VkPipelineStageFlags stage, const std::vector<VulkanSemaphore*>& semaphores)
-{
-    if (semaphores.empty())
-    {
-        return;
-    }
-    for (auto* semaphore : semaphores)
-    {
-        WaitFlags.push_back(stage);
-        WaitSemaphores.push_back(semaphore);
-    }
-}
-
-void VulkanCommandBuffer::AddSignalSemaphores(const std::vector<VulkanSemaphore*>& semaphores)
-{
-    if (semaphores.empty())
-    {
-        return;
-    }
-    SignalSemaphores.insert(SignalSemaphores.end(), semaphores.begin(), semaphores.end());
 }
 
 // VulkanCommandBufferPool
@@ -137,6 +111,7 @@ void VulkanCommandBufferPool::Reset()
     for (auto& buf : allBuffers) // 注意 auto&
     {
         availableBuffers.push_back(buf.get());
+        buf->MarkState(VulkanCommandBuffer::Free);
     }
 }
 
@@ -204,14 +179,6 @@ VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkComman
     return newBuffer;
 }
 
-void VulkanCommandBufferManager::SubmitActiveCommandBuffer(uint32_t NumSignalSemaphores, VulkanSemaphore* SignalSemaphores)
-{
-	VulkanCommandBuffer* commandBuffer = EndActiveCommandBuffer();
-	if (!commandBuffer) return;
-
-	commandContext->GetQueue()->SubmitCommandBuffer(commandBuffer, NumSignalSemaphores, SignalSemaphores);
-	// ⚠️ 不立刻 Reset，等 Fence 完成后由外部回收
-}
 
 VulkanCommandBuffer* VulkanCommandBufferManager::EndActiveCommandBuffer()
 {
@@ -238,12 +205,12 @@ void VulkanCommandBufferManager::GarbageCollect()
 {
 	for (auto it = ManagedBuffers.begin(); it != ManagedBuffers.end();)
 	{
-		VulkanFence* fence = (*it)->GetFence();
-		if (fence && fence->IsSignaled())
+		if ((*it)->GetState() == VulkanCommandBuffer::ECommandBufferState::NeedRecycle)
 		{
 			// 回收资源
 			(*it)->Reset();
 			it = ManagedBuffers.erase(it);
+            (*it)->MarkState(VulkanCommandBuffer::Free);
 		}
 		else
 		{

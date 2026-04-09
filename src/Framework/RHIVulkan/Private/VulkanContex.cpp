@@ -23,18 +23,14 @@ void VulkanCommandContext::Begin()
     commandBufferManager->GetActiveCommandBuffer();
 }
 
-RHICmdBuffer VulkanCommandContext::End()
+void VulkanCommandContext::End()
 {
     device->GetDescriptorSetManager()->GarbageCollect();
     commandBufferManager->GarbageCollect();
-    device->ReleaseDeferredResources();
+
 
     auto commandBuffer = commandBufferManager->EndActiveCommandBuffer();
-    if (!commandBuffer)
-    {
-        return 0;
-    }
-    return reinterpret_cast<RHICmdBuffer>(commandBuffer);
+    RecordedCommandBuffer = commandBuffer;
 }
 
 void VulkanCommandContext::BeginTransitions(std::vector<const RHITransition*> Transitions)

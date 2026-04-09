@@ -38,8 +38,6 @@ VulkanDevice::VulkanDevice(VulkanRHIApi* rhiApi,
     descriptorSetManager_ = new VulkanDescriptorSetManager(this, descriptorSetLayoutManager_);
 	shaderManager_ = new VulkanShaderManager(this);
 	pipelineLayoutCache_ = new VulkanPipelineLayoutCache(this);
-    semaphoreManager_ = new VulkanSemaphoreManager(this);
-    syncPointManager_ = new VulkanRHISyncPointManager(this);
     deferredDeleteQueue_ = new VulkanDeferredDeleteQueue(this);
 }
 
@@ -183,12 +181,12 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
     VkQueue transferQueue;
     VKFunc::GetDeviceQueue(device_, transferQueueFamilyIndex_, 0, &transferQueue);
 
-    graphicsQueue_ = new VulkanQueue(this, graphicsQueue, graphicsQueueFamilyIndex_);
-	graphicsQueue_->InitContextPool(EQueueType::Graphics, 10);
-    computeQueue_  = new VulkanQueue(this, computeQueue, computeQueueFamilyIndex_);
-	computeQueue_->InitContextPool(EQueueType::Compute, 10);
-    transferQueue_ = new VulkanQueue(this, transferQueue, transferQueueFamilyIndex_);
-	transferQueue_->InitContextPool(EQueueType::Transfer, 5);
+    graphicsQueue_ = new VulkanQueue(this, graphicsQueue, graphicsQueueFamilyIndex_, EQueueType::Graphics);
+	graphicsQueue_->InitContextPool(10);
+    computeQueue_  = new VulkanQueue(this, computeQueue, computeQueueFamilyIndex_, EQueueType::Compute);
+	computeQueue_->InitContextPool(10);
+    transferQueue_ = new VulkanQueue(this, transferQueue, transferQueueFamilyIndex_, EQueueType::Transfer);
+	transferQueue_->InitContextPool(5);
 }
 
 bool VulkanDevice::InitPresentQueue(VkSurfaceKHR Surface)
@@ -305,12 +303,6 @@ void VulkanDevice::Destroy()
         fenceManager_ = nullptr;
     }
 
-    if (syncPointManager_ != nullptr)
-    {
-        syncPointManager_->WaitAndRecycleAll();
-        delete syncPointManager_;
-        syncPointManager_ = nullptr;
-    }
 
     if (semaphoreManager_ != nullptr)
     {

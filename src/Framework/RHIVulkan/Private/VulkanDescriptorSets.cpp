@@ -252,7 +252,7 @@ namespace RHIVulkan {
         {
             VulkanCommandBuffer* cmdBuffer = it->CmdBuffer;
 
-            if (!cmdBuffer->GetFence() || cmdBuffer->GetFence()->IsSignaled())
+            if (!cmdBuffer->GetState() != VulkanCommandBuffer::NeedRecycle)
             {
                 ++it;
                 continue;

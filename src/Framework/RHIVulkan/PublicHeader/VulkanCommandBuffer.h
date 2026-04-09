@@ -22,6 +22,15 @@ public:
     VulkanCommandBuffer(VulkanDevice* device, VulkanCommandBufferPool* owner,VkCommandBufferLevel level);
     ~VulkanCommandBuffer();
 
+    enum ECommandBufferState {
+        Free,//空闲
+        Pending,//已经提交
+        NeedRecycle//需要回收
+    };
+
+    void MarkState(ECommandBufferState state) { this->state = state; }
+    ECommandBufferState GetState() const { return state; }
+
     VkCommandBuffer GetHandle() const { return commandBuffer; }
     void AllocateMemory();
 
@@ -31,8 +40,6 @@ public:
     void Reset();
     VulkanFence* GetFence() const { return fence; } // 可选：用于同步
 
-    void AddWaitSemaphores(VkPipelineStageFlags stage, const std::vector<VulkanSemaphore*>& semaphores);
-    void AddSignalSemaphores(const std::vector<VulkanSemaphore*>& semaphores);
 
 	VulkanImageLayoutManager* GetImageLayoutManager() { return &imageLayoutManager; }
 
@@ -43,11 +50,8 @@ private:
     VulkanFence* fence = nullptr; // 可选：用于同步
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     friend class VulkanQueue;
-    std::vector<VkPipelineStageFlags> WaitFlags;
-    std::vector<VulkanSemaphore*> WaitSemaphores;
-    std::vector<VulkanSemaphore*> SubmittedWaitSemaphores;
-    std::vector<VulkanSemaphore*> SignalSemaphores;
     VulkanImageLayoutManager imageLayoutManager;
+    ECommandBufferState state = ECommandBufferState::Free;
 };
 
 class VulkanCommandBufferPool
@@ -92,7 +96,6 @@ public:
     // 获取一个可用的命令缓冲区（如有空闲则复用，否则新分配）
     VulkanCommandBuffer* GetActiveCommandBuffer(VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 	VulkanCommandBuffer* EndActiveCommandBuffer();
-	void SubmitActiveCommandBuffer(uint32_t NumSignalSemaphores = 0, VulkanSemaphore* SignalSemaphores = nullptr);
 
 
     // 重置所有池

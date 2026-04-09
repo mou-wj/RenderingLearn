@@ -33,7 +33,7 @@ namespace RHIVulkan{
     VulkanEventManager::~VulkanEventManager() {
         std::lock_guard<std::mutex> lock(mutex_);
         pool_ = {};
-        managedObjects_ = {}; // ���� shared_ptr �Զ�����
+        managedObjects_ = {}; // shared_ptrԶ
     }
 
     std::shared_ptr<VulkanEvent> VulkanEventManager::Acquire() {
@@ -45,7 +45,7 @@ namespace RHIVulkan{
             return evt;
         }
 
-        // �ؿ�ʱ�����¶��󣬲����� managedObjects
+        //ؿʱ¶󣬲 managedObjects
         auto evt = std::make_shared<VulkanEvent>(device_);
         managedObjects_.push_back(evt);
         return evt;
@@ -58,12 +58,27 @@ namespace RHIVulkan{
     }
 
 
-    VulkanSemaphore::VulkanSemaphore(VulkanDevice* device)
-        : device_(device)
+    VulkanSemaphore::VulkanSemaphore(VulkanDevice* device, bool isBinary, uint64_t initialValue)
+        : device_(device),isBinary_(isBinary), value_(initialValue)
     {
-        VkSemaphoreCreateInfo info{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        info.flags = 0;
-        VKFunc::CreateSemaphore_(device_->GetHandle(), &info, &semaphore_);
+        VkSemaphoreTypeCreateInfo typeCreateInfo{};
+        typeCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+        if (!isBinary) {
+            typeCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+            typeCreateInfo.initialValue = initialValue;
+            value_ = initialValue;
+        }
+        else {
+            typeCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
+            typeCreateInfo.initialValue = 0;
+            value_ = 0;
+        }
+        
+        VkSemaphoreCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        createInfo.pNext = &typeCreateInfo;
+        createInfo.flags = 0;
+        VKFunc::CreateSemaphore_(device_->GetHandle(), &createInfo, &semaphore_);
     }
 
     VulkanSemaphore::~VulkanSemaphore()
@@ -77,6 +92,30 @@ namespace RHIVulkan{
     VkSemaphore VulkanSemaphore::GetHandle() const { return semaphore_; }
 
 
+
+    uint64_t VulkanSemaphore::GetCurrentValue() {
+        uint64_t value = 0;
+        VkResult res = vkGetSemaphoreCounterValue(device_->GetHandle(), semaphore_, &value);
+        if (res != VK_SUCCESS) {
+            throw std::runtime_error("Failed to get timeline semaphore value");
+        }
+        return value;
+    }
+
+    void VulkanSemaphore::Wait(uint64_t Value, uint64_t TimeoutNS) {
+        VkSemaphoreWaitInfo waitInfo{};
+        waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+        waitInfo.flags = 0;
+        waitInfo.semaphoreCount = 1;
+        waitInfo.pSemaphores = &semaphore_;
+        waitInfo.pValues = &Value;
+        VkResult res = vkWaitSemaphores(device_->GetHandle(), &waitInfo, TimeoutNS);
+        if (res != VK_SUCCESS) {
+            throw std::runtime_error("Failed to wait for timeline semaphore");
+        }
+        value_ = Value;
+    }
+
     VulkanSemaphoreManager::VulkanSemaphoreManager(VulkanDevice* device)
         : device_(device) {
     }
@@ -85,7 +124,7 @@ namespace RHIVulkan{
         std::lock_guard<std::mutex> lock(mutex_);
         pool_ = {};
         for (auto sem : managedObjects_) {
-            delete sem; // ���ж�������
+            delete sem; // ж
         }
         managedObjects_.clear();
     }
@@ -233,328 +272,26 @@ void VulkanFenceManager::GarbageCollect()
 }
 
 // -------------------------------------------------------------------------------------------------
-// VulkanRHISyncPointManager Implementation
+// VulkanRHISyncPoint (Timeline Semaphore) Implementation
 // -------------------------------------------------------------------------------------------------
 
-VulkanRHISyncPointManager::VulkanRHISyncPointManager(VulkanDevice* device)
-    : Device(device)
+VulkanRHISyncPoint::VulkanRHISyncPoint(VulkanDevice* device, RHI::EQueueType queueType, uint64_t initialValue, bool isBinary)
+	: device_(device)
 {
-}
-
-VulkanRHISyncPointManager::~VulkanRHISyncPointManager()
-{
-    WaitAndRecycleAll();
-    std::lock_guard<std::mutex> lock(Mutex);
-    PendingSyncPoints.clear();
-    FreeSyncPoints.clear();
-    AllSyncPoints.clear();
-    PendingDependencies.clear();
-    FreeDependencies.clear();
-    AllDependencies.clear();
-}
-
-RHI::RHISyncPoint* VulkanRHISyncPointManager::AcquireCompletion(
-    RHI::EQueueType queueType,
-    VulkanFence* fence)
-{
-    std::lock_guard<std::mutex> lock(Mutex);
-    GarbageCollect_NoLock();
-
-    RHI::RHISyncPoint* syncPoint = nullptr;
-    if (!FreeSyncPoints.empty())
-    {
-        syncPoint = FreeSyncPoints.back();
-        FreeSyncPoints.pop_back();
-    }
-    else
-    {
-        auto newSyncPoint = std::make_unique<VulkanRHISyncPoint>();
-        syncPoint = newSyncPoint.get();
-        AllSyncPoints.push_back(std::move(newSyncPoint));
-    }
-
-    if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
-    {
-        vulkanSyncPoint->Activate(queueType, fence, NextValue++, this);
-    }
-    PendingSyncPoints.push_back(syncPoint);
-    return syncPoint;
-}
-
-RHI::RHISyncDependency* VulkanRHISyncPointManager::AcquireDependency(
-    RHI::EQueueType queueType,
-    VulkanSemaphore* semaphore,
-    bool ownsSemaphore)
-{
-    if (!semaphore)
-    {
-        return nullptr;
-    }
-
-    std::lock_guard<std::mutex> lock(Mutex);
-    GarbageCollect_NoLock();
-
-    RHI::RHISyncDependency* dependency = nullptr;
-    if (!FreeDependencies.empty())
-    {
-        dependency = FreeDependencies.back();
-        FreeDependencies.pop_back();
-    }
-    else
-    {
-        auto newDependency = std::make_unique<VulkanRHISyncDependency>();
-        dependency = newDependency.get();
-        AllDependencies.push_back(std::move(newDependency));
-    }
-
-    if (auto vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
-    {
-        vulkanDependency->Activate(queueType, semaphore, ownsSemaphore, NextValue++, this);
-    }
-    PendingDependencies.push_back(dependency);
-    return dependency;
-}
-
-void VulkanRHISyncPointManager::GarbageCollect()
-{
-    std::lock_guard<std::mutex> lock(Mutex);
-    GarbageCollect_NoLock();
-}
-
-void VulkanRHISyncPointManager::TryRecycle(RHI::RHISyncPoint* syncPoint)
-{
-    if (!syncPoint)
-    {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(Mutex);
-    if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
-    {
-        if (!vulkanSyncPoint->bPending)
-        {
-            return;
-        }
-
-        const bool reachedByFence = vulkanSyncPoint->Fence && vulkanSyncPoint->Fence->IsSignaled();
-        if (reachedByFence)
-        {
-            Recycle_NoLock(syncPoint);
-        }
-    }
-}
-
-void VulkanRHISyncPointManager::TryRecycle(RHI::RHISyncDependency* dependency)
-{
-    if (!dependency)
-    {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(Mutex);
-    if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
-    {
-        if (!vulkanDependency->bPending)
-        {
-            return;
-        }
-
-        Recycle_NoLock(dependency);
-    }
-}
-
-void VulkanRHISyncPointManager::WaitAndRecycleAll()
-{
-    std::lock_guard<std::mutex> lock(Mutex);
-    for (RHI::RHISyncPoint* syncPoint : PendingSyncPoints)
-    {
-        if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
-        {
-            if (vulkanSyncPoint && vulkanSyncPoint->Fence)
-            {
-                vulkanSyncPoint->Fence->Wait();
-            }
-            if (vulkanSyncPoint)
-            {
-                vulkanSyncPoint->bPending = false;
-                vulkanSyncPoint->Fence = nullptr;
-                vulkanSyncPoint->Owner = this;
-                FreeSyncPoints.push_back(syncPoint);
-            }
-        }
-    }
-    PendingSyncPoints.clear();
-
-    for (RHI::RHISyncDependency* dependency : PendingDependencies)
-    {
-        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
-        {
-            if (vulkanDependency->Semaphore && vulkanDependency->bOwnsSemaphore)
-            {
-                if (auto* semaphoreManager = Device ? Device->GetSemaphoreManager() : nullptr)
-                {
-                    semaphoreManager->Release(vulkanDependency->Semaphore);
-                }
-            }
-            vulkanDependency->bPending = false;
-            vulkanDependency->Semaphore = nullptr;
-            vulkanDependency->bOwnsSemaphore = false;
-            vulkanDependency->Owner = this;
-            FreeDependencies.push_back(dependency);
-        }
-    }
-    PendingDependencies.clear();
-}
-
-void VulkanRHISyncPointManager::GarbageCollect_NoLock()
-{
-    for (auto it = PendingSyncPoints.begin(); it != PendingSyncPoints.end();)
-    {
-        RHI::RHISyncPoint* syncPoint = *it;
-        bool reached = false;
-        if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
-        {
-            reached = !vulkanSyncPoint || (vulkanSyncPoint->Fence && vulkanSyncPoint->Fence->IsSignaled());
-        }
-        
-        if (reached)
-        {
-            if (syncPoint)
-            {
-                if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
-                {
-                    vulkanSyncPoint->bPending = false;
-                    vulkanSyncPoint->Fence = nullptr;
-                    vulkanSyncPoint->Owner = this;
-                }
-                FreeSyncPoints.push_back(syncPoint);
-            }
-            it = PendingSyncPoints.erase(it);
-            continue;
-        }
-        ++it;
-    }
-
-    for (auto it = PendingDependencies.begin(); it != PendingDependencies.end();)
-    {
-        auto* dependency = *it;
-        if (!dependency)
-        {
-            it = PendingDependencies.erase(it);
-            continue;
-        }
-
-        if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
-        {
-            if (!vulkanDependency->bPending)
-            {
-                it = PendingDependencies.erase(it);
-                continue;
-            }
-        }
-
-        ++it;
-    }
-}
-
-void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncPoint* syncPoint)
-{
-    auto it = std::find(PendingSyncPoints.begin(), PendingSyncPoints.end(), syncPoint);
-    if (it != PendingSyncPoints.end())
-    {
-        PendingSyncPoints.erase(it);
-    }
-
-    if (auto vulkanSyncPoint = dynamic_cast<VulkanRHISyncPoint*>(syncPoint))
-    {
-        vulkanSyncPoint->bPending = false;
-        vulkanSyncPoint->Fence = nullptr;
-        vulkanSyncPoint->Owner = this;
-    }
-    FreeSyncPoints.push_back(syncPoint);
-}
-
-void VulkanRHISyncPointManager::Recycle_NoLock(RHI::RHISyncDependency* dependency)
-{
-    auto it = std::find(PendingDependencies.begin(), PendingDependencies.end(), dependency);
-    if (it != PendingDependencies.end())
-    {
-        PendingDependencies.erase(it);
-    }
-
-    if (auto* vulkanDependency = dynamic_cast<VulkanRHISyncDependency*>(dependency))
-    {
-        if (vulkanDependency->Semaphore && vulkanDependency->bOwnsSemaphore)
-        {
-            if (auto* semaphoreManager = Device ? Device->GetSemaphoreManager() : nullptr)
-            {
-                semaphoreManager->Release(vulkanDependency->Semaphore);
-            }
-        }
-        vulkanDependency->bPending = false;
-        vulkanDependency->Semaphore = nullptr;
-        vulkanDependency->bOwnsSemaphore = false;
-        vulkanDependency->Owner = this;
-    }
-    FreeDependencies.push_back(dependency);
-}
-
-// -------------------------------------------------------------------------------------------------
-// VulkanRHISyncPoint Implementation
-// -------------------------------------------------------------------------------------------------
-
-void VulkanRHISyncPoint::Activate(
-    RHI::EQueueType queueType,
-    VulkanFence* inFence,
-    uint64_t inValue,
-    VulkanRHISyncPointManager* inOwner)
-{
-    Owner = inOwner;
-    Fence = inFence;
-    bPending = true;
+    semaphore_ = new VulkanSemaphore(device_, isBinary,initialValue);
     Type = queueType;
-    Value = inValue;
 }
 
-bool VulkanRHISyncPoint::IsReached() const
-{
-    bool reached = false;
-    if (Fence)
-    {
-        reached = Fence->IsSignaled();
-    }
-    if (reached && Owner)
-    {
-        Owner->TryRecycle(const_cast<VulkanRHISyncPoint*>(this));
-    }
-    return reached;
+VulkanRHISyncPoint::~VulkanRHISyncPoint() {
+    delete semaphore_;
 }
 
-void VulkanRHISyncPoint::Wait() const
-{
-    if (Fence)
-    {
-        Fence->Wait();
-    }
-    if (Owner)
-    {
-        Owner->TryRecycle(const_cast<VulkanRHISyncPoint*>(this));
-    }
+uint64_t VulkanRHISyncPoint::GetCurrentValue() {
+    return semaphore_->GetCurrentValue();
 }
 
-void VulkanRHISyncDependency::Activate(
-    RHI::EQueueType queueType,
-    VulkanSemaphore* inSemaphore,
-    bool inOwnsSemaphore,
-    uint64_t inValue,
-    VulkanRHISyncPointManager* inOwner)
-{
-    Owner = inOwner;
-    Semaphore = inSemaphore;
-    bOwnsSemaphore = inOwnsSemaphore;
-    bPending = true;
-    Type = queueType;
-    Value = inValue;
+void VulkanRHISyncPoint::Wait(uint64_t Value, uint64_t TimeoutNS) {
+    semaphore_->Wait(Value, TimeoutNS);
 }
 
 }

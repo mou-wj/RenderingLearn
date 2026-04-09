@@ -184,14 +184,19 @@ public:
 
             // 执行所有命令
             cmdList.ExecuteAll();
-            RHI::RHICmdBuffer cmdBuffer = cmdList.End();
+            cmdList.End();
             std::vector<RHI::RHIWaitInfo> waitInfos;
             if (swapchainSlot.ReadySync)
             {
-                waitInfos.push_back({ swapchainSlot.ReadySync, RHI::ERHIPipelineStage::ColorAttachmentOutput });
+                waitInfos.push_back({ swapchainSlot.ReadySync, 0,RHI::ERHIPipelineStage::ColorAttachmentOutput });
             }
-            RHI::RHISubmitResult submitResult = queue->Submit({ cmdBuffer }, waitInfos);
-            GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), submitResult.Dependency);
+            RHI::RHIFence submitResult = queue->FlushContext({ graphicContext }, waitInfos);
+            RHI::RHIWaitInfo presentWait;
+            presentWait.SyncPoint = submitResult.Point;
+			presentWait.Value = submitResult.Value;
+            presentWait.WaitStage = RHI::ERHIPipelineStage::ColorAttachmentOutput;
+
+            GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentWait);
             cmdList.Clear();
         }
 
@@ -282,8 +287,8 @@ private:
         api->UpdateBuffer(commandList, VertexBuffer.get(), vertices, { 0, sizeof(vertices) });
         TransitionResource(api, commandList, VertexBuffer.get(), RHI::ERHIResourceAccess::VertexOrIndexBuffer);
         commandList.ExecuteAll();
-        RHI::RHICmdBuffer cmdBuffer = commandList.End();
-        queue->Submit(cmdBuffer);
+        commandList.End();
+        queue->FlushContext(graphicContext);
 
     }
 

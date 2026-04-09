@@ -184,7 +184,7 @@ namespace RHI {
         // ��ӿ�
         // -----------------
         void Begin();
-        RHICmdBuffer End();
+        void End();
 
         void BeginTransitions(std::vector<const RHITransition*> Transitions);
         void EndTransitions(std::vector<const RHITransition*> Transitions);

@@ -23,19 +23,22 @@ public:
     VulkanCommandContext(VulkanDevice* device, VulkanQueue* queue);
     virtual ~VulkanCommandContext();
 
+
     void Begin() override;
-    RHICmdBuffer End() override;
+    void End() override;
     void BeginTransitions(std::vector<const RHITransition*> Transitions) override;
     void EndTransitions(std::vector<const RHITransition*> Transitions) override;
 
     VulkanQueue* GetQueue() const { return queue; }
     VulkanCommandBufferManager* GetCommandBufferManager() const { return commandBufferManager; }
     VulkanDevice* GetDevice() const { return device; }
-
+    VulkanCommandBuffer* GetRecordedCommandBuffer() const { return RecordedCommandBuffer; }
 protected:
     VulkanDevice* device = nullptr;
     VulkanQueue* queue = nullptr;
     VulkanCommandBufferManager* commandBufferManager = nullptr;
+    VulkanCommandBuffer* RecordedCommandBuffer = nullptr;
+
 };
 
 class RHIVULKAN_API VulkanTransferContext : public VulkanCommandContext, public RHI::RHITransferContext

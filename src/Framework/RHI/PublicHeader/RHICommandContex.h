@@ -13,7 +13,7 @@ namespace RHI
     public:
         virtual ~RHIContextBase() = default;
         virtual void Begin() = 0;
-        virtual RHICmdBuffer End() = 0;
+        virtual void End() = 0;
         virtual void BeginTransitions(std::vector<const RHITransition*> Transitions) = 0;
         virtual void EndTransitions(std::vector<const RHITransition*> Transitions) = 0;
     };
@@ -87,17 +87,7 @@ namespace RHI
     using RHIComputeContextSP = std::shared_ptr<RHIComputeContext>;
     using RHICommandContextSP = std::shared_ptr<RHICommandContext>;
 
-class RHISyncPoint {
-public:
-    virtual ~RHISyncPoint() = default;
 
-    EQueueType Type;   // 产生该信号的队列类型 (Graphics/Compute/Transfer)
-    uint64_t Value;    // 该队列时间轴上的单调递增数值
-
-    // 核心接口
-    virtual bool IsReached() const = 0; // 非阻塞检查是否完成
-    virtual void Wait() const = 0;      // CPU 阻塞等待
-};
 
 enum class ERHIPipelineStage
 {
@@ -116,24 +106,32 @@ enum class ERHIPipelineStage
     AllCommands
 };
 
-class RHISyncDependency {
+class RHISyncPoint {
 public:
-    virtual ~RHISyncDependency() = default;
+    virtual ~RHISyncPoint() = default;
 
-    EQueueType Type = EQueueType::Graphics;
+    // 获取当前 GPU 已经执行到的数值（用于 CPU 端的进度查询或 GC）
+    virtual uint64_t GetCurrentValue() = 0;
+
+    // CPU 端阻塞等待直到达到某个值
+    virtual void Wait(uint64_t Value, uint64_t TimeoutNS = UINT64_MAX) = 0;
+
+    // 获取所属队列类型
+    EQueueType GetQueueType() const { return Type; }
+
+protected:
+    EQueueType Type;
+};
+
+struct RHIWaitInfo {
+    // 依赖哪一个同步点（即哪个队列）
+    RHISyncPoint* SyncPoint = nullptr;
+    
+    // 依赖该同步点的哪一个具体进度
     uint64_t Value = 0;
-};
-
-struct RHIWaitInfo
-{
-    RHISyncDependency* Dependency = nullptr;
+    
+    // 在本队列的哪个阶段开始等待
     ERHIPipelineStage WaitStage = ERHIPipelineStage::AllCommands;
-};
-
-struct RHISubmitResult
-{
-    RHISyncPoint* Completion = nullptr;
-    RHISyncDependency* Dependency = nullptr;
 };
 
 class RHISwapchain {
@@ -142,7 +140,7 @@ public:
 
     struct RHISwapchainSlot {
     RHITexture* Texture;    // 物理资源
-    RHISyncDependency* ReadySync; // 准入证
+    RHISyncPoint* ReadySync; // 准入证
     };
 
     // 关键：获取当前帧可以写入的纹理（不透明的 RHITexture）
@@ -161,7 +159,12 @@ class RHI_API RHIPresentExecutor
 {
 public:
     virtual ~RHIPresentExecutor() = default;
-    virtual void Present(RHISwapchain* Swapchain, RHISyncDependency* WaitDependency = nullptr) = 0;
+    virtual void Present(RHISwapchain* Swapchain, const RHIWaitInfo& WaitInfo) = 0;
+};
+
+struct RHIFence {
+    RHISyncPoint* Point; // 哪根标尺
+    uint64_t Value;      // 哪个刻度
 };
 
 class RHIQueue {
@@ -174,10 +177,10 @@ public:
     virtual RHIContextBase* ReleaseCommandContext(RHIContextBase* Context) = 0;
 
     // 提交指令包，并返回完成点与可供后续等待的依赖对象
-    virtual RHISubmitResult Submit(RHICmdBuffer CmdBuffer) = 0;
+    virtual RHIFence FlushContext(RHIContextBase* context) = 0;
 
     // 批量提交并处理跨队列等待
-    virtual RHISubmitResult Submit(const std::vector<RHICmdBuffer>& Cmds,
+    virtual RHIFence FlushContext(const std::vector<RHIContextBase*>& Cmds,
                                const std::vector<RHIWaitInfo>& WaitInfos) = 0;
 
     // 强制刷新硬件队列
