@@ -210,8 +210,8 @@ namespace RHIVulkan {
         rpInfo.subpassCount = 1;
         rpInfo.pSubpasses = &subpass;
 
-        VkResult result = vkCreateRenderPass(Device->GetHandle(), &rpInfo, nullptr, &RenderPass);
-        assert(result == VK_SUCCESS);
+        bool result = VKFunc::CreateRenderPass(Device->GetHandle(), &rpInfo, &RenderPass);
+        assert(result == true);
     }
 
     VulkanRenderPass::~VulkanRenderPass()
@@ -295,7 +295,7 @@ namespace RHIVulkan {
         fbInfo.height = Extent.height;
         fbInfo.layers = 1;
 
-        VkResult result = vkCreateFramebuffer(Device->GetHandle(), &fbInfo, nullptr, &Framebuffer);
+        bool result = VKFunc::CreateFramebuffer(Device->GetHandle(), &fbInfo, &Framebuffer);
         assert(result == VK_SUCCESS);
     }
 
@@ -416,12 +416,12 @@ namespace RHIVulkan {
 		auto clearValues = GenerateClearValues(renderPassInfo.RenderTargets);
         renderPassBeginInfo.pClearValues = clearValues.data();
 
-        vkCmdBeginRenderPass(cmdBuffer->GetHandle(),&renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        VKFunc::CmdBeginRenderPass(cmdBuffer->GetHandle(),&renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     }
 
     void VulkanRenderPassManager::EndRenderPass(VulkanCommandBuffer* cmdBuffer)
     {
-        vkCmdEndRenderPass(cmdBuffer->GetHandle());
+        VKFunc::CmdEndRenderPass(cmdBuffer->GetHandle());
     }
 
     void VulkanRenderPassManager::NotifyDeletedImage(VkImage image)

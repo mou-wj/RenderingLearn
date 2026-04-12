@@ -140,6 +140,7 @@ size_t RHIPipelineStateCache::HashGraphicsPipelineDesc(const RHIGraphicsPipeline
 }
 size_t RHIPipelineStateCache::HashComputePipelineDesc(const RHIComputePipelineStateDesc& desc) {
 	size_t hash = 0;
+	hash ^= std::hash<uint64_t>()(desc.computeShader ? (uint64_t)desc.computeShader : 0);
 	return hash;
 
 }

@@ -515,7 +515,7 @@ namespace RHIVulkan {
             dstStage |= dstCurStage;
 
 		}
-		vkCmdPipelineBarrier(
+		VKFunc::CmdPipelineBarrier(
 			cmd->GetHandle(),
 			srcStage,
 			dstStage,

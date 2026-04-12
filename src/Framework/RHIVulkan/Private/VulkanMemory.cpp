@@ -19,18 +19,18 @@ VulkanMemoryBlock::VulkanMemoryBlock(VulkanDevice* device, uint32_t memoryTypeIn
     allocInfo.allocationSize = size_;
     allocInfo.memoryTypeIndex = memoryTypeIndex;
 
-    if (vkAllocateMemory(device_->GetHandle(), &allocInfo, nullptr, &memory_) != VK_SUCCESS)
+    if (!VKFunc::AllocateMemory(device_->GetHandle(), &allocInfo, &memory_))
         throw std::runtime_error("Failed to allocate Vulkan memory block");
 
     if (mappable_)
-        vkMapMemory(device_->GetHandle(), memory_, 0, VK_WHOLE_SIZE, 0, &mapped_);
+        VKFunc::MapMemory(device_->GetHandle(), memory_, 0, VK_WHOLE_SIZE, 0, &mapped_);
 }
 
 VulkanMemoryBlock::~VulkanMemoryBlock()
 {
     if (mapped_)
-        vkUnmapMemory(device_->GetHandle(), memory_);
-    vkFreeMemory(device_->GetHandle(), memory_, nullptr);
+        VKFunc::UnmapMemory(device_->GetHandle(), memory_);
+    VKFunc::FreeMemory(device_->GetHandle(), memory_);
 }
 
 bool VulkanMemoryBlock::Allocate(VkDeviceSize size, VkDeviceSize alignment, VulkanAllocation& outAlloc)
@@ -72,7 +72,7 @@ VulkanMemoryManager::~VulkanMemoryManager()
 uint32_t VulkanMemoryManager::FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties) const
 {
     VkPhysicalDeviceMemoryProperties memProps;
-    vkGetPhysicalDeviceMemoryProperties(device_->GetPhysicalDevice(), &memProps);
+    VKFunc::GetPhysicalDeviceMemoryProperties(device_->GetPhysicalDevice(), &memProps);
 
     for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i)
     {
@@ -140,7 +140,7 @@ VulkanStagingBuffer::VulkanStagingBuffer(VulkanDevice* device, VulkanMemoryManag
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 
-    vkCreateBuffer(device_->GetHandle(), &bufferInfo, nullptr, &buffer_);
+    VKFunc::CreateBuffer(device_->GetHandle(), &bufferInfo, &buffer_);
 #ifdef DEBUG_INFO
     std::string debugName;
     char buf[64];
@@ -151,14 +151,14 @@ VulkanStagingBuffer::VulkanStagingBuffer(VulkanDevice* device, VulkanMemoryManag
 
     // 查询 memory requirements
     VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(device_->GetHandle(), buffer_, &memReq);
+    VKFunc::GetBufferMemoryRequirements(device_->GetHandle(), buffer_, &memReq);
 
 
     // 分配 HostVisible 内存
     memManager_->Allocate(memReq, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, allocation_);
 
 
-    vkBindBufferMemory(device_->GetHandle(), buffer_, allocation_.GetMemory(), allocation_.GetOffset());
+    VKFunc::BindBufferMemory(device_->GetHandle(), buffer_, allocation_.GetMemory(), allocation_.GetOffset());
 
 
     // 映射内存
@@ -220,38 +220,31 @@ void VulkanStagingManager::ReleaseToCmdBuffer(
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto& entry = cmdBufferMap_[cmd];
-    entry.cmd = cmd;
+    auto& entry = pendingBufferMap_[cmd];
     entry.pendingBuffers.push_back(buffer);
-}
-
-void VulkanStagingManager::OnCommandBufferSubmitted(VulkanCommandBuffer* cmd)
-{
-    auto it = cmdBufferMap_.find(cmd);
-    if (it == cmdBufferMap_.end())
-        return;
-
-    VulkanFence* fence = cmd->GetFence();
-
-    for (auto& buf : it->second.pendingBuffers)
-    {
-        pendingFree_.push_back({buf, fence});
-    }
-
-    cmdBufferMap_.erase(it);
 }
 
 void VulkanStagingManager::GarbageCollect()
 {
-    while (!pendingFree_.empty())
-    {
-        PendingBuffer& front = pendingFree_.front();
-        if (!front.fence->IsSignaled())
-            break;
+    std::lock_guard<std::mutex> lock(mutex_);
+	std::vector<VulkanCommandBuffer*> completedCmds;
+	std::vector<std::shared_ptr<VulkanStagingBuffer>> buffersToFree; 
+	for (auto& entry : pendingBufferMap_)
+	{
+		if (entry.first->GetState() == VulkanCommandBuffer::NeedRecycle)
+		{
+			completedCmds.push_back(entry.first);
+			for (auto& buf : entry.second.pendingBuffers)
+			{
+                freeBuffers_.push_back(buf);
+			}
+		}
+	}
+    for (auto& cmd : completedCmds)
+	{
+        pendingBufferMap_.erase(cmd);
+	}
 
-        freeBuffers_.push_back(front.buffer);
-        pendingFree_.pop_front();
-    }
 }
 
 }

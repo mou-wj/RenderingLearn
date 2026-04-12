@@ -26,6 +26,7 @@ void VulkanCommandContext::Begin()
 void VulkanCommandContext::End()
 {
     device->GetDescriptorSetManager()->GarbageCollect();
+	device->GetStagingManager()->GarbageCollect();
     commandBufferManager->GarbageCollect();
 
 
@@ -152,7 +153,7 @@ void VulkanComputeContext::Dispatch(uint32_t groupCountX, uint32_t groupCountY, 
     if (PendingCompute && PendingCompute->HasPipeline())
     {
         PendingCompute->PrepareForDispatch(commandBuffer);
-        vkCmdDispatch(commandBuffer->GetHandle(), groupCountX, groupCountY, groupCountZ);
+        VKFunc::CmdDispatch(commandBuffer->GetHandle(), groupCountX, groupCountY, groupCountZ);
     }
 }
 
@@ -289,7 +290,7 @@ void VulkanGraphicContext::Draw(uint32_t vertexCount, uint32_t instanceCount, ui
     if (PendingGfx && PendingGfx->HasPipeline())
     {
         PendingGfx->PrepareForDraw(commandBuffer);
-        vkCmdDraw(commandBuffer->GetHandle(), vertexCount, instanceCount, firstVertex, firstInstance);
+        VKFunc::CmdDraw(commandBuffer->GetHandle(), vertexCount, instanceCount, firstVertex, firstInstance);
     }
 }
 
@@ -301,8 +302,8 @@ void VulkanGraphicContext::DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCou
         PendingGfx->PrepareForDraw(commandBuffer);
         VulkanBuffer* vulkanIndexBuffer = static_cast<VulkanBuffer*>(indexBuffer);
         VkIndexType indexType = vulkanIndexBuffer->GetDesc().Stride == 4 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
-        vkCmdBindIndexBuffer(commandBuffer->GetHandle(), static_cast<VulkanBuffer*>(indexBuffer)->GetHandle(), 0, indexType);
-        vkCmdDrawIndexed(commandBuffer->GetHandle(), indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+        VKFunc::CmdBindIndexBuffer(commandBuffer->GetHandle(), static_cast<VulkanBuffer*>(indexBuffer)->GetHandle(), 0, indexType);
+        VKFunc::CmdDrawIndexed(commandBuffer->GetHandle(), indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 }
 

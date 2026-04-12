@@ -94,7 +94,7 @@ private:
     // 其他 Vulkan 资源管理结构
 	VulkanDevice* Device = nullptr;
 	VkPhysicalDevice PhysicalDevice = nullptr;
-    VulkanPresentExecutor* PresentExecutor = nullptr;
+
 };
 
 

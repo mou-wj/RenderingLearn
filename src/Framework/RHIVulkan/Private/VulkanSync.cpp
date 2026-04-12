@@ -9,22 +9,22 @@ namespace RHIVulkan{
     {
         VkEventCreateInfo info{ VK_STRUCTURE_TYPE_EVENT_CREATE_INFO };
         info.flags = 0;
-        vkCreateEvent(device_->GetHandle(), &info, nullptr, &event_);
+        VKFunc::CreateEvent_(device_->GetHandle(), &info, &event_);
     }
 
     VulkanEvent::~VulkanEvent()
     {
         if (event_ != VK_NULL_HANDLE) {
-            vkDestroyEvent(device_->GetHandle(), event_, nullptr);
+            VKFunc::DestroyEvent(device_->GetHandle(), event_);
             event_ = VK_NULL_HANDLE;
         }
     }
 
     VkEvent VulkanEvent::GetHandle() const { return event_; }
 
-    void VulkanEvent::Set() const { vkSetEvent(device_->GetHandle(), event_); }
-    void VulkanEvent::Reset() const { vkResetEvent(device_->GetHandle(), event_); }
-    VkResult VulkanEvent::GetStatus() const { return vkGetEventStatus(device_->GetHandle(), event_); }
+    void VulkanEvent::Set() const { VKFunc::SetEvent(device_->GetHandle(), event_); }
+    void VulkanEvent::Reset() const { VKFunc::ResetEvent(device_->GetHandle(), event_); }
+    VkResult VulkanEvent::GetStatus() const { return VKFunc::GetEventStatus(device_->GetHandle(), event_) ? VK_SUCCESS : VK_ERROR_UNKNOWN; }
 
     VulkanEventManager::VulkanEventManager(VulkanDevice* device)
         : device_(device) {
@@ -79,6 +79,12 @@ namespace RHIVulkan{
         createInfo.pNext = &typeCreateInfo;
         createInfo.flags = 0;
         VKFunc::CreateSemaphore_(device_->GetHandle(), &createInfo, &semaphore_);
+#ifdef DEBUG_INFO
+		static uint64_t counter = 0;
+		std::string debugNname = "Semaphore_" + std::to_string(counter++);
+        		VKFunc::SetDebugName(device_->GetHandle(), VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)semaphore_, debugNname.c_str());
+#endif // DEBUG_INFO
+
     }
 
     VulkanSemaphore::~VulkanSemaphore()
@@ -95,10 +101,7 @@ namespace RHIVulkan{
 
     uint64_t VulkanSemaphore::GetCurrentValue() {
         uint64_t value = 0;
-        VkResult res = vkGetSemaphoreCounterValue(device_->GetHandle(), semaphore_, &value);
-        if (res != VK_SUCCESS) {
-            throw std::runtime_error("Failed to get timeline semaphore value");
-        }
+        VKFunc::GetSemaphoreCounterValue(device_->GetHandle(), semaphore_, &value);
         return value;
     }
 
@@ -109,8 +112,7 @@ namespace RHIVulkan{
         waitInfo.semaphoreCount = 1;
         waitInfo.pSemaphores = &semaphore_;
         waitInfo.pValues = &Value;
-        VkResult res = vkWaitSemaphores(device_->GetHandle(), &waitInfo, TimeoutNS);
-        if (res != VK_SUCCESS) {
+        if (!VKFunc::WaitSemaphores(device_->GetHandle(), &waitInfo, TimeoutNS)) {
             throw std::runtime_error("Failed to wait for timeline semaphore");
         }
         value_ = Value;
@@ -134,7 +136,7 @@ namespace RHIVulkan{
 
         if (requireUnsignaled)
         {
-            VulkanSemaphore* sem = new VulkanSemaphore(device_);
+            VulkanSemaphore* sem = new VulkanSemaphore(device_,true);
             managedObjects_.push_back(sem);
             return sem;
         }
@@ -197,8 +199,7 @@ VulkanFence::~VulkanFence()
 bool VulkanFence::IsSignaled() const
 {
     if (!Fence || !Device) return false;
-    VkResult result = vkGetFenceStatus(Device->GetHandle(), Fence); // 若有VKFunc包装可替换
-    return result == VK_SUCCESS;
+    return VKFunc::GetFenceStatus(Device->GetHandle(), Fence);
 }
 
 void VulkanFence::Reset()

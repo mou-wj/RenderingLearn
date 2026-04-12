@@ -24,6 +24,7 @@ class VulkanDescriptorSetManager;
 class VulkanShaderManager;
 class VulkanPipelineLayoutCache;
 class VulkanRHISyncPointManager;
+class VulkanPresentExecutor;
 
 // 延迟删除队列 - 用于延迟删除Vulkan对象
 class VulkanDeferredDeleteQueue
@@ -123,6 +124,7 @@ public:
     VulkanDescriptorSetManager* GetDescriptorSetManager() const { return descriptorSetManager_; }
 	VulkanShaderManager* GetShaderManager() const { return shaderManager_; }
     VulkanPipelineLayoutCache* GetPipelineLayoutCache() const { return pipelineLayoutCache_; }
+    VulkanPresentExecutor* GetPresentExecutor() const { return presentExecutor_; }
 
     // 延迟删除资源接口
     void EnqueueRenderPassForDeletion(VkRenderPass RenderPass);
@@ -147,6 +149,8 @@ private:
 
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
     VkDevice device_{VK_NULL_HANDLE};
+	VkPhysicalDeviceFeatures2 supportedFeatures2_{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+	VkPhysicalDeviceTimelineSemaphoreFeatures timelineSemaphoreFeatures_{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES };
 
     uint32_t queueFamilyCount = 0;
     uint32_t graphicsQueueFamilyIndex_ = UINT32_MAX;
@@ -171,6 +175,7 @@ private:
     VulkanShaderManager* shaderManager_;
     VulkanPipelineLayoutCache* pipelineLayoutCache_;
     VulkanDeferredDeleteQueue* deferredDeleteQueue_ = nullptr;
+    VulkanPresentExecutor* presentExecutor_ = nullptr;
 };
 
 }

@@ -1,7 +1,7 @@
 #pragma once
 #include "VulkanDevice.h"
+#include "VulkanFuncWrapper.h"
 #include <vector>
-#include <vulkan/vulkan.h>
 #include <stdexcept>
 #include <map>
 #include <array>
@@ -74,6 +74,7 @@ namespace RHIVulkan {
             VkDescriptorSetLayout layout,
             const DescriptorSetLayoutInfo& layoutInfo,
             uint32_t maxSetsPerPool);
+        ~TypedDescriptorPool();
 
         VkDescriptorSet Allocate();
     private:
@@ -93,6 +94,7 @@ namespace RHIVulkan {
     {
     public:
         VulkanDescriptorSetLayoutManager(VulkanDevice* device);
+        ~VulkanDescriptorSetLayoutManager();
         VkDescriptorSetLayout GetOrCreateLayout(const DescriptorSetLayoutInfo& info);
 
     private:
@@ -109,6 +111,7 @@ namespace RHIVulkan {
     {
     public:
         VulkanDescriptorSetManager(VulkanDevice* device, VulkanDescriptorSetLayoutManager* layoutManager);
+        ~VulkanDescriptorSetManager();
 
         VkDescriptorSet GetDescriptorSet(const DescriptorSetLayoutInfo& layoutInfo);
         void BindDescriptorSets(VulkanCommandBuffer* cmdBuffer, VkPipelineLayout layout, VkPipelineBindPoint pipelineBindingPoint, const std::vector<VkDescriptorSet>& descriptorSets, const std::vector<uint32_t>& dynamicOffsets = {});
@@ -204,7 +207,7 @@ namespace RHIVulkan {
             for (auto& w : Writes)
                 w.dstSet = set;
 
-            vkUpdateDescriptorSets(device,
+            VKFunc::UpdateDescriptorSets(device,
                 (uint32_t)Writes.size(),
                 Writes.data(),
                 0, nullptr);

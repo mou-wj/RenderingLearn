@@ -268,8 +268,8 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     shader.setStrings(&sourceCStr, 1);
     shader.setEntryPoint(input.EntryPoint.c_str());
     shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, 100);
-    shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
-    shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
+    shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_2);
+    shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_2);
     // 定义偏移量 (你可以根据自己 RHI 的习惯调整这些常数)
     const int CBV_SHIFT = 100;   // b 寄存器 (Constant Buffer)
     const int SRV_SHIFT = 200; // t 寄存器 (Texture/Buffer SRV)

@@ -1,13 +1,20 @@
 {
   "name": "SPIRV-Tools",
-
-  "type": "managed",
-
+  "type": "source",
+  "config_type": "cmake_config",
+  "source_type": "git",
+  "build_timing": "pre_build",
   "source": {
     "git": "https://github.com/KhronosGroup/SPIRV-Tools.git",
-    "branch": "main"
+    "branch": "main",
+    "extra_repos": [
+      {
+        "path": "external/spirv-headers",
+        "git": "https://github.com/KhronosGroup/SPIRV-Headers.git",
+        "branch": "main"
+      }
+    ]
   },
-
   "compiler": {
     "windows": {
       "preferred": "msvc",
@@ -25,37 +32,18 @@
       "cmake_toolset": ""
     }
   },
-
-  "pre_clone": {
-    "extra_repos": [
-      {
-        "path": "external/spirv-headers",
-        "git": "https://github.com/KhronosGroup/SPIRV-Headers.git",
-        "branch": "main"
-      }
-    ]
-  },
-
-  "build": {
-    "system": "cmake",
+  "build_config": {
     "configure_args": [
-      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/${CONFIG}"
+      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/spirv-tools/${CONFIG}"
     ],
-    "build_targets": ["install"],
-    "configs": ["Debug", "Release"],
-    "type" : "shared"
+    "cmake_options": {}
   },
-
   "install_layout": {
-    "root": "${INSTALL_DIR}/${CONFIG}",
-    "include": "${INSTALL_DIR}/${CONFIG}/include/spirv_tools",
-    "lib": "${INSTALL_DIR}/${CONFIG}/lib",
-    "bin": "${INSTALL_DIR}/${CONFIG}/bin"
+    "root": "${INSTALL_DIR}/spirv-tools/${CONFIG}",
+    "include": "include",
+    "lib": "lib",
+    "bin": "bin"
   },
-
-  "dependencies": ["SPIRV-Headers"],
-
-  "auto_generate_find_cmake": "if_missing",
-
-  "notes": "SPIRV-Tools needs spirv-headers present in external/spirv-headers or provided via CMake option. Prefer Config.cmake if available; otherwise auto-generate FindSPIRV-Tools.cmake."
+  "dependencies": [
+  ]
 }

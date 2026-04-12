@@ -111,6 +111,11 @@ namespace RHIVulkan {
     {
     }
 
+    TypedDescriptorPool::~TypedDescriptorPool()
+    {
+		Pools.clear();
+    }
+
     VkDescriptorSet TypedDescriptorPool::Allocate()
     {
         for (auto& pool : Pools)
@@ -142,6 +147,14 @@ namespace RHIVulkan {
     VulkanDescriptorSetLayoutManager::VulkanDescriptorSetLayoutManager(VulkanDevice* device)
         : Device(device)
     {
+    }
+
+    VulkanDescriptorSetLayoutManager::~VulkanDescriptorSetLayoutManager()
+    {
+        for (auto& pair : LayoutMap) {
+            VKFunc::DestroyDescriptorSetLayout(Device->GetHandle(), pair.second);
+        }
+        LayoutMap.clear();
     }
 
     VkDescriptorSetLayout VulkanDescriptorSetLayoutManager::GetOrCreateLayout(const DescriptorSetLayoutInfo& info)
@@ -183,6 +196,11 @@ namespace RHIVulkan {
     VulkanDescriptorSetManager::VulkanDescriptorSetManager(VulkanDevice* device, VulkanDescriptorSetLayoutManager* layoutManager)
         : Device(device), LayoutCache(layoutManager)
     {
+    }
+
+    VulkanDescriptorSetManager::~VulkanDescriptorSetManager()
+    {
+		LayoutDescriptorPoolMap.clear();
     }
 
     VkDescriptorSet VulkanDescriptorSetManager::GetDescriptorSet(const DescriptorSetLayoutInfo& layoutInfo)

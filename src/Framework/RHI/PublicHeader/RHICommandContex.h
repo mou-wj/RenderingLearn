@@ -177,12 +177,12 @@ public:
     virtual RHIContextBase* ReleaseCommandContext(RHIContextBase* Context) = 0;
 
     // 提交指令包，并返回完成点与可供后续等待的依赖对象
-    virtual RHIFence FlushContext(RHIContextBase* context) = 0;
+    virtual RHIFence ExecuteContext(RHIContextBase* context) = 0;
 
     // 批量提交并处理跨队列等待
-    virtual RHIFence FlushContext(const std::vector<RHIContextBase*>& Cmds,
+    virtual RHIFence ExecuteContext(const std::vector<RHIContextBase*>& Cmds,
                                const std::vector<RHIWaitInfo>& WaitInfos) = 0;
-
+    virtual void WaitFence(RHIFence Fence) = 0;
     // 强制刷新硬件队列
     virtual void WaitIdle() = 0;
 private:

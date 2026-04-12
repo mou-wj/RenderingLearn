@@ -69,6 +69,25 @@ VulkanQueue::VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyInd
 	: device_(device), queue_(queue), familyIndex_(familyIndex), QueueType_(queueType)
 {
     SubmitSyncPoint_ = new VulkanRHISyncPoint(device, queueType);
+#ifdef DEBUG_INFO
+	std::string queueTypeName;
+	switch (queueType)
+	{
+	case RHI::EQueueType::Graphics:
+		queueTypeName = "Graphics";
+		break;
+	case RHI::EQueueType::Compute:
+		queueTypeName = "Compute";
+		break;
+	case RHI::EQueueType::Transfer:
+		queueTypeName = "Transfer";
+		break;
+	default:
+		queueTypeName = "Unknown";
+		break;
+	}
+	VKFunc::SetDebugName(device_->GetHandle(), VK_OBJECT_TYPE_QUEUE, (uint64_t)queue_, ("VulkanQueue:" + queueTypeName).c_str());
+#endif
 }
 
 VulkanQueue::~VulkanQueue()
@@ -79,15 +98,28 @@ VulkanQueue::~VulkanQueue()
     }
     AllContexts_.clear();
     FreeContexts_.clear();
+    delete SubmitSyncPoint_;
 }
 
 void VulkanQueue::WaitIdle()
 {
-    if (!VKFunc::QueueWaitIdle(queue_))
-    {
-        throw std::runtime_error("Failed to wait for Vulkan queue to be idle!");
-    }
+    VKFunc::QueueWaitIdle(queue_);
 
+}
+
+void VulkanQueue::GarbageCollect() 
+{
+    uint64_t CurrentTime = SubmitSyncPoint_->GetCurrentValue();
+    while (!PendingInfos.empty()) {
+        auto& front = PendingInfos.front();
+        if (front.FinishedTimelineValue <= CurrentTime) {
+            for (auto cmd : front.Cmds) {
+                cmd->MarkState(VulkanCommandBuffer::NeedRecycle);
+            }
+            PendingInfos.pop();
+        }
+
+    }
 }
 
 void VulkanQueue::InitContextPool(uint32_t poolSize)
@@ -134,13 +166,15 @@ RHI::RHIContextBase* VulkanQueue::ReleaseCommandContext(RHI::RHIContextBase* Con
     return nullptr;
 }
 
-RHI::RHIFence VulkanQueue::FlushContext(RHI::RHIContextBase* contextBase)
+RHI::RHIFence VulkanQueue::ExecuteContext(RHI::RHIContextBase* contextBase)
 {
-    return FlushContext({ contextBase }, {});
+    return ExecuteContext({ contextBase }, {});
 }
 
-RHI::RHIFence VulkanQueue::FlushContext(const std::vector<RHI::RHIContextBase*>& Contexts, const std::vector<RHI::RHIWaitInfo>& WaitInfos)
+RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*>& Contexts, const std::vector<RHI::RHIWaitInfo>& WaitInfos)
 {
+    std::lock_guard<std::mutex> lock(FlushContextMutex_);
+
     // 1. 准备所有的 Wait 信息 (Timeline Semaphore 模式)
     std::vector<VkSemaphore> waitHandles;
     std::vector<uint64_t> waitValues;
@@ -151,13 +185,13 @@ RHI::RHIFence VulkanQueue::FlushContext(const std::vector<RHI::RHIContextBase*>&
         if (!waitInfo.SyncPoint) continue;
 
         auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(waitInfo.SyncPoint);
-		bool isBinary = vkSyncPoint->IsBinary();
+        bool isBinary = vkSyncPoint->IsBinary();
         if (isBinary)
-		{
-			// Binary Semaphore 直接等待即可，无需 Value
-			waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
-			waitValues.push_back(0); 
-			
+        {
+            // Binary Semaphore 直接等待即可，无需 Value
+            waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
+            waitValues.push_back(0);
+
         }
         else {
             waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
@@ -203,10 +237,10 @@ RHI::RHIFence VulkanQueue::FlushContext(const std::vector<RHI::RHIContextBase*>&
     VkSemaphore signalHandle = SubmitSyncPoint_->GetSemaphore()->GetHandle();
     submitInfo.pSignalSemaphores = &signalHandle;
 
-    vkQueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+    VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
 
     device_->GetStagingManager()->GarbageCollect();
-    for (auto cmdBuffer : cmdBuffers) 
+    for (auto cmdBuffer : cmdBuffers)
     {
         cmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
         cmdBuffer->GetImageLayoutManager()->Clear();
@@ -216,7 +250,8 @@ RHI::RHIFence VulkanQueue::FlushContext(const std::vector<RHI::RHIContextBase*>&
 
     // 5. 资源回收与状态更新
     device_->ReleaseDeferredResources();
-
+    GarbageCollect();
+    PendingInfos.push({ cmdBuffers ,signalValue});
     // 6. 返回 Fence：它本质上是同步点和数值的组合
     RHI::RHIFence result{};
     result.Point = SubmitSyncPoint_;
@@ -246,7 +281,17 @@ void VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t w
     submitInfo.pSignalSemaphores = &binarySignal;
 
     // 提交空命令
-    vkQueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+    VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+}
+
+void VulkanQueue::WaitFence(RHIFence Fence)
+{
+	if (!Fence.Point || Fence.Value == 0)
+	{
+		return;
+	}
+	auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(Fence.Point);
+    vkSyncPoint->Wait(Fence.Value);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -266,6 +311,6 @@ void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, const RHI::RHI
         return;
     }
 
-    //vulkanSwapchain->Present(Queue, WaitDependency);
+    vulkanSwapchain->Present(Queue, WaitDependency);
 }
 }

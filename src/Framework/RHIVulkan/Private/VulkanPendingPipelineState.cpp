@@ -38,8 +38,8 @@ namespace RHIVulkan {
                 // 为该频率的PackedUniformBuffer分配GPU内存
                 uint64_t newOffset = uploader->AllocateMemory(
                     buffer.Num(), 
-                    256,  // 256字节对齐
-                    cmd);
+                    256  // 256字节对齐
+                    );
                 
                 // 检测是否发生了环绕
                 if (newOffset < lastAllocationOffset && lastAllocationOffset > 0)

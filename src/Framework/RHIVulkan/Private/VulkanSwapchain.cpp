@@ -82,15 +82,15 @@ namespace RHIVulkan {
 
         // 7. 创建交换链
         VkDevice deviceHandle = device_->GetHandle();
-        if (vkCreateSwapchainKHR(deviceHandle, &createInfo, nullptr, &swapchain_) != VK_SUCCESS) {
+        if (!VKFunc::CreateSwapchainKHR(deviceHandle, &createInfo, &swapchain_)) {
             return;
         }
 
         // 8. 检索交换链图像句柄
-        vkGetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, nullptr);
+        VKFunc::GetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, nullptr);
         std::vector<VkImage>& images = outImages;
         images.resize(imageCount);
-        vkGetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, images.data());
+        VKFunc::GetSwapchainImagesKHR(deviceHandle, swapchain_, &imageCount, images.data());
         
 
 
@@ -109,13 +109,13 @@ namespace RHIVulkan {
         VkDevice deviceHandle = device_->GetHandle();
 
         if (swapchain_ != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(deviceHandle, swapchain_, nullptr);
+            VKFunc::DestroySwapchainKHR(deviceHandle, swapchain_);
             swapchain_ = VK_NULL_HANDLE;
         }
 
         // Destroy the surface
         if (surface_ != VK_NULL_HANDLE) {
-            vkDestroySurfaceKHR(device_->GetInstance(), surface_, nullptr);
+            VKFunc::DestroySurfaceKHR(device_->GetInstance(), surface_);
             surface_ = VK_NULL_HANDLE;
         }
     }
@@ -149,9 +149,9 @@ namespace RHIVulkan {
 
         presentInfo.pImageIndices = &currentImageIndex_;
 
-        VkResult result = vkQueuePresentKHR(queueHandle, &presentInfo);
+        auto result = VKFunc::QueuePresentKHR(queueHandle, &presentInfo);
 
-        if (result != VK_SUCCESS) {
+        if (result != true) {
             return false;
         }
 
@@ -177,24 +177,24 @@ namespace RHIVulkan {
         SwapChainSupportDetails details;
 
         // Surface capabilities
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_, &details.capabilities);
+        VKFunc::GetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_, &details.capabilities);
 
         // Surface formats
         uint32_t formatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, nullptr);
+        VKFunc::GetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, nullptr);
 
         if (formatCount != 0) {
             details.formats.resize(formatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, details.formats.data());
+            VKFunc::GetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, details.formats.data());
         }
 
         // Present modes
         uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, nullptr);
+        VKFunc::GetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, nullptr);
 
         if (presentModeCount != 0) {
             details.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, details.presentModes.data());
+            VKFunc::GetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, details.presentModes.data());
         }
 
         return details;

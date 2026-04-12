@@ -103,22 +103,15 @@ public:
     void ReleaseToCmdBuffer(VulkanCommandBuffer* cmd,
         std::shared_ptr<VulkanStagingBuffer> buffer);
 
-    // 在 Queue Submit 之后调用，把本次提交的 staging 绑定到 fence
-    void OnCommandBufferSubmitted(VulkanCommandBuffer* cmd);
 
     // 每帧调用，检查 fence 并回收 staging
     void GarbageCollect();
 
 private:
-    struct PendingBuffer
-    {
-        std::shared_ptr<VulkanStagingBuffer> buffer;
-        VulkanFence* fence; // 不再用 value
-    };
 
-    struct CmdBufferEntry
+
+    struct PendingEntry
     {
-        VulkanCommandBuffer* cmd = nullptr;
         std::vector<std::shared_ptr<VulkanStagingBuffer>> pendingBuffers;
     };
 
@@ -127,11 +120,8 @@ private:
 
     std::vector<std::shared_ptr<VulkanStagingBuffer>> freeBuffers_;
 
-    // 等待 fence 的 staging buffers
-    std::deque<PendingBuffer> pendingFree_;
-
     // 记录某个 cmdBuffer 本次录制用了哪些 staging
-    std::unordered_map<VulkanCommandBuffer*, CmdBufferEntry> cmdBufferMap_;
+    std::unordered_map<VulkanCommandBuffer*, PendingEntry> pendingBufferMap_;
 
     std::mutex mutex_;
 };

@@ -9,6 +9,7 @@
 #include "VulkanRenderPass.h"
 #include "VulkanResource.h"
 #include "RHIDefine.h"
+#include "VulkanFuncWrapper.h"
 inline void HashCombine(size_t& seed, size_t value)
 {
     seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
@@ -134,10 +135,9 @@ namespace RHIVulkan{
                 createInfo.pPushConstantRanges = &info.pushConstant;
             }
 
-            vkCreatePipelineLayout(
+            VKFunc::CreatePipelineLayout(
                 device->GetHandle(),
                 &createInfo,
-                nullptr,
                 &layout);
         }
 
@@ -145,7 +145,7 @@ namespace RHIVulkan{
         {
             if (layout != VK_NULL_HANDLE) 
             {
-                vkDestroyPipelineLayout(device->GetHandle(), layout, nullptr);
+                VKFunc::DestroyPipelineLayout(device->GetHandle(), layout);
             }
                 
         }
@@ -171,6 +171,10 @@ namespace RHIVulkan{
         VulkanPipelineLayoutCache(VulkanDevice* device)
             : device(device)
         {
+        }   
+        ~VulkanPipelineLayoutCache() 
+        {
+			Layouts.clear();
         }
 
         VulkanPipelineLayout* GetOrCreateLayout(

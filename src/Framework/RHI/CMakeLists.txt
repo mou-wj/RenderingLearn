@@ -37,7 +37,9 @@ target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
 )
-target_link_libraries(${TARGET_NAME} PUBLIC Core)
+target_link_libraries(${TARGET_NAME} PUBLIC Core Deps::RenderDoc)
+
+_3rds_postbuild_copy_dlls(${TARGET_NAME} "${RENDERDOC_DLLS}" "${BINARY_DIR}")
 
 string(TOUPPER "${TARGET_NAME}" TARGET_NAME_UPPER)
 if (WIN32)
@@ -50,6 +52,10 @@ else()
     INTERFACE ${TARGET_NAME_UPPER}_API=__attribute__\(\(visibility\(\"default\"\)\)\)
   )
 endif()
+
+# Enable RenderDoc Capture
+
+target_compile_definitions(${TARGET_NAME} PRIVATE ENABLE_RENDERDOC_CAPTURE=1)
 
 # Position independent code for shared libs
 set_target_properties(${TARGET_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)

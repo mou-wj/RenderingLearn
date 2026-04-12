@@ -1,5 +1,6 @@
 ﻿#include "VulkanShader.h"
 #include "VulkanRHIUtils.h"
+#include "VulkanFuncWrapper.h"
 #include <spirv_cross/spirv_cross.hpp>
 
 namespace RHIVulkan {
@@ -27,7 +28,7 @@ bool VulkanRHIShader::Initialize(const std::vector<char>& packedCode)
     createInfo.codeSize = spirvCode.size() * sizeof(uint32_t);
     createInfo.pCode = spirvCode.data();
 
-    VkResult result = vkCreateShaderModule(Device->GetHandle(), &createInfo, nullptr, &shaderModule);
+    bool result = VKFunc::CreateShaderModule(Device->GetHandle(), &createInfo,  &shaderModule);
     if (result != VK_SUCCESS)
     {
         // Handle error
@@ -41,7 +42,7 @@ void VulkanRHIShader::Cleanup()
 {
     if (shaderModule != VK_NULL_HANDLE && Device)
     {
-        vkDestroyShaderModule(Device->GetHandle(), shaderModule, nullptr);
+        VKFunc::DestroyShaderModule(Device->GetHandle(), shaderModule);
         shaderModule = VK_NULL_HANDLE;
     }
 

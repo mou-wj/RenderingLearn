@@ -18,6 +18,7 @@
 #include "RHITransition.h"
 #include "VulkanSwapchain.h"
 #include "VulkanQueue.h"
+#include "RHICaptureHelper.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
 using namespace  RHI;
@@ -32,6 +33,8 @@ namespace RHIVulkan{
 // 初始化和销毁接口实现
 bool VulkanRHIApi::Init()
 {
+	RHICaptureHelper::GetInstance();
+	VKFunc::InitializeLoader();
 	GShaderPlatform = ERHIShaderPlatform::Vulkan;
     // 创建Vulkan实例
     VkApplicationInfo appInfo = {};
@@ -40,7 +43,7 @@ bool VulkanRHIApi::Init()
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "WREngine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.apiVersion = VK_API_VERSION_1_2;
 
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -57,14 +60,13 @@ bool VulkanRHIApi::Init()
 
 
     // 创建Vulkan实例
-    VkResult result = vkCreateInstance(&createInfo, nullptr, &Instance);
-    if (result != VK_SUCCESS)
+    bool result = VKFunc::CreateInstance(&createInfo, &Instance);
+    if (result != true)
     {
         // 处理错误
-       
         return false;
     }
-
+	RHI::RHICaptureHelper::GetInstance().Init();
 	// 初始化Vulkan设备和其他资源
 	// 这里可以添加更多的初始化逻辑，如选择物理设备、创建逻辑设备等
 	PhysicalDevice = PickPhysicalDevice();
@@ -84,7 +86,6 @@ bool VulkanRHIApi::Init()
 		return false;
 	}
 	Device = device;
-	PresentExecutor = new VulkanPresentExecutor(Device->GetPresentQueue());
 
 	// 1. 确定头大小
 	uint32_t HeaderSize = sizeof(RHITransition);
@@ -112,16 +113,13 @@ void VulkanRHIApi::Shutdown()
 {
 	RHI::RHIPipelineStateCache::ClearAll();
 
-	delete PresentExecutor;
-	PresentExecutor = nullptr;
-
 	delete Device;
 	Device = nullptr;
 
     // 销毁Vulkan实例和其他资源
     if (Instance != VK_NULL_HANDLE)
     {
-        vkDestroyInstance(Instance, nullptr);
+        VKFunc::DestroyInstance(Instance);
         Instance = VK_NULL_HANDLE;
     }
 
@@ -414,7 +412,7 @@ RHIQueue* VulkanRHIApi::GetQueue(EQueueType Type)
 
 RHIPresentExecutor* VulkanRHIApi::GetPresentExecutor()
 {
-	return PresentExecutor;
+	return Device->GetPresentExecutor();
 }
 
 void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITransitionCreateInfo& CreateInfo)
@@ -613,22 +611,22 @@ RHITransientResourceManagerSP VulkanRHIApi::CreateTransientResourceManager()
 VkPhysicalDevice VulkanRHIApi::PickPhysicalDevice() {
 	// 选择合适的物理设备
 	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(Instance, &deviceCount, nullptr);
+	VKFunc::EnumeratePhysicalDevices(Instance, &deviceCount, nullptr);
 	if (deviceCount == 0) {
 		std::cerr << "No Vulkan-compatible devices found!" << std::endl;
 		return VK_NULL_HANDLE;
 	}
 	std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
-	vkEnumeratePhysicalDevices(Instance, &deviceCount, physicalDevices.data());
+	VKFunc::EnumeratePhysicalDevices(Instance, &deviceCount, physicalDevices.data());
 	// 这里可以添加更多的逻辑来选择最合适的物理设备
 	// 例如检查设备的特性、支持的扩展等
 	auto preferredVendor = GetPreferredVendorId();
 	for (const auto & device : physicalDevices) {
 		VkPhysicalDeviceProperties deviceProperties;
-		vkGetPhysicalDeviceProperties(device, &deviceProperties);
+		VKFunc::GetPhysicalDeviceProperties(device, &deviceProperties);
 
 		VkPhysicalDeviceFeatures deviceFeatures;
-		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+		VKFunc::GetPhysicalDeviceFeatures(device, &deviceFeatures);
 		std::cout << "Found device: " << deviceProperties.deviceName << std::endl;
 		// 这里可以添加更多的检查逻辑
         if (GetVendorIdFromUint32(deviceProperties.vendorID) == preferredVendor) {
@@ -646,10 +644,10 @@ std::vector<const char*> VulkanRHIApi::GetWantedInstanceLayers() {
     std::vector<const char*> res;
     //检查是否支持
 	uint32_t layerCount = 0;
-	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+	VKFunc::EnumerateInstanceLayerProperties(&layerCount, nullptr);
 	if (layerCount > 0) {
 		std::vector<VkLayerProperties> availableLayers(layerCount);
-		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+		VKFunc::EnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 		for (const auto& layer : availableLayers) {
 			for (const auto& wantLayer : wantLayers) {
 				if (strcmp(layer.layerName, wantLayer) == 0) {
@@ -666,10 +664,10 @@ std::vector<const char*> VulkanRHIApi::GetWantedInstanceExtensions() {
     std::vector<const char*> res;
 	// 检查是否支持
 	uint32_t extensionCount = 0;
-	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+	VKFunc::EnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 	if (extensionCount > 0) {
 		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.data());
+		VKFunc::EnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.data());
 		for (const auto& extension : availableExtensions) {
 			for (const auto& wantExtension : wantExtensions) {
 				if (strcmp(extension.extensionName, wantExtension) == 0) {
@@ -688,10 +686,10 @@ std::vector<const char*> VulkanRHIApi::GetWantedDeviceLayers() {
 	std::vector<const char*> res;
 	// 检查是否支持
 	uint32_t layerCount = 0;
-	vkEnumerateDeviceLayerProperties(PhysicalDevice, &layerCount, nullptr);
+	VKFunc::EnumerateDeviceLayerProperties(PhysicalDevice, &layerCount, nullptr);
 	if (layerCount > 0) {
 		std::vector<VkLayerProperties> availableLayers(layerCount);
-		vkEnumerateDeviceLayerProperties(PhysicalDevice, &layerCount, availableLayers.data());
+		VKFunc::EnumerateDeviceLayerProperties(PhysicalDevice, &layerCount, availableLayers.data());
 		for (const auto& layer : availableLayers) {
 			for (const auto& wantLayer : wantLayers) {
 				if (strcmp(layer.layerName, wantLayer) == 0) {
@@ -709,10 +707,10 @@ std::vector<const char*> VulkanRHIApi::GetWantedDeviceExtensions() {
     std::vector<const char*> res;
 	// 检查是否支持
 	uint32_t extensionCount = 0;
-	vkEnumerateDeviceExtensionProperties(PhysicalDevice,VK_NULL_HANDLE, &extensionCount, nullptr);
+	VKFunc::EnumerateDeviceExtensionProperties(PhysicalDevice,VK_NULL_HANDLE, &extensionCount, nullptr);
 	if (extensionCount > 0) {
 		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-		vkEnumerateDeviceExtensionProperties(PhysicalDevice, VK_NULL_HANDLE, &extensionCount, availableExtensions.data());
+		VKFunc::EnumerateDeviceExtensionProperties(PhysicalDevice, VK_NULL_HANDLE, &extensionCount, availableExtensions.data());
 		for (const auto& extension : availableExtensions) {
 			for (const auto& wantExtension : wantExtensions) {
 				if (strcmp(extension.extensionName, wantExtension) == 0) {

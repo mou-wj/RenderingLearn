@@ -41,12 +41,22 @@ public:
     RHI::EQueueType GetType() const override;
     RHI::RHIContextBase* AcquireCommandContext() override;
     RHI::RHIContextBase* ReleaseCommandContext(RHI::RHIContextBase* Context) override;
-    RHI::RHIFence FlushContext(RHI::RHIContextBase* context) override;
-    RHI::RHIFence FlushContext(const std::vector<RHI::RHIContextBase*>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
+    RHI::RHIFence ExecuteContext(RHI::RHIContextBase* context) override;
+    RHI::RHIFence ExecuteContext(const std::vector<RHI::RHIContextBase*>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
     void SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue, VkSemaphore binarySignal);
+    void WaitFence(RHIFence Fence) override;
+
     void WaitIdle() override;
 
+    void GarbageCollect();
+
 private:
+    struct PendingInfo {
+        std::vector<VulkanCommandBuffer*> Cmds;
+        uint64_t FinishedTimelineValue;
+    };
+    std::queue<PendingInfo> PendingInfos;
+
     VulkanDevice* device_ = nullptr;
     VkQueue queue_ = VK_NULL_HANDLE;
     uint32_t familyIndex_ = UINT32_MAX;
@@ -57,6 +67,7 @@ private:
     VulkanRHISyncPoint* SubmitSyncPoint_ = nullptr; // 用于跨提交等待的时间线信号量
     uint64_t currentTimelineValue_ = 0;
     std::mutex ContextPoolMutex_;
+    std::mutex FlushContextMutex_;
 };
 
 // -------------------------------------------------------------------------------------------------

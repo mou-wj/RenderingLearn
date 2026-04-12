@@ -783,7 +783,7 @@ namespace RHIVulkan {
                     if (stream.Stream != VK_NULL_HANDLE)
                     {
                         VkDeviceSize offsets[1] = { stream.BufferOffset };
-                        vkCmdBindVertexBuffers(cmd->GetHandle(), i, 1, &stream.Stream, offsets);
+                        VKFunc::CmdBindVertexBuffers(cmd->GetHandle(), i, 1, &stream.Stream, offsets);
                     }
                 }
                 bDirtyVertexStreams = false;
@@ -791,10 +791,10 @@ namespace RHIVulkan {
 
             // 4. Set viewport / scissor
             if (!Viewports.empty())
-                vkCmdSetViewport(cmd->GetHandle(), 0, (uint32_t)Viewports.size(), Viewports.data());
+                VKFunc::CmdSetViewport(cmd->GetHandle(), 0, (uint32_t)Viewports.size(), Viewports.data());
 
             if (!Scissors.empty())
-                vkCmdSetScissor(cmd->GetHandle(), 0, (uint32_t)Scissors.size(), Scissors.data());
+                VKFunc::CmdSetScissor(cmd->GetHandle(), 0, (uint32_t)Scissors.size(), Scissors.data());
 
             // 5. Set stencil ref
             //vkCmdSetStencilReference(cmd->GetHandle(), VK_STENCIL_FRONT_AND_BACK, StencilRef);

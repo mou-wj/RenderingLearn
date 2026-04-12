@@ -13,12 +13,12 @@ namespace RHIVulkan{
 
 VulkanCommandBuffer::VulkanCommandBuffer(VulkanDevice* device, VulkanCommandBufferPool* owner, VkCommandBufferLevel level) :device(device), owner(owner),level(level)
 {
-    fence = device->GetFenceManager()->AcquireFence();
+
 }
 
 VulkanCommandBuffer::~VulkanCommandBuffer()
 {
-    device->GetFenceManager()->ReleaseFence(fence);
+
 }
 
 void VulkanCommandBuffer::AllocateMemory()
@@ -40,17 +40,12 @@ void VulkanCommandBuffer::Begin(VkCommandBufferUsageFlags usage)
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = usage;
 
-    if (!VKFunc::BeginCommandBuffer(commandBuffer, &beginInfo)) {
-        throw std::runtime_error("Failed to begin command buffer");
-    }
-
+    VKFunc::BeginCommandBuffer(commandBuffer, &beginInfo);
 }
 
 void VulkanCommandBuffer::End()
 {
-    if (!VKFunc::EndCommandBuffer(commandBuffer)) {
-        throw std::runtime_error("Failed to end command buffer");
-    }
+    VKFunc::EndCommandBuffer(commandBuffer);
 }
 
 void VulkanCommandBuffer::Reset()
@@ -104,7 +99,7 @@ VulkanCommandBuffer* VulkanCommandBufferPool::AllocateCommandBuffer(VkCommandBuf
 void VulkanCommandBufferPool::Reset()
 {
     // 重置 Vulkan CommandPool，所有 CommandBuffer 自动重置
-    vkResetCommandPool(device->GetHandle(), commandPool, 0); // 若有VKFunc包装可替换
+    VKFunc::ResetCommandPool(device->GetHandle(), commandPool, 0); // 已用VKFunc包装
 
     // 所有 buffer 都回到可用池
     availableBuffers.clear();
@@ -159,10 +154,9 @@ VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkComman
     // 查找可复用的命令缓冲区（Fence已完成）
     for (auto& buffer : ManagedBuffers)
     {
-        VulkanFence* fence = buffer->GetFence();
-        if (fence && fence->IsSignaled())
+        
+        if (buffer->GetState() == VulkanCommandBuffer::Free)
         {
-            fence->Reset();
             buffer->Reset();
             buffer->Begin();
             commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(buffer);

@@ -4,6 +4,7 @@
 #include "ShaderCompiler.h"
 #include "Window.h"
 #include "RHIPipelineStateCache.h"
+#include "RHICaptureHelper.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <unordered_map>
@@ -136,11 +137,12 @@ public:
             return;
         }
         RHI::RHIGraphicCommandList cmdList(graphicContext);
-        constexpr int kMaxFrames = 300;
+        constexpr int kMaxFrames = 3000;
         for (int frameIndex = 0; frameIndex < kMaxFrames; ++frameIndex) {
             // 设置为即时执行模式
+            RHICapture_Begin();
             cmdList.SetImmediate(true);
-
+            cmdList.Begin();
             // 设置图形管线状态
             cmdList.SetGraphicPipelineState(TriangleGraphicsPipelineState.get());
 
@@ -170,7 +172,7 @@ public:
 			passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;
             passInfo.RenderArea.Width = FrameWidth;
             passInfo.RenderArea.Height = FrameHeight;
-            cmdList.Begin();
+            
 
             TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::RenderTargetView);
             TransitionResource(api, cmdList, depthStencilTexture.get(), RHI::ERHIResourceAccess::DSVWrite);
@@ -181,22 +183,24 @@ public:
             cmdList.EndRenderPass();
 
             TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::Present);
-
+            cmdList.End();
             // 执行所有命令
             cmdList.ExecuteAll();
-            cmdList.End();
+
             std::vector<RHI::RHIWaitInfo> waitInfos;
             if (swapchainSlot.ReadySync)
             {
                 waitInfos.push_back({ swapchainSlot.ReadySync, 0,RHI::ERHIPipelineStage::ColorAttachmentOutput });
             }
-            RHI::RHIFence submitResult = queue->FlushContext({ graphicContext }, waitInfos);
+            RHI::RHIFence submitResult = queue->ExecuteContext({ graphicContext }, waitInfos);
+            queue->WaitFence(submitResult);
             RHI::RHIWaitInfo presentWait;
             presentWait.SyncPoint = submitResult.Point;
 			presentWait.Value = submitResult.Value;
             presentWait.WaitStage = RHI::ERHIPipelineStage::ColorAttachmentOutput;
-
+            
             GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentWait);
+            RHICapture_End();
             cmdList.Clear();
         }
 
@@ -288,7 +292,7 @@ private:
         TransitionResource(api, commandList, VertexBuffer.get(), RHI::ERHIResourceAccess::VertexOrIndexBuffer);
         commandList.ExecuteAll();
         commandList.End();
-        queue->FlushContext(graphicContext);
+        queue->ExecuteContext(graphicContext);
 
     }
 

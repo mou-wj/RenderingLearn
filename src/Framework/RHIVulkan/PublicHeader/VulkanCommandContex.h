@@ -147,7 +147,7 @@ struct VulkanCommandUpdateBuffer : public RHICommandBase
         VulkanCommandBuffer* cmdBuffer =
             vulkanContext->GetCommandBufferManager()->GetActiveCommandBuffer();
 
-        vkCmdCopyBuffer(
+        VKFunc::CmdCopyBuffer(
             cmdBuffer->GetHandle(),
             staging->GetHandle(),
             buffer->GetHandle(),

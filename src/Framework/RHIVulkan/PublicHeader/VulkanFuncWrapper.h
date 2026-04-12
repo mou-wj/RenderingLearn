@@ -1,4 +1,7 @@
 #pragma once
+#ifndef VK_NO_PROTOTYPES
+#define VK_NO_PROTOTYPES
+#endif
 #include "vulkan/vulkan.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -11,143 +14,158 @@
 #include <X11/Xlib.h>
 #endif
 namespace VKFunc {
+    bool InitializeLoader();
 
-    // 新增补充接口声明
-    // Descriptor Pool
-    bool ResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool);
-    // Descriptor Set Layout
-    bool CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkDescriptorSetLayout* pSetLayout);
-    // Cmd Bind Descriptor Sets
-    void CmdBindDescriptorSets(
-        VkCommandBuffer commandBuffer,
-        VkPipelineBindPoint pipelineBindPoint,
-        VkPipelineLayout layout,
-        uint32_t firstSet,
-        uint32_t descriptorSetCount,
-        const VkDescriptorSet* pDescriptorSets,
-        uint32_t dynamicOffsetCount,
-        const uint32_t* pDynamicOffsets);
-
-    // ---------------------------
-    // Instance
-    // ---------------------------
+    // =================================================================
+    // 1. 全局实例与初始化 (Instance & Validation)
+    // =================================================================
     bool CreateInstance(const VkInstanceCreateInfo* pCreateInfo, VkInstance* pInstance);
-    bool DestroyInstance(VkInstance instance);
+    void DestroyInstance(VkInstance instance);
+    void EnumerateInstanceExtensionProperties(const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties);
+    void EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties);
 
-    bool CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo,
-        VkSurfaceKHR* pSurface);
-    bool DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface);
-
-    bool EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices);
-    bool GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyCount, VkQueueFamilyProperties* pQueueFamilies);
-
-    bool GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported);
-    bool GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pCapabilities);
-    bool GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t* pSurfaceFormatCount, VkSurfaceFormatKHR* pSurfaceFormats);
-    bool GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes);
-
-    // ---------------------------
-    // Device
-    // ---------------------------
-    bool CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, VkDevice* pDevice);
-    bool DestroyDevice(VkDevice device);
-    bool GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue);
-
-    // ---------------------------
-    // Command Pool / Command Buffer
-    // ---------------------------
-    bool CreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo, VkCommandPool* pCommandPool);
-    bool DestroyCommandPool(VkDevice device, VkCommandPool commandPool);
-    bool AllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers);
-    bool FreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers);
-    bool BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo);
-    bool EndCommandBuffer(VkCommandBuffer commandBuffer);
-
-    bool ResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags = 0);
-
-    //cmd
-    void CmdCopyBufferToImage(
-        VkCommandBuffer                             commandBuffer,
-        VkBuffer                                    srcBuffer,
-        VkImage                                     dstImage,
-        VkImageLayout                               dstImageLayout,
-        uint32_t                                    regionCount,
-        const VkBufferImageCopy* pRegions);
-
-
-    // ---------------------------
-    // Synchronization
-    // ---------------------------
-    bool CreateSemaphore_(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, VkSemaphore* pSemaphore);
-    bool DestroySemaphore(VkDevice device, VkSemaphore semaphore);
-
-    bool CreateFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo, VkFence* pFence);
-    bool DestroyFence(VkDevice device, VkFence fence);
-    bool WaitForFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences, VkBool32 waitAll, uint64_t timeout);
-    bool ResetFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences);
-
-    // ---------------------------
-    // Buffer / Image / Memory
-    // ---------------------------
-    bool CreateBuffer(VkDevice device, const VkBufferCreateInfo* pCreateInfo, VkBuffer* pBuffer);
-    bool DestroyBuffer(VkDevice device, VkBuffer buffer);
-
-    bool CreateImage(VkDevice device, const VkImageCreateInfo* pCreateInfo, VkImage* pImage);
-    bool DestroyImage(VkDevice device, VkImage image);
-
-    bool CreateImageView(VkDevice device, const VkImageViewCreateInfo* pCreateInfo, VkImageView* pImageView);
-
-    void DestroyImageView(VkDevice device, VkImageView imageView);
-
-    bool GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements);
-    bool GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements);
-
-    bool AllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory);
-    bool FreeMemory(VkDevice device, VkDeviceMemory memory);
-    bool BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize offset);
-    bool BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize offset);
-
-    // ---------------------------
-    // Swapchain
-    // ---------------------------
-    bool CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR* pCreateInfo, VkSwapchainKHR* pSwapchain);
-    bool DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain);
-    bool AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex);
-    bool QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo);
-
-    // ---------------------------
-    // Pipeline / RenderPass / Framebuffer
-    // ---------------------------
-    bool CreateRenderPass(VkDevice device, const VkRenderPassCreateInfo* pCreateInfo, VkRenderPass* pRenderPass);
-    bool DestroyRenderPass(VkDevice device, VkRenderPass renderPass);
-
-    bool CreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* pCreateInfo, VkFramebuffer* pFramebuffer);
-    bool DestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer);
-
-    bool CreateGraphicsPipeline(VkDevice device, const VkGraphicsPipelineCreateInfo* pCreateInfo, VkPipeline* pPipeline);
-    bool DestroyPipeline(VkDevice device, VkPipeline pipeline);
-
-    bool CreateComputePipeline(VkDevice device, const VkComputePipelineCreateInfo* pCreateInfo, VkPipeline* pPipeline);
-
-    // ---------------------------
-    // Descriptor Sets
-    // ---------------------------
-    bool CreateDescriptorPool(VkDevice device, const VkDescriptorPoolCreateInfo* pCreateInfo, VkDescriptorPool* pDescriptorPool);
-    bool DestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool);
-    bool AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets);
-    bool FreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets);
-
-    // ---------------------------
-    // Utility
-    // ---------------------------
-    bool QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence);
-    bool DeviceWaitIdle(VkDevice device);
-    bool QueueWaitIdle(VkQueue queue);
-
-    // ---------------------------
-    // Debug Utils
-    // ---------------------------
-    // 设置Vulkan对象的调试名称
     void SetDebugName(VkDevice device, VkObjectType type, uint64_t handle, const char* name);
 
+    // =================================================================
+    // 2. 物理设备探测 (Physical Device)
+    // =================================================================
+    bool EnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices);
+    void GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties);
+    void GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures);
+    void GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures);
+    void GetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties);
+    void GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyCount, VkQueueFamilyProperties* pQueueFamilies);
+    void EnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties);
+    void EnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties);
+
+    // =================================================================
+    // 3. 逻辑设备与队列 (Device & Queue)
+    // =================================================================
+    bool CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, VkDevice* pDevice);
+    void DestroyDevice(VkDevice device);
+    void GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue);
+    void DeviceWaitIdle(VkDevice device);
+    void QueueWaitIdle(VkQueue queue);
+    bool QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence);
+
+    // =================================================================
+    // 4. 内存管理与基础资源 (Memory, Buffer, Image)
+    // =================================================================
+    bool AllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory);
+    void FreeMemory(VkDevice device, VkDeviceMemory memory);
+    bool MapMemory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags flags, void** ppData);
+    void UnmapMemory(VkDevice device, VkDeviceMemory memory);
+
+    bool CreateBuffer(VkDevice device, const VkBufferCreateInfo* pCreateInfo, VkBuffer* pBuffer);
+    void DestroyBuffer(VkDevice device, VkBuffer buffer);
+    void GetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements);
+    bool BindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize offset);
+
+    bool CreateBufferView(VkDevice device, const VkBufferViewCreateInfo* pCreateInfo, VkBufferView* pView);
+    void DestroyBufferView(VkDevice device, VkBufferView bufferView);
+
+    bool CreateImage(VkDevice device, const VkImageCreateInfo* pCreateInfo, VkImage* pImage);
+    void DestroyImage(VkDevice device, VkImage image);
+    void GetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements);
+    bool BindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize offset);
+    bool CreateImageView(VkDevice device, const VkImageViewCreateInfo* pCreateInfo, VkImageView* pImageView);
+    void DestroyImageView(VkDevice device, VkImageView imageView);
+    bool CreateSampler(VkDevice device, const VkSamplerCreateInfo* pCreateInfo, VkSampler* pSampler);
+    void DestroySampler(VkDevice device, VkSampler sampler);
+
+    // =================================================================
+    // 5. 描述符集 (Descriptors)
+    // =================================================================
+    bool CreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkDescriptorSetLayout* pSetLayout);
+    void DestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout);
+    bool CreateDescriptorPool(VkDevice device, const VkDescriptorPoolCreateInfo* pCreateInfo, VkDescriptorPool* pDescriptorPool);
+    void ResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool);
+    void DestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool);
+    bool AllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets);
+    void FreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets);
+    void UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies);
+
+    // =================================================================
+    // 6. 管线与着色器 (Pipeline & Shaders)
+    // =================================================================
+    bool CreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, VkShaderModule* pShaderModule);
+    void DestroyShaderModule(VkDevice device, VkShaderModule shaderModule);
+    bool CreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo, VkPipelineLayout* pPipelineLayout);
+    void DestroyPipelineLayout(VkDevice device, VkPipelineLayout layout);
+    bool CreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos, VkPipeline* pPipelines);
+    bool CreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo* pCreateInfos, VkPipeline* pPipelines);
+    void DestroyPipeline(VkDevice device, VkPipeline pipeline);
+
+    // =================================================================
+    // 7. 渲染目标 (RenderPass & Framebuffer)
+    // =================================================================
+    bool CreateRenderPass(VkDevice device, const VkRenderPassCreateInfo* pCreateInfo, VkRenderPass* pRenderPass);
+    void DestroyRenderPass(VkDevice device, VkRenderPass renderPass);
+    bool CreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* pCreateInfo, VkFramebuffer* pFramebuffer);
+    void DestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer);
+
+    // =================================================================
+    // 8. 指令录制 (Command Pools & Buffers)
+    // =================================================================
+    bool CreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo, VkCommandPool* pCommandPool);
+    void ResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags);
+    void DestroyCommandPool(VkDevice device, VkCommandPool commandPool);
+    bool AllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers);
+    void FreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers);
+
+    void BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo);
+    void EndCommandBuffer(VkCommandBuffer commandBuffer);
+    void ResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags = 0);
+
+    // 录制命令
+    void CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
+    void CmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t* pDynamicOffsets);
+    void CmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets);
+    void CmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType);
+    void CmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewport* pViewports);
+    void CmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor, uint32_t scissorCount, const VkRect2D* pScissors);
+    void CmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+    void CmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
+    void CmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
+    void CmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferCopy* pRegions);
+    void CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions);
+    void CmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers);
+    void CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin, VkSubpassContents contents);
+    void CmdEndRenderPass(VkCommandBuffer commandBuffer);
+
+    // =================================================================
+    // 9. 同步机制 (Synchronization)
+    // =================================================================
+    bool CreateFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo, VkFence* pFence);
+    void DestroyFence(VkDevice device, VkFence fence);
+    bool GetFenceStatus(VkDevice device, VkFence fence);
+    bool WaitForFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences, VkBool32 waitAll, uint64_t timeout);
+    void ResetFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences);
+
+    bool CreateSemaphore_(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, VkSemaphore* pSemaphore);
+    void DestroySemaphore(VkDevice device, VkSemaphore semaphore);
+    void GetSemaphoreCounterValue(VkDevice device, VkSemaphore semaphore, uint64_t* pValue);
+    bool WaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout);
+
+    bool CreateEvent_(VkDevice device, const VkEventCreateInfo* pCreateInfo, VkEvent* pEvent);
+    void DestroyEvent(VkDevice device, VkEvent event);
+    void SetEvent(VkDevice device, VkEvent event);
+    void ResetEvent(VkDevice device, VkEvent event);
+    bool GetEventStatus(VkDevice device, VkEvent event);
+
+    // =================================================================
+    // 10. WSI / 交换链 (Display)
+    // =================================================================
+    bool CreateWin32SurfaceKHR(VkInstance instance, const VkWin32SurfaceCreateInfoKHR* pCreateInfo, VkSurfaceKHR* pSurface);
+    void DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface);
+    void GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported);
+    void GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pCapabilities);
+    void GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t* pSurfaceFormatCount, VkSurfaceFormatKHR* pSurfaceFormats);
+    void GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes);
+
+    bool CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR* pCreateInfo, VkSwapchainKHR* pSwapchain);
+    void DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain);
+    void GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pImageCount, VkImage* pImages);
+    bool AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex);
+    bool QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo);
 }

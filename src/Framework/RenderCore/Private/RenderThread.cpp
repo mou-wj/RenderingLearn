@@ -92,7 +92,7 @@ void RenderThread::ThreadFunc() {
             cmd.Execute(immediateCommandList);
             immediateCommandList.ExecuteAll();
             ImmediateCommandContex->End();
-            ImmediateQueue->FlushContext(ImmediateCommandContex);
+            ImmediateQueue->ExecuteContext(ImmediateCommandContex);
             immediateCommandList.Clear();
         }
         CmdFinishCV.notify_one();

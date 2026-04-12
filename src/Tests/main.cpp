@@ -1,10 +1,13 @@
 // main.cpp
 #include <iostream>
 #include "TestBase.h"
-
+#include "RHICaptureHelper.h"
+#  include <Windows.h>
+#include "vulkan/vulkan.h"
 int main(int argc, char** argv)
 {
-    std::string testName = "RHIShaderParameterTest"; // 默认
+    //RHI::RHICaptureHelper::GetInstance();
+    std::string testName = "RHIRenderTriangleTest"; // 默认
     if (argc > 1)
         testName = argv[1];
 

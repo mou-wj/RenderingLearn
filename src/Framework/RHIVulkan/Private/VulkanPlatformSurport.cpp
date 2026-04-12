@@ -84,7 +84,7 @@ namespace RHIVulkan{
 #ifdef DEBUG_INFO
         layers.push_back("VK_LAYER_KHRONOS_validation");
 #endif
-       // 平台层（UE基本不加功能性 layer）
+       // 平台层
 #ifdef _WIN32
     // Windows 没有特殊 layer
 #elif defined(__linux__)

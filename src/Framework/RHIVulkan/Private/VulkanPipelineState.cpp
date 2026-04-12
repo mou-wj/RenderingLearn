@@ -47,7 +47,7 @@ VulkanGraphicsPipelineState::~VulkanGraphicsPipelineState() {
 
 void VulkanGraphicsPipelineState::Bind(VulkanCommandBuffer* cmdBuffer)
 {
-    vkCmdBindPipeline(cmdBuffer->GetHandle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    VKFunc::CmdBindPipeline(cmdBuffer->GetHandle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 }
 
 PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RHIGraphicsPipelineStateDesc& pipelineDesc)
@@ -206,8 +206,7 @@ void VulkanGraphicsPipelineState::CreatePipeline() {
     createInfo.pStages = shaderStages.data();
 
     // 创建图形管线
-    VkResult result = vkCreateGraphicsPipelines(device->GetHandle(), VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
-    if (result != VK_SUCCESS) {
+    if (!VKFunc::CreateGraphicsPipelines(device->GetHandle(), VK_NULL_HANDLE, 1, &createInfo, &pipeline)) {
         throw std::runtime_error("无法创建图形管线!");
     }
 }
@@ -236,7 +235,7 @@ VulkanComputePipelineState::~VulkanComputePipelineState() {
 
 void VulkanComputePipelineState::Bind(VulkanCommandBuffer* cmdBuffer)
 {
-    vkCmdBindPipeline(cmdBuffer->GetHandle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    VKFunc::CmdBindPipeline(cmdBuffer->GetHandle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 }
 
 PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHIComputePipelineStateDesc& pipelineDesc)
@@ -318,8 +317,7 @@ void VulkanComputePipelineState::CreatePipeline() {
     createInfo.stage = shaderStageInfo;
 
     // 创建计算管线
-    VkResult result = vkCreateComputePipelines(device->GetHandle(), VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline);
-    if (result != VK_SUCCESS) {
+    if (!VKFunc::CreateComputePipelines(device->GetHandle(), VK_NULL_HANDLE, 1, &createInfo, &pipeline)) {
         throw std::runtime_error("无法创建计算管线!");
     }
 }

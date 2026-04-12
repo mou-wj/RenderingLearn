@@ -275,20 +275,20 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     bufferInfo.queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size());
     bufferInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 
-    if (vkCreateBuffer(vkDevice, &bufferInfo, nullptr, &Buffer) != VK_SUCCESS) {
+    if (VKFunc::CreateBuffer(vkDevice, &bufferInfo, &Buffer) != true) {
     }
 
     // Get memory requirements
     VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(vkDevice, Buffer, &memRequirements);
+    VKFunc::GetBufferMemoryRequirements(vkDevice, Buffer, &memRequirements);
 
     // Allocate memory
     if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
-        vkDestroyBuffer(vkDevice, Buffer, nullptr);
+        VKFunc::DestroyBuffer(vkDevice, Buffer);
     }
     
     // Bind memory to buffer
-    vkBindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
+    VKFunc::BindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
 
 #ifdef DEBUG_INFO
     std::string debugName;
@@ -657,11 +657,12 @@ VulkanRHISwapchain::~VulkanRHISwapchain() {
 
     DestroySwapchain();
 
+
 }
 
 void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, const RHI::RHIWaitInfo& waitInfo)
 {
-    if (currentBackBufferIndex == -1 || currentSemaphoreIndex == -1)
+    if (currentBackBufferIndex == -1)
     {
         return;
     }
@@ -697,11 +698,12 @@ void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, const RHI::RHIWaitIn
     // 2. 调用原生的 Present
     // 注意：Swapchain->Present 内部应调用 vkQueuePresentKHR
     Swapchain->Present(presentQueue, binaryWaitHandle);
+    currentIndex++;
+    currentIndex %= swapchainImages_.size();
 
     // 3. 更新索引和状态
     // ... 保持原有的索引更新逻辑 ...
     currentBackBufferIndex = -1;
-    currentSemaphoreIndex = -1;
 }
 
 RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
@@ -713,11 +715,11 @@ RHISwapchain::RHISwapchainSlot VulkanRHISwapchain::AcquireNextSlot()
     auto backTexture = GetBackTexture();
     slot.Texture = backTexture.get();
 
-    if (slot.Texture && currentSemaphoreIndex >= 0)
+    if (slot.Texture && currentBackBufferIndex >= 0)
     {
         // 4. 返回给 Slot
         // 注意：在随后的 FlushContext 中，这个 Dependency 会进入 WaitInfos
-        slot.ReadySync = acquireSemaphores[currentSemaphoreIndex];
+        slot.ReadySync = acquireSemaphores[currentIndex];
     }
     else
     {
@@ -740,13 +742,9 @@ VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
     if (currentBackBufferIndex != -1) {
         return backBufferTextures[currentBackBufferIndex];
     }
-	// 保守策略：Acquire 前确保上一帧的等待信号量已被消费，避免复用未完成的 acquire semaphore。
-	Device->GetGraphicsQueue()->WaitIdle();
 
-    currentSemaphoreIndex = currentIndex;
-    Swapchain->AcquireNextImage(acquireSemaphores[currentSemaphoreIndex]->GetSemaphore(), &currentBackBufferIndex);
+    Swapchain->AcquireNextImage(acquireSemaphores[currentIndex]->GetSemaphore(), &currentBackBufferIndex);
     if (currentBackBufferIndex == -1) {
-        currentSemaphoreIndex = -1;
         return nullptr;
     }
     return backBufferTextures[currentBackBufferIndex];
@@ -791,9 +789,11 @@ void VulkanRHISwapchain::DestroySwapchain()
     delete Swapchain;
     Swapchain = nullptr;
     backBufferTextures.clear();
+    for (auto* semaphore : acquireSemaphores) {
+        delete semaphore;
+    }
     acquireSemaphores.clear();
     currentBackBufferIndex = -1;
-    currentSemaphoreIndex = -1;
     currentIndex = 0;
 
 }
@@ -1009,7 +1009,7 @@ VulkanRingBuffer::~VulkanRingBuffer()
     }
 }
 
-uint64_t VulkanRingBuffer::AllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer)
+uint64_t VulkanRingBuffer::AllocateMemory(uint64_t size, uint32_t alignment)
 {
     alignment = alignment > MinAlignment ? alignment : MinAlignment;
     // 简单的对齐计算：向上对齐到alignment的倍数
@@ -1020,23 +1020,14 @@ uint64_t VulkanRingBuffer::AllocateMemory(uint64_t size, uint32_t alignment, Vul
         return alignedOffset;
     }
 
-    return WrapAroundAllocateMemory(size, alignment, cmdBuffer);
+    return WrapAroundAllocateMemory(size, alignment);
 }
 
-uint64_t VulkanRingBuffer::WrapAroundAllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer)
+uint64_t VulkanRingBuffer::WrapAroundAllocateMemory(uint64_t size, uint32_t alignment)
 {
-    // 检查是否有足够的命令缓冲区引用来等待
-    if (FenceCmdBuffer && FenceCmdBuffer != cmdBuffer) {
-        // 等待之前的命令缓冲区完成
-        FenceCmdBuffer->GetFence()->Wait();
-    }
 
     // 重置缓冲区偏移
     BufferOffset = 0;
-
-    // 记录当前命令缓冲区用于同步
-    FenceCmdBuffer = cmdBuffer;
-    FenceCounter++;
 
     // 分配新内存
     uint64_t alignedOffset = (BufferOffset + alignment - 1) & ~(alignment - 1);

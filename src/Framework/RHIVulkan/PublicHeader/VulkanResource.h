@@ -3,6 +3,7 @@
 
 #include "VulkanMemory.h"
 #include "VulkanDevice.h"
+#include "VulkanFuncWrapper.h"
 #include <vector>
 #include <memory>
 #include <deque>
@@ -66,8 +67,8 @@ struct VulkanTextureView
             ViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
         }
 
-        VkResult Result = vkCreateImageView(Device->GetHandle(), &ViewInfo, nullptr, &View);
-        assert(Result == VK_SUCCESS && "Failed to create VkImageView");
+        bool Result = VKFunc::CreateImageView(Device->GetHandle(), &ViewInfo, &View);
+        assert(Result == true && "Failed to create VkImageView");
 
         // 简单 ID 用于 debug / hash
         static uint32_t NextViewId = 1;
@@ -128,8 +129,8 @@ struct VulkanBufferView
         this->Size = Size;
         this->Offset = Offset;
 
-        VkResult Result = vkCreateBufferView(Device->GetHandle(), &ViewInfo, nullptr, &View);
-        assert(Result == VK_SUCCESS && "Failed to create VkBufferView");
+        bool Result = VKFunc::CreateBufferView(Device->GetHandle(), &ViewInfo, &View);
+        assert(Result == true && "Failed to create VkBufferView");
 
         // 简单 ID 用于 debug / hash
         static uint32_t NextViewId = 1;
@@ -345,7 +346,7 @@ public:
     ~VulkanRingBuffer();
 
     // 分配内存空间
-    uint64_t AllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer);
+    uint64_t AllocateMemory(uint64_t size, uint32_t alignment);
 
     // 获取缓冲区信息
     uint32_t GetBufferOffset() const { return Allocation.GetOffset(); }
@@ -363,11 +364,8 @@ private:
     VulkanAllocation Allocation;
     VulkanDevice* Device;
 
-    // 用于环绕分配的同步
-    VulkanCommandBuffer* FenceCmdBuffer = nullptr;
-    uint64_t FenceCounter = 0;
 
-    uint64_t WrapAroundAllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer);
+    uint64_t WrapAroundAllocateMemory(uint64_t size, uint32_t alignment);
 };
 
 // Vulkan Loose Uniform Buffer Uploader - 用于上传uniform buffer数据的工具
@@ -381,9 +379,9 @@ public:
     uint8_t* GetCPUMappedPointer() { return static_cast<uint8_t*>(CPUBuffer->GetMappedPointer()); }
 
     // 分配内存
-    uint64_t AllocateMemory(uint64_t size, uint32_t alignment, VulkanCommandBuffer* cmdBuffer)
+    uint64_t AllocateMemory(uint64_t size, uint32_t alignment)
     {
-        return CPUBuffer->AllocateMemory(size, alignment, cmdBuffer);
+        return CPUBuffer->AllocateMemory(size, alignment);
     }
 
     // 获取缓冲区信息
@@ -446,7 +444,6 @@ private:
     std::queue<VulkanSemaphore*> presentSemaphores;
     int currentBackBufferIndex = -1;  // 渲染用
     int currentIndex = 0; // Present用
-    int currentSemaphoreIndex = -1; // 当前已Acquire但未Present的信号量槽位
     std::vector<VkImage> swapchainImages_;
 };
 

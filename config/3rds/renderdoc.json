@@ -1,18 +1,18 @@
 {
-  "name": "Vulkan",
+  "name": "RenderDoc",
   "type": "prebuilt",
   "config_type": "manual",
   "install_layout": {
-    "root": "${ENV:VULKAN_SDK}"
+    "root": "${ENV:RENDER_DOC_INSTALL}"
   },
-"manual_info": {
+  "manual_info": {
     "common_defines": [
-      ""
+      "RENDERDOC_API_EXPORTS"
     ],
     "components": {
       "Runtime": {
         "include_dirs": [
-          "Include"
+          "."
         ],
         "libs": {
           "debug": [
@@ -23,11 +23,12 @@
           ]
         },
         "dlls": [
-          ""
+          "renderdoc"
         ],
         "dependencies": []
       }
     }
   },
-  "notes": " Vulkan 为手动配置模式，只需要头文件。脚本应拼接 install_layout.root 与 manual_info 中的相对路径来构建 Target。"
+  "dependencies": [],
+  "notes": "RenderDoc 为手动配置模式。脚本应拼接 install_layout.root 与 manual_info 中的相对路径来构建 Target。"
 }

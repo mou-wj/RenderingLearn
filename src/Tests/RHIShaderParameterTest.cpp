@@ -4,6 +4,7 @@
 #include "ShaderCompiler.h"
 #include "Window.h"
 #include "RHIPipelineStateCache.h"
+#include "RHICaptureHelper.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstring>
@@ -113,12 +114,16 @@ public:
             return;
         }
         RHI::RHIComputeCommandList cmdList(computeContext);
+
+
+
         // ========================
         // 执行计算着色器 (4 次迭代)
         // ========================
-        for (int iteration = 0; iteration < 4; ++iteration)
+        for (int iteration = 0; iteration < 4000; ++iteration)
         {
             cmdList.SetImmediate(true);
+            RHICapture_Begin();
             cmdList.Begin();
 
             // 设置计算管线状态
@@ -248,11 +253,13 @@ public:
             // 分发计算任务 (2x2 纹理，每个线程组 8x8，分发 1 个线程组)
             cmdList.Dispatch(1, 1, 1);
 
-            cmdList.ExecuteAll();
-
             // 提交命令
 			cmdList.End();
-            queue->FlushContext(computeContext);
+            cmdList.ExecuteAll();
+
+            auto Fence = queue->ExecuteContext(computeContext);
+            RHICapture_End();
+            queue->WaitFence(Fence);
             cmdList.Clear();
         }
 
@@ -419,10 +426,10 @@ private:
         TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::CopyDest);
         api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHITextureRegion::Create2DRegion(2, 2));
         TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRVCompute);
-        cmdList.ExecuteAll();
         cmdList.End();
-        queue->FlushContext(computeContext);
-
+        cmdList.ExecuteAll();
+        queue->ExecuteContext(computeContext);
+        queue->WaitIdle();
         // 采样器
         RHI::RHISamplerDesc samplerDesc;
         TestSampler = api->CreateSampler(samplerDesc);
@@ -445,9 +452,9 @@ private:
         TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::CopyDest);
         api->UpdateBuffer(cmdList, TestBuffer.get(), &bufferData, { 0, sizeof(bufferData) });
         TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
-        cmdList.ExecuteAll();
         cmdList.End();
-        queue->FlushContext(computeContext);
+        cmdList.ExecuteAll();
+        queue->ExecuteContext(computeContext);
         queue->WaitIdle();
         queue->ReleaseCommandContext(cmdContext);
 
@@ -521,9 +528,9 @@ private:
         TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::CopyDest);
         api->UpdateBuffer(cmdList, ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
         TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
-        cmdList.ExecuteAll();
         cmdList.End();
-        queue->FlushContext(computeContext);
+        cmdList.ExecuteAll();
+        queue->ExecuteContext(computeContext);
         queue->WaitIdle();
         queue->ReleaseCommandContext(cmdContext);
 

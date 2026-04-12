@@ -27,18 +27,23 @@ VulkanDevice::VulkanDevice(VulkanRHIApi* rhiApi,
       computeQueue_(nullptr),
       transferQueue_(nullptr),
       presentQueue_(nullptr),
-      memoryManager_(nullptr)
+      memoryManager_(nullptr),
+      presentExecutor_(nullptr)
 {
     memoryManager_ = new VulkanMemoryManager(this);
 	stagingManager_ = new VulkanStagingManager(this, memoryManager_);
 
     fenceManager_ = new VulkanFenceManager(this);
+    semaphoreManager_ = new VulkanSemaphoreManager(this);
     renderPassManager_ = new VulkanRenderPassManager(this);
     descriptorSetLayoutManager_ = new VulkanDescriptorSetLayoutManager(this);
     descriptorSetManager_ = new VulkanDescriptorSetManager(this, descriptorSetLayoutManager_);
 	shaderManager_ = new VulkanShaderManager(this);
 	pipelineLayoutCache_ = new VulkanPipelineLayoutCache(this);
     deferredDeleteQueue_ = new VulkanDeferredDeleteQueue(this);
+    supportedFeatures2_.pNext
+		= &timelineSemaphoreFeatures_;
+	VKFunc::GetPhysicalDeviceFeatures2(physicalDevice_, &supportedFeatures2_);
 }
 
 VulkanDevice::~VulkanDevice()
@@ -171,6 +176,13 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
     createInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
     createInfo.ppEnabledLayerNames = layers.data();
 
+	VkPhysicalDeviceFeatures featuresToEnable = {};
+	VkPhysicalDeviceFeatures2 features2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+    
+    if (timelineSemaphoreFeatures_.timelineSemaphore) {
+		createInfo.pNext = &timelineSemaphoreFeatures_;
+    }
+
     VKFunc::CreateDevice(physicalDevice, &createInfo,&device_);
     
     // 获取队列
@@ -204,6 +216,9 @@ bool VulkanDevice::InitPresentQueue(VkSurfaceKHR Surface)
     CheckPresentSupport(computeQueue_, Surface);
     CheckPresentSupport(transferQueue_, Surface);
     if (!presentQueue_) return false;
+    if (!presentExecutor_) {
+        presentExecutor_ = new VulkanPresentExecutor(presentQueue_);
+    }
     return true;
 }
 
@@ -228,6 +243,10 @@ void VulkanDevice::Destroy()
     {
         delete pipelineLayoutCache_;
         pipelineLayoutCache_ = nullptr;
+    }
+    if (descriptorSetManager_ != nullptr) {
+		delete descriptorSetManager_;
+        descriptorSetManager_ = nullptr;
     }
 
     if (shaderManager_ != nullptr)
@@ -357,7 +376,7 @@ void VulkanDeferredDeleteQueue::ReleaseResource(EResourceType Type, const FDefer
         VKFunc::DestroyBuffer(VulkanDevice, reinterpret_cast<VkBuffer>(Entry.Handle));
         break;
     case EResourceType::BufferView:
-        vkDestroyBufferView(VulkanDevice, reinterpret_cast<VkBufferView>(Entry.Handle), nullptr); // 若有VKFunc包装可替换
+        VKFunc::DestroyBufferView(VulkanDevice, reinterpret_cast<VkBufferView>(Entry.Handle));
         break;
     case EResourceType::Image:
     {
@@ -365,7 +384,6 @@ void VulkanDeferredDeleteQueue::ReleaseResource(EResourceType Type, const FDefer
         device_->GetGraphicsQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
         device_->GetComputeQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
         device_->GetTransferQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
-        device_->GetPresentQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
 
         VKFunc::DestroyImage(VulkanDevice, Image);
         break;
@@ -380,10 +398,10 @@ void VulkanDeferredDeleteQueue::ReleaseResource(EResourceType Type, const FDefer
         VKFunc::DestroyFramebuffer(VulkanDevice, reinterpret_cast<VkFramebuffer>(Entry.Handle));
         break;
     case EResourceType::Sampler:
-        vkDestroySampler(VulkanDevice, reinterpret_cast<VkSampler>(Entry.Handle), nullptr); // 若有VKFunc包装可替换
+        VKFunc::DestroySampler(VulkanDevice, reinterpret_cast<VkSampler>(Entry.Handle));
         break;
     case EResourceType::ShaderModule:
-        vkDestroyShaderModule(VulkanDevice, reinterpret_cast<VkShaderModule>(Entry.Handle), nullptr); // 若有VKFunc包装可替换
+        VKFunc::DestroyShaderModule(VulkanDevice, reinterpret_cast<VkShaderModule>(Entry.Handle));
         break;
     default:
         break;

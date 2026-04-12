@@ -1,13 +1,13 @@
 {
   "name": "glfw",
-
-  "type": "managed", 
-
+  "type": "source",
+  "config_type": "cmake_config",
+  "source_type": "git",
+  "build_timing": "pre_build",
   "source": {
     "git": "https://github.com/glfw/glfw.git",
     "branch": "master"
   },
-
   "compiler": {
     "windows": {
       "preferred": "msvc",
@@ -26,29 +26,20 @@
     }
   },
 
-  "build": {
-    "system": "cmake",
+  "build_config": {
     "configure_args": [
-      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/${CONFIG}",
+      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/glfw/${CONFIG}",
       "-DGLFW_BUILD_EXAMPLES=OFF",
       "-DGLFW_BUILD_TESTS=OFF",
       "-DGLFW_BUILD_DOCS=OFF"
     ],
-    "build_targets": ["install"],
-    "configs": ["Debug", "Release"],
-    "type" : "shared"
+    "cmake_options": {}
   },
-
   "install_layout": {
-    "root": "${INSTALL_DIR}/${CONFIG}",
-    "include": "${INSTALL_DIR}/${CONFIG}/include",
-    "lib": "${INSTALL_DIR}/${CONFIG}/lib",
-    "bin": "${INSTALL_DIR}/${CONFIG}/bin"
+    "root": "${INSTALL_DIR}/glfw/${CONFIG}",
+    "include": "include",
+    "lib": "lib",
+    "bin": "bin"
   },
-
-  "dependencies": [],
-
-  "auto_generate_find_cmake": "if_missing", 
-
-  "notes": "CMake installs headers and library; prefer Config.cmake if available, otherwise auto-generate FindGLFW.cmake."
+  "dependencies": []
 }

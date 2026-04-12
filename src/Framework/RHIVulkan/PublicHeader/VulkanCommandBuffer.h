@@ -38,7 +38,6 @@ public:
     void End();
 
     void Reset();
-    VulkanFence* GetFence() const { return fence; } // 可选：用于同步
 
 
 	VulkanImageLayoutManager* GetImageLayoutManager() { return &imageLayoutManager; }
@@ -47,7 +46,6 @@ private:
     VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     VulkanCommandBufferPool* owner = nullptr;
     VulkanDevice* device = nullptr;
-    VulkanFence* fence = nullptr; // 可选：用于同步
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     friend class VulkanQueue;
     VulkanImageLayoutManager imageLayoutManager;
