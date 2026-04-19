@@ -53,6 +53,20 @@ void RHICommandCopyTexture::Execute(RHICommandListBase& cmdList)
     }
 }
 
+RHICommandBlitTexture::RHICommandBlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc)
+    : Src(src), Dst(dst), BlitDesc(blitDesc)
+{
+}
+
+void RHICommandBlitTexture::Execute(RHICommandListBase& cmdList)
+{
+    auto* transferContext = dynamic_cast<RHITransferContext*>(cmdList.GetContext());
+    if (transferContext)
+    {
+        transferContext->BlitTexture(Src, Dst, BlitDesc);
+    }
+}
+
 RHICommandSetComputePipelineState::RHICommandSetComputePipelineState(RHIComputePipelineState* pipelineState)
     : PipelineState(pipelineState)
 {
@@ -272,13 +286,9 @@ void RHICommandListBase::EndTransitions(std::vector<const RHITransition*> Transi
     }
 }
 
-void RHICommandListBase::Merge(const std::shared_ptr<RHICommandListBase>& other)
+void RHICommandListBase::Merge(const RHICommandListBase& other)
 {
-    if (!other)
-    {
-        return;
-    }
-    commands.insert(commands.end(), other->commands.begin(), other->commands.end());
+    commands.insert(commands.end(), other.commands.begin(), other.commands.end());
 }
 
 RHITransferCommandList::RHITransferCommandList(RHITransferContext* context)
@@ -294,6 +304,9 @@ RHITransferContext* RHITransferCommandList::GetTransferContext() const
 void RHITransferCommandList::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
 {
     AddCommand<RHICommandCopyTexture>(src, dst, copyDesc);
+}
+void RHITransferCommandList::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) {
+    AddCommand<RHICommandBlitTexture>(src, dst, blitDesc);
 }
 
 RHIComputeCommandList::RHIComputeCommandList(RHIComputeContex* context)

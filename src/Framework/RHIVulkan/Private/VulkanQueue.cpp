@@ -107,6 +107,11 @@ void VulkanQueue::WaitIdle()
 
 }
 
+uint64_t VulkanQueue::GetCurrentTimelineValue()
+{
+	return SubmitSyncPoint_->GetCurrentValue();
+}
+
 void VulkanQueue::GarbageCollect() 
 {
     uint64_t CurrentTime = SubmitSyncPoint_->GetCurrentValue();
@@ -254,7 +259,7 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     PendingInfos.push({ cmdBuffers ,signalValue});
     // 6. 返回 Fence：它本质上是同步点和数值的组合
     RHI::RHIFence result{};
-    result.Point = SubmitSyncPoint_;
+    result.QueueType = SubmitSyncPoint_->GetQueueType();
     result.Value = signalValue;
 
     return result;
@@ -286,12 +291,11 @@ void VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t w
 
 void VulkanQueue::WaitFence(RHIFence Fence)
 {
-	if (!Fence.Point || Fence.Value == 0)
+	if (Fence.QueueType != SubmitSyncPoint_->GetQueueType() || Fence.Value == 0)
 	{
 		return;
 	}
-	auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(Fence.Point);
-    vkSyncPoint->Wait(Fence.Value);
+    SubmitSyncPoint_->Wait(Fence.Value);
 }
 
 // -------------------------------------------------------------------------------------------------

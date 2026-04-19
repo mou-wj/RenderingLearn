@@ -5,69 +5,6 @@
 
 namespace RHI {
 
-struct RHI_API RHISubresourceRange
-{
-	static const uint32_t kDepthPlaneSlice = 0;
-	static const uint32_t kStencilPlaneSlice = 1;
-	static const uint32_t kAllSubresources = 0xFFFFFFFF;
-
-	uint32_t MipIndex = kAllSubresources;
-	uint32_t ArraySlice = kAllSubresources;
-	uint32_t PlaneSlice = kAllSubresources;
-
-	RHISubresourceRange() = default;
-
-	RHISubresourceRange(
-		uint32_t InMipIndex,
-		uint32_t InArraySlice,
-		uint32_t InPlaneSlice)
-		: MipIndex(InMipIndex)
-		, ArraySlice(InArraySlice)
-		, PlaneSlice(InPlaneSlice)
-	{}
-
-	inline bool IsAllMips() const
-	{
-		return MipIndex == kAllSubresources;
-	}
-
-	inline bool IsAllArraySlices() const
-	{
-		return ArraySlice == kAllSubresources;
-	}
-
-	inline bool IsAllPlaneSlices() const
-	{
-		return PlaneSlice == kAllSubresources;
-	}
-
-	inline bool IsWholeResource() const
-	{
-		return IsAllMips() && IsAllArraySlices() && IsAllPlaneSlices();
-	}
-
-	inline bool IgnoreDepthPlane() const
-	{
-		return PlaneSlice == kStencilPlaneSlice;
-	}
-
-	inline bool IgnoreStencilPlane() const
-	{
-		return PlaneSlice == kDepthPlaneSlice;
-	}
-
-	inline bool operator == (RHISubresourceRange const& RHS) const
-	{
-		return MipIndex == RHS.MipIndex
-			&& ArraySlice == RHS.ArraySlice
-			&& PlaneSlice == RHS.PlaneSlice;
-	}
-
-	inline bool operator != (RHISubresourceRange const& RHS) const
-	{
-		return !(*this == RHS);
-	}
-};
 
 struct RHI_API RHITransitionInfo : public RHISubresourceRange
 {
@@ -167,6 +104,7 @@ struct RHI_API RHITransitionInfo : public RHISubresourceRange
 	{
 		return !(*this == RHS);
 	}
+
 };
 
 

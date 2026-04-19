@@ -71,6 +71,10 @@ VulkanTransferContext::VulkanTransferContext(VulkanDevice* device, VulkanQueue* 
 void VulkanTransferContext::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
 {
 }
+void VulkanTransferContext::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc)
+{
+    
+}
 
 VulkanComputeContext* VulkanComputeContext::CastFrom(RHIComputeContext* context)
 {

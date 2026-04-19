@@ -50,6 +50,7 @@ public:
     ~VulkanTransferContext() override = default;
 
     void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) override;
+    void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) override;
 };
 
 class RHIVULKAN_API VulkanComputeContext : public VulkanCommandContext, public RHI::RHIComputeContex

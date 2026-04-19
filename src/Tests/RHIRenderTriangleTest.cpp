@@ -195,7 +195,7 @@ public:
             RHI::RHIFence submitResult = queue->ExecuteContext({ graphicContext }, waitInfos);
             queue->WaitFence(submitResult);
             RHI::RHIWaitInfo presentWait;
-            presentWait.SyncPoint = submitResult.Point;
+            presentWait.SyncPoint = queue->GetSyncPoint();
 			presentWait.Value = submitResult.Value;
             presentWait.WaitStage = RHI::ERHIPipelineStage::ColorAttachmentOutput;
             

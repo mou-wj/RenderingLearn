@@ -23,6 +23,8 @@ namespace RHI
     public:
         virtual ~RHITransferContext() = default;
         virtual void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) = 0;
+        // 新增：BlitTexture接口
+        virtual void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) = 0;
     };
 
     class RHI_API RHIComputeContex : public virtual RHIContextBase
@@ -163,7 +165,7 @@ public:
 };
 
 struct RHIFence {
-    RHISyncPoint* Point; // 哪根标尺
+    EQueueType QueueType; // 哪根标尺
     uint64_t Value;      // 哪个刻度
 };
 
@@ -185,6 +187,10 @@ public:
     virtual void WaitFence(RHIFence Fence) = 0;
     // 强制刷新硬件队列
     virtual void WaitIdle() = 0;
+
+	virtual uint64_t GetCurrentTimelineValue() = 0;
+
+    virtual RHISyncPoint* GetSyncPoint() = 0;
 private:
     EQueueType Type;
 };

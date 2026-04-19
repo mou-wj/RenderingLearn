@@ -3,8 +3,8 @@
 
 namespace RenderCore {
 
-    RenderGraphPass::RenderGraphPass(const std::string& name, const RenderGraphPassInfo& info)
-        : Name(name), PassInfo(info)
+    RenderGraphPass::RenderGraphPass(const std::string& name, EPassFlag passFlag, const RenderGraphParameterStruct& parameter)
+        : Name(name), ParameterStruct(parameter)
     {
         // If no shader parameter block provided, nothing to extract
         //if (PassInfo.ShaderParmeters.Paramters == nullptr)
@@ -99,11 +99,11 @@ namespace RenderCore {
         //} // while
     }
 
-    void BarrierBatchBegin::Execute(RHI::RHIGraphicCommandList& commandList)
+    void BarrierBatchBegin::Execute(RHI::RHICommandListBase& commandList)
     {
     }
 
-    void BarrierBatchEnd::Execute(RHI::RHIGraphicCommandList& commandList)
+    void BarrierBatchEnd::Execute(RHI::RHICommandListBase& commandList)
     {
     }
 

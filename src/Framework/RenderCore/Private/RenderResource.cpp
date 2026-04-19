@@ -58,23 +58,6 @@ void RenderBuffer::ReleaseRHIResource() {
     RenderResource::ReleaseRHIResource();
 }
 
-// RenderVertexBuffer
-RenderVertexBuffer::RenderVertexBuffer() = default;
-RenderVertexBuffer::~RenderVertexBuffer() = default;
-
-void RenderVertexBuffer::InitRHIResource() {
-    RenderBuffer::InitRHIResource();
-    // 顶点缓冲区初始化逻辑
-}
-
-void RenderVertexBuffer::ReleaseRHIResource() {
-    // 顶点缓冲区释放逻辑
-    RenderBuffer::ReleaseRHIResource();
-}
-
-// RenderIndexBuffer
-RenderIndexBuffer::RenderIndexBuffer() = default;
-RenderIndexBuffer::~RenderIndexBuffer() = default;
 
 
 
@@ -83,30 +66,63 @@ RenderTargetPool* GRenderTargetPool = nullptr;
 
 TransientResourceAllocator* GTransientResourceAllocator = nullptr;
 
-// 分配或复用 RenderTarget
-std::shared_ptr<PooledRenderTarget> RenderTargetPool::AllocateRenderTarget(
-    const PoolRenderTargetDesc& Desc)
+// 分配或复用 RenderTarget（重命名GetFreeRenderTarget，增加垃圾回收和分配管理）
+std::shared_ptr<PooledRenderTarget> RenderTargetPool::GetFreeRenderTarget(
+	const PoolRenderTargetDesc& Desc)
 {
-    std::lock_guard<std::mutex> Lock(Mutex);
+	std::lock_guard<std::mutex> Lock(Mutex);
+	GarbageCollect();
 
-    if (!FreeList.empty())
-    {
-        auto RT = FreeList.back();
-        FreeList.pop_back();
-        return RT;
-    }
+	if (!FreeList.empty())
+	{
+		auto RT = FreeList.back();
+		FreeList.pop_back();
+		AllocatedList.push_back(RT);
+		return RT;
+	}
 	auto descRHI = PoolRenderTargetDesc::ConvertToRHITextureDesc(Desc);
-    auto Texture = RHI::GRHIApi->CreateTexture(descRHI);
-    // 没有可复用的资源，创建新的
-    auto RT = std::make_shared<PooledRenderTarget>(Desc, Texture);
-    return RT;
+	auto Texture = RHI::GRHIApi->CreateTexture(descRHI);
+	// 没有可复用的资源，创建新的
+	auto RT = std::make_shared<PooledRenderTarget>(Desc, Texture);
+	AllocatedList.push_back(RT);
+	return RT;
 }
-
-// 回收 RenderTarget
-void RenderTargetPool::Release(std::shared_ptr<PooledRenderTarget> RenderTarget)
+// 垃圾回收：遍历AllocatedList，若target的LastUsedFrame小于当前队列的frame则回收
+void RenderTargetPool::GarbageCollect()
 {
-    std::lock_guard<std::mutex> Lock(Mutex);
-    FreeList.push_back(RenderTarget);
+	auto graphicsQueueFrame = RHI::GRHIApi->GetQueue(EQueueType::Graphics)->GetCurrentTimelineValue(); // 需RHI支持此接口
+	auto computeQueueFrame = RHI::GRHIApi->GetQueue(EQueueType::Compute)->GetCurrentTimelineValue(); // 需RHI支持
+    auto copyQueueFrame = RHI::GRHIApi->GetQueue(EQueueType::Transfer)->GetCurrentTimelineValue(); // 需RHI
+
+
+	// 一次遍历，按队列类型和frame判断是否回收
+	auto it = AllocatedList.begin();
+	while (it != AllocatedList.end()) {
+		auto& target = *it;
+		auto& tracker = target->GetTracker();
+		EQueueType queueType = tracker.GetLastAccessFence().QueueType;
+		uint64_t targetFrame = tracker.GetLastAccessFence().Value;
+		uint64_t currentFrame = 0;
+		switch (queueType) {
+			case EQueueType::Graphics:
+				currentFrame = graphicsQueueFrame;
+				break;
+			case EQueueType::Compute:
+				currentFrame = computeQueueFrame;
+				break;
+			case EQueueType::Transfer:
+				currentFrame = copyQueueFrame;
+				break;
+			default:
+				break;
+		}
+		if (target && targetFrame < currentFrame) {
+			FreeList.push_back(target);
+			it = AllocatedList.erase(it);
+		} else {
+			++it;
+		}
+	}
 }
 
 // 可选：清空池
@@ -117,15 +133,6 @@ void RenderTargetPool::Clear()
 }
 
 
-void RenderIndexBuffer::InitRHIResource() {
-    RenderBuffer::InitRHIResource();
-    // 索引缓冲区初始化逻辑
-}
-
-void RenderIndexBuffer::ReleaseRHIResource() {
-    // 索引缓冲区释放逻辑
-    RenderBuffer::ReleaseRHIResource();
-}
 
 RenderTexture* GlobalTestTexture = nullptr;
 
@@ -178,7 +185,7 @@ RenderTexture* CreateTexture(const std::string& Path)
 
 	RenderCore::RenderTexture* outTexture = nullptr;
 
-	ExecuteSync("Create Texture", [&outTexture, &desc, pixels](RHI::RHIGraphicCommandList& commandList) {
+	ExecuteSync("Create Texture", [&outTexture, &desc, pixels](RHI::RHICommandListBase& commandList) {
 
 		// 3. 调用 RHI 创建纹理
 		RHITextureSP texture = GRHIApi->CreateTexture(desc);

@@ -9,6 +9,7 @@
 
 namespace RenderCore {
 
+
     RenderGraphBuilder::RenderGraphBuilder()
     {
     }
@@ -17,16 +18,8 @@ namespace RenderCore {
     {
         // Clean up passes
         Passes.clear();
-        PasseSPs.clear();
     }
 
-    RenderGraphPassSP RenderGraphBuilder::AddPass(const std::string& name, const RenderGraphPassInfo& info, std::function<void(RHI::RHIGraphicCommandList&)>&& lambda)
-    {
-        auto pass = std::make_shared<RenderGraphLambdaPass>(name, info, std::move(lambda));
-        PasseSPs.push_back(pass);
-        Passes.push_back(pass.get());
-        return pass;
-    }
 
     void RenderGraphBuilder::AddPassDependency(RenderGraphPass* pass, RenderGraphPass* passConsumer)
     {
@@ -178,7 +171,7 @@ namespace RenderCore {
 
         std::vector<Core::TaskHandle> handles;
         handles.reserve(ParallelPasses.size());
-        std::vector<RHI::RHIGraphicCommandListSP> RecordedCommansLists;
+        std::vector<RHI::RHICommandListBase*> RecordedCommansLists;
 		RecordedCommansLists.reserve(ParallelPasses.size());
         // For each parallel group, create one task that creates a command context/list
         // and executes each pass in the group sequentially: begin barriers, pass work, end barriers.
@@ -202,13 +195,13 @@ namespace RenderCore {
             auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(ctx);
             if (!graphicContext) return;
 
-            RHI::RHIGraphicCommandListSP cmdListSP = std::make_shared<RHI::RHIGraphicCommandList>(graphicContext);
+            RHI::RHICommandListBase* cmdListSP = new RHI::RHIGraphicCommandList(graphicContext);
             RecordedCommansLists.push_back(cmdListSP);
 
             auto handle = taskPool.AddTask([groupCopy = std::move(groupCopy), cmdListSP]() {
 
 
-                RHI::RHIGraphicCommandList& cmdList = *cmdListSP;
+                RHI::RHICommandListBase& cmdList = *cmdListSP;
 
                 for (auto* pass : groupCopy)
                 {
@@ -241,10 +234,10 @@ namespace RenderCore {
 
 
         // enqueue command
-        EnqueueRenderCommand("Execute Render Graph Builder", [RecordedCommansLists](RHI::RHIGraphicCommandList& commandList) {
-            for (const auto& cmdList : RecordedCommansLists) {
+        EnqueueRenderCommand("Execute Render Graph Builder", [RecordedCommansLists](RHI::RHICommandListBase& commandList) {
+            for (auto cmdList : RecordedCommansLists) {
                 if (cmdList) {
-                    commandList.Merge(cmdList);
+                    commandList.Merge(*cmdList);
                 }
             }
         });
@@ -252,84 +245,75 @@ namespace RenderCore {
 
     void RenderGraphBuilder::AnalyzePasses()
     {
-        // Map resource name -> last access state & last visitor
+        // 追踪每个资源的当前状态
         struct LocalResState {
             RenderGraphPass* LastVisitor = nullptr;
             ERHIResourceAccess LastAccess = ERHIResourceAccess::Unknown;
-            RenderGraphResource* Resource;
         };
-        std::unordered_map<std::string, LocalResState> resStates;
+        std::unordered_map<RenderGraphResource*, LocalResState> ResourceStates;
 
-        // Helper to register producer/consumer and add barrier on previous visitor
-        auto handleAccess = [&](RenderGraphPass* pass, RenderGraphResource* resource, ERHIResourceAccess access) {
-            if (!resource) return;
-            const std::string& rname = resource->GetName();
-            auto& state = resStates[rname];
+        // --- 第一阶段：遍历所有 Pass，收集 Intent 并建立依赖/屏障 ---
+        for (auto* Pass : Passes)
+        {
+            // 1. 处理纹理意图 (TextureIntents)
+            for (const auto& Intent : Pass->TextureIntents)
+            {
+                auto& State = ResourceStates[Intent.Texture];
 
-            // If previously visited by another pass, insert a transition from previous access -> current
-            if (state.LastVisitor && state.LastVisitor != pass) {
-                // create transient info describing transition
-                RHI::RHITransitionInfo transient{};
-                // determine type
-                if (dynamic_cast<RenderGraphTexture*>(resource)) {
-                    transient.Type = RHI::RHITransitionInfo::EType::Texture;
-                    // fill texture range defaults already in struct ctor
-                } else if (dynamic_cast<RenderGraphBuffer*>(resource)) {
-                    transient.Type = RHI::RHITransitionInfo::EType::Buffer;
-                } else {
-                    transient.Type = RHI::RHITransitionInfo::EType::Unknown;
+                // 如果之前有 Pass 访问过，且访问权限不兼容（或是为了确保状态切换）
+                if (State.LastVisitor && State.LastVisitor != Pass)
+                {
+                    // 只有状态确实需要改变时才添加屏障（或者处理 Read-after-Write 等）
+                    if (State.LastAccess != Intent.RequiredAccess)
+                    {
+                        RHI::RHITransitionInfo Transition{};
+                        Transition.Type = RHI::RHITransitionInfo::EType::Texture;
+                        Transition.Texture = Intent.Texture->GetRHITexture(); // 注意：这里可能需要延迟到真正的执行时刻获取
+                        Transition.AccessBefore = State.LastAccess;
+                        Transition.AccessAfter = Intent.RequiredAccess;
+                        Transition.MipIndex = Intent.SubresourceRange.MipIndex;
+                        Transition.ArraySlice = Intent.SubresourceRange.ArraySlice;
+                        Transition.PlaneSlice = Intent.SubresourceRange.PlaneSlice;
+
+                        // 核心修改：将屏障放在当前 Pass 执行之前
+                        Pass->BeginBarrier.AddTransition(Transition);
+                    }
+
+                    // 建立 DAG 依赖
+                    State.LastVisitor->PassConsumers.push_back(Pass);
+                    Pass->PassProducers.push_back(State.LastVisitor);
                 }
 
-                transient.Resource = nullptr; // underlying RHI resource may be created later
-                transient.AccessBefore = state.LastAccess;
-                transient.AccessAfter = access;
-
-                // add transition to previous visitor's end barrier
-                state.LastVisitor->EndBarrier.AddTransition(transient);
-
-                // link producer/consumer
-                state.LastVisitor->PassConsumers.push_back(pass);
-                pass->PassProducers.push_back(state.LastVisitor);
+                // 更新资源最后访问状态
+                State.LastVisitor = Pass;
+                State.LastAccess = Intent.RequiredAccess;
             }
 
-            // update state
-            state.LastVisitor = pass;
-            state.LastAccess = access;
-            state.Resource = resource;
-        };
+            // 2. 处理 Buffer 意图 (BufferStates)
+            for (const auto& Intent : Pass->BufferStates)
+            {
+                auto& State = ResourceStates[Intent.Buffer];
 
-        // Iterate passes in order and examine their cached resource references
-        for (auto* pass : Passes) {
-            // collect resources accessed by this pass and their access type
-            // Textures:
-            if (pass->ReadTextureResourceCache) {
-                handleAccess(pass, pass->ReadTextureResourceCache, ERHIResourceAccess::SRVGraphics);
-            }
-            if (pass->ReadOnlyTextureCache) {
-                // SRV -> read
-                auto tex = pass->ReadOnlyTextureCache->GetDesc().Texture;
-                if (tex) handleAccess(pass, tex, ERHIResourceAccess::SRVGraphics);
-            }
-            if (pass->ReadWriteTextureCache) {
-                // UAV -> read/write
-                auto tex = pass->ReadWriteTextureCache->GetDesc().Texture;
-                if (tex) handleAccess(pass, tex, ERHIResourceAccess::UAVGraphics);
-            }
+                if (State.LastVisitor && State.LastVisitor != Pass)
+                {
+                    if (State.LastAccess != Intent.RequiredAccess)
+                    {
+                        RHI::RHITransitionInfo Transition{};
+                        Transition.Type = RHI::RHITransitionInfo::EType::Buffer;
+                        Transition.Buffer = Intent.Buffer->GetRHIBuffer();
+                        Transition.AccessBefore = State.LastAccess;
+                        Transition.AccessAfter = Intent.RequiredAccess;
 
-            // Buffers:
-            if (pass->ReadWriteBufferResourceCache) {
-                handleAccess(pass, pass->ReadWriteBufferResourceCache, ERHIResourceAccess::UAVGraphics);
-            }
-            if (pass->ReadOnlyBufferCache) {
-                auto buf = pass->ReadOnlyBufferCache->GetDesc().Buffer;
-                if (buf) handleAccess(pass, buf, ERHIResourceAccess::SRVGraphics);
-            }
-            if (pass->ReadWriteBufferCache) {
-                auto buf = pass->ReadWriteBufferCache->GetDesc().Buffer;
-                if (buf) handleAccess(pass, buf, ERHIResourceAccess::UAVGraphics);
-            }
+                        Pass->BeginBarrier.AddTransition(Transition);
+                    }
 
-            // Render targets / other resources could be handled similarly (omitted for brevity)
+                    State.LastVisitor->PassConsumers.push_back(Pass);
+                    Pass->PassProducers.push_back(State.LastVisitor);
+                }
+
+                State.LastVisitor = Pass;
+                State.LastAccess = Intent.RequiredAccess;
+            }
         }
 
         // Build dependency graph (Kahn's algorithm) using PassProducers/PassConsumers
@@ -395,6 +379,73 @@ namespace RenderCore {
                 PassList single;
                 single.push_back(remaining);
                 ParallelPasses.push_back(single);
+            }
+        }
+    }
+
+    void RenderGraphBuilder::SetupPassInternal(RenderGraphPass* Pass, const ShaderParametersMetadata* Metadata, const void* Parameters)
+    {
+        const uint8_t* BaseDataPtr = reinterpret_cast<const uint8_t*>(Parameters);
+
+        // 遍历所有成员，寻找资源类型
+        for (const auto& Member : Metadata->GetMembers())
+        {
+            // 计算成员在结构体中的实际地址
+            const uint8_t* MemberAddr = BaseDataPtr + Member.Offset;
+
+            if (Member.IsResource())
+            {
+                // 1. 处理纹理相关 (Texture, Texture_UAV)
+                if (Member.BaseType == EShaderUniformBaseType::Texture ||
+                    Member.BaseType == EShaderUniformBaseType::Texture_UAV)
+                {
+                    // 这里的关键：直接将内存解析为 RenderGraphTexture* 指针
+                    // 注意：如果你的参数宏支持的是 RDG_TEXTURE_UAV 等包装类，这里需要对应调整
+                    RenderGraphTexture* Tex = *reinterpret_cast<RenderGraphTexture* const*>(MemberAddr);
+
+                    if (Tex)
+                    {
+                        RenderGraphPass::RenderGraphTextureIntent Intent;
+                        Intent.Texture = Tex;
+                        Intent.SubresourceRange = RHISubresourceRange(); // 默认全资源访问
+
+                        // 根据元数据类型决定 RHI 访问权限
+                        Intent.RequiredAccess = (Member.BaseType == EShaderUniformBaseType::Texture_UAV)
+                            ? ERHIResourceAccess::UAVGraphics
+                            : ERHIResourceAccess::UAVGraphics;
+
+                        // 【核心】因为是友元，直接 push 到 Pass 的私有 vector 中
+                        Pass->TextureIntents.push_back(Intent);
+
+
+                    }
+                }
+                // 2. 处理 Buffer 相关 (Buffer, Buffer_UAV)
+                else if (Member.BaseType == EShaderUniformBaseType::Buffer ||
+                    Member.BaseType == EShaderUniformBaseType::Buffer_UAV)
+                {
+                    RenderGraphBuffer* Buf = *reinterpret_cast<RenderGraphBuffer* const*>(MemberAddr);
+
+                    if (Buf)
+                    {
+                        RenderGraphPass::RenderGraphBufferIntent Intent;
+                        Intent.Buffer = Buf;
+                        Intent.Offset = 0;
+                        Intent.Size = 0; // 全缓冲
+                        Intent.RequiredAccess = (Member.BaseType == EShaderUniformBaseType::Buffer_UAV)
+                            ? ERHIResourceAccess::UAVGraphics
+                            : ERHIResourceAccess::UAVGraphics;
+
+                        // 【核心】直接操作私有成员 BufferStates
+                        Pass->BufferStates.push_back(Intent);
+
+                    }
+                }
+            }
+            // 3. 处理嵌套结构体 (如果你的 Metadata 支持嵌套)
+            else if (Member.IsStruct())
+            {
+                SetupPassInternal(Pass, Member.StructMetadata, MemberAddr);
             }
         }
     }

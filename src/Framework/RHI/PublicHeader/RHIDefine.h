@@ -1,3 +1,6 @@
+// 使RHISubresourceRange可用于unordered_map的key
+
+
 #pragma once
 #include <vector>
 #include <unordered_map>
@@ -591,6 +594,17 @@ enum class ERHIShaderFrequency
         uint32_t DstArraySlice = 0;
     };
 
+    // 纹理Blit描述结构体
+    struct RHI_API RHIBlitTextureDesc {
+        uint32_t SrcMipIndex = 0;
+        uint32_t SrcArraySlice = 0;
+        uint32_t DstMipIndex = 0;
+        uint32_t DstArraySlice = 0;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+        // 可扩展：滤波方式、区域、颜色空间等
+    };
+
 
     struct RHIUpdateTextureRegion2D
     {
@@ -684,4 +698,71 @@ enum class ERHIShaderFrequency
     };
 
 #define MAX_RENDER_TARGETS 8
+
+
+
+    struct RHI_API RHISubresourceRange
+    {
+        static const uint32_t kDepthPlaneSlice = 0;
+        static const uint32_t kStencilPlaneSlice = 1;
+        static const uint32_t kAllSubresources = 0xFFFFFFFF;
+
+        uint32_t MipIndex = kAllSubresources;
+        uint32_t ArraySlice = kAllSubresources;
+        uint32_t PlaneSlice = kAllSubresources;
+
+        RHISubresourceRange() = default;
+
+        RHISubresourceRange(
+            uint32_t InMipIndex,
+            uint32_t InArraySlice,
+            uint32_t InPlaneSlice)
+            : MipIndex(InMipIndex)
+            , ArraySlice(InArraySlice)
+            , PlaneSlice(InPlaneSlice)
+        {
+        }
+
+        inline bool IsAllMips() const
+        {
+            return MipIndex == kAllSubresources;
+        }
+
+        inline bool IsAllArraySlices() const
+        {
+            return ArraySlice == kAllSubresources;
+        }
+
+        inline bool IsAllPlaneSlices() const
+        {
+            return PlaneSlice == kAllSubresources;
+        }
+
+        inline bool IsWholeResource() const
+        {
+            return IsAllMips() && IsAllArraySlices() && IsAllPlaneSlices();
+        }
+
+        inline bool IgnoreDepthPlane() const
+        {
+            return PlaneSlice == kStencilPlaneSlice;
+        }
+
+        inline bool IgnoreStencilPlane() const
+        {
+            return PlaneSlice == kDepthPlaneSlice;
+        }
+
+        inline bool operator == (RHISubresourceRange const& RHS) const
+        {
+            return MipIndex == RHS.MipIndex
+                && ArraySlice == RHS.ArraySlice
+                && PlaneSlice == RHS.PlaneSlice;
+        }
+
+        inline bool operator != (RHISubresourceRange const& RHS) const
+        {
+            return !(*this == RHS);
+        }
+    };
 }

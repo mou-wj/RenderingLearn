@@ -20,8 +20,6 @@ public:
     void Shutdown() override;
     VkInstance GetInstance() const { return Instance; }
 
-    RHIShaderLibrarySP CreateShaderLibrary(const std::string& name, ERHIShaderPlatform platform) override;
-
     RHITextureSP CreateTexture(const RHITextureDesc& desc) override;
     RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) override;
     void UpdateTexture(RHICommandListBase& cmdList, RHITexture* texture, const void* data,const RHITextureRegion& size) override;

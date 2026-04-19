@@ -57,6 +57,15 @@ namespace RHI {
         RHICommandCopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
         void Execute(RHICommandListBase& cmdList) override;
     };
+    struct RHI_API RHICommandBlitTexture : public RHICommandBase
+    {
+        RHITexture* Src = nullptr;
+        RHITexture* Dst = nullptr;
+        RHIBlitTextureDesc BlitDesc{};
+        RHICommandBlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
 
     struct RHI_API RHICommandSetComputePipelineState : public RHICommandBase
     {
@@ -189,7 +198,7 @@ namespace RHI {
         void BeginTransitions(std::vector<const RHITransition*> Transitions);
         void EndTransitions(std::vector<const RHITransition*> Transitions);
 
-        void Merge(const std::shared_ptr<RHICommandListBase>& other);
+        void Merge(const RHICommandListBase& other);
 
     protected:
         bool immediate = false;
@@ -207,6 +216,7 @@ namespace RHI {
         explicit RHITransferCommandList(RHITransferContext* context);
         RHITransferContext* GetTransferContext() const;
         void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
+		void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc);
     };
 
     class RHI_API RHIComputeCommandList : public RHICommandListBase
@@ -239,12 +249,5 @@ namespace RHI {
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1);
     };
 
-    // -----------------------------
-    // ���ͱ���
-    // -----------------------------
-    using RHICommandListBaseSP = std::shared_ptr<RHICommandListBase>;
-    using RHITransferCommandListSP = std::shared_ptr<RHITransferCommandList>;
-    using RHIComputeCommandListSP = std::shared_ptr<RHIComputeCommandList>;
-    using RHIGraphicCommandListSP = std::shared_ptr<RHIGraphicCommandList>;
 
 } // namespace WR::RHI

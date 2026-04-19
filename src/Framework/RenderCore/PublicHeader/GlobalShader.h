@@ -15,74 +15,51 @@ namespace RenderCore {
 class RENDERCORE_API GlobalShader : public Shader
 {
 public:
-    using ShaderTypeMap = std::unordered_map<std::string, RenderCore::ShaderType*>;
-
-    GlobalShader() = delete;
-    ~GlobalShader() = default;
-
-    // Register a ShaderType pointer for a given C++ class type name.
-    // Returns true on success.
-    static bool RegisterTypeInstance(const std::string& classTypeName, RenderCore::ShaderType* typePtr)
+    // 继承父类的构造函数
+    GlobalShader(const ShaderCompiledInitializer& Initializer)
+        : Shader(Initializer)
     {
-        if (!typePtr) return false;
-        std::lock_guard<std::mutex> lg(s_Mutex);
-        s_GlobalShaderTypes[classTypeName] = typePtr;
+    }
+
+    // Global Shader 通常不需要 VertexFactory
+    static bool ShouldCompilePermutation(const ShaderPermutationParameters&Parameters)
+    {
         return true;
     }
-
-    // Get read-only access to the registered shader types
-    static const ShaderTypeMap& GetGlobalShaderTypes()
-    {
-        return s_GlobalShaderTypes;
-    }
-    static RenderCore::ShaderType* GetGlobalShaderType(const std::string& classTypeName) {
-        if (s_GlobalShaderTypes.find(classTypeName) != s_GlobalShaderTypes.end()) {
-            return s_GlobalShaderTypes[classTypeName];
-        }
-        return nullptr;
-    }
-
-private:
-    static ShaderTypeMap s_GlobalShaderTypes;
-    static std::mutex    s_Mutex;
-    friend class GlobalShaderMap;
 };
-
 class RENDERCORE_API GlobalShaderMap {
 public:
-
-
+    // 获取一个已编译的 Shader 实例
     ShaderSP GetShader(ShaderType* shaderType, ShaderPermutationId id);
-    bool Initialize();
-private:
-	bool IsInitialized = false;
-    std::unordered_map<ShaderType*, std::unordered_map<ShaderPermutationId, ShaderSP>> ShaderMap;
 
+    /**
+     * 初始化：遍历所有注册为 Global 的 ShaderType，并触发编译/加载
+     * 建议在引擎初始化 RHI 后调用
+     */
+    bool Initialize();
+
+private:
+    bool IsInitialized = false;
+    // 存储结构：ShaderType -> PermutationID -> ShaderInstance
+    std::unordered_map<ShaderType*, std::unordered_map<ShaderPermutationId, ShaderSP>> ShaderMap;
 };
 
 RENDERCORE_API GlobalShaderMap& GetGlobalShaderMap();
-
-#define DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, Frequency, ShaderName, EntryPoint) \
+#define DECLARE_GLOBAL_SHADER_TYPE(ClassType) \
 public: \
-    static RenderCore::ShaderType& StaticShaderTypeInstance() { \
-        /* function-local static guarantees single instance without needing out-of-class definition */ \
-        static RenderCore::ShaderType s_Instance( (ShaderName), (ShaderPath), (EntryPoint),(Frequency), (&ClassType::ModifyShaderCompilerEnvironment),(&ClassType::ShouldCompilePermutation),(ClassType::GetShaderParameterBindingInfo()) ); \
-        return s_Instance; \
-    } \
-private: \
-    /* Inline static bool initialized during static init - performs registration */ \
-    inline static bool s_##ClassType##_GlobalShaderType_Registered = (RenderCore::GlobalShader::RegisterTypeInstance(#ClassType, &ClassType::StaticShaderTypeInstance()), true); \
-public:
+    using ShaderMetaType = ClassType; \
+    static RenderCore::ShaderType StaticType; \
+    /* 每一个 Global Shader 类必须实现的构造函数 */ \
+    ClassType(const RenderCore::ShaderCompiledInitializer& Initializer) : RenderCore::GlobalShader(Initializer) {}
 
-//这个宏有问题，先暂时搁置，能弄清楚UE这套机制后再调整
-// convenience shortcuts
-#define DECLARE_GLOBAL_VERTEX_SHADER(ClassType, ShaderPath, ShaderName) \
-    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderFrequency::Vertex, ShaderName, "MainVS")
-
-#define DECLARE_GLOBAL_FRAGMENT_SHADER(ClassType, ShaderPath, ShaderName) \
-    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderFrequency::Fragment, ShaderName, "MainPS")
-
-#define DECLARE_GLOBAL_COMPUTE_SHADER(ClassType, ShaderPath, ShaderName) \
-    DECLARE_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, RHI::ERHIShaderFrequency::Compute, ShaderName, "MainCS")
+#define IMPLEMENT_GLOBAL_SHADER_TYPE(ClassType, ShaderPath, ShaderName, EntryPoint, Frequency) \
+    RenderCore::ShaderType ClassType::StaticType( \
+        ShaderName, ShaderPath, EntryPoint, Frequency, \
+        &ClassType::ModifyShaderCompilerEnvironment, \
+        &ClassType::ShouldCompilePermutation, \
+        [](const RenderCore::ShaderCompiledInitializer& Initializer) { return new ClassType(Initializer); } \
+    ); \
+    /* 利用静态变量初始化实现自动注册 */ \
+    static RenderCore::ShaderTypeRegister GRegister_##ClassType(&ClassType::StaticType);
 
 } // namespace RenderCore

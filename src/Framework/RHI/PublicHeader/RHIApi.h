@@ -23,9 +23,6 @@ public:
 	virtual bool Init() = 0;
 	virtual void Shutdown() = 0;
 
-
-    virtual RHIShaderLibrarySP CreateShaderLibrary(const std::string& name, ERHIShaderPlatform platform) = 0;
-
     virtual RHITextureSP CreateTexture(const RHITextureDesc& desc) = 0;
     virtual RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) = 0;
     virtual void UpdateTexture(RHICommandListBase& cmdList,RHITexture* texture, const void* data,const RHITextureRegion& size) = 0;

@@ -48,6 +48,10 @@ public:
 
     void WaitIdle() override;
 
+	uint64_t GetCurrentTimelineValue() override;
+
+	RHISyncPoint* GetSyncPoint() override { return SubmitSyncPoint_; }
+
     void GarbageCollect();
 
 private:

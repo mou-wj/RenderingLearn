@@ -1,14 +1,12 @@
 #include "GlobalShader.h"
-#include "ShaderLibrary.h"
 #include "ShaderCompiler.h"
+#include "RHIApi.h"
 #include <functional>
 #include <sstream>
 
 namespace RenderCore{
 
     // static members
-    GlobalShader::ShaderTypeMap GlobalShader::s_GlobalShaderTypes;
-    std::mutex GlobalShader::s_Mutex;
 
     GlobalShaderMap GlobalShaderMapInstance;
     GlobalShaderMap& RenderCore::GetGlobalShaderMap()
@@ -44,7 +42,7 @@ namespace RenderCore{
         }
 
         // Iterate registered global shader types and compile / instantiate them
-        const auto& globalTypes = GlobalShader::GetGlobalShaderTypes();
+        const auto& globalTypes = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global];
         for (const auto& kv : globalTypes)
         {
             ShaderType* st = kv.second;
@@ -54,7 +52,7 @@ namespace RenderCore{
             ShaderPermutationId permId = 0;
 
             // Determine current platform (extern from ShaderLibrary.h)
-            RHI::ERHIShaderPlatform platform = CurrentShaderPlatform;
+            RHI::ERHIShaderPlatform platform = GShaderPlatform;
 
             // Build a ShaderKey (local representation)
             ShaderKey key(st, platform, permId, nullptr);
@@ -92,22 +90,22 @@ namespace RenderCore{
             switch (st->Frequency)
             {
             case RHI::ERHIShaderFrequency::Vertex:
-                rhiShader = ShaderLibrary::CreateVertexShader(platform, rhiHash);
+
                 break;
             case RHI::ERHIShaderFrequency::Fragment:
-                rhiShader = ShaderLibrary::CreateFragmentShader(platform, rhiHash);
+                
                 break;
             case RHI::ERHIShaderFrequency::Compute:
-                rhiShader = ShaderLibrary::CreateComputeShader(platform, rhiHash);
+                
                 break;
             case RHI::ERHIShaderFrequency::Geometry:
-                rhiShader = ShaderLibrary::CreateGeometryShader(platform, rhiHash);
+                
                 break;
             case RHI::ERHIShaderFrequency::TessControl:
-                rhiShader = ShaderLibrary::CreateTessControlShader(platform, rhiHash);
+
                 break;
             case RHI::ERHIShaderFrequency::TessEvaluation:
-                rhiShader = ShaderLibrary::CreateTessEvalShader(platform, rhiHash);
+
                 break;
             default:
                 rhiShader = nullptr;
@@ -122,7 +120,7 @@ namespace RenderCore{
 
             // Create a generic Shader instance and attach the RHI shader
             // Use the ShaderType's name/source to construct the Shader
-            ShaderSP shaderInstance = std::make_shared<Shader>(st->Name, st->SourceFile, st->Frequency);
+            ShaderSP shaderInstance ;
             shaderInstance->SetRHIShader(rhiShader);
 
             // store into map

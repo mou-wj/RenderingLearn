@@ -126,9 +126,6 @@ void VulkanRHIApi::Shutdown()
     // 销毁其他Vulkan资源
 }
 
-RHIShaderLibrarySP VulkanRHIApi::CreateShaderLibrary(const std::string& name, ERHIShaderPlatform platform) {
-	return nullptr; // 暂时返回nullptr
-}
 
 // 资源创建接口实现
 RHITextureSP VulkanRHIApi::CreateTexture(const RHITextureDesc& desc)

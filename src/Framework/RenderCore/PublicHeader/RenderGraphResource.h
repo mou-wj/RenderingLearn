@@ -114,9 +114,6 @@ private:
 };
 
 
-
-
-
 using RenderGraphResourceSP = std::shared_ptr<RenderGraphResource>;
 using RenderGraphTextureSP = std::shared_ptr<RenderGraphTexture>;
 using RenderGraphBufferSP = std::shared_ptr<RenderGraphBuffer>;
@@ -140,7 +137,7 @@ struct RENDERCORE_API RenderGraphViewDesc
 };
 
 
-class RENDERCORE_API RenderGraphView: public RenderGraphResource
+class RENDERCORE_API RenderGraphView
 {
 public:
     RenderGraphView(const std::string& name);

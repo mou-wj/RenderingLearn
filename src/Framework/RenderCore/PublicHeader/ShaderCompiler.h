@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <memory>
 #include <set>
+#include <map>
+#include <mutex>
 #include "Shader.h"
 #include "RHIDefine.h"
 

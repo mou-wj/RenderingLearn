@@ -5,6 +5,9 @@
 #include <atomic>
 #include <mutex>
 #include "RHITransientResource.h"
+#include "RHIDefine.h"
+#include "RHICommandContex.h"
+#include "RenderResourceTracker.h"
 namespace RenderCore {
 
 // 渲染资源生命周期管理基类
@@ -52,29 +55,6 @@ public:
     // 其他缓冲区相关接口
 };
 
-// 顶点缓冲区
-class RENDERCORE_API RenderVertexBuffer : public RenderBuffer
-{
-public:
-    RenderVertexBuffer();
-    ~RenderVertexBuffer() override;
-
-    void InitRHIResource() override;
-    void ReleaseRHIResource() override;
-    // 其他顶点缓冲区相关接口
-};
-
-// 索引缓冲区
-class RENDERCORE_API RenderIndexBuffer : public RenderBuffer
-{
-public:
-    RenderIndexBuffer();
-    ~RenderIndexBuffer() override;
-
-    void InitRHIResource() override;
-    void ReleaseRHIResource() override;
-    // 其他索引缓冲区相关接口
-};
 
 
 struct RENDERCORE_API PoolRenderTargetDesc
@@ -187,12 +167,9 @@ struct RENDERCORE_API IPooledRenderTarget
     // ------------------------
     virtual RHI::RHITexture* GetRHI() { return nullptr; };
 
-	virtual RHI::RHITransientTexture* GetTransientRHI() { return nullptr; };
+    RenderTextureTracker& GetTracker() { return Tracker; }
 protected:
-
-
-
-   
+    RenderTextureTracker Tracker;
 };
 
 
@@ -235,7 +212,7 @@ public:
         return Desc;
     }
 
-    virtual RHI::RHITransientTexture* GetTransientRHI() override
+    virtual RHI::RHITransientTexture* GetTransientRHI()
     {
         return TransientTexture;
     }
@@ -256,24 +233,27 @@ private:
 // -------------------------------
 // 精简 RenderTargetPool
 // -------------------------------
+
 class RENDERCORE_API RenderTargetPool
 {
 public:
     RenderTargetPool() = default;
 
-    // 分配或复用 RenderTarget
-    std::shared_ptr<PooledRenderTarget> AllocateRenderTarget(
+    // 分配或复用 RenderTarget（重命名）
+    std::shared_ptr<PooledRenderTarget> GetFreeRenderTarget(
         const PoolRenderTargetDesc& Desc);
-
-    // 回收 RenderTarget
-    void Release(std::shared_ptr<PooledRenderTarget> RenderTarget);
 
     // 可选：清空池
     void Clear();
 
 private:
+    // 垃圾回收：检查所有已分配target，若frame小于当前queue的frame则回收
+    void GarbageCollect();
+
     std::mutex Mutex;
     std::vector<std::shared_ptr<PooledRenderTarget>> FreeList;
+    // 记录所有已分配的target，便于垃圾回收
+    std::vector<std::shared_ptr<PooledRenderTarget>> AllocatedList;
 };
 
 extern RENDERCORE_API RenderTargetPool* GRenderTargetPool;
@@ -281,12 +261,10 @@ extern RENDERCORE_API RenderTargetPool* GRenderTargetPool;
 // -------------------------------
 // 精简 Transient Allocator（无 PassHandle）
 // -------------------------------
-class RENDERCORE_API TransientResourceAllocator : public RenderResource
+class RENDERCORE_API TransientResourceAllocator
 {
 public:
     TransientResourceAllocator() = default;
-    virtual void InitRHIResource() override {}
-    virtual void ReleaseRHIResource() override {}
 
     // 分配 transient render target
     std::shared_ptr<PooledTransientRenderTarget> AllocateRenderTarget(
@@ -326,8 +304,6 @@ extern RENDERCORE_API TransientResourceAllocator* GTransientResourceAllocator;
 using RenderResourceSP = std::shared_ptr<RenderResource>;
 using RenderTextureSP = std::shared_ptr<RenderTexture>;
 using RenderBufferSP = std::shared_ptr<RenderBuffer>;
-using RenderVertexBufferSP = std::shared_ptr<RenderVertexBuffer>;
-using RenderIndexBufferSP = std::shared_ptr<RenderIndexBuffer>;
 
 extern RENDERCORE_API RenderTexture* GlobalTestTexture;
 
