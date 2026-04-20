@@ -26,7 +26,9 @@
     V(vkGetPhysicalDeviceSurfaceSupportKHR) \
     V(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) \
     V(vkGetPhysicalDeviceSurfaceFormatsKHR) \
-    V(vkGetPhysicalDeviceSurfacePresentModesKHR)
+    V(vkGetPhysicalDeviceSurfacePresentModesKHR)\
+    V(vkCreateDebugUtilsMessengerEXT) \
+    V(vkDestroyDebugUtilsMessengerEXT)
 
 // 设备级别函数（通过 vkGetDeviceProcAddr 加载，效率最高）
 #define VK_DEVICE_FUNC_LIST(V) \
@@ -146,7 +148,17 @@ namespace VKFunc {
 #define LOAD_EXPORTED(name) name = (PFN_##name)GetProcAddress(vulkanLib, #name);
         VK_EXPORTED_FUNC_LIST(LOAD_EXPORTED)
 #undef LOAD_EXPORTED
-            return vkGetInstanceProcAddr != nullptr;
+        //3. 预加载全局接口
+       vkEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)
+            vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties");
+
+        vkCreateInstance = (PFN_vkCreateInstance)
+            vkGetInstanceProcAddr(nullptr, "vkCreateInstance");
+
+        vkEnumerateInstanceLayerProperties = (PFN_vkEnumerateInstanceLayerProperties)vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceLayerProperties");
+
+
+        return vkGetInstanceProcAddr != nullptr;
     }
 
     void LoadInstanceFunctions(VkInstance instance) {
@@ -207,7 +219,25 @@ namespace VKFunc {
         }
 #endif
     }
+    // 代理函数：负责加载并调用创建函数
+    bool CreateDebugUtilsMessengerEXT(VkInstance instance,
+        const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+        VkDebugUtilsMessengerEXT* pDebugMessenger) {
 
+        if (vkCreateDebugUtilsMessengerEXT) {
+			auto res = vkCreateDebugUtilsMessengerEXT(instance, pCreateInfo, nullptr, pDebugMessenger);
+            return res == VK_SUCCESS;
+        }
+        return false;
+    }
+
+    // 代理函数：负责加载并调用销毁函数
+    void DestroyDebugUtilsMessengerEXT(VkInstance instance,
+        VkDebugUtilsMessengerEXT debugMessenger) {
+        if (vkDestroyDebugUtilsMessengerEXT) {
+			vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+        }
+    }
 
     //---
 
@@ -399,6 +429,7 @@ namespace VKFunc {
         if (!device || !pCreateInfo || !pImage) return false;
 #endif
         VkResult res = vkCreateImage(device, pCreateInfo, nullptr, pImage);
+        LOG_ERROR("VK: CreateImage: %x", pImage);
 #ifdef DEBUG_INFO
         if (res != VK_SUCCESS) { LOG_ERROR("VK: CreateImage failed: %d", res); }
 #endif

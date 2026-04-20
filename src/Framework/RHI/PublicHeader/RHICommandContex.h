@@ -129,6 +129,9 @@ struct RHIWaitInfo {
     // 依赖哪一个同步点（即哪个队列）
     RHISyncPoint* SyncPoint = nullptr;
     
+    //如果SyncPoint为空，则依赖队列的当前进度
+    EQueueType QueueType = EQueueType::Graphics;
+
     // 依赖该同步点的哪一个具体进度
     uint64_t Value = 0;
     

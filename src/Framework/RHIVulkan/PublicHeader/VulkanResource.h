@@ -73,7 +73,7 @@ struct VulkanTextureView
         // 简单 ID 用于 debug / hash
         static uint32_t NextViewId = 1;
         ViewId = NextViewId++;
-        return Result == VK_SUCCESS;
+        return Result;
     }
 
     // 销毁 ImageView

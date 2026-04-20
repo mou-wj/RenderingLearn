@@ -92,7 +92,10 @@ private:
     // 其他 Vulkan 资源管理结构
 	VulkanDevice* Device = nullptr;
 	VkPhysicalDevice PhysicalDevice = nullptr;
-
+#ifdef DEBUG_INFO
+    VkDebugUtilsMessengerEXT DebugMessenger = VK_NULL_HANDLE;
+#endif
+    bool ValidFlag = false;
 };
 
 

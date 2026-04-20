@@ -190,7 +190,7 @@ public:
             std::vector<RHI::RHIWaitInfo> waitInfos;
             if (swapchainSlot.ReadySync)
             {
-                waitInfos.push_back({ swapchainSlot.ReadySync, 0,RHI::ERHIPipelineStage::ColorAttachmentOutput });
+                waitInfos.push_back({ swapchainSlot.ReadySync, EQueueType::Graphics, 0,RHI::ERHIPipelineStage::ColorAttachmentOutput });
             }
             RHI::RHIFence submitResult = queue->ExecuteContext({ graphicContext }, waitInfos);
             queue->WaitFence(submitResult);

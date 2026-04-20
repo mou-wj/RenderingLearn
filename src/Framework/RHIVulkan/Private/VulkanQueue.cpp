@@ -187,16 +187,40 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
 
     for (const auto& waitInfo : WaitInfos)
     {
-        if (!waitInfo.SyncPoint) continue;
-
-        auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(waitInfo.SyncPoint);
+        RHISyncPoint* rhivkSyncPoint = nullptr;
+        if (waitInfo.SyncPoint) {
+			rhivkSyncPoint = waitInfo.SyncPoint;
+        } else {
+            // 优先判断QueueType是否和当前queue一致
+            if (waitInfo.QueueType == QueueType_) {
+                rhivkSyncPoint = SubmitSyncPoint_;
+            } else {
+                switch (waitInfo.QueueType)
+                {
+                case EQueueType::Graphics:
+                    rhivkSyncPoint = device_->GetGraphicsQueue()->GetSyncPoint();
+					break;
+                case EQueueType::Compute:
+                    rhivkSyncPoint = device_->GetComputeQueue()->GetSyncPoint();
+					break;
+                case EQueueType::Transfer:
+					rhivkSyncPoint = device_->GetTransferQueue()->GetSyncPoint();
+                default:
+                    break;
+                }
+            }
+        }
+        VulkanRHISyncPoint* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(waitInfo.SyncPoint);
+        if (!vkSyncPoint) {
+            // 无法获取到SyncPoint，跳过
+            continue;
+        }
         bool isBinary = vkSyncPoint->IsBinary();
         if (isBinary)
         {
             // Binary Semaphore 直接等待即可，无需 Value
             waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
             waitValues.push_back(0);
-
         }
         else {
             waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
@@ -314,7 +338,7 @@ void VulkanPresentExecutor::Present(RHI::RHISwapchain* Swapchain, const RHI::RHI
     {
         return;
     }
-
+    
     vulkanSwapchain->Present(Queue, WaitDependency);
 }
 }

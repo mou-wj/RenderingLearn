@@ -29,13 +29,7 @@ bool VulkanRHIShader::Initialize(const std::vector<char>& packedCode)
     createInfo.pCode = spirvCode.data();
 
     bool result = VKFunc::CreateShaderModule(Device->GetHandle(), &createInfo,  &shaderModule);
-    if (result != VK_SUCCESS)
-    {
-        // Handle error
-        return false;
-    }
-
-    return true;
+    return result;
 }
 
 void VulkanRHIShader::Cleanup()

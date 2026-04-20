@@ -96,6 +96,7 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     );
 
     if (!viewSuccess) {
+        Image = VK_NULL_HANDLE;
         VKFunc::DestroyImage(vkDevice, Image);
         memoryManager->Free(Allocation);
     }
@@ -667,11 +668,32 @@ void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, const RHI::RHIWaitIn
         return;
     }
 
+    RHISyncPoint* rhivkSyncPoint = nullptr;
+    if (waitInfo.SyncPoint) {
+        rhivkSyncPoint = waitInfo.SyncPoint;
+    }
+    else {
+        switch (waitInfo.QueueType)
+        {
+        case EQueueType::Graphics:
+            rhivkSyncPoint = Device->GetGraphicsQueue()->GetSyncPoint();
+            break;
+        case EQueueType::Compute:
+            rhivkSyncPoint = Device->GetComputeQueue()->GetSyncPoint();
+            break;
+        case EQueueType::Transfer:
+            rhivkSyncPoint = Device->GetTransferQueue()->GetSyncPoint();
+        default:
+            break;
+        }
+    }
+
+
     // 1. 获取用于给 Present 等待的 Binary Semaphore
     // 注意：Present 只能等待 Binary Semaphore
     VulkanSemaphore* binaryWaitHandle = VK_NULL_HANDLE;
 
-    if (waitInfo.SyncPoint)
+    if (rhivkSyncPoint)
     {
         // 【核心修改】：将 Timeline SyncPoint 桥接到一个 Binary Semaphore
         // 我们提交一个没有任何命令的空包，让它等待 Timeline 达到指定 Value，完成后触发一个 Binary Semaphore

@@ -21,6 +21,20 @@
 #include "RHICaptureHelper.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	VkDebugUtilsMessageTypeFlagsEXT messageType,
+	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void* pUserData) {
+
+	// 如果严重程度大于警告，可以使用红色输出或断点
+	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+		fprintf(stderr, "Validation Layer: %s\n", pCallbackData->pMessage);
+	}
+
+	return VK_FALSE; // 永远返回 FALSE，否则 API 会在报错处中断并返回错误码
+}
+
 using namespace  RHI;
 namespace RHIVulkan{
 
@@ -33,6 +47,9 @@ namespace RHIVulkan{
 // 初始化和销毁接口实现
 bool VulkanRHIApi::Init()
 {
+	if (ValidFlag) {
+		return true;
+	}
 	RHICaptureHelper::GetInstance();
 	VKFunc::InitializeLoader();
 	GShaderPlatform = ERHIShaderPlatform::Vulkan;
@@ -66,6 +83,31 @@ bool VulkanRHIApi::Init()
         // 处理错误
         return false;
     }
+#ifdef DEBUG_INFO
+	// 设置调试回调（如果需要）
+	// 这里可以添加创建 Debug Messenger 的逻辑
+	VkDebugUtilsMessengerCreateInfoEXT debugMessagerCreateInfo{};
+	debugMessagerCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+
+	// 设置你关心的消息严重程度
+	debugMessagerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+
+	// 设置你关心的消息类型
+	debugMessagerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+		VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+		VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+
+	// 指定回调函数
+	debugMessagerCreateInfo.pfnUserCallback = debugCallback;
+	debugMessagerCreateInfo.pUserData = nullptr; // 可选
+
+	if (!VKFunc::CreateDebugUtilsMessengerEXT(Instance, &debugMessagerCreateInfo,  &DebugMessenger) != VK_SUCCESS) {
+		assert(0);
+	}
+#endif
+
 	RHI::RHICaptureHelper::GetInstance().Init();
 	// 初始化Vulkan设备和其他资源
 	// 这里可以添加更多的初始化逻辑，如选择物理设备、创建逻辑设备等
@@ -102,8 +144,7 @@ bool VulkanRHIApi::Init()
 	// 4. 计算总分配大小
 	G_RHITransition_TotalSize = G_RHITransition_PrivateDataOffset + PrivateSize;
 
-
-
+	ValidFlag = true;
     return true;
     // 初始化其他Vulkan资源
     // 如物理设备、逻辑设备、队列等
@@ -111,14 +152,23 @@ bool VulkanRHIApi::Init()
 
 void VulkanRHIApi::Shutdown()
 {
+	if (!ValidFlag) {
+		return;
+	}
+
+	ValidFlag = false;
 	RHI::RHIPipelineStateCache::ClearAll();
 
 	delete Device;
 	Device = nullptr;
 
+
     // 销毁Vulkan实例和其他资源
     if (Instance != VK_NULL_HANDLE)
     {
+#ifdef DEBUG_INFO
+		VKFunc::DestroyDebugUtilsMessengerEXT(Instance, DebugMessenger);
+#endif
         VKFunc::DestroyInstance(Instance);
         Instance = VK_NULL_HANDLE;
     }

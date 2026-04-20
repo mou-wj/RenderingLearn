@@ -8,12 +8,7 @@ namespace RenderCore{
 
     // static members
 
-    GlobalShaderMap GlobalShaderMapInstance;
-    GlobalShaderMap& RenderCore::GetGlobalShaderMap()
-    {
-        GlobalShaderMapInstance.Initialize();
-        return GlobalShaderMapInstance;
-    }
+    GlobalShaderMap* GShaderMap = nullptr;
 
     ShaderSP GlobalShaderMap::GetShader(ShaderType* shaderType, ShaderPermutationId id)
     {

@@ -6,7 +6,9 @@
 #include "ShaderParameter.h"
 #include "GlobalShader.h"
 #include "RenderResource.h"
+#include "ShaderCompiler.h"
 #include "RHIApi.h"
+#include "VulkanRHIApi.h"
 #include <unordered_map>
 using namespace RenderCore;
 #include "TestBase.h"
@@ -80,11 +82,31 @@ namespace Test {
 class RenderGraphBuildTest : public TestBase {
 public:
     void Setup() override {
+        RHI::GRHIApi = new RHIVulkan::VulkanRHIApi();
+        RHI::GRHIApi->Init();
+		RenderCore::GShaderCompilationCache = new RenderCore::ShaderCompilationCache();
+        auto* api = RHI::GRHIApi;
+        if (!api)
+        {
+            return;
+        }
+        InitShaderMap();
+
+
         // 只保存静态描述
         texDesc.Width = 256;
         texDesc.Height = 256;
         texDesc.Format = ERHIFormat::R8G8B8A8_UNorm;
         texDesc.Usage = ERHITextureCreateFlag::ShaderResource | ERHITextureCreateFlag::CopySrc | ERHITextureCreateFlag::CopyDest;
+    }
+
+    
+
+    void InitShaderMap()
+    {
+        GShaderMap = new GlobalShaderMap();
+        GShaderMap->Initialize();
+
     }
 
     void Run() override {

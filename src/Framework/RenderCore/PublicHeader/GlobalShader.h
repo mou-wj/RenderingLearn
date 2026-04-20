@@ -43,8 +43,7 @@ private:
     // ´æ´¢½á¹¹£ºShaderType -> PermutationID -> ShaderInstance
     std::unordered_map<ShaderType*, std::unordered_map<ShaderPermutationId, ShaderSP>> ShaderMap;
 };
-
-RENDERCORE_API GlobalShaderMap& GetGlobalShaderMap();
+extern RENDERCORE_API GlobalShaderMap* GShaderMap;
 #define DECLARE_GLOBAL_SHADER_TYPE(ClassType) \
 public: \
     using ShaderMetaType = ClassType; \

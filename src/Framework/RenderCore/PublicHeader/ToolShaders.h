@@ -5,47 +5,53 @@
 #include "RHICommandList.h"
 namespace RenderCore {
 
-    // ¶¨Òå Blit ²ÎÊý½á¹¹
-    BEGIN_SHADER_PARAMETER_STRUCT(FBlitCopyTextureParameters)
-    END_SHADER_PARAMETER_STRUCT(FBlitCopyTextureParameters)
 
-    class FBlitCopyTextureCS : public GlobalShader
+    // ï¿½ï¿½ï¿½ï¿½ Blit ï¿½ï¿½ï¿½ï¿½ï¿½á¹¹
+    BEGIN_SHADER_PARAMETER_STRUCT(BlitTextureParameters)
+        SHADER_PARAMETER(Core::Float2, SrcSize)
+        SHADER_PARAMETER(Core::Float2, SrcInvSize)
+        SHADER_PARAMETER(Core::Float2, DstSize)
+        SHADER_PARAMETER(Core::Float2, DstInvSize)
+        SHADER_PARAMETER(float, SrcMipLevel)
+    END_SHADER_PARAMETER_STRUCT(BlitTextureParameters)
+
+    class BlitTextureCS : public GlobalShader
     {
         
     public:
-        // ÉùÃ÷Îª Global Shader ÀàÐÍ
-        // ÕâÒ»²½»áÓÉÄãµÄ IMPLEMENT_SHADER_TYPE_FLAG ´¦Àí×¢²áÂß¼­
-        DECLARE_GLOBAL_SHADER_TYPE(FBlitCopyTextureCS);
+        // ï¿½ï¿½ï¿½ï¿½Îª Global Shader ï¿½ï¿½ï¿½ï¿½
+        // ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ IMPLEMENT_SHADER_TYPE_FLAG ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½ï¿½ß¼ï¿½
+        DECLARE_GLOBAL_SHADER_TYPE(BlitTextureCS);
 
-        // Ä¬ÈÏÇé¿öÏÂÈ«¾Ö Shader ±àÒëËùÓÐ±äÌå
+        // Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È«ï¿½ï¿½ Shader ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½
         static bool ShouldCompilePermutation(const ShaderPermutationParameters& Parameters)
         {
             return true;
         }
 
-        // ÐÞ¸Ä±àÒë»·¾³£¨Èç¹ûÐèÒª¿ªÆôÄ³Ð©ºê£¬±ÈÈçÖ§³Ö²»Í¬µÄ²ÉÑù·½Ê½£©
+        // ï¿½Þ¸Ä±ï¿½ï¿½ë»·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½Ä³Ð©ï¿½ê£¬ï¿½ï¿½ï¿½ï¿½Ö§ï¿½Ö²ï¿½Í¬ï¿½Ä²ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ï¿½ï¿½
         static void ModifyShaderCompilerEnvironment(ShaderCompilerEnvironment& OutEnvironment)
         {
             GlobalShader::ModifyShaderCompilerEnvironment(OutEnvironment);
             // OutEnvironment.SetDefine("SUPPORT_SRGB", 1);
         }
 
-        // »ñÈ¡²ÎÊýÔªÊý¾Ý£¬ÓÃÓÚ·´Éä
+        // ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½Ú·ï¿½ï¿½ï¿½
         static const ShaderParametersMetadata* GetShaderParameterMetadata()
         {
-            return &FBlitCopyTextureParameters::GetMetaData();
+            return &BlitTextureParameters::GetMetaData();
         }
     };
 
-    // --- ×¢²á Shader ---
-    // Ê¹ÓÃÄãµÄºê£¬±ê¼ÇÎª Global ·Ö×é
+    // --- ×¢ï¿½ï¿½ Shader ---
+    // Ê¹ï¿½ï¿½ï¿½ï¿½Äºê£¬ï¿½ï¿½ï¿½Îª Global ï¿½ï¿½ï¿½ï¿½
     IMPLEMENT_SHADER_TYPE_FLAG(
-        FBlitCopyTextureCS,
-        "BlitCopyTextureCS",                     // Shader ÓÑºÃÃû³Æ
-        "/Engine/Shaders/BlitCopyTexture.usf",   // ÐéÄâÂ·¾¶
-        "MainCS",                                // Èë¿Úµã
-        RHI::ERHIShaderFrequency::Compute,       // ÆµÂÊ
-        ShaderType::EShaderTypeFlag::Global      // ×¢²á·Ö×é£ºGlobal
+        BlitTextureCS,
+        "litTextureCS",                     // Shader ï¿½Ñºï¿½ï¿½ï¿½ï¿½ï¿½
+        "/tools/BlitTextureCS.sf",   // ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½
+        "MainCS",                                // ï¿½ï¿½Úµï¿½
+        RHI::ERHIShaderFrequency::Compute,       // Æµï¿½ï¿½
+        ShaderType::EShaderTypeFlag::Global      // ×¢ï¿½ï¿½ï¿½ï¿½é£ºGlobal
     );
 
 } // namespace RenderCore

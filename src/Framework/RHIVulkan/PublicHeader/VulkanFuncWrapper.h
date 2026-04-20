@@ -25,6 +25,12 @@ namespace VKFunc {
     void EnumerateInstanceLayerProperties(uint32_t* pPropertyCount, VkLayerProperties* pProperties);
 
     void SetDebugName(VkDevice device, VkObjectType type, uint64_t handle, const char* name);
+    bool CreateDebugUtilsMessengerEXT(VkInstance instance,
+        const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+        VkDebugUtilsMessengerEXT* pDebugMessenger);
+    void DestroyDebugUtilsMessengerEXT(VkInstance instance,
+        VkDebugUtilsMessengerEXT debugMessenger);
+
 
     // =================================================================
     // 2. 物理设备探测 (Physical Device)

@@ -296,7 +296,7 @@ namespace RHIVulkan {
         fbInfo.layers = 1;
 
         bool result = VKFunc::CreateFramebuffer(Device->GetHandle(), &fbInfo, &Framebuffer);
-        assert(result == VK_SUCCESS);
+        assert(result);
     }
 
     VulkanFramebuffer::~VulkanFramebuffer()
