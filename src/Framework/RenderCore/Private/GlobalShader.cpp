@@ -36,90 +36,73 @@ namespace RenderCore{
             return true;
         }
 
-        // Iterate registered global shader types and compile / instantiate them
+        // 获取当前运行平台
+        RHI::ERHIShaderPlatform platform = GShaderPlatform;
+
+        // 1. 获取所有注册为 Global 类型的 Shader
         const auto& globalTypes = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global];
+
         for (const auto& kv : globalTypes)
         {
             ShaderType* st = kv.second;
             if (!st) continue;
 
-            // set permutation id = 0 (global shaders use default permutation)
-            ShaderPermutationId permId = 0;
-
-            // Determine current platform (extern from ShaderLibrary.h)
-            RHI::ERHIShaderPlatform platform = GShaderPlatform;
-
-            // Build a ShaderKey (local representation)
-            ShaderKey key(st, platform, permId, nullptr);
-
-            // Decide whether to compile this permutation
-            ShaderPermutationParameters permParams;
-            permParams.PermutationId = permId;
-            bool bShouldCompile = true;
-            if (st->ShouldCompilePermutation)
+            // 2. 遍历该 ShaderType 的所有变体组合 (由 IMPLEMENT_SHADER_TYPE 宏自动提取)
+            for (int32_t permId = 0; permId < st->TotalPermutationCount; ++permId)
             {
-                bShouldCompile = st->ShouldCompilePermutation(permParams);
+                // 3. 检查当前变体是否需要编译
+                ShaderPermutationParameters permParams;
+                permParams.Platform = static_cast<uint32_t>(platform);
+                permParams.PermutationId = static_cast<uint32_t>(permId);
+
+                if (st->ShouldCompilePermutation && !st->ShouldCompilePermutation(permParams))
+                {
+                    continue;
+                }
+
+                // 4. 准备编译环境 (Environment)
+                ShaderCompilerEnvironment env;
+
+                // A. 处理 Shader 参数 (VFS 注册)
+                if (st->RootParametersMetadata)
+                {
+                    // 生成 HLSL 并注册到 GShaderVirtualFileSystem
+                    auto parameterInfos = ShaderCompiler::GenerateOrGetShaderPrameterMetaDataSF(*(st->RootParametersMetadata));
+                }
+
+                // B. 处理变体宏注入 (调用子类静态方法)
+                if (st->ModifyCompilationEnvironment)
+                {
+                    // 内部会调用 Domain.SetFromId(permId) 和 Domain.ModifyCompilationEnvironment(env)
+                    st->ModifyCompilationEnvironment(env);
+                }
+
+                // 5. 构造编译输入并调用编译器
+                ShaderCompileInput input;
+                input.VirtualSourceFilePath = st->SourceFile;
+                input.EntryPoint = st->EntryPoint;
+                input.Frequency = st->Frequency;
+                input.Platform = platform;
+                input.Environment = std::move(env); // 移动环境数据
+
+                ShaderCompilationOutput output = ShaderCompiler::Compile(input);
+
+                if (!output.Success)
+                {
+                    // 记录错误并跳过此变体
+                    // LOG_ERROR("Failed to compile %s (Permutation %d)", st->Name.c_str(), permId);
+                    continue;
+                }
+
+                // 6. 构造 RHI Shader 对象
+                ShaderCompiledInitializer initializer(st,output.PackedBinaryData,output.ParameterMap,permId);
+
+                // 7. 实例化并缓存
+                ShaderSP shaderInstance = std::make_shared<Shader>(initializer);
+
+                // ShaderMap 结构: std::unordered_map<ShaderType*, std::map<ShaderPermutationId, ShaderSP>>
+                ShaderMap[st][permId] = shaderInstance;
             }
-            if (!bShouldCompile)
-            {
-                continue;
-            }
-
-            // Allow shader to modify compiler environment
-            ShaderCompilerEnvironment env;
-            if (st->ModifyCompilationEnvironment)
-            {
-                //st->ModifyCompilationEnvironment(env);
-            }
-
-            // Create a simple hashed key for the RHI layer
-            std::string unique = BuildShaderUniqueString(st, platform, permId);
-            // Assuming RHI provides a ShaderKeyHash type with constructor from uint64_t or similar.
-            // We produce a uint64_t hash and wrap it in RHI::ShaderKeyHash if available.
-            uint64_t hash64 = std::hash<std::string>()(unique);
-            RHI::ShaderKeyHash rhiHash;
-            rhiHash = hash64; // requires RHI::ShaderKeyHash to have member 'Hash' (adapt if different)
-
-            // Compile/Create RHI shader using ShaderLibrary according to frequency
-            RHI::RHIShaderSP rhiShader;
-            switch (st->Frequency)
-            {
-            case RHI::ERHIShaderFrequency::Vertex:
-
-                break;
-            case RHI::ERHIShaderFrequency::Fragment:
-                
-                break;
-            case RHI::ERHIShaderFrequency::Compute:
-                
-                break;
-            case RHI::ERHIShaderFrequency::Geometry:
-                
-                break;
-            case RHI::ERHIShaderFrequency::TessControl:
-
-                break;
-            case RHI::ERHIShaderFrequency::TessEvaluation:
-
-                break;
-            default:
-                rhiShader = nullptr;
-                break;
-            }
-
-            if (!rhiShader)
-            {
-                // creation/compilation failed for this shader; skip storing
-                continue;
-            }
-
-            // Create a generic Shader instance and attach the RHI shader
-            // Use the ShaderType's name/source to construct the Shader
-            ShaderSP shaderInstance ;
-            shaderInstance->SetRHIShader(rhiShader);
-
-            // store into map
-            ShaderMap[st][permId] = shaderInstance;
         }
 
         IsInitialized = true;

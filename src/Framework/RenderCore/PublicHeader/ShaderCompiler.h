@@ -9,6 +9,8 @@
 #include <mutex>
 #include "Shader.h"
 #include "RHIDefine.h"
+#include "ShaderParameter.h"
+#include "ShaderCore.h"
 
 namespace RenderCore{
     // ============================================================
@@ -38,50 +40,6 @@ namespace RenderCore{
             static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
     }
 
-    // ============================================================
-    // Shader Compiler Environment
-    // ============================================================
-
-    struct ShaderCompilerEnvironment
-    {
-        // ºËĞÄºê¶¨Òå
-        std::map<std::string, std::string> Definitions;
-
-        // ĞéÄâ include ÄÚÈİ
-        std::map<std::string, std::string> VirtualIncludes;
-
-        // include ËÑË÷Â·¾¶
-        std::vector<std::string> IncludePaths;
-
-        // ¿ÉÑ¡ÒÆ¶¯Æ½Ì¨È«¾«¶È¿ØÖÆ
-        bool FullPrecisionInPS = false;
-
-        void Merge(const ShaderCompilerEnvironment& other)
-        {
-            Definitions.insert(other.Definitions.begin(), other.Definitions.end());
-            for (const auto& it : other.VirtualIncludes)
-            {
-                auto existing = VirtualIncludes.find(it.first);
-                if (existing != VirtualIncludes.end())
-                    existing->second.append(it.second);
-                else
-                    VirtualIncludes[it.first] = it.second;
-            }
-            IncludePaths.insert(IncludePaths.end(), other.IncludePaths.begin(), other.IncludePaths.end());
-            FullPrecisionInPS |= other.FullPrecisionInPS;
-        }
-        bool operator==(const ShaderCompilerEnvironment& other) const
-        {
-            return Definitions == other.Definitions &&
-                VirtualIncludes == other.VirtualIncludes &&
-				IncludePaths == other.IncludePaths &&
-				FullPrecisionInPS == other.FullPrecisionInPS;
-        }
-        void SetDefine(const std::string& name, const std::string& value) { Definitions[name] = value; }
-        void SetDefine(const std::string& name, int32_t value) { Definitions[name] = std::to_string(value); }
-        void SetDefine(const std::string& name, bool value) { Definitions[name] = value ? "1" : "0"; }
-        void SetDefine(const std::string& name, float value) { Definitions[name] = std::to_string(value); }
-    };
 
     // ============================================================
     // Shader Compile Input
@@ -89,7 +47,7 @@ namespace RenderCore{
 
     struct RENDERCORE_API ShaderCompileInput
     {
-        // Ô­Ê¼ÎÄ¼şÂ·¾¶£¨ÓÃÓÚÈÕÖ¾/µ÷ÊÔ£©
+        // Ô­Ê¼ï¿½Ä¼ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾/ï¿½ï¿½ï¿½Ô£ï¿½
         std::string VirtualSourceFilePath;
 
         std::string EntryPoint = "main";
@@ -97,13 +55,13 @@ namespace RenderCore{
         RHI::ERHIShaderFrequency Frequency;
         RHI::ERHIShaderPlatform Platform;
 
-        // °üº¬ºê¶¨Òå / include ËÑË÷Â·¾¶ / ĞéÄâ include
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ê¶¨ï¿½ï¿½ / include ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½ / ï¿½ï¿½ï¿½ï¿½ include
         ShaderCompilerEnvironment Environment;
 
-        std::string TargetProfile;     // vs_6_6 / ps_6_6 µÈ
+        std::string TargetProfile;     // vs_6_6 / ps_6_6 ï¿½ï¿½
         EShaderCompileFlags Flags = EShaderCompileFlags::None;
 
-        // ÊÇ·ñÊôÓÚ shader pipeline£¨¿ÉÑ¡£©
+        // ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ shader pipelineï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½
         bool bCompilingForPipeline = false;
 
         bool operator==(const ShaderCompileInput& other) const
@@ -184,7 +142,7 @@ namespace RenderCore
         std::string PreprocessedSource;
 #endif
 
-        // ÒÀÀµÎÄ¼ş£¨ÓÃÓÚÈÈÖØÔØ£©
+        // ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø£ï¿½
         std::vector<std::string> IncludedFiles;
     };
 
@@ -195,25 +153,38 @@ namespace RenderCore
     class RENDERCORE_API ShaderCompiler
     {
     public:
-        ShaderCompiler();
-        ~ShaderCompiler();
+            ShaderCompiler();
+            ~ShaderCompiler();
 
-        bool Initialize(const std::string& shaderSourceDir);
+            static bool Initialize(const std::string& shaderSourceDir);
 
-        // Ê¹ÓÃ ShaderCompileInput ½øĞĞÍêÕû±àÒë
-        ShaderCompilationOutput Compile(const ShaderCompileInput& input);
+            // Ê¹ï¿½ï¿½ ShaderCompileInput ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            static ShaderCompilationOutput Compile(const ShaderCompileInput& input);
 
-    private:
-        bool LoadShaderSource(
+            /**
+             * ç”Ÿæˆ ShaderParameter çš„ç»“æ„ä½“å®šä¹‰å­—ç¬¦ä¸²ï¼Œå¸¦å…¨å±€ç¼“å­˜ã€‚
+             * è§„åˆ™ï¼š
+             * 1. åŸºæœ¬ç±»å‹ï¼ˆå¦‚ float2ï¼‰ç”ŸæˆåŒåç»“æ„ä½“ï¼Œå†…éƒ¨å¡«å…¥å¯¹åº”å‚æ•°ã€‚
+             * 2. èµ„æºç±»å‹ï¼ˆå¦‚ Textureï¼‰å…¨éƒ¨æ‰å¹³åŒ–åˆ°æœ€å¤–å±‚ç»“æ„ä½“ã€‚
+             * 3. å†…åµŒç»“æ„ä½“ï¼š
+             *    - è‹¥æœ‰èµ„æºï¼Œèµ„æºæ‰å¹³åŒ–åˆ°å¤–å±‚ï¼Œä¸”é€’å½’ç”Ÿæˆ #include å£°æ˜ã€‚
+             *    - è‹¥ä»…æœ‰åŸºæœ¬ç±»å‹ï¼Œåˆ™ç›´æ¥ä½œä¸ºç±»å‹åæˆå‘˜ã€‚
+             * 4. ç»“æœç¼“å­˜åˆ°å…¨å±€ mapï¼Œkey ä¸ºå‚æ•°ç»“æ„ä½“åã€‚
+             */
+            static std::string GenerateOrGetShaderPrameterMetaDataSF(const ShaderParametersMetadata& root);
+
+            static std::optional<std::string> GetFileContent(const std::string& Path);
+        private:
+        static bool LoadShaderSource(
             const ShaderCompileInput& input,
             std::string& outSource);
 
-        bool PreprocessSource(
+        static bool PreprocessSource(
             const ShaderCompileInput& input,
             std::string& outSource,
             std::vector<std::string>& outIncludedFiles);
 
-        bool ExpandIncludes(
+        static bool ExpandIncludes(
             const std::string& source,
             const ShaderCompilerEnvironment& env,
             std::string& outExpanded,
@@ -221,32 +192,32 @@ namespace RenderCore
             int depth = 0,
             std::set<std::string>* includeStack = nullptr);
 
-        void ApplyMacros(
+        static void ApplyMacros(
             std::string& source,
             const std::map<std::string, std::string>& macros);
 
-        void CompileToSPIRV(
+        static void CompileToSPIRV(
             const std::string& preprocessedSource,
             const ShaderCompileInput& input,
             ShaderCompilationOutput& out);
 
-        void CompileToDirectX(
+        static void CompileToDirectX(
             const std::string& preprocessedSource,
             const ShaderCompileInput& input,
             ShaderCompilationOutput& out);
 
-        void CompileToMetal(
+        static void CompileToMetal(
             const std::string& preprocessedSource,
             const ShaderCompileInput& input,
             ShaderCompilationOutput& out);
 
-        void CompileToOpenGL(
+        static void CompileToOpenGL(
             const std::string& preprocessedSource,
             const ShaderCompileInput& input,
             ShaderCompilationOutput& out);
 
     private:
-        std::string ShaderSourceDirectory;
+        static std::string ShaderSourceDirectory;
         int MaxIncludeDepth = 10;
     };
 

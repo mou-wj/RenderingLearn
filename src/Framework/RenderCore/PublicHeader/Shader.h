@@ -166,7 +166,10 @@ namespace RenderCore {
         const std::vector<char>& Code;
         const ShaderParameterAllocationMap& ParameterMap;
         uint32_t PermutationId;
-        size_t OutputHash;
+        ShaderCompiledInitializer(const ShaderType* Type,
+            const std::vector<char>& Code,
+            const ShaderParameterAllocationMap& ParameterMap,
+            uint32_t PermutationId):Type(Type) , Code(Code), ParameterMap(ParameterMap), PermutationId(PermutationId) {}
     };
 
     // ShaderType ��
@@ -285,6 +288,7 @@ public:
 class RENDERCORE_API Shader
 {
 public:
+    using PermutationDomain = ShaderPermutationDomain<>;
     // Construction/Destruction
     Shader(const ShaderCompiledInitializer& initializer);
     virtual ~Shader();
@@ -337,7 +341,7 @@ public:
         SHADER_NAME, SHADER_PATH, ENTRY, FREQ, \
         &T::ModifyShaderCompilerEnvironment, \
         &T::ShouldCompilePermutation, \
-        nullptr, 1, T::GetShaderParameterMetadata(), FLAG \
+        nullptr, T::PermutationDomain::TotalCount, T::GetShaderParameterMetadata(), FLAG \
     }; \
     struct G##T##ShaderTypeRegister { \
         G##T##ShaderTypeRegister() { RenderCore::ShaderType::Register(#T, &G##T##ShaderTypeInstance, FLAG); } \

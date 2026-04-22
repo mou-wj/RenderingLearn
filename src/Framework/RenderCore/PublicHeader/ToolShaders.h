@@ -3,6 +3,7 @@
 #include "GlobalShader.h"
 #include "ShaderParameter.h"
 #include "RHICommandList.h"
+#include "ShaderCore.h"
 namespace RenderCore {
 
 
@@ -13,12 +14,22 @@ namespace RenderCore {
         SHADER_PARAMETER(Core::Float2, DstSize)
         SHADER_PARAMETER(Core::Float2, DstInvSize)
         SHADER_PARAMETER(float, SrcMipLevel)
+        SHADER_PARAMETER_TEXTURE(RenderGraphTexture, SrcTexture)
+        SHADER_PARAMETER_TEXTURE(RenderGraphTexture, DstTexture)
     END_SHADER_PARAMETER_STRUCT(BlitTextureParameters)
 
     class BlitTextureCS : public GlobalShader
     {
         
     public:
+        static constexpr char Macro_ColorMode[] = "COLOR_CONVERSION_MODE";
+
+        // 2. 定义变体维度（例如 3 种颜色转换模式）
+        using ColorConversionDim = FPermutationDimensionEnum<Macro_ColorMode, 3>;
+
+        // 3. 定义变体域（Domain），可以包含多个维度
+        using PermutationDomain = ShaderPermutationDomain<ColorConversionDim>;
+
         // ����Ϊ Global Shader ����
         // ��һ��������� IMPLEMENT_SHADER_TYPE_FLAG ����ע���߼�
         DECLARE_GLOBAL_SHADER_TYPE(BlitTextureCS);

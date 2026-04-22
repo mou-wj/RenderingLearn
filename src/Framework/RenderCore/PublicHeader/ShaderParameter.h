@@ -115,83 +115,6 @@ namespace RenderCore {
         EUseCase GetUseCase() const { return UseCase; }
 
 
-        
-        // ---------------------------
-        // HLSL generation
-        // ---------------------------
-        void GenerateHLSL(std::ostream& Out, uint32_t& bindingSlot, int indent = 0) const
-        {
-            std::string IndentStr(indent, ' ');
-
-            // 1. 如果是 UniformBuffer (HLSL 中对应 ConstantBuffer)
-            if (UseCase == EUseCase::UniformBuffer)
-            {
-                // 使用 Vulkan 风格的 HLSL 绑定语法
-                // [[vk::binding(X)]] 是最显式的写法，或者使用标准的 : register(bX)
-                Out << IndentStr << "cbuffer " << StructName << " : register(b" << bindingSlot++ << ")\n";
-                Out << IndentStr << "{\n";
-            }
-            else if (indent == 0) // 顶级普通结构体定义
-            {
-                Out << IndentStr << "struct " << StructName << "\n";
-                Out << IndentStr << "{\n";
-            }
-
-            // 2. 处理常量数据成员 (变量)
-            for (const auto& Member : Members)
-            {
-                if (Member.IsResource()) continue; // 资源（纹理/采样器）不进 cbuffer
-
-                if (Member.IsStruct())
-                {
-                    // 嵌套结构体引用
-                    Out << IndentStr << "    " << Member.StructMetadata->GetStructName() << " " << Member.Name << ";\n";
-                }
-                else
-                {
-                    Out << IndentStr << "    " << GetHLSLType(Member) << " " << Member.Name;
-                    if (Member.NumElements > 0)
-                        Out << "[" << Member.NumElements << "]";
-                    Out << ";\n";
-                }
-            }
-
-            // 3. 闭合结构/cbuffer
-            if (UseCase == EUseCase::UniformBuffer)
-            {
-                // 实例名：为了让 VS/PS 逻辑一致，建议给 cbuffer 一个实例名
-                // 这样在 Shader 中访问就是 Primitive.LocalToWorld
-                std::string InstanceName = StructName;
-                if (InstanceName[0] == 'F' && isupper(InstanceName[1])) InstanceName.erase(0, 1);
-
-                Out << IndentStr << "} " << InstanceName << ";\n\n";
-            }
-            else if (indent == 0)
-            {
-                Out << IndentStr << "};\n\n";
-            }
-
-            // 4. 处理资源成员 (Texture / Sampler / Buffer)
-            // 这些在 HLSL 中必须定义在 ConstantBuffer 外部
-            for (const auto& Member : Members)
-            {
-                if (Member.IsResource())
-                {
-                    // 根据类型选择寄存器前缀 (t 为纹理/Buffer, s 为采样器, u 为 UAV)
-                    char regChar = 't';
-                    if (Member.BaseType == EShaderUniformBaseType::Sampler) regChar = 's';
-                    else if (Member.BaseType == EShaderUniformBaseType::Texture_UAV ||
-                        Member.BaseType == EShaderUniformBaseType::Buffer_UAV) regChar = 'u';
-
-                    Out << "layout(binding = " << bindingSlot << ") " // 兼容 SPIR-V 编译
-                        << GetHLSLType(Member) << " " << Member.Name
-                        << " : register(" << regChar << bindingSlot << ");\n";
-
-                    bindingSlot++;
-                }
-            }
-        }
-    
         std::vector<Member> Members;
     private:
         const char* StructName;
@@ -199,27 +122,6 @@ namespace RenderCore {
         
         EUseCase UseCase;
 
-        static std::string GetHLSLType(const Member& M)
-        {
-            switch (M.BaseType)
-            {
-            case EShaderUniformBaseType::Float32:
-                if (M.NumRows == 1 && M.NumColumns == 1) return "float";
-                if (M.NumRows == 1 && M.NumColumns == 2) return "float2";
-                if (M.NumRows == 1 && M.NumColumns == 3) return "float3";
-                if (M.NumRows == 1 && M.NumColumns == 4) return "float4";
-                if (M.NumRows == 4 && M.NumColumns == 4) return "float4x4";
-                return "float";
-            case EShaderUniformBaseType::Int32: return "int";
-            case EShaderUniformBaseType::UInt32: return "uint";
-            case EShaderUniformBaseType::Texture: return "Texture2D";
-            case EShaderUniformBaseType::Texture_UAV: return "RWTexture2D<float4>";
-            case EShaderUniformBaseType::Buffer: return "StructuredBuffer<float4>";
-            case EShaderUniformBaseType::Buffer_UAV: return "RWStructuredBuffer<float4>";
-            case EShaderUniformBaseType::Sampler: return "SamplerState";
-            default: return "unknown";
-            }
-        }
     };
     
 

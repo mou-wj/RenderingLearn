@@ -1,84 +1,179 @@
 #pragma once
+#include <map>
+#include <string>
+#include <vector>
 
-// shader compiler environment
-struct ShaderCompilerEnvironment
-{
-    std::unordered_map<std::string, std::string> Macros;
-};
-
-// 所有 Shader 通用的最小参数
-struct ShaderPermutationParameters
-{
-    uint32_t Platform;        // Vulkan / DX12 / Metal ...
-    uint32_t PermutationId;   // Bitmask（功能组合）
-    size_t GetHash() const {
-		size_t hash = std::hash<uint32_t>()(Platform);
-		hash ^= std::hash<uint32_t>()(PermutationId) << 1;
-		return hash;
-    }
-};
-
-using ShaderPermutationId = size_t;
+namespace RenderCore {
 
 
-// ------------------- 简化模板宏维度 -------------------
-template<const char* MacroName>
-struct FPermutationDimensionBool
-{
-    static constexpr const char* Name = MacroName;
-    bool Value = false;
-};
+    // ============================================================
+    // Shader Compiler Environment
+    // ============================================================
 
-// ------------------- 简化 ShaderPermutationDomain -------------------
-template<typename... Dimensions>
-class ShaderPermutationDomain
-{
-public:
-    std::tuple<Dimensions...> Values;
-
-    ShaderPermutationDomain() = default;
-
-    // 设置当前组合
-    void SetCombination(std::array<bool, sizeof...(Dimensions)> Bools)
+    struct ShaderCompilerEnvironment
     {
-        SetCombinationImpl(Bools, std::make_index_sequence<sizeof...(Dimensions)>{});
-    }
 
-    // 生成 PermutationId（打包成整数）
-    ShaderPermutationId GetPermutationId() const
+        std::map<std::string, std::string> Definitions;
+
+        std::map<std::string, std::string> VirtualIncludes;
+
+
+        std::vector<std::string> IncludePaths;
+
+
+        bool FullPrecisionInPS = false;
+
+        void Merge(const ShaderCompilerEnvironment& other)
+        {
+            Definitions.insert(other.Definitions.begin(), other.Definitions.end());
+            for (const auto& it : other.VirtualIncludes)
+            {
+                auto existing = VirtualIncludes.find(it.first);
+                if (existing != VirtualIncludes.end())
+                    existing->second.append(it.second);
+                else
+                    VirtualIncludes[it.first] = it.second;
+            }
+            IncludePaths.insert(IncludePaths.end(), other.IncludePaths.begin(), other.IncludePaths.end());
+            FullPrecisionInPS |= other.FullPrecisionInPS;
+        }
+        bool operator==(const ShaderCompilerEnvironment& other) const
+        {
+            return Definitions == other.Definitions &&
+                VirtualIncludes == other.VirtualIncludes &&
+                IncludePaths == other.IncludePaths &&
+                FullPrecisionInPS == other.FullPrecisionInPS;
+        }
+        void SetDefine(const std::string& name, const std::string& value) { Definitions[name] = value; }
+        void SetDefine(const std::string& name, int32_t value) { Definitions[name] = std::to_string(value); }
+        void SetDefine(const std::string& name, bool value) { Definitions[name] = value ? "1" : "0"; }
+        void SetDefine(const std::string& name, float value) { Definitions[name] = std::to_string(value); }
+    };
+
+    // 所有 Shader 通用的最小参数
+    struct ShaderPermutationParameters
     {
-        return GetPermutationIdImpl(std::make_index_sequence<sizeof...(Dimensions)>{});
-    }
+        uint32_t Platform;        // Vulkan / DX12 / Metal ...
+        uint32_t PermutationId;   // Bitmask（功能组合）
+        size_t GetHash() const {
+            size_t hash = std::hash<uint32_t>()(Platform);
+            hash ^= std::hash<uint32_t>()(PermutationId) << 1;
+            return hash;
+        }
+    };
 
-private:
-    template<std::size_t... I>
-    void SetCombinationImpl(const std::array<bool, sizeof...(Dimensions)>& Bools, std::index_sequence<I...>)
+    using ShaderPermutationId = size_t;
+
+
+    // 基础布尔维度
+    template<const char* MacroName>
+    struct FPermutationDimensionBool
     {
-        ((std::get<I>(Values).Value = Bools[I]), ...);
-    }
+        static constexpr const char* Name = MacroName;
+        static constexpr uint32_t Count = 2; // 固定为 0 和 1
+        uint32_t Value = 0; // 内部统一用 uint32 存储
+    };
 
-    template<std::size_t... I>
-    int32_t GetPermutationIdImpl(std::index_sequence<I...>) const
+    // 基础枚举/整数维度
+    template<const char* MacroName, uint32_t InCount>
+    struct FPermutationDimensionEnum
     {
-        int32_t Id = 0;
-        ((Id |= (std::get<I>(Values).Value ? (1 << I) : 0)), ...);
-        return Id;
-    }
-};
+        static constexpr const char* Name = MacroName;
+        static constexpr uint32_t Count = InCount;
+        uint32_t Value = 0;
+    };
+   // ------------------- 增强型 ShaderPermutationDomain -------------------
+    template<typename... Dimensions>
+    class ShaderPermutationDomain
+    {
+    public:
+        // 1. 编译期计算总变体数量 (所有维度 Count 的乘积)
+        static constexpr uint32_t TotalCount = (Dimensions::Count * ... * 1);
 
-/*
-// ------------------- 宏名字符串 -------------------
-constexpr char USE_VERTEX_COLOR[] = "USE_VERTEX_COLOR";
-constexpr char USE_DITHERED_LOD[]  = "USE_DITHERED_LOD";
+        std::tuple<Dimensions...> DimensionValues;
 
-// ------------------- Shader 的 PermutationDomain -------------------
-using PermutationDomain = TShaderPermutationDomain<
-    FPermutationDimensionBool<USE_VERTEX_COLOR>,
-    FPermutationDimensionBool<USE_DITHERED_LOD>
->;
-    PermutationDomain Domain;
+        ShaderPermutationDomain() = default;
 
-    Domain.SetCombination({true, false});
-    std::cout << "PermutationId = " << Domain.GetPermutationId() << std::endl; // 1
+        // --- 核心接口 1: 从 PermutationId 还原所有维度的状态 ---
+        void SetFromId(uint32_t Id)
+        {
+            SetFromIdImpl(Id, std::make_index_sequence<sizeof...(Dimensions)>{});
+        }
 
-*/
+        // --- 核心接口 2: 将当前维度状态打包为单一 ID ---
+        uint32_t GetPermutationId() const
+        {
+            return GetPermutationIdImpl(std::make_index_sequence<sizeof...(Dimensions)>{});
+        }
+
+        // --- 核心接口 3: 注入到编译环境 ---
+        void ModifyCompilationEnvironment(ShaderCompilerEnvironment& OutEnv) const
+        {
+            ModifyEnvImpl(OutEnv, std::make_index_sequence<sizeof...(Dimensions)>{});
+        }
+
+        // --- 辅助接口: 获取特定维度的值 ---
+        template<typename T>
+        uint32_t GetFieldValue() const
+        {
+            return std::get<T>(DimensionValues).Value;
+        }
+
+        // --- 辅助接口: 设置特定维度的值 ---
+        template<typename T>
+        void SetFieldValue(uint32_t InValue)
+        {
+            std::get<T>(DimensionValues).Value = InValue;
+        }
+
+    private:
+        // 辅助工具：计算第 I 个维度之前的“进制权重”
+        // 例如：维度为 [Count=3, Count=2, Count=4]，则权重分别为 [1, 3, 6]
+        template<std::size_t I>
+        static constexpr uint32_t GetDimensionMultiplier()
+        {
+            return GetMultiplierImpl<I>(std::make_index_sequence<I>{});
+        }
+
+        template<std::size_t I, std::size_t... J>
+        static constexpr uint32_t GetMultiplierImpl(std::index_sequence<J...>)
+        {
+            // 展开计算前面的 Dimensions::Count 乘积
+            uint32_t Res = 1;
+            auto Helper = [&Res](uint32_t Count) { Res *= Count; };
+
+            // 这里的技巧是利用 tuple_element 拿到前面维度的 Count
+            using TDimensions = std::tuple<Dimensions...>;
+            (Helper(std::tuple_element_t<J, TDimensions>::Count), ...);
+
+            return Res;
+        }
+
+        // --- 解码实现 (Id -> Values) ---
+        template<std::size_t... I>
+        void SetFromIdImpl(uint32_t Id, std::index_sequence<I...>)
+        {
+            // 公式：Value = (Id / Multiplier) % Count
+            ((std::get<I>(DimensionValues).Value = (Id / GetDimensionMultiplier<I>()) % std::get<I>(DimensionValues).Count), ...);
+        }
+
+        // --- 编码实现 (Values -> Id) ---
+        template<std::size_t... I>
+        uint32_t GetPermutationIdImpl(std::index_sequence<I...>) const
+        {
+            // 公式：Id = Sum(Value * Multiplier)
+            uint32_t Id = 0;
+            ((Id += std::get<I>(DimensionValues).Value * GetDimensionMultiplier<I>()), ...);
+            return Id;
+        }
+
+        // --- 注入宏实现 ---
+        template<std::size_t... I>
+        void ModifyEnvImpl(ShaderCompilerEnvironment& OutEnv, std::index_sequence<I...>) const
+        {
+            ((OutEnv.SetDefine(Dimensions::Name, (int32_t)std::get<I>(DimensionValues).Value)), ...);
+        }
+    };
+
+
+}
