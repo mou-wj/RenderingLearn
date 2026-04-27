@@ -31,30 +31,36 @@ bool RenderResource::IsInitialized() const {
 }
 
 // RenderTexture
-RenderTexture::RenderTexture() = default;
+RenderTexture::RenderTexture(const RHI::RHITextureDesc& inDesc) : Desc(inDesc) {}
 RenderTexture::~RenderTexture() = default;
 
 void RenderTexture::InitRHIResource() {
+	Texture = RHI::GRHIApi->CreateTexture(Desc);
     RenderResource::InitRHIResource();
     // 纹理资源初始化逻辑
 }
 
 void RenderTexture::ReleaseRHIResource() {
     // 纹理资源释放逻辑
+	Texture.reset();
+	Texture = nullptr;
     RenderResource::ReleaseRHIResource();
 }
 
 // RenderBuffer
-RenderBuffer::RenderBuffer() = default;
+RenderBuffer::RenderBuffer(const RHI::RHIBufferDesc& inDesc) : Desc(inDesc) {};
 RenderBuffer::~RenderBuffer() = default;
 
 void RenderBuffer::InitRHIResource() {
+	Buffer = RHI::GRHIApi->CreateBuffer(Desc);	
     RenderResource::InitRHIResource();
     // 缓冲区资源初始化逻辑
 }
 
 void RenderBuffer::ReleaseRHIResource() {
     // 缓冲区资源释放逻辑
+	Buffer.reset();
+	Buffer = nullptr;
     RenderResource::ReleaseRHIResource();
 }
 
@@ -190,8 +196,7 @@ RenderTexture* CreateTexture(const std::string& Path)
 		// 3. 调用 RHI 创建纹理
 		RHITextureSP texture = GRHIApi->CreateTexture(desc);
 		GRHIApi->UpdateTexture(commandList, texture.get(), pixels, RHITextureRegion::Create2DRegion(desc.Width,desc.Height));
-		outTexture = new RenderCore::RenderTexture();
-		outTexture->Texture = texture;
+		outTexture = new RenderCore::RenderTexture(desc);
 		outTexture->InitRHIResource();
 		});
 
@@ -200,5 +205,15 @@ RenderTexture* CreateTexture(const std::string& Path)
 	return outTexture;
 }
 
+
+void TransientResourceAllocator::InitRHI() 
+{
+	TransientResourceManager = RHI::GRHIApi->CreateTransientResourceManager();
+}
+
+void TransientResourceAllocator::ReleaseRHI()
+{
+	TransientResourceManager.reset();
+}
 
 } // namespace RenderCore

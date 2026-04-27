@@ -1,7 +1,7 @@
 #include "RenderGraphResource.h"
 #include "RenderGraphBuilder.h"
 #include "RHIApi.h"
-
+using namespace RHI;
 namespace RenderCore {
 
 // -------------------------------------------------------------------------------------------------
@@ -17,7 +17,7 @@ RenderGraphResource::~RenderGraphResource()
     // Cleanup if necessary
 }
 
-void RenderGraphResource::SetRHIResource(RHIResource* resource)
+void RenderGraphResource::SetRHIResource(RHI::RHIResource* resource)
 {
     Resource = resource;
 }
@@ -35,17 +35,6 @@ RenderGraphTexture::~RenderGraphTexture()
     // Cleanup if necessary
 }
 
-void RenderGraphTexture::Create(RenderGraphBuilder& builder)
-{
-    if (!IsCreated())
-    {
-        RHITextureDesc textureDesc;
-        RHITextureSP texture = GRHIApi->CreateTexture(textureDesc);
-        SetRHITexture(texture.get());
-        SetCreated(true);
-    }
-}
-
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Buffer Implementation
 // -------------------------------------------------------------------------------------------------
@@ -59,16 +48,6 @@ RenderGraphBuffer::~RenderGraphBuffer()
     // Cleanup if necessary
 }
 
-void RenderGraphBuffer::Create(RenderGraphBuilder& builder)
-{
-    if (!IsCreated())
-    {
-        RHIBufferDesc bufferDesc;
-        RHIBufferSP buffer = GRHIApi->CreateBuffer(bufferDesc);
-        SetRHIBuffer(buffer.get());
-        SetCreated(true);
-    }
-}
 
 RenderGraphUAV::RenderGraphUAV(const std::string& name) : RenderGraphView(name)
 {

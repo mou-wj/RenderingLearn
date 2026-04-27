@@ -1,4 +1,4 @@
-#pragma
+#pragma once
 template<typename EnumType>
 class TFlags
 {

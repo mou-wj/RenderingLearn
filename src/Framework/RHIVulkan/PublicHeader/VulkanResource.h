@@ -4,6 +4,7 @@
 #include "VulkanMemory.h"
 #include "VulkanDevice.h"
 #include "VulkanFuncWrapper.h"
+#include "VulkanTransientResource.h"
 #include <vector>
 #include <memory>
 #include <deque>
@@ -169,10 +170,12 @@ protected:
     bool IsValid = true;
 };
 
+class VulkanTransientAllocation;
+
 // Vulkan Texture
 class VulkanTexture : public RHITexture {
 public:
-    VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc);
+    VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, bool externalAllocated = false);
     VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, VkImage image);
     ~VulkanTexture() override;
 
@@ -182,11 +185,17 @@ public:
 	VkImageAspectFlags GetAspectFlags() const { return ImageAspectFlags; }
 	VulkanAllocation& GetAllocation() { return Allocation; }
 
+    void SetTransientAllocation(VulkanTransientAllocation transientAllocation) {
+        TransientAllocation = transientAllocation;
+    }
+    VulkanTransientAllocation GetTransientAllocation() const { return TransientAllocation; }
+
 
     // View management
     void AttachView(VulkanViewBase* view);
     void DetachView(VulkanViewBase* view);
 private:
+    VulkanTransientAllocation TransientAllocation;
     void DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImageLayout &Layout,ERHIResourceAccess &Access);
 
     VkImage Image = VK_NULL_HANDLE;
@@ -196,7 +205,7 @@ private:
     VulkanAllocation Allocation;
     bool owner = true;
 	VkImageAspectFlags ImageAspectFlags = 0;
-
+    bool ExternalAllocated = false;
     std::vector<VulkanViewBase*> views;
 };
 using VulkanTextureSP = std::shared_ptr<VulkanTexture>;
@@ -204,11 +213,16 @@ using VulkanTextureSP = std::shared_ptr<VulkanTexture>;
 // Vulkan Buffer
 class VulkanBuffer : public RHIBuffer {
 public:
-    VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc);
+    VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc,bool externalAllocated = false);
     ~VulkanBuffer() override;
 
     const VkBuffer& GetHandle() const { return Buffer; }
     VkDeviceSize GetSize() const { return Size; }
+
+    void SetTransientAllocation(VulkanTransientAllocation transientAllocation) {
+        TransientAllocation = transientAllocation;
+    }
+    VulkanTransientAllocation GetTransientAllocation() const { return TransientAllocation; }
 
     // View management
     void AttachView(VulkanViewBase* view);
@@ -219,6 +233,8 @@ private:
     VkDeviceSize Size = 0;
     VulkanDevice* Device = nullptr;
     VulkanAllocation Allocation;
+    bool ExternalAllocated = false;
+    VulkanTransientAllocation TransientAllocation;
 
     std::vector<VulkanViewBase*> views;
 };

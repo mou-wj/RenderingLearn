@@ -516,4 +516,22 @@ void VulkanDevice::ReleaseDeferredResources(uint32_t FrameDelay)
         deferredDeleteQueue_->ReleaseResources(FrameDelay);
 }
 
+uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
+{
+    VkPhysicalDeviceMemoryProperties memProperties;
+    VKFunc::GetPhysicalDeviceMemoryProperties(physicalDevice_, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+    {
+        // 1. typeFilter：bitmask，表示哪些 memoryType 可用
+        // 2. properties：你想要的属性（比如 DEVICE_LOCAL）
+        if ((typeFilter & (1 << i)) &&
+            (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+    throw std::runtime_error("Failed to find suitable memory type!");
+}
+
 }

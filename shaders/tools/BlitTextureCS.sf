@@ -1,44 +1,44 @@
 // 1. 静态宏定义，由 C++ 根据当前需求动态注入
 // #define COLOR_CONVERSION_MODE  1
 // 0: None, 1: sRGBToLinear, 2: LinearToSRGB
-Texture2D<float4> SrcTexture : register(t0);
-SamplerState LinearSampler  : register(s0);
-RWTexture2D<float4> DstTexture : register(u0);
+#include "/Generated/ShaderParameters/BlitTextureParameters.sf"
 
-#include "/Generated/BlitTextureParameters.sf"
-
-
-// 简单的 sRGB 转换函数 (工业级通常使用更精确的近似公式)
-float3 ApplySRGB(float3 InColor) {
-    return InColor < 0.0031308 ? InColor * 12.92 : 1.055 * pow(InColor, 1.0 / 2.4) - 0.055;
+float3 ApplySRGB(float3 c)
+{
+    return lerp(
+        c * 12.92,
+        1.055 * pow(c, 1.0 / 2.4) - 0.055,
+        step(0.0031308, c)
+    );
 }
 
-float3 RemoveSRGB(float3 InColor) {
-    return InColor < 0.04045 ? InColor / 12.92 : pow((InColor + 0.055) / 1.055, 2.4);
+float3 RemoveSRGB(float3 c)
+{
+    return lerp(
+        c / 12.92,
+        pow((c + 0.055) / 1.055, 2.4),
+        step(0.04045, c)
+    );
 }
 
 [numthreads(8, 8, 1)]
 void MainCS(uint3 DTid : SV_DispatchThreadID)
 {
-    // 1. 越界检查
-    if (DTid.x >= (uint)DstSize.x || DTid.y >= (uint)DstSize.y)
+    uint2 DstDim = uint2((uint)DstSize.x, (uint)DstSize.y);
+
+    if (DTid.x >= DstDim.x || DTid.y >= DstDim.y)
         return;
 
-    // 2. 计算 UV 坐标
-    // 加上 0.5 偏移以采样像素中心，乘以 DstInvSize 归一化
-    float2 UV = (float2(DTid.xy) + 0.5f) * DstInvSize;
+    // ⭐ 正确UV（支持不同分辨率）
+    float2 UV = (float2(DTid.xy) + 0.5f) / DstSize;
 
-    // 3. 采样数据
-    // 使用 SampleLevel 明确 LOD，防止 CS 在计算导数时产生伪影
-    float4 OutColor = SrcTexture.SampleLevel(LinearSampler, UV, SrcMipLevel);
+    float4 OutColor = SrcTexture.SampleLevel(SrcSampler, UV, SrcMipLevel);
 
-    // 4. 处理颜色空间转换 (基于静态编译宏，零运行时开销)
 #if COLOR_CONVERSION_MODE == 1
     OutColor.rgb = RemoveSRGB(OutColor.rgb);
 #elif COLOR_CONVERSION_MODE == 2
     OutColor.rgb = ApplySRGB(OutColor.rgb);
 #endif
 
-    // 5. 写入目标
     DstTexture[DTid.xy] = OutColor;
 }

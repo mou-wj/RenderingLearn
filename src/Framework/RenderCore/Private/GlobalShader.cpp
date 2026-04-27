@@ -74,7 +74,7 @@ namespace RenderCore{
                 if (st->ModifyCompilationEnvironment)
                 {
                     // 内部会调用 Domain.SetFromId(permId) 和 Domain.ModifyCompilationEnvironment(env)
-                    st->ModifyCompilationEnvironment(env);
+                    st->ModifyCompilationEnvironment(permParams,env);
                 }
 
                 // 5. 构造编译输入并调用编译器

@@ -98,6 +98,10 @@ namespace RenderCore {
             return Names;
         }
 
+        const std::unordered_map<std::string, ShaderParameterAllocation>& GetParameterMap() const {
+            return ParameterMap;
+        }
+
     private:
         std::unordered_map<std::string, ShaderParameterAllocation> ParameterMap;
     };
@@ -187,7 +191,7 @@ public:
     std::string SourceFile;       // USF 源文件路径
     std::string EntryPoint;       // 入口函数名
     RHI::ERHIShaderFrequency Frequency;   // VS / PS / CS
-    std::function< void(ShaderCompilerEnvironment&)> ModifyCompilationEnvironment;
+    std::function< void(const ShaderPermutationParameters&,ShaderCompilerEnvironment&)> ModifyCompilationEnvironment;
     std::function< bool(const ShaderPermutationParameters&)> ShouldCompilePermutation;
     std::function<RHIShader* (const ShaderCompiledInitializer&)> ConstructCompiled;
     int32_t TotalPermutationCount = 1;
@@ -307,7 +311,7 @@ public:
 
 
 
-    static void ModifyShaderCompilerEnvironment(ShaderCompilerEnvironment& Env) {}
+    static void ModifyShaderCompilerEnvironment(const ShaderPermutationParameters& ,ShaderCompilerEnvironment& Env) {}
 
     static bool ShouldCompilePermutation(const ShaderPermutationParameters& param) { return true; }
 
@@ -315,7 +319,14 @@ public:
 
 protected:
     void InitShaderBindings(const ShaderParametersMetadata* Metadata,
-        const ShaderParameterAllocationMap& InParameterMap,std::string Prefix);
+        const ShaderParameterAllocationMap& InParameterMap);
+    void ProcessMetadataRecursive(
+        const ShaderParametersMetadata& Metadata,
+        const std::string& Prefix,
+        const ShaderParameterAllocationMap& ParameterMap,
+        ShaderParameterBindingInfo& OutBindings);
+
+    void InitShaderRHI(ERHIShaderFrequency frequency, const std::vector<char>& shaderSourceCode);
     // Shader Name (for debugging and identification)
     std::string Name;
 

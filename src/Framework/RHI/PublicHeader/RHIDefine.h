@@ -128,6 +128,12 @@ enum class EQueueType
     Transfer
 };
 
+struct RHIFence {
+    EQueueType QueueType; // 哪根标尺
+    uint64_t Value;      // 哪个刻度
+};
+
+
 // 资源类型
 enum class ERHIResourceType
 {

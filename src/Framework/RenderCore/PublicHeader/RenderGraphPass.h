@@ -19,30 +19,27 @@ class RenderGraphBuilder;
 
 class RENDERCORE_API BarrierBatchBegin {
 public:
-    void AddTransition(const RHITransitionInfo& transientInfo) {
+    void AddTransition(const RHI::RHITransitionInfo& transientInfo) {
         transitions.push_back(transientInfo);
     }
 
-    void Execute(RHI::RHICommandListBase& commandList);
-
-    const std::vector<RHITransitionInfo>& GetTransitions() const { return transitions; }
+    const std::vector<RHI::RHITransitionInfo>& GetTransitions() const { return transitions; }
 
 private:
-    std::vector<RHITransitionInfo> transitions;
+    std::vector<RHI::RHITransitionInfo> transitions;
 };
 
 class RENDERCORE_API BarrierBatchEnd {
 public:
-    void AddTransition(const RHITransitionInfo& transientInfo) {
+    void AddTransition(const RHI::RHITransitionInfo& transientInfo) {
         transitions.push_back(transientInfo);
     }
 
-    void Execute(RHI::RHICommandListBase& commandList);
 
-    const std::vector<RHITransitionInfo>& GetTransitions() const { return transitions; }
+    const std::vector<RHI::RHITransitionInfo>& GetTransitions() const { return transitions; }
 
 private:
-    std::vector<RHITransitionInfo> transitions;
+    std::vector<RHI::RHITransitionInfo> transitions;
 };
 
 enum class EPassFlag {
@@ -96,6 +93,8 @@ public:
     RenderGraphPass(const std::string& name, EPassFlag passFlag, const RenderGraphParameterStruct& parameter) ;
     virtual ~RenderGraphPass() = default;
 
+    EPassFlag GetPassFlag() const { return PassFlag; }
+
     // Accessors
     const std::string& GetName() const { return Name; }
 
@@ -108,6 +107,7 @@ public:
 protected:
     // Pass Name (for debugging and identification)
     std::string Name;
+    EPassFlag PassFlag;
     // Pass Info (metadata about the pass)
     RenderGraphParameterStruct ParameterStruct;
     using PassList = std::list<RenderGraphPass*>;
@@ -123,11 +123,11 @@ protected:
         RenderGraphTexture* Texture = nullptr;
 
         // 该 Pass 对纹理的访问需求
-        ERHIResourceAccess RequiredAccess = ERHIResourceAccess::Unknown;
+        RHI::ERHIResourceAccess RequiredAccess = RHI::ERHIResourceAccess::Unknown;
 
         // 访问的子资源范围（重要：解决你之前担心的 Subresource 问题）
         // 如果是全资源访问，可以使用之前定义的 kAllSubresources
-        RHISubresourceRange SubresourceRange;
+        RHI::RHISubresourceRange SubresourceRange;
         
     };
 
@@ -139,7 +139,7 @@ protected:
         RenderGraphBuffer* Buffer = nullptr;
 
         // 该 Pass 需要的访问权限 (如：ShaderResource, UnorderedAccess, VertexBuffer 等)
-        ERHIResourceAccess RequiredAccess = ERHIResourceAccess::Unknown;
+        RHI::ERHIResourceAccess RequiredAccess = RHI::ERHIResourceAccess::Unknown;
 
         // 虽然 Buffer 通常视为整体，但为了严谨，可以预留偏移和大小
         // 某些高级优化（如 Buffer Aliasing）可能会用到

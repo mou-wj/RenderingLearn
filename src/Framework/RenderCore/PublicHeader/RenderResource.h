@@ -34,12 +34,15 @@ protected:
 class RENDERCORE_API RenderTexture : public RenderResource
 {
 public:
-    RenderTexture();
+    RenderTexture(const RHI::RHITextureDesc& inDesc);
     ~RenderTexture() override;
 
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
+    RHI::RHITextureSP GetRHI() const { return Texture; }
+private:
     // 其他纹理相关接口
+	RHI::RHITextureDesc Desc;
     RHI::RHITextureSP Texture;
 };
 
@@ -47,12 +50,16 @@ public:
 class RENDERCORE_API RenderBuffer : public RenderResource
 {
 public:
-    RenderBuffer();
+    RenderBuffer(const RHI::RHIBufferDesc& inDesc);
     ~RenderBuffer() override;
 
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
     // 其他缓冲区相关接口
+	RHI::RHIBufferSP GetRHI() const { return Buffer; }
+private:
+    RHI::RHIBufferDesc Desc;
+    RHI::RHIBufferSP Buffer;
 };
 
 
@@ -200,11 +207,10 @@ class RENDERCORE_API PooledTransientRenderTarget final : public IPooledRenderTar
 public:
     PooledTransientRenderTarget(
         const PoolRenderTargetDesc& InDesc,
-        RHI::RHITransientTexture* InTransientTexture)
+        RHI::RHITransientTextureSP InTransientTexture)
         : Desc(InDesc)
-        , TransientTexture(InTransientTexture)
+        , TransientTexture(std::move(InTransientTexture))
     {
-
     }
 
     virtual const PoolRenderTargetDesc& GetDesc() const override
@@ -214,10 +220,9 @@ public:
 
     virtual RHI::RHITransientTexture* GetTransientRHI()
     {
-        return TransientTexture;
+        return TransientTexture.get();
     }
 
-    // 可选：如果你希望某些地方仍然能拿到“底层纹理”
     virtual RHI::RHITexture* GetRHI() override
     {
         return TransientTexture
@@ -227,7 +232,9 @@ public:
 
 private:
     PoolRenderTargetDesc Desc;
-    RHI::RHITransientTexture* TransientTexture = nullptr;
+
+    // ✅ 改成 shared_ptr（核心）
+    RHI::RHITransientTextureSP TransientTexture;
 };
 
 // -------------------------------
@@ -258,44 +265,83 @@ private:
 
 extern RENDERCORE_API RenderTargetPool* GRenderTargetPool;
 
+struct TransientBufferDesc{
+
+};
+
+class PooledTransientBuffer
+{
+public:
+	PooledTransientBuffer(
+		const RHI::RHIBufferDesc& InDesc,
+		RHI::RHITransientBufferSP InTransientBuffer)
+		: Desc(InDesc)
+		, TransientBuffer(std::move(InTransientBuffer))
+	{
+	}
+
+    const RHI::RHIBufferDesc& GetDesc() const { return Desc; }
+    RHI::RHIBuffer* GetRHI() const { return TransientBuffer->GetBuffer().get(); }
+private:
+    RHI::RHIBufferDesc Desc;
+    RHI::RHITransientBufferSP TransientBuffer = nullptr;
+
+
+};
+
 // -------------------------------
 // 精简 Transient Allocator（无 PassHandle）
 // -------------------------------
+// --------------------------------------
+// TransientResourceAllocator（优化版）
+// --------------------------------------
 class RENDERCORE_API TransientResourceAllocator
 {
 public:
     TransientResourceAllocator() = default;
+    void InitRHI();
+    void ReleaseRHI();
 
-    // 分配 transient render target
+    // -------------------------------
+    // Allocate
+    // -------------------------------
     std::shared_ptr<PooledTransientRenderTarget> AllocateRenderTarget(
         const PoolRenderTargetDesc& Desc,
-        RHI::RHITransientTexture* Texture)
+        uint32_t beginIndex,
+        uint32_t endIndex)
     {
-        std::lock_guard<std::mutex> Lock(Mutex);
+        // 👉 直接创建 transient texture（核心）
+        auto transientTex = TransientResourceManager->CreateTransientTexture(
+            PoolRenderTargetDesc::ConvertToRHITextureDesc(Desc),
+            beginIndex,
+            endIndex);
 
-        if (!FreeList.empty())
-        {
-            auto RT = FreeList.back();
-            FreeList.pop_back();
-            return RT;
-        }
+        // 👉 创建 wrapper（不复用）
+        return std::make_shared<PooledTransientRenderTarget>(
+            Desc,
+            transientTex);
+    }
+    std::shared_ptr<PooledTransientBuffer> AllocateBuffer(
+        const RHI::RHIBufferDesc& Desc,
+        uint32_t beginIndex,
+        uint32_t endIndex)
+    {
+        // 👉 直接创建 transient texture（核心）
+        auto transientTex = TransientResourceManager->CreateTransientBuffer(
+            Desc,
+            beginIndex,
+            endIndex);
 
-        // 创建新的
-        auto RT = std::make_shared<PooledTransientRenderTarget>(Desc, Texture);
-        return RT;
+        // 👉 创建 wrapper（不复用）
+        return std::make_shared<PooledTransientBuffer>(
+            Desc,
+            transientTex);
     }
 
-    // 释放 render target（立即放回 free list）
-    void Release(std::shared_ptr<PooledTransientRenderTarget> RenderTarget)
-    {
-        std::lock_guard<std::mutex> Lock(Mutex);
-        FreeList.push_back(RenderTarget);
-    }
 
 private:
-    RHI::RHITransientResourceManagerSP Allocator = nullptr;
-    std::mutex Mutex;
-    std::vector<std::shared_ptr<PooledTransientRenderTarget>> FreeList;
+
+    RHI::RHITransientResourceManagerSP TransientResourceManager;
 };
 
 extern RENDERCORE_API TransientResourceAllocator* GTransientResourceAllocator;

@@ -167,10 +167,6 @@ public:
     virtual void Present(RHISwapchain* Swapchain, const RHIWaitInfo& WaitInfo) = 0;
 };
 
-struct RHIFence {
-    EQueueType QueueType; // 哪根标尺
-    uint64_t Value;      // 哪个刻度
-};
 
 class RHIQueue {
 public:

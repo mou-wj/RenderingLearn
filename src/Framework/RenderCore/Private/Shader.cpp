@@ -7,13 +7,28 @@
 namespace RenderCore {
 
 
+inline bool IsResourceType(EShaderUniformBaseType type)
+{
+    switch (type)
+    {
+    case EShaderUniformBaseType::Texture_SRV:
+    case EShaderUniformBaseType::Texture_UAV:
+    case EShaderUniformBaseType::Buffer_SRV:
+    case EShaderUniformBaseType::Buffer_UAV:
+    case EShaderUniformBaseType::Sampler:
+        return true;
+    default:
+        return false;
+    }
+}
 Shader::Shader(const ShaderCompiledInitializer& initializer)
 {
     Name = initializer.Type->Name;
-
-
-
-
+    auto metadata = initializer.Type->RootParametersMetadata;
+    if (metadata) {
+		InitShaderBindings(metadata, initializer.ParameterMap);
+    }
+    InitShaderRHI(initializer.Type->Frequency, initializer.Code);
 }
 
 // Destructor
@@ -44,76 +59,142 @@ bool Shader::Compile()
     }
 }
 
-void Shader::InitShaderBindings(const ShaderParametersMetadata* Metadata, const ShaderParameterAllocationMap& InParameterMap, std::string Prefix)
+void Shader::ProcessMetadataRecursive(
+    const ShaderParametersMetadata& Metadata,
+    const std::string& Prefix,
+    const ShaderParameterAllocationMap& ParameterMap,
+    ShaderParameterBindingInfo& OutBindings)
+{
+    for (const auto& Member : Metadata.GetMembers())
+    {
+        std::string Name = Prefix.empty()
+            ? Member.Name
+            : Prefix + "_" + Member.Name;
+
+        // =========================
+        // 1. Resource（SRV/UAV/Sampler）
+        // =========================
+        if (Member.IsResource())
+        {
+            auto Allocation = ParameterMap.FindParameterAllocation(Name);
+            if (!Allocation.has_value())
+                continue; // shader没用到
+
+            ShaderParameterBindingInfo::ShaderResourceBinding Binding;
+            Binding.BaseType = Member.BaseType;
+            Binding.BindSlot = Allocation->BaseIndex;
+            Binding.ArraySize = (Member.NumElements > 0) ? Member.NumElements : 1;
+            Binding.Offset = Member.Offset;
+
+            OutBindings.AddResourceBinding(Name, Binding);
+        }
+        // =========================
+        // 2. Struct（递归展开）
+        // =========================
+        else if (Member.IsStruct())
+        {
+            ProcessMetadataRecursive(
+                *Member.StructMetadata,
+                Name,
+                ParameterMap,
+                OutBindings);
+        }
+        // =========================
+        // 3. Uniform（关键）
+        // =========================
+        else
+        {
+            // Uniform 是走 cbuffer 的
+
+            auto Allocation = ParameterMap.FindParameterAllocation(Name);
+
+            if (!Allocation.has_value())
+                continue; // shader没用到
+
+            if (Allocation->Type != EShaderParameterType::LooseData &&
+                Allocation->Type != EShaderParameterType::UniformBuffer)
+            {
+                continue;
+            }
+
+            ShaderParameterBindingInfo::ShaderUniformBinding Binding;
+            Binding.BaseType = Member.BaseType;
+            Binding.Offset = Member.Offset;
+            Binding.Size = Allocation->Size;
+
+            OutBindings.AddUniformBinding(Name, Binding);
+        }
+    }
+}
+
+void Shader::InitShaderBindings(const ShaderParametersMetadata* Metadata, const ShaderParameterAllocationMap& InParameterMap)
 {
     if (!Metadata) return;
 
-    // 1. 处理 UniformBuffer 整体绑定
-    // 如果该 Metadata 被声明为 UniformBuffer (cbuffer)，它在物理表里通常有一个整体的 Slot
-    if (Metadata->GetUseCase() == ShaderParametersMetadata::EUseCase::UniformBuffer)
+    Bindings = {}; // 清空
+
+    if (!Metadata)
+        return;
+
+    ProcessMetadataRecursive(
+        *Metadata,
+        "",                     // prefix
+        InParameterMap,
+        Bindings);
+}
+
+void Shader::InitShaderRHI(ERHIShaderFrequency frequency, const std::vector<char>& shaderSourceCode)
+{
+    switch (frequency)
     {
-        // UniformBuffer 的名字在物理表中通常不带前缀，或者是顶级名字
-        auto Alloc = InParameterMap.FindParameterAllocation(Metadata->GetStructName());
-        if (Alloc.has_value())
-        {
-            ShaderParameterBindingInfo::ShaderResourceBinding UB;
-            UB.BindSlot = Alloc->BaseIndex; // 对应的 register(bN)
-            UB.BaseType = EShaderUniformBaseType::Unknown;
-            UB.ArraySize = 1;
-
-            // 将整个 UB 块存入资源绑定，Key 是结构体名
-            Bindings.AddResourceBinding(Metadata->GetStructName(), UB);
-
-            // 注意：如果这是一个 UB，我们通常不再递归处理它的内部成员的物理绑定，
-            // 因为 UB 内部成员是通过 CPU 端的 Offset 进行内存拷贝的，而不是靠 GPU Slot。
-            return;
-        }
+    case RHI::ERHIShaderFrequency::Unknown:
+        break;
+    case RHI::ERHIShaderFrequency::Vertex:
+        RHIShader = GRHIApi->CreateVertexShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Fragment:
+        RHIShader = GRHIApi->CreateFragmentShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Geometry:
+        RHIShader = GRHIApi->CreateGeometryShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Compute:
+        RHIShader = GRHIApi->CreateComputeShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::TessControl:
+        RHIShader = GRHIApi->CreateTessControlShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::TessEvaluation:
+        RHIShader = GRHIApi->CreateTessEvalShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Mesh:
+        RHIShader = GRHIApi->CreateMeshShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Task:
+        RHIShader = GRHIApi->CreateTaskShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::RayGen:
+        RHIShader = GRHIApi->CreateRayGenShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::ClosestHit:
+        RHIShader = GRHIApi->CreateCloseHitShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Miss:
+        RHIShader = GRHIApi->CreateMissShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::AnyHit:
+        RHIShader = GRHIApi->CreateAnyHitShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Intersection:
+        RHIShader = GRHIApi->CreateIntersectionShader(shaderSourceCode);
+        break;
+    case RHI::ERHIShaderFrequency::Callable:
+        RHIShader = GRHIApi->CreateCallableShader(shaderSourceCode);
+        break;
+    default:
+        break;
     }
 
-    // 2. 遍历成员，处理嵌套结构体或独立变量 (Loose Parameters / Resources)
-    for (const auto& Member : Metadata->GetMembers())
-    {
-        // 构造完整的反射路径名，例如 "View.Direction"
-        std::string FullName = Prefix.empty() ? Member.Name : Prefix + Member.Name;
-
-        if (Member.IsStruct())
-        {
-            // --- 递归处理嵌套结构体 ---
-            // 传入 "Member名." 作为下一级的前缀
-            InitShaderBindings(Member.StructMetadata, InParameterMap, FullName + ".");
-        }
-        else
-        {
-            // --- 处理叶子节点（基础变量或资源） ---
-            auto Alloc = InParameterMap.FindParameterAllocation(FullName);
-
-            if (Alloc.has_value())
-            {
-                const auto& PhysLoc = Alloc.value();
-
-                if (Member.IsResource())
-                {
-                    // 处理 Texture, Sampler, UAV 等
-                    ShaderParameterBindingInfo::ShaderResourceBinding Resource;
-                    Resource.BindSlot = PhysLoc.BaseIndex; // register(t/s/u N)
-                    Resource.BaseType = Member.BaseType;
-                    Resource.ArraySize = (Member.NumElements > 0) ? Member.NumElements : 1;
-
-                    Bindings.AddResourceBinding(FullName, Resource);
-                }
-                else
-                {
-                    // 处理 Loose Data (不在 UB 里的全局变量)
-                    ShaderParameterBindingInfo::ShaderUniformBinding Uniform;
-                    Uniform.BaseType = Member.BaseType;
-                    Uniform.Offset = PhysLoc.BaseIndex; // 物理偏移或 Slot
-                    Uniform.Size = PhysLoc.Size;
-
-                    Bindings.AddUniformBinding(FullName, Uniform);
-                }
-            }
-        }
-    }
 }
 
 

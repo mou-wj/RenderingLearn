@@ -7,6 +7,7 @@
 namespace RenderCore {
 
 
+
     // ���� Blit �����ṹ
     BEGIN_SHADER_PARAMETER_STRUCT(BlitTextureParameters)
         SHADER_PARAMETER(Core::Float2, SrcSize)
@@ -15,7 +16,8 @@ namespace RenderCore {
         SHADER_PARAMETER(Core::Float2, DstInvSize)
         SHADER_PARAMETER(float, SrcMipLevel)
         SHADER_PARAMETER_TEXTURE(RenderGraphTexture, SrcTexture)
-        SHADER_PARAMETER_TEXTURE(RenderGraphTexture, DstTexture)
+        SHADER_PARAMETER_TEXTURE_UAV(RenderGraphTextureUAV, DstTexture)
+		SHADER_PARAMETER_SAMPLER(SrcSampler)
     END_SHADER_PARAMETER_STRUCT(BlitTextureParameters)
 
     class BlitTextureCS : public GlobalShader
@@ -30,6 +32,8 @@ namespace RenderCore {
         // 3. 定义变体域（Domain），可以包含多个维度
         using PermutationDomain = ShaderPermutationDomain<ColorConversionDim>;
 
+        
+
         // ����Ϊ Global Shader ����
         // ��һ��������� IMPLEMENT_SHADER_TYPE_FLAG ����ע���߼�
         DECLARE_GLOBAL_SHADER_TYPE(BlitTextureCS);
@@ -41,10 +45,11 @@ namespace RenderCore {
         }
 
         // �޸ı��뻷���������Ҫ����ĳЩ�꣬����֧�ֲ�ͬ�Ĳ�����ʽ��
-        static void ModifyShaderCompilerEnvironment(ShaderCompilerEnvironment& OutEnvironment)
+        static void ModifyShaderCompilerEnvironment(const ShaderPermutationParameters& Parameters,ShaderCompilerEnvironment& OutEnvironment)
         {
-            GlobalShader::ModifyShaderCompilerEnvironment(OutEnvironment);
-            // OutEnvironment.SetDefine("SUPPORT_SRGB", 1);
+            PermutationDomain Domain;
+            Domain.SetFromId(Parameters.PermutationId);
+            Domain.ModifyCompilationEnvironment(OutEnvironment);
         }
 
         // ��ȡ����Ԫ���ݣ����ڷ���
@@ -58,7 +63,7 @@ namespace RenderCore {
     // ʹ����ĺ꣬���Ϊ Global ����
     IMPLEMENT_SHADER_TYPE_FLAG(
         BlitTextureCS,
-        "litTextureCS",                     // Shader �Ѻ�����
+        "BlitTextureCS",                     // Shader �Ѻ�����
         "/tools/BlitTextureCS.sf",   // ����·��
         "MainCS",                                // ��ڵ�
         RHI::ERHIShaderFrequency::Compute,       // Ƶ��

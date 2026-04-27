@@ -18,6 +18,7 @@
 #include "spirv_hlsl.hpp"
 #include "PathInfo.h"
 #include "ShaderCompiledDataPacker.h"
+#include "Log.h"
 
 namespace RenderCore {
 
@@ -70,116 +71,229 @@ namespace RenderCore {
     public:
         // 统一定义虚拟路径的前缀
         static std::string GetVirtualPath(const ShaderParametersMetadata& root) {
-            return std::string("/Engine/ShaderParameters/") + root.GetStructName() + ".sf";
+            return std::string("/Generated/ShaderParameters/") + root.GetStructName() + ".sf";
         }
 
         // 用户调用的接口：只返回字符串
         std::string GenerateOrGetShaderParameterMetaDataSF(const ShaderParametersMetadata& root) {
             std::string VirtualPath = GetVirtualPath(root);
-            // 1. 检查全局虚拟文件系统是否已有缓存
+
             auto CachedContent = GShaderVirtualFileSystem.GetFileContent(VirtualPath);
             if (CachedContent.has_value()) {
                 return CachedContent.value();
             }
 
-            // 2. 准备编译上下文
-            std::stringstream FinalCode;
-            std::unordered_set<std::string> DefinedTypes;
-            uint32_t TextureSlot = 0;
-            uint32_t SamplerSlot = 0;
-            uint32_t UavSlot = 0;
+            std::stringstream Code;
 
-            // 添加文件头注释，方便调试查看生成来源
-            FinalCode << "// Generated for " << root.GetStructName() << "\n\n";
+            uint32_t TSlot = 0;
+            uint32_t SSlot = 0;
+            uint32_t USlot = 0;
+            uint32_t BSlot = 0;
 
-            // 3. 执行递归生成
-            RecursiveProcess(root, "", FinalCode, DefinedTypes, TextureSlot, SamplerSlot, UavSlot);
+            Code << "// Generated for " << root.GetStructName() << "\n\n";
 
-            // 4. 存入全局虚拟文件系统并返回结果
-            std::string Result = FinalCode.str();
+            // ================================
+            // ⭐ 1. 生成 cbuffer（Uniform）
+            // ================================
+            Code << "cbuffer " << root.GetStructName()
+                << " : register(b" << BSlot++ << ")\n{\n";
+
+            EmitUniformMembers(root, "", Code);
+
+            Code << "};\n\n";
+
+            // ================================
+            // ⭐ 2. 生成 Resource（SRV/UAV/Sampler）
+            // ================================
+            EmitResources(root, "", Code, TSlot, SSlot, USlot);
+
+            std::string Result = Code.str();
+
+            LOG_INFO("%s", Result.c_str());
             GShaderVirtualFileSystem.RegisterVirtualFile(VirtualPath, Result);
 
             return Result;
         }
 
+
     private:
 
-        void RecursiveProcess(
+        // ============================================
+   // ⭐ Uniform flatten（核心）
+   // ============================================
+        void EmitUniformMembers(
             const ShaderParametersMetadata& Metadata,
-            std::string PathPrefix,
-            std::stringstream& OutCode,
-            std::unordered_set<std::string>& DefinedTypes,
-            uint32_t& TSlot, uint32_t& SSlot, uint32_t& USlot)
+            const std::string& Prefix,
+            std::stringstream& OutCode)
         {
-            // --- 步骤 A: 确保类型定义 (Type Definitions) ---
-            // 先处理所有嵌套结构体的类型声明，且全局只声明一次
-            for (const auto& Member : Metadata.GetMembers()) {
-                if (Member.IsStruct() && Member.StructMetadata) {
-                    if (DefinedTypes.find(Member.StructMetadata->GetStructName()) == DefinedTypes.end()) {
-                        // 递归声明子结构体类型（此时不传路径，因为是类型定义）
-                        RecursiveProcess(*Member.StructMetadata, "", OutCode, DefinedTypes, TSlot, SSlot, USlot);
-                    }
+            for (const auto& Member : Metadata.GetMembers())
+            {
+                if (Member.IsResource())
+                    continue;
+
+                std::string Name = Prefix.empty()
+                    ? Member.Name
+                    : Prefix + "_" + Member.Name;
+
+                if (Member.IsStruct())
+                {
+                    // ⭐递归展开 struct
+                    EmitUniformMembers(*Member.StructMetadata, Name, OutCode);
                 }
-            }
+                else
+                {
+                    std::string TypeName = MapNumericType(Member);
 
-            // 生成当前结构体的 struct 定义
-            if (DefinedTypes.find(Metadata.GetStructName()) == DefinedTypes.end()) {
-                OutCode << "struct " << Metadata.GetStructName() << "\n{\n";
-                for (const auto& Member : Metadata.GetMembers()) {
-                    if (Member.IsResource()) continue; // struct 内部不放资源
-
-                    std::string TypeName = Member.IsStruct() ?
-                        Member.StructMetadata->GetStructName() : MapBaseType(Member.BaseType);
-
-                    OutCode << "    " << TypeName << " " << Member.Name << ";\n";
-                }
-                OutCode << "};\n\n";
-                DefinedTypes.insert(Metadata.GetStructName());
-            }
-
-            // --- 步骤 B: 资源绑定平铺 (Resource Flattening) ---
-            // 只有当 PathPrefix 不为空时，才表示我们在处理某个具体变量的资源展开
-            // 如果是顶层调用，我们也需要遍历其成员展开资源
-            for (const auto& Member : Metadata.GetMembers()) {
-                std::string FullName = PathPrefix.empty() ? Member.Name : PathPrefix + "_" + Member.Name;
-
-                if (Member.IsResource()) {
-                    // 根据类型分配寄存器
-                    std::string Reg;
-                    if (Member.BaseType == EShaderUniformBaseType::Texture || Member.BaseType == EShaderUniformBaseType::Texture_SRV) {
-                        Reg = "t" + std::to_string(TSlot++);
-                    }
-                    else if (Member.BaseType == EShaderUniformBaseType::Sampler) {
-                        Reg = "s" + std::to_string(SSlot++);
-                    }
-                    else if (Member.BaseType == EShaderUniformBaseType::Texture_UAV) {
-                        Reg = "u" + std::to_string(USlot++);
+                    std::string ArraySuffix;
+                    if (Member.NumElements > 0)
+                    {
+                        ArraySuffix = "[" + std::to_string(Member.NumElements) + "]";
                     }
 
-                    OutCode << MapBaseType(Member.BaseType) << " " << FullName << " : register(" << Reg << ");\n";
-                }
-                else if (Member.IsStruct()) {
-                    // 如果是嵌套结构体，继续向下探测其内部是否有资源需要展开
-                    RecursiveProcess(*Member.StructMetadata, FullName, OutCode, DefinedTypes, TSlot, SSlot, USlot);
+                    OutCode << "    " << TypeName << " " << Name << ArraySuffix << ";\n";
                 }
             }
         }
 
-        std::string MapBaseType(EShaderUniformBaseType type) {
-            switch (type) {
-            case EShaderUniformBaseType::Float32:     return "float";
-            case EShaderUniformBaseType::Int32:       return "int";
-            case EShaderUniformBaseType::UInt32:      return "uint";
-            case EShaderUniformBaseType::Bool:        return "bool";
-            case EShaderUniformBaseType::Texture:     return "Texture2D";
-            case EShaderUniformBaseType::Texture_SRV: return "Texture2D";
-            case EShaderUniformBaseType::Texture_UAV: return "RWTexture2D<float4>";
-            case EShaderUniformBaseType::Sampler:     return "SamplerState";
-            case EShaderUniformBaseType::Buffer_SRV:  return "Buffer<float4>";
-            case EShaderUniformBaseType::Buffer_UAV:  return "RWBuffer<float4>";
+        // ============================================
+        // ⭐ Resource flatten（SRV/UAV/Sampler）
+        // ============================================
+        void EmitResources(
+            const ShaderParametersMetadata& Metadata,
+            const std::string& Prefix,
+            std::stringstream& OutCode,
+            uint32_t& TSlot,
+            uint32_t& SSlot,
+            uint32_t& USlot)
+        {
+            for (const auto& Member : Metadata.GetMembers())
+            {
+                std::string Name = Prefix.empty()
+                    ? Member.Name
+                    : Prefix + "_" + Member.Name;
+
+                if (Member.IsResource())
+                {
+                    std::string Reg;
+
+                    switch (GetResourceClass(Member.BaseType))
+                    {
+                    case EResourceBindClass::SRV:
+                        Reg = "t" + std::to_string(TSlot++);
+                        break;
+
+                    case EResourceBindClass::UAV:
+                        Reg = "u" + std::to_string(USlot++);
+                        break;
+
+                    case EResourceBindClass::Sampler:
+                        Reg = "s" + std::to_string(SSlot++);
+                        break;
+
+                    default:
+                        continue;
+                    }
+
+                    std::string ArraySuffix;
+                    if (Member.NumElements > 0)
+                    {
+                        ArraySuffix = "[" + std::to_string(Member.NumElements) + "]";
+                    }
+
+                    OutCode << MapResourceType(Member)
+                        << " " << Name << ArraySuffix
+                        << " : register(" << Reg << ");\n";
+                }
+                else if (Member.IsStruct())
+                {
+                    // ⭐递归展开资源
+                    EmitResources(*Member.StructMetadata, Name, OutCode, TSlot, SSlot, USlot);
+                }
+            }
+        }
+
+        // ============================================
+        // ⭐ 类型映射
+        // ============================================
+        std::string MapNumericType(const ShaderParametersMetadata::Member& member)
+        {
+            std::string base;
+
+            switch (member.BaseType)
+            {
+            case EShaderUniformBaseType::Float32: base = "float"; break;
+            case EShaderUniformBaseType::Int32:   base = "int";   break;
+            case EShaderUniformBaseType::UInt32:  base = "uint";  break;
+            case EShaderUniformBaseType::Bool:    base = "bool";  break;
             default: return "float";
             }
+
+            if (member.NumRows == 1 && member.NumColumns == 1)
+                return base;
+
+            if (member.NumRows == 1)
+                return base + std::to_string(member.NumColumns);
+
+            return base + std::to_string(member.NumRows) + "x" + std::to_string(member.NumColumns);
         }
+
+        // ============================================
+        // ⭐ Resource分类
+        // ============================================
+        enum class EResourceBindClass
+        {
+            SRV,
+            UAV,
+            Sampler,
+            None
+        };
+
+        EResourceBindClass GetResourceClass(EShaderUniformBaseType type)
+        {
+            switch (type)
+            {
+            case EShaderUniformBaseType::Texture:
+            case EShaderUniformBaseType::Texture_SRV:
+            case EShaderUniformBaseType::Buffer_SRV:
+                return EResourceBindClass::SRV;
+
+            case EShaderUniformBaseType::Texture_UAV:
+            case EShaderUniformBaseType::Buffer_UAV:
+                return EResourceBindClass::UAV;
+
+            case EShaderUniformBaseType::Sampler:
+                return EResourceBindClass::Sampler;
+
+            default:
+                return EResourceBindClass::None;
+            }
+        }
+
+        std::string MapResourceType(const ShaderParametersMetadata::Member& member)
+        {
+            switch (member.BaseType)
+            {
+            case EShaderUniformBaseType::Texture:
+            case EShaderUniformBaseType::Texture_SRV:
+                return "Texture2D";
+
+            case EShaderUniformBaseType::Texture_UAV:
+                return "RWTexture2D<float4>";
+
+            case EShaderUniformBaseType::Sampler:
+                return "SamplerState";
+
+            case EShaderUniformBaseType::Buffer_SRV:
+                return "Buffer<float4>";
+
+            case EShaderUniformBaseType::Buffer_UAV:
+                return "RWBuffer<float4>";
+
+            default:
+                return "Texture2D";
+            }
+        }
+
     };
 
     ShaderParameterSFGenerator GShaderParameterSFGenerator;
@@ -203,19 +317,6 @@ ShaderCompiler::~ShaderCompiler()
 {
 }
 
-
-bool ShaderCompiler::Initialize(const std::string& shaderSourceDir)
-{
-    if (shaderSourceDir == "") {
-        ShaderSourceDirectory = Core::GetProjectDir() + "/shaders";
-    }
-    if (!std::filesystem::exists(shaderSourceDir))
-    {
-        return false;
-    }
-    ShaderSourceDirectory = shaderSourceDir;
-    return true;
-}
 
 ShaderCompilationOutput ShaderCompiler::Compile(const ShaderCompileInput& input)
 {
@@ -275,7 +376,7 @@ bool ShaderCompiler::LoadShaderSource(const ShaderCompileInput& input, std::stri
     }
 
     // ���Դ� ShaderSourceDirectory + VirtualSourceFilePath ��ȡ
-    std::string fullPath = ShaderSourceDirectory + "/" + input.VirtualSourceFilePath;
+    std::string fullPath = Core::GetProjectDir() + "/shaders" + input.VirtualSourceFilePath;
     std::ifstream file(fullPath, std::ios::in | std::ios::binary);
     if (!file.is_open())
         return false;
@@ -300,6 +401,7 @@ bool ShaderCompiler::PreprocessSource(const ShaderCompileInput& input, std::stri
 
     // 3. Ӧ�ú궨��
     ApplyMacros(outSource, input.Environment.Definitions);
+    LOG_INFO("Preprocess shader source: %s", outSource.c_str());
     return true;
 }
 
@@ -583,7 +685,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     {
         std::string bufferName = compiler.get_name(ub.id);
         if (bufferName.empty()) {
-            bufferName = compiler.get_name(ub.base_type_id); // ���û��ʵ��������ȡ������ ($Globals)
+            bufferName = compiler.get_name(ub.base_type_id); // fallback ($Globals)
         }
 
         uint32_t binding = compiler.get_decoration(ub.id, spv::DecorationBinding);
@@ -592,44 +694,69 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         auto& type = compiler.get_type(ub.base_type_id);
         uint32_t bufferSize = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
 
-        // 2. ��������ʽ cbuffer ������ʽ LooseData ��
-        // ͨ������ "$Globals" ����û��ʵ�����Ŀ���� LooseData
         bool bIsLooseDataBlock = (bufferName.find("$Global") != std::string::npos);
 
-        if (bIsLooseDataBlock)
+        // ============================================================
+        // ⭐ 1. 记录整个 UniformBuffer（Descriptor 用）
+        // ============================================================
+        if (!bIsLooseDataBlock)
         {
-            globalUniformBufferIndex = static_cast<int>(binding);
-            globalUniformBufferSet = static_cast<int>(set);
-            // --- ���� LooseData: ���ṹ���Ա ---
-            uint32_t memberCount = (uint32_t)type.member_types.size();
-            for (uint32_t i = 0; i < memberCount; i++)
-            {
-                // ��ȡ��Ա������ (�� "bExtraParam")
-                std::string memberName = compiler.get_member_name(ub.base_type_id, i);
-                // ��ȡ��Ա�� Buffer �ڲ���ƫ����
-                uint32_t memberOffset = compiler.type_struct_member_offset(type, i);
-                // ��ȡ��Ա�Ĵ�С
-                uint32_t memberSize = static_cast<uint32_t>(compiler.get_declared_struct_member_size(type, i));
-
-                // ע�⣺���� LooseData��������Ҫ�洢 Binding �� Offset ������Ϣ
-                out.ParameterMap.AddParameterAllocation(
-                    memberName,
-                    static_cast<uint32_t>(binding),
-                    static_cast<uint32_t>(memberOffset), // ����� Offset
-                    static_cast<uint32_t>(memberSize),   // ����� Size
-                    EShaderParameterType::LooseData      // ��ȷ��������
-                );
-            }
+            out.ParameterMap.AddParameterAllocation(
+                bufferName,
+                static_cast<uint16_t>(set),       // UE语义：BufferIndex=Set
+                static_cast<uint16_t>(binding),   // BaseIndex=Binding
+                static_cast<uint16_t>(bufferSize),
+                EShaderParameterType::UniformBuffer
+            );
         }
         else
         {
-            // --- ������ʽ Uniform Buffer (�� ComputeConstants) ---
+            // 记录 global UB binding（可选）
+            globalUniformBufferIndex = static_cast<int>(binding);
+            globalUniformBufferSet = static_cast<int>(set);
+        }
+
+        // ============================================================
+        // ⭐ 2. 展开所有成员（关键！！！）
+        // ============================================================
+        uint32_t memberCount = static_cast<uint32_t>(type.member_types.size());
+
+        for (uint32_t i = 0; i < memberCount; i++)
+        {
+            std::string memberName = compiler.get_member_name(ub.base_type_id, i);
+
+            uint32_t memberOffset = compiler.type_struct_member_offset(type, i);
+
+            uint32_t memberSize = static_cast<uint32_t>(
+                compiler.get_declared_struct_member_size(type, i));
+
+            // ========================================================
+            // ⭐ 构造“扁平路径名”（必须和你 HLSL 完全一致）
+            // ========================================================
+            std::string fullName;
+
+            if (bIsLooseDataBlock)
+            {
+                // $Globals → 直接用成员名
+                fullName = memberName;
+            }
+            else
+            {
+                // 普通UB → BufferName_Member
+                fullName = memberName;
+            }
+
+            // ========================================================
+            // ⭐ 写入 ParameterMap（成员级）
+            // ========================================================
             out.ParameterMap.AddParameterAllocation(
-                bufferName,
-                static_cast<uint32_t>(set),
-                static_cast<uint32_t>(binding),  
-                static_cast<uint32_t>(bufferSize),
-                EShaderParameterType::UniformBuffer
+                fullName,
+                static_cast<uint16_t>(binding),       // ⭐ 指向所属UB binding
+                static_cast<uint16_t>(memberOffset),  // ⭐ offset（关键）
+                static_cast<uint16_t>(memberSize),
+                bIsLooseDataBlock
+                ? EShaderParameterType::LooseData
+                : EShaderParameterType::UniformBuffer
             );
         }
     }
@@ -652,18 +779,27 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     }
 
     // ---------- Separate Samplers ----------
-    for (const auto& sampler : resourcesSC.separate_samplers)
+    for (const auto& sb : resourcesSC.separate_samplers)
     {
-        std::string name = compiler.get_name(sampler.id);
+        std::string name = compiler.get_name(sb.id);
 
-        uint32_t binding = compiler.get_decoration(sampler.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(sampler.id, spv::DecorationDescriptorSet);
+        if (name.empty())
+            continue;
+
+        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
+
+        auto& type = compiler.get_type(sb.type_id);
+
+        uint32_t arraySize = 1;
+        if (!type.array.empty())
+            arraySize = type.array[0];
 
         out.ParameterMap.AddParameterAllocation(
             name,
-            static_cast<uint32_t>(set),
-            static_cast<uint32_t>(binding),
-            1,
+            static_cast<uint16_t>(set),
+            static_cast<uint16_t>(binding),
+            static_cast<uint16_t>(arraySize),   // ⭐数组支持
             EShaderParameterType::Sampler
         );
     }
@@ -951,6 +1087,14 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
     {
         addBinding(img, ESPIRVShaderResourceType::StorageImage);
     }
+
+    // =========================
+	// Samplers
+    // =========================
+    for (auto& sampler : resources.separate_samplers)
+	{
+		addBinding(sampler, ESPIRVShaderResourceType::Sampler);
+	}
 
     // =========================
     // Push constants

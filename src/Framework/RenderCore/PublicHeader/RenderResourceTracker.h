@@ -15,9 +15,79 @@ namespace std {
         }
     };
 }
+template<typename TState>
+class TextureSubresourceStateContainer
+{
+public:
+    void SetWhole(TState state)
+    {
+        bUseSubresource = false;
+        WholeState = state;
+        SubStates.clear();
+    }
 
+    void SetSubresource(const RHI::RHISubresourceRange& range, const TState& state)
+    {
+        if (range.IsWholeResource())
+        {
+            SetWhole(state);
+            return;
+        }
+
+        bUseSubresource = true;
+
+        SubresourceKey key{
+            range.MipIndex,
+            range.ArraySlice,
+            range.PlaneSlice
+        };
+
+        SubStates[key] = state;
+    }
+
+    TState Get(const RHI::RHISubresourceRange& range) const
+    {
+        if (!bUseSubresource || range.IsWholeResource())
+        {
+            return WholeState;
+        }
+
+        SubresourceKey key{
+            range.MipIndex,
+            range.ArraySlice,
+            range.PlaneSlice
+        };
+
+        auto it = SubStates.find(key);
+        return (it != SubStates.end()) ? it->second : WholeState;
+    }
+
+private:
+    struct SubresourceKey
+    {
+        uint32_t Mip, Array, Plane;
+
+        bool operator==(const SubresourceKey&) const = default;
+    };
+
+    struct Hasher
+    {
+        size_t operator()(const SubresourceKey& k) const
+        {
+            return ((k.Mip * 73856093) ^
+                (k.Array * 19349663) ^
+                (k.Plane * 83492791));
+        }
+    };
+
+    bool bUseSubresource = false;
+
+    TState WholeState{};
+    std::unordered_map<SubresourceKey, TState, Hasher> SubStates;
+};
 
 namespace RenderCore {
+
 
 // 资源追踪基类
 class RenderResourceTrackerBase {
@@ -35,16 +105,14 @@ class RenderTextureTracker : public RenderResourceTrackerBase {
 public:
     // 更新子资源访问控制
     void UpdateSubresourceAccess(const RHI::RHISubresourceRange& range, RHI::ERHIResourceAccess access) {
-        SubresourceAccess[range] = access;
+		SubresourceAccess.SetSubresource(range, access);
     }
     // 获取子资源访问控制
     RHI::ERHIResourceAccess GetSubresourceAccess(const RHI::RHISubresourceRange& range) const {
-        auto it = SubresourceAccess.find(range);
-        if (it != SubresourceAccess.end()) return it->second;
-        return RHI::ERHIResourceAccess::Unknown;
+		return SubresourceAccess.Get(range);
     }
 private:
-    std::unordered_map<RHI::RHISubresourceRange, RHI::ERHIResourceAccess> SubresourceAccess;
+    TextureSubresourceStateContainer<RHI::ERHIResourceAccess> SubresourceAccess;
 };
 
 // 缓冲区资源追踪

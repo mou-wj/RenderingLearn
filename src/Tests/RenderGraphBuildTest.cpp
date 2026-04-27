@@ -92,6 +92,8 @@ public:
         }
         InitShaderMap();
 
+        InitPipelines();
+
 
         // 只保存静态描述
         texDesc.Width = 256;
@@ -108,6 +110,21 @@ public:
         GShaderMap->Initialize();
 
     }
+
+	void InitPipelines()
+	{
+		//获取第0好blittextureshader变体
+        auto blitShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global]["BlitTextureCS"];
+		auto blitTextureShader0 = GShaderMap->GetShader(blitShaderType,0);
+        if (!blitTextureShader0) {
+            assert(0);
+        }
+       
+        // 创建计算管线状态
+        RHI::RHIComputePipelineStateDesc computeDesc;
+        computeDesc.computeShader = dynamic_cast<RHIComputeShader*>(blitTextureShader0->GetRHIShader().get());
+        ComputePipelineState = RHI::GRHIApi->CreateComputePipelineState(computeDesc);
+	}
 
     void Run() override {
         using namespace RHI;
@@ -144,13 +161,13 @@ public:
 
             // 3. 注册到builder，获取RDGTexture
             RenderGraphBuilder builder;
-            auto rdgSrc = builder.RegisterExternalTexture("SrcTex", randomTex.get());
-            auto rdgDst = builder.RegisterExternalTexture("DstTex", renderTarget->GetRHI());
+            //auto rdgSrc = builder.RegisterExternalTexture("SrcTex", randomTex.get());
+            //auto rdgDst = builder.RegisterExternalTexture("DstTex", renderTarget->GetRHI());
 
             // 4. 初始化参数
             auto* params = builder.AllocateParameter<CopyTexturePassParameters>();
-            params->SrcTexture = rdgSrc.get();
-            params->DstTexture = rdgDst.get();
+           //params->SrcTexture = rdgSrc;
+           //params->DstTexture = rdgDst;
 
             // 5. 添加拷贝pass
             builder.AddPass<CopyTexturePassParameters>(
@@ -198,6 +215,7 @@ public:
 
 private:
     RenderGraphTextureDesc texDesc;
+    RHI::RHIComputePipelineStateSP ComputePipelineState;
     RHI::RHISwapchainSP Swapchain;
 };
 

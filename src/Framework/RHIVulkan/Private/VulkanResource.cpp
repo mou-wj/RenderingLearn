@@ -39,10 +39,10 @@ static VulkanQueue* ResolveInitialQueue(VulkanDevice* device, EQueueType queueTy
 
    
 // Vulkan Texture
-VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
-    : RHITexture(desc), Device(device) {
+VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, bool externalAllocated)
+    : RHITexture(desc), Device(device),ExternalAllocated(externalAllocated) {
     VkDevice vkDevice = Device->GetHandle();
-    VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
+    
     Format = TransformFormatFrom(desc.Format);
 	ImageAspectFlags = GetImageAspectFlags(Format);
     // Create VkImage
@@ -71,14 +71,18 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     // Get memory requirements
     VkMemoryRequirements memRequirements;
     VKFunc::GetImageMemoryRequirements(vkDevice, Image, &memRequirements);
+    VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
+    if (!externalAllocated)
+    {
+        // Allocate memory
+        if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
+            VKFunc::DestroyImage(vkDevice, Image);
+        }
 
-    // Allocate memory
-    if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
-        VKFunc::DestroyImage(vkDevice, Image);
+        // Bind memory to image
+        VKFunc::BindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
     }
 
-    // Bind memory to image
-    VKFunc::BindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
 
     // Create VkImageView
     bool viewSuccess = DefaltView.Create(
@@ -98,7 +102,10 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc)
     if (!viewSuccess) {
         Image = VK_NULL_HANDLE;
         VKFunc::DestroyImage(vkDevice, Image);
-        memoryManager->Free(Allocation);
+        if (!externalAllocated)
+        {
+            memoryManager->Free(Allocation);
+        }
     }
 }
 
@@ -137,8 +144,10 @@ VulkanTexture::~VulkanTexture() {
     for (auto view : views) {
         view->Invalidate();
     }
-
-    memoryManager->Free(Allocation);
+    if (!ExternalAllocated)
+    {
+        memoryManager->Free(Allocation);
+    }
 }
 
 void VulkanTexture::AttachView(VulkanViewBase* view)
@@ -257,10 +266,10 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
 }
 
 // Vulkan Buffer
-VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
-    : RHIBuffer(desc), Device(device) {
+VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc, bool externalAllocated)
+    : RHIBuffer(desc), Device(device),ExternalAllocated(externalAllocated) {
     VkDevice vkDevice = Device->GetHandle();
-    VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
+
 
     // Create VkBuffer
     VkBufferCreateInfo bufferInfo{};
@@ -279,17 +288,20 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc)
     if (VKFunc::CreateBuffer(vkDevice, &bufferInfo, &Buffer) != true) {
     }
 
+    VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
     // Get memory requirements
-    VkMemoryRequirements memRequirements;
-    VKFunc::GetBufferMemoryRequirements(vkDevice, Buffer, &memRequirements);
+    if (externalAllocated) {
+        VkMemoryRequirements memRequirements;
+        VKFunc::GetBufferMemoryRequirements(vkDevice, Buffer, &memRequirements);
+        // Allocate memory
+        if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
+            VKFunc::DestroyBuffer(vkDevice, Buffer);
+        }
 
-    // Allocate memory
-    if (!memoryManager->Allocate(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, Allocation)) {
-        VKFunc::DestroyBuffer(vkDevice, Buffer);
+        // Bind memory to buffer
+        VKFunc::BindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
+
     }
-    
-    // Bind memory to buffer
-    VKFunc::BindBufferMemory(vkDevice, Buffer, Allocation.GetMemory(), Allocation.GetOffset());
 
 #ifdef DEBUG_INFO
     std::string debugName;
@@ -314,8 +326,10 @@ VulkanBuffer::~VulkanBuffer() {
     for (auto view : views) {
         view->Invalidate();
     }
+    if (!ExternalAllocated) {
+        memoryManager->Free(Allocation);
+    }
 
-    memoryManager->Free(Allocation);
 }
 
 void VulkanBuffer::AttachView(VulkanViewBase* view)

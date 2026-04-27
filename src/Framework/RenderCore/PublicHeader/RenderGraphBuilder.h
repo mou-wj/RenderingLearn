@@ -2,29 +2,17 @@
 
 #include "RenderGraphResource.h" // For RenderGraphResource
 #include "RenderGraphPass.h"
+#include "RenderResource.h"
 #include <list>
 #include <vector>
 #include <unordered_map>
 
 namespace RenderCore {
-struct RENDERCORE_API GraphResourceAccessState {
-    RenderGraphPass* LastVisitor = nullptr;
-    RenderGraphResourceSP Resource;
-    struct TextureAccess {
-        ERHIResourceAccess Access;
-        RHITextureRegion TextureRegion;
-    };
-    struct BufferAccess {
-        ERHIResourceAccess Access;
-        RHIBufferRegion BufferRegion;
-    };
-    std::vector<TextureAccess> TextureAccesses;
-    std::vector<BufferAccess> BufferAccesses;
-};
+
 
 
 /**
- * ÏßĞÔ·ÖÅäÆ÷£ºÃ¿Ö¡Í³Ò»·ÖÅä£¬Í³Ò»ÖØÖÃ
+ * ï¿½ï¿½ï¿½Ô·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¿Ö¡Í³Ò»ï¿½ï¿½ï¿½ä£¬Í³Ò»ï¿½ï¿½ï¿½ï¿½
  */
 class RenderGraphAllocator {
 public:
@@ -33,7 +21,7 @@ public:
     }
 
     ~RenderGraphAllocator() {
-        // Ïú»ÙÊ±±ØĞë³¹µ×ÊÍ·ÅËùÓĞÎïÀíÄÚ´æ
+        // ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ë³¹ï¿½ï¿½ï¿½Í·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½
         Reset();
         for (void* Page : Pages) {
             free(Page);
@@ -41,17 +29,17 @@ public:
     }
 
     /**
-     * ×îºËĞÄµÄ·ÖÅä½Ó¿Ú
+     * ï¿½ï¿½ï¿½ï¿½ÄµÄ·ï¿½ï¿½ï¿½Ó¿ï¿½
      */
     template<typename T, typename... Args>
     T* Allocate(Args&&... args) {
-        // 1. ÉêÇë¿Õ¼ä
+        // 1. ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½
         void* RawMem = AllocateRaw(sizeof(T), alignof(T));
 
-        // 2. ¹¹Ôì¶ÔÏó (Placement New)
+        // 2. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (Placement New)
         T* Object = new (RawMem) T(std::forward<Args>(args)...);
 
-        // 3. Èç¹û¶ÔÏó²»ÊÇ¡°Æ½·²Îö¹¹¡±µÄ£¨±ÈÈçº¬ÓĞ std::string£©£¬¼ÇÂ¼ËüµÄÎö¹¹º¯Êı
+        // 3. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç¡ï¿½Æ½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½çº¬ï¿½ï¿½ std::stringï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if constexpr (!std::is_trivially_destructible_v<T>) {
             DestructionStack.push_back({
                 Object,
@@ -61,29 +49,34 @@ public:
         return Object;
     }
 
+    void* AllocateBytes(size_t Size, size_t Alignment = alignof(std::max_align_t))
+    {
+        return AllocateRaw(Size, Alignment);
+    }
+
     /**
-     * Ã¿Ò»Ö¡½áÊøÊ±µ÷ÓÃ
+     * Ã¿Ò»Ö¡ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½
      */
     void Reset() {
-        // 1. °´·ÖÅäË³ĞòµÄ·´Ğòµ÷ÓÃÎö¹¹º¯Êı
+        // 1. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë³ï¿½ï¿½Ä·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         for (auto it = DestructionStack.rbegin(); it != DestructionStack.rend(); ++it) {
             it->Deleter(it->Ptr);
         }
         DestructionStack.clear();
 
-        // 2. ÖØÖÃÖ¸Õë£¬µ«²»ÊÍ·ÅÎïÀíÒ³ÄÚ´æ£¬Áô¸øÏÂÒ»Ö¡¸´ÓÃ
+        // 2. ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ë£¬ï¿½ï¿½ï¿½ï¿½ï¿½Í·ï¿½ï¿½ï¿½ï¿½ï¿½Ò³ï¿½Ú´æ£¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»Ö¡ï¿½ï¿½ï¿½ï¿½
         CurrentPage = 0;
         CurrentOffset = 0;
     }
 
 private:
     void* AllocateRaw(size_t Size, size_t Alignment) {
-        // ÕâÀïµÄ¶ÔÆëÂß¼­È·±£Ö¸Õë·ûºÏ CPU ÒªÇó
+        // ï¿½ï¿½ï¿½ï¿½Ä¶ï¿½ï¿½ï¿½ï¿½ß¼ï¿½È·ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ CPU Òªï¿½ï¿½
         size_t Padding = (Alignment - (CurrentOffset % Alignment)) % Alignment;
 
         if (CurrentPage == -1 || CurrentOffset + Padding + Size > PageSize) {
             MoveToNextPage();
-            Padding = 0; // ĞÂÒ³Í¨³£ÊÇ×ÔÈ»¶ÔÆëµÄ
+            Padding = 0; // ï¿½ï¿½Ò³Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È»ï¿½ï¿½ï¿½ï¿½ï¿½
         }
 
         void* Result = (uint8_t*)Pages[CurrentPage] + CurrentOffset + Padding;
@@ -108,8 +101,8 @@ private:
     int32_t CurrentPage;
     size_t CurrentOffset;
 
-    std::vector<void*> Pages;                // ÎïÀíÒ³³Ø
-    std::vector<DestructionItem> DestructionStack; // Îö¹¹º¯ÊıÁ´±í
+    std::vector<void*> Pages;                // ï¿½ï¿½ï¿½ï¿½Ò³ï¿½ï¿½
+    std::vector<DestructionItem> DestructionStack; // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 };
 
 
@@ -125,20 +118,20 @@ public:
 
     // Pass Management
     /**
-     * ¸Ä½øºóµÄ AddPass Ä£°å
+     * ï¿½Ä½ï¿½ï¿½ï¿½ï¿½ AddPass Ä£ï¿½ï¿½
      */
     template <typename TParameterStruct, typename TExecuteLambda>
     RenderGraphPassRef AddPass(
         const std::string& InName,
         const ShaderParametersMetadata* InMetadata,
-        TParameterStruct* InParameters, // ÓÉ AllocateParameter ·ÖÅäµÄ²ÎÊıÖ¸Õë
+        TParameterStruct* InParameters, // ï¿½ï¿½ AllocateParameter ï¿½ï¿½ï¿½ï¿½Ä²ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½
         EPassFlag InPassFlags,
         TExecuteLambda&& InExecuteLambda)
     {
-        // 1. ½«ÓÃ»§Ìî³äµÄ TParameterStruct ·â×°½ø RenderGraphParameterStruct
+        // 1. ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ TParameterStruct ï¿½ï¿½×°ï¿½ï¿½ RenderGraphParameterStruct
         RenderGraphParameterStruct ParameterStruct(InParameters, InMetadata);
 
-        // 2. ´´½¨ÕæÕıµÄ Pass ÊµÀı (ÀûÓÃÖ®Ç°¶¨ÒåµÄ RenderGraphLambdaPass)
+        // 2. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Pass Êµï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½Ö®Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ RenderGraphLambdaPass)
         auto Pass = new RenderGraphLambdaPass<TParameterStruct, TExecuteLambda>(
             InName,
             InPassFlags,
@@ -146,39 +139,37 @@ public:
             std::forward<TExecuteLambda>(InExecuteLambda)
         );
 
-        // 3. ºËĞÄ£º½âÎö TParameterStruct ÖĞµÄ×ÊÔ´ÒıÓÃ£¬½¨Á¢ DAG ÒÀÀµ
-        // ÔÚ UE ÖĞ£¬ÕâÀï»áµ÷ÓÃ SetupPass(Pass) À´·ÖÎö×ÊÔ´ Read/Write ×´Ì¬
+        // 3. ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ï¿½ TParameterStruct ï¿½Ğµï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½ï¿½ï¿½ DAG ï¿½ï¿½ï¿½ï¿½
+        // ï¿½ï¿½ UE ï¿½Ğ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SetupPass(Pass) ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´ Read/Write ×´Ì¬
         SetupPassInternal(Pass, InMetadata, InParameters);
 
-        // 4. ¼ÓÈëÖ´ĞĞ¶ÓÁĞ
+        // 4. ï¿½ï¿½ï¿½ï¿½Ö´ï¿½Ğ¶ï¿½ï¿½ï¿½
         Passes.push_back(Pass);
         return Pass;
     }
     void AddPassDependency(RenderGraphPass* pass, RenderGraphPass* passConsumer);
 
     // Resource Creation (Examples - Add more as needed)
-    RenderGraphTextureSP CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc);
-    RenderGraphBufferSP CreateBuffer(const std::string& name, const RenderGraphBufferDesc& desc);
+    RenderGraphTextureRef CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc);
+    RenderGraphBufferRef CreateBuffer(const std::string& name, const RenderGraphBufferDesc& desc);
 
-    RenderGraphTextureSRVSP CreateTextureSRV(const std::string& name, RenderGraphResourceSP resource);
-    RenderGraphBufferSRVSP CreateBufferSRV(const std::string& name, RenderGraphResourceSP resource);
-    RenderGraphTextureUAVSP CreateTextureUAV(const std::string& name, RenderGraphResourceSP resource);
-    RenderGraphBufferUAVSP CreateBufferUAV(const std::string& name, RenderGraphResourceSP resource);
+    RenderGraphTextureSRVRef CreateTextureSRV(const std::string& name, const RenderGraphTextureSRVDesc& desc);
+    RenderGraphBufferSRVRef CreateBufferSRV(const std::string& name, const RenderGraphBufferSRVDesc& desc);
+    RenderGraphTextureUAVRef CreateTextureUAV(const std::string& name, const RenderGraphTextureUAVDesc& desc);
+    RenderGraphBufferUAVRef CreateBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc);
 
-    RenderGraphTextureSP RegisterExternalTexture(const std::string& name, RHITexture* texture);
-    RenderGraphTextureSP GetExternalTexture(const std::string& name);
+    RenderGraphTextureRef RegisterExternalTexture(const std::string& name, PooledRenderTarget* target);
+    RenderGraphTextureRef GetExternalTexture(const std::string& name);
 
     // Resource Access (Get RHI resources from RenderGraphResources)
-    RHITexture* GetTexture(RenderGraphResourceSP resource);
-    RHIBuffer* GetBuffer(RenderGraphResourceSP resource);
+    RHI::RHITexture* GetTexture(RenderGraphResourceRef resource);
+    RHI::RHIBuffer* GetBuffer(RenderGraphResourceRef resource);
 
-    RenderGraphTextureSP GetTexture(const std::string& name);
-    RenderGraphBufferSP GetBuffer(const std::string& name);
+    RenderGraphTextureRef GetTexture(const std::string& name);
+    RenderGraphBufferRef GetBuffer(const std::string& name);
     template<typename T>
     T* AllocateParameter(){
-        T* ptr = new T();
-        ParameterCache.push_back(ptr);
-        return ptr;
+        return Allocator.Allocate<T>();
     }
 
 
@@ -187,22 +178,75 @@ public:
     void Execute(); // Executes all added passes
 protected:
     void AnalyzePasses(); // Analyzes passes and groups them for execution
+    void AllocateResources();
     void SetupPassInternal(
         RenderGraphPass* Pass,
         const ShaderParametersMetadata* Metadata,
         const void* Parameters);
+    void ApplyFinalStates();
 private:
     using PassList = std::list<RenderGraphPass*>; // Using std::list for pass management
     using PassListGroup = std::list<PassList>; // Group of passes for execution
     PassList Passes; // List of passes to execute (using std::list)
     PassListGroup ParallelPasses; // Group of passes to execute in parallel (using std::list)
     // Resource Cache
-    std::unordered_map<std::string, RenderGraphTextureSP> TextureCache; // Cache for textures
-    std::unordered_map<std::string, RenderGraphBufferSP> BufferCache;   // Cache for buffers
-    //Parameters Storage
-    std::vector<void*> ParameterCache; // Cache for parameters
+    std::unordered_map<std::string, RenderGraphTextureRef> TextureCache; // Cache for textures
+    std::unordered_map<std::string, RenderGraphBufferRef> BufferCache;   // Cache for buffers
+    std::unordered_map<std::string, RenderGraphTextureSRVRef> TextureSRVCache; // Cache for texture SRVs
+    std::unordered_map<std::string, RenderGraphBufferSRVRef> BufferSRVCache;   // Cache for buffer SRVs
+	std::unordered_map<std::string, RenderGraphTextureUAVRef> TextureUAVCache; // Cache for texture UAVs
+    std::unordered_map<std::string, RenderGraphBufferUAVRef> BufferUAVCache;   // Cache for buffer UAVs
+
+    // æ–°å¢ï¼šBuilder å†…éƒ¨çŠ¶æ€ç¼“å­˜
+    struct ResourceSubresourceKey
+    {
+        RenderGraphResource* Resource;
+        RHI::RHISubresourceRange Range;
+        bool isBuffer = false;
+        // true if buffer, false if texture
+        uint64_t Offset = 0; // For buffers, the offset of the accessed range
+        uint64_t Size = 0;
+
+        bool operator==(const ResourceSubresourceKey& other) const
+        {
+            return Resource == other.Resource && Range == other.Range && isBuffer == other.isBuffer && Offset == other.Offset && Size == other.Size;
+        }
+    };
+
+    struct KeyHasher
+    {
+        size_t operator()(const ResourceSubresourceKey& k) const
+        {
+            size_t h = std::hash<void*>()(k.Resource);
+            h ^= (size_t(k.Range.MipIndex) << 1);
+            h ^= (size_t(k.Range.ArraySlice) << 2);
+            h ^= (size_t(k.Range.PlaneSlice) << 3);
+            h ^= (size_t(k.isBuffer) << 4);
+            h ^= (size_t(k.Offset) << 5);
+            h ^= (size_t(k.Size) << 6);
+            return h;
+        }
+    };
+    std::unordered_map<ResourceSubresourceKey, RHI::ERHIResourceAccess, KeyHasher> InitialStates;
+    std::unordered_map<ResourceSubresourceKey, RHI::ERHIResourceAccess, KeyHasher> FinalStates;
     //
-    std::unordered_map<std::string, RenderGraphTextureSP> ExternalTextureCache; // Cache for resources
+    std::unordered_map<std::string, RenderGraphTextureRef> ExternalTextureCache; // Cache for resources
+    std::unordered_map<PooledRenderTarget*, RenderGraphTextureRef> PoolTarget2RDGTexture;
+    std::unordered_map<RenderGraphTexture*, PooledRenderTarget*> RDGTexture2PoolTarget;
+
+    RenderGraphAllocator Allocator;
+    TransientResourceAllocator* TransientAllocator;
+
+    struct ResourceLifetime
+    {
+        RenderGraphPass* FirstPass = nullptr;
+        RenderGraphPass* LastPass = nullptr;
+
+        uint32_t BeginPassIndex = UINT32_MAX;
+        uint32_t EndPassIndex = 0;
+    };
+
+    std::unordered_map<RenderGraphResource*, ResourceLifetime> ResourceLifetimes;
 };
 
 } // namespace WR::RenderCore

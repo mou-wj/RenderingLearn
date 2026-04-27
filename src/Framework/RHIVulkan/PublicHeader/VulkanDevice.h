@@ -139,6 +139,7 @@ public:
 
     // 释放延迟删除的资源
     void ReleaseDeferredResources(uint32_t FrameDelay = 2);
+    uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
 private:
     void SelectQueueFamilies(VkPhysicalDevice physicalDevice);
     void CreateLogicalDevice(VkPhysicalDevice physicalDevice,

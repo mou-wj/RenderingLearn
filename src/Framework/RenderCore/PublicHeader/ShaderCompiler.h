@@ -156,8 +156,6 @@ namespace RenderCore
             ShaderCompiler();
             ~ShaderCompiler();
 
-            static bool Initialize(const std::string& shaderSourceDir);
-
             // ʹ�� ShaderCompileInput ������������
             static ShaderCompilationOutput Compile(const ShaderCompileInput& input);
 

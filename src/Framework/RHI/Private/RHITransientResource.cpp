@@ -11,17 +11,17 @@ namespace RHI {
     RHITransientResource::~RHITransientResource() = default;
 
     // Acquire 方法
-    void RHITransientResource::Acquire(const std::string& name, uint32_t passIndex)
+    void RHITransientResource::Acquire(const std::string& name, uint32_t beginIndex)
     {
         Name = name;
-        AcquirePass = passIndex;
+        BeginIndex = beginIndex;
         bAcquired = true;
     }
 
     // Release 方法
-    void RHITransientResource::Release(uint32_t passIndex)
+    void RHITransientResource::Release(uint32_t endIndex)
     {
-        ReleasePass = passIndex;
+        EndIndex = endIndex;
         bAcquired = false;
     }
 
@@ -54,6 +54,7 @@ namespace RHI {
     }
 
     std::shared_ptr<RHIBuffer> RHITransientBuffer::GetBuffer() const { return Buffer; }
+
 
 
 }

@@ -1,10 +1,9 @@
 #pragma once
 
 #include "RHIResource.h" // Assuming this is where your RHI resource definitions are
+#include "RenderResourceTracker.h"
 #include <string>
 #include <memory>
-
-using namespace RHI;
 
 namespace RenderCore {
 
@@ -32,6 +31,8 @@ public:
     RenderGraphResource(const std::string& name);
     virtual ~RenderGraphResource();
 
+    RenderGraphResourceType GetType() const { return Type; }
+
     // Accessors
     const std::string& GetName() const { return Name; }
     bool IsImported() const { return bImported; }
@@ -42,21 +43,19 @@ public:
     void SetCreated(bool created) { bCreated = created; }
 
     // RHI Resource Management
-    virtual RHIResource* GetRHIResource() const { return Resource; } // Returns the underlying RHI resource
-    virtual void SetRHIResource(RHIResource* resource);
+    virtual RHI::RHIResource* GetRHIResource() const { return Resource; } // Returns the underlying RHI resource
+    virtual void SetRHIResource(RHI::RHIResource* resource);
 
-    // Virtual method to allow the render graph to create the underlying RHI resource
-    virtual void Create(RenderGraphBuilder& builder) {};
 
 protected:
     // Resource Name (for debugging and identification)
     std::string Name;
-
+    RenderGraphResourceType Type;
     // Flags to track resource state
     bool bImported = false;  // True if the resource was imported from outside the render graph
     bool bCreated = false;   // True if the resource has been created by the render graph
 
-    RHIResource* Resource = nullptr; // Pointer to the underlying RHI resource
+    RHI::RHIResource* Resource = nullptr; // Pointer to the underlying RHI resource
 };
 
 // -------------------------------------------------------------------------------------------------
@@ -75,15 +74,15 @@ public:
     ~RenderGraphTexture() override;
 
     const RenderGraphTextureDesc& GetDesc() const { return desc; }
-    RHITexture* GetRHITexture() const { return innerTexture; } // Returns the underlying RHI texture
+    RHI::RHITexture* GetRHITexture() const { return innerTexture; } // Returns the underlying RHI texture
 
-    void SetRHITexture(RHITexture* texture) { innerTexture = texture; } // Allows importing an existing RHI texture
-
-    void Create(RenderGraphBuilder& builder) override;
+    void SetRHITexture(RHI::RHITexture* texture) { innerTexture = texture; } // Allows importing an existing RHI texture
 
 private:
+    friend class RenderGraphBuilder;
     RenderGraphTextureDesc desc;
-    RHITexture* innerTexture; // The underlying RHI texture
+    RHI::RHITexture* innerTexture; // The underlying RHI texture
+    bool IsExternal = false;
 };
 
 // -------------------------------------------------------------------------------------------------
@@ -92,7 +91,18 @@ private:
 struct RENDERCORE_API RenderGraphBufferDesc {
     std::string Name;          // Buffer name
     uint32_t Size = 0;         // Size of the buffer in bytes
-    ERHIBufferUsageFlags Usage = ERHIBufferUsageFlag::None; // Buffer flags (e.g., vertex, index, constant)
+    RHI::ERHIBufferUsageFlags Usage = RHI::ERHIBufferUsageFlag::None; // Buffer flags (e.g., vertex, index, constant)
+	RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown; // For structured buffers, the format of each element
+	uint32_t Stride = 0;      // For structured buffers, the size of each element
+    static RHI::RHIBufferDesc ConvertToRHIDesc(const RenderGraphBufferDesc& desc) {
+		RHI::RHIBufferDesc rhiDesc;
+		rhiDesc.Size = desc.Size;
+		rhiDesc.Usage = desc.Usage;
+		rhiDesc.Stride = desc.Stride;
+		rhiDesc.DebugName = desc.Name.c_str();
+		return rhiDesc;
+    }
+
 };
 
 class RENDERCORE_API RenderGraphBuffer : public RenderGraphResource
@@ -102,21 +112,22 @@ public:
     ~RenderGraphBuffer() override;
 
     const RenderGraphBufferDesc& GetDesc() const { return desc; }
-    RHIBuffer* GetRHIBuffer() const { return innerBuffer; }
+    RHI::RHIBuffer* GetRHIBuffer() const { return innerBuffer; }
 
-    void SetRHIBuffer(RHIBuffer* buffer) { innerBuffer = buffer; }
-
-    void Create(RenderGraphBuilder& builder) override;
+    void SetRHIBuffer(RHI::RHIBuffer* buffer) { innerBuffer = buffer; }
 
 private:
+    friend class RenderGraphBuilder;
     RenderGraphBufferDesc desc;
-    RHIBuffer* innerBuffer;
+    RHI::RHIBuffer* innerBuffer;
+    bool IsExternal = false;
+
 };
 
 
-using RenderGraphResourceSP = std::shared_ptr<RenderGraphResource>;
-using RenderGraphTextureSP = std::shared_ptr<RenderGraphTexture>;
-using RenderGraphBufferSP = std::shared_ptr<RenderGraphBuffer>;
+using RenderGraphResourceRef = RenderGraphResource*;
+using RenderGraphTextureRef = RenderGraphTexture*;
+using RenderGraphBufferRef = RenderGraphBuffer*;
 
 // 新增：资源视图类型
 enum class RenderGraphViewType
@@ -129,11 +140,6 @@ enum class RenderGraphViewType
 struct RENDERCORE_API RenderGraphViewDesc
 {
     RenderGraphViewType ViewType;
-    // 视图格式
-    ERHIFormat Format = ERHIFormat::Unknown;
-    // mip/slice等可选参数
-    uint32_t MipLevel = 0;
-    uint32_t ArraySlice = 0;
 };
 
 
@@ -155,10 +161,11 @@ class RENDERCORE_API RenderGraphSRV : public RenderGraphView{
 public:
     RenderGraphSRV(const std::string& name);
     ~RenderGraphSRV() override;
-    RHIShaderResourceView* GetRHIShaderResourceView() const { return RHIShaderResourceView; }
+    RHI::RHIShaderResourceView* GetRHIShaderResourceView() const { return RHIShaderResourceView; }
+	void SetRHIShaderResourceView(RHI::RHIShaderResourceView* view) { RHIShaderResourceView = view; }
 
 protected:
-    RHIShaderResourceView* RHIShaderResourceView = nullptr;
+    RHI::RHIShaderResourceView* RHIShaderResourceView = nullptr;
 
 };
 
@@ -166,10 +173,11 @@ class RENDERCORE_API RenderGraphUAV : public RenderGraphView{
 public:
     RenderGraphUAV(const std::string& name);
     ~RenderGraphUAV() override;
-    RHIUnorderedAccessView* GetRHIUnorderedAccessView() const { return RHIUnorderedAccessView; }
+    RHI::RHIUnorderedAccessView* GetRHIUnorderedAccessView() const { return RHIUnorderedAccessView; }
+    void SetRHIUnorderedAccessView(RHI::RHIUnorderedAccessView* view) { RHIUnorderedAccessView = view; }
 
 protected:
-    RHIUnorderedAccessView* RHIUnorderedAccessView = nullptr;  
+    RHI::RHIUnorderedAccessView* RHIUnorderedAccessView = nullptr;
 
 };
 
@@ -181,6 +189,7 @@ struct RENDERCORE_API RenderGraphTextureSRVDesc : public RenderGraphViewDesc
 {
     RenderGraphTextureSRVDesc() { ViewType = RenderGraphViewType::TextureSRV; }
     RenderGraphTexture* Texture; // 关联的纹理资源
+    RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown;
     uint32_t MipLevel = 0; // 关联的mip层
     uint32_t ArraySlice = 0; // 关联的数组切片
     uint32_t NumMipLevels = 1; // 关联的mip层数
@@ -206,6 +215,7 @@ struct RENDERCORE_API RenderGraphTextureUAVDesc : public RenderGraphViewDesc
 {
     RenderGraphTextureUAVDesc() { ViewType = RenderGraphViewType::TextureUAV; }
     RenderGraphTexture* Texture; // 关联的纹理资源
+    RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown;
     uint32_t MipLevel = 0; // 关联的mip层
     uint32_t ArraySlice = 0; // 关联的数组切片
     uint32_t NumMipLevels = 1; // 关联的mip层数
@@ -232,7 +242,8 @@ struct RENDERCORE_API RenderGraphBufferSRVDesc : public RenderGraphViewDesc
 {
     RenderGraphBufferSRVDesc() { ViewType = RenderGraphViewType::BufferSRV; }
     RenderGraphBuffer* Buffer; // 关联的缓冲区资源
-    //RHIUpdateBufferRegion Region; // 缓冲区区域
+	uint64_t Offset = 0;        // 起始字节偏移
+	uint64_t Size = 0;   // 元素数量
 };
 
 class RENDERCORE_API RenderGraphBufferSRV : public RenderGraphSRV
@@ -254,7 +265,8 @@ struct RENDERCORE_API RenderGraphBufferUAVDesc : public RenderGraphViewDesc
 {
     RenderGraphBufferUAVDesc() { ViewType = RenderGraphViewType::BufferUAV; }
     RenderGraphBuffer* Buffer; // 关联的缓冲区资源
-    //RHIBufferRegion Region; // 缓冲区区域
+    uint64_t Offset = 0;        // 起始字节偏移
+    uint64_t Size = 0;   // 元素数量
 };
 
 class RENDERCORE_API RenderGraphBufferUAV : public RenderGraphUAV
@@ -271,14 +283,14 @@ private:
 };
 
 // 资源智能指针
-using RenderGraphResourceSP = std::shared_ptr<RenderGraphResource>;
-using RenderGraphTextureSP = std::shared_ptr<RenderGraphTexture>;
-using RenderGraphBufferSP = std::shared_ptr<RenderGraphBuffer>;
-using RenderGraphViewSP = std::shared_ptr<RenderGraphView>;
-using RenderGraphTextureSRVSP = std::shared_ptr<RenderGraphTextureSRV>;
-using RenderGraphTextureUAVSP = std::shared_ptr<RenderGraphTextureUAV>;
-using RenderGraphBufferSRVSP = std::shared_ptr<RenderGraphBufferSRV>;
-using RenderGraphBufferUAVSP = std::shared_ptr<RenderGraphBufferUAV>;
+using RenderGraphResourceRef = RenderGraphResource*;
+using RenderGraphTextureRef = RenderGraphTexture*;
+using RenderGraphBufferRef = RenderGraphBuffer*;
+using RenderGraphViewRef = RenderGraphView*;
+using RenderGraphTextureSRVRef = RenderGraphTextureSRV*;
+using RenderGraphTextureUAVRef = RenderGraphTextureUAV*;
+using RenderGraphBufferSRVRef = RenderGraphBufferSRV*;
+using RenderGraphBufferUAVRef = RenderGraphBufferUAV*;
 
 
 } // namespace WR::RenderCore

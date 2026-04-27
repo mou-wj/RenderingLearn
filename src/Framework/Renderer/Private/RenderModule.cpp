@@ -39,12 +39,12 @@ namespace Renderer {
     {
         RenderCore::RenderGraphBuilder builder;
         auto rhiColorTex = Views->RenderTarget->RenderTarget;
-        auto targetTexture = builder.RegisterExternalTexture("RenderTarget", rhiColorTex.get());
+        //auto targetTexture = builder.RegisterExternalTexture("RenderTarget", rhiColorTex);
         
         auto sceneRenderer = CreateSceneRenderer();
         //sceneRenderer->Scene =  dynamic_cast<Engine::Scene*>(Views->Scene);
         sceneRenderer->Views = Views;
-        sceneRenderer->SceneTextures.SceneColor = targetTexture;
+        //sceneRenderer->SceneTextures.SceneColor = targetTexture;
         sceneRenderer->Build(builder);
         
         builder.Execute();

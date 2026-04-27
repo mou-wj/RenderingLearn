@@ -8,30 +8,24 @@ namespace Renderer {
     {
        
         // 主输出
-        RenderCore::RenderGraphTextureSP SceneColor;
-        RenderCore::RenderGraphTextureSP SceneDepth;
+        RenderCore::RenderGraphTextureRef SceneColor;
+        RenderCore::RenderGraphTextureRef SceneDepth;
 
         // GBuffer（可选，后续扩展）
-        RenderCore::RenderGraphTextureSP GBufferA;
-        RenderCore::RenderGraphTextureSP GBufferB;
-        RenderCore::RenderGraphTextureSP GBufferC;
+        RenderCore::RenderGraphTextureRef GBufferA;
+        RenderCore::RenderGraphTextureRef GBufferB;
+        RenderCore::RenderGraphTextureRef GBufferC;
 
         // 可选：后处理 / 扩展输出
-        RenderCore::RenderGraphTextureSP Velocity;
-        RenderCore::RenderGraphTextureSP CustomDepth;
+        RenderCore::RenderGraphTextureRef Velocity;
+        RenderCore::RenderGraphTextureRef CustomDepth;
 
         uint32_t Width = 0;
         uint32_t Height = 0;
 
         void Reset()
         {
-            SceneColor.reset();
-            SceneDepth.reset();
-            GBufferA.reset();
-            GBufferB.reset();
-            GBufferC.reset();
-            Velocity.reset();
-            CustomDepth.reset();
+
         }
     };
 

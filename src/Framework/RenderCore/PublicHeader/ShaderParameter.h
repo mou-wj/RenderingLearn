@@ -21,7 +21,7 @@ namespace RenderCore {
     template<typename T>
     struct ShaderParameterTypeInfo
     {
-        static constexpr EShaderUniformBaseType BaseType = EShaderUniformBaseType::Unknown;
+        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Unknown;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 1;
         static constexpr uint32_t NumElements = 0;
@@ -40,7 +40,7 @@ namespace RenderCore {
     template<>
     struct ShaderParameterTypeInfo<RenderGraphTexture>
     {
-        static constexpr EShaderUniformBaseType BaseType = EShaderUniformBaseType::Texture;
+        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Texture;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 1;
         static constexpr uint32_t NumElements = 0;
@@ -48,6 +48,65 @@ namespace RenderCore {
         static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
 
         using TAlignedType = RenderGraphTexture*;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    };
+
+    template<>
+    struct ShaderParameterTypeInfo<RenderGraphTextureUAV>
+    {
+        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Texture_UAV;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 1;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+        using TAlignedType = RenderGraphTextureUAV*;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    };
+
+    template<>
+    struct ShaderParameterTypeInfo<RHI::RHISampler>
+    {
+        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Sampler;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 1;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+        using TAlignedType = RHI::RHISampler*;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    };
+
+    template<>
+    struct ShaderParameterTypeInfo<float>
+    {
+        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Float32;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 1;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+        using TAlignedType = float;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    };
+    template<>
+    struct ShaderParameterTypeInfo<Core::Float2>
+    {
+        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Float32;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 2;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+        using TAlignedType = Core::Float2;
 
         static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
     };
@@ -65,7 +124,7 @@ namespace RenderCore {
         {
             const char* Name;
             uint32_t Offset;
-            EShaderUniformBaseType BaseType;
+            RHI::EShaderUniformBaseType BaseType;
             uint32_t NumRows = 1;
             uint32_t NumColumns = 1;
             uint32_t NumElements = 0;
@@ -73,7 +132,7 @@ namespace RenderCore {
             Member(
             const char* InName,
             uint32_t InOffset,
-            EShaderUniformBaseType InBaseType,
+            RHI::EShaderUniformBaseType InBaseType,
             uint32_t InNumRows,
             uint32_t InNumColumns,
             uint32_t InNumElements,
@@ -92,9 +151,9 @@ namespace RenderCore {
             }
 
             bool IsStruct() const { return StructMetadata != nullptr; }
-            bool IsResource() const { return BaseType >= EShaderUniformBaseType::Texture; }
+            bool IsResource() const { return BaseType >= RHI::EShaderUniformBaseType::Texture; }
         };
-
+		bool InitFlag = false;
     public:
 
         ShaderParametersMetadata(
@@ -145,6 +204,7 @@ public:\
     static const ShaderParametersMetadata& GetMetaData() \
     {\
         static ShaderParametersMetadata sMetaData(#StructClass,sizeof(StructClass),{});\
+        if(!sMetaData.InitFlag){\
         std::vector<ShaderParametersMetadata::Member>& Members = sMetaData.Members;\
         FuncPtr(*PrevFunc)(LastIdType, std::vector<ShaderParametersMetadata::Member>*);            \
         PrevFunc = sAppendMemberGetPrev; \
@@ -152,6 +212,8 @@ public:\
         do{\
             func = reinterpret_cast<MemberFuncType>(func)(LastIdType(), &Members);\
 	    } while (func != nullptr); \
+        sMetaData.InitFlag = true;\
+        }\
         return sMetaData;\
     }\
 };
@@ -177,7 +239,7 @@ private:\
 			PrevFunc = sAppendMemberGetPrev; \
             return (FuncPtr)PrevFunc; \
 		} \
-	typedef PrevMemberIdType
+	typedef CurMemberIdType##MemberName
 
 // Define a texture parameter
 #define SHADER_PARAMETER(ClassType,Name) \
@@ -190,6 +252,20 @@ SHADER_PARAMETER_INTERNAL(ShaderParameterTypeInfo<ClassType>::BaseType,ClassType
         ShaderParameterTypeInfo<TextureType>::TAlignedType, \
         MemberName, \
         ShaderParameterTypeInfo<TextureType>)
+
+#define SHADER_PARAMETER_SAMPLER(MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        ShaderParameterTypeInfo<RHI::RHISampler>::BaseType, \
+        ShaderParameterTypeInfo<RHI::RHISampler>::TAlignedType, \
+        MemberName, \
+        ShaderParameterTypeInfo<RHI::RHISampler>)
+
+#define SHADER_PARAMETER_TEXTURE_UAV(TextureUAVType, MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        ShaderParameterTypeInfo<TextureUAVType>::BaseType, \
+        ShaderParameterTypeInfo<TextureUAVType>::TAlignedType, \
+        MemberName, \
+        ShaderParameterTypeInfo<TextureUAVType>)
 
 BEGIN_SHADER_PARAMETER_STRUCT(A)
     SHADER_PARAMETER(Core::Int2,Color)

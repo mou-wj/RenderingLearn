@@ -29,7 +29,7 @@ namespace Engine {
 
 	TextureAsset::TextureAsset(const std::string& Path) : Path_(Path)
 	{
-		Texture_ = new RenderCore::RenderTexture();
+		
 	}
 
 

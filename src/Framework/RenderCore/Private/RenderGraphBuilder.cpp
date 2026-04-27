@@ -1,16 +1,21 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif // !NOMINMAX
+
 #include "RenderGraphBuilder.h"
 #include "RHIApi.h"
 #include "RenderGraphResource.h"
 #include "TaskPool.h"
 #include "RenderThread.h"
+#include "RHICommandContex.h"
 #include <unordered_set>
 #include <queue>
-
+using namespace RHI;
 
 namespace RenderCore {
 
 
-    RenderGraphBuilder::RenderGraphBuilder()
+    RenderGraphBuilder::RenderGraphBuilder() : TransientAllocator(GTransientResourceAllocator)
     {
     }
 
@@ -27,96 +32,92 @@ namespace RenderCore {
         passConsumer->PassProducers.push_back(pass);
     }
 
-
-    RenderGraphTextureSP RenderGraphBuilder::CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc)
+    RenderGraphTextureRef RenderGraphBuilder::CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc)
     {
-        // Check if the texture already exists in the cache
         auto it = TextureCache.find(name);
         if (it != TextureCache.end())
         {
-            return it->second; // Return the cached texture
+            return it->second;
         }
 
-        // Create a new texture and add it to the cache
-        auto texture = std::make_shared<RenderGraphTexture>(name, desc);
-        texture->Create(*this);
+        // Áî® Allocator
+        auto texture = Allocator.Allocate<RenderGraphTexture>(name, desc);
+
         TextureCache[name] = texture;
         return texture;
     }
 
-    RenderGraphBufferSP RenderGraphBuilder::CreateBuffer(const std::string& name, const RenderGraphBufferDesc& desc)
+    RenderGraphBufferRef RenderGraphBuilder::CreateBuffer(const std::string& name, const RenderGraphBufferDesc& desc)
     {
-        // Check if the buffer already exists in the cache
         auto it = BufferCache.find(name);
         if (it != BufferCache.end())
         {
-            return it->second; // Return the cached buffer
+            return it->second;
         }
 
-        // Create a new buffer and add it to the cache
-        auto buffer = std::make_shared<RenderGraphBuffer>(name, desc);
-        buffer->Create(*this);
+        auto buffer = Allocator.Allocate<RenderGraphBuffer>(name, desc);
+
+
         BufferCache[name] = buffer;
         return buffer;
     }
+
+    RenderGraphTextureSRVRef RenderGraphBuilder::CreateTextureSRV(const std::string& name, const RenderGraphTextureSRVDesc& desc)
+    {
+        auto it = TextureSRVCache.find(name);
+        if (it != TextureSRVCache.end())
+        {
+            return it->second;
+        }
+
+        auto srv = Allocator.Allocate<RenderGraphTextureSRV>(name, desc);
+
+        TextureSRVCache[name] = srv;
+        return srv;
+    }
     
-    RenderGraphTextureSRVSP RenderGraphBuilder::CreateTextureSRV(const std::string& name, RenderGraphResourceSP resource)
+    RenderGraphBufferSRVRef RenderGraphBuilder::CreateBufferSRV(const std::string& name, const RenderGraphBufferSRVDesc& desc)
     {
-        auto textureResource = std::dynamic_pointer_cast<RenderGraphTexture>(resource);
-        if (!textureResource)
+        auto it = BufferSRVCache.find(name);
+        if (it != BufferSRVCache.end())
         {
-            
+            return it->second;
         }
 
-        RenderGraphTextureSRVDesc desc;
-        desc.Texture = textureResource.get();
+        auto srv = Allocator.Allocate<RenderGraphBufferSRV>(name, desc);
 
-        return std::make_shared<RenderGraphTextureSRV>(name, desc);
+        BufferSRVCache[name] = srv;
+        return srv;
     }
 
-    RenderGraphBufferSRVSP RenderGraphBuilder::CreateBufferSRV(const std::string& name, RenderGraphResourceSP resource)
+    RenderGraphTextureUAVRef RenderGraphBuilder::CreateTextureUAV(const std::string& name, const RenderGraphTextureUAVDesc& desc)
     {
-        auto bufferResource = std::dynamic_pointer_cast<RenderGraphBuffer>(resource);
-        if (!bufferResource)
+        auto it = TextureUAVCache.find(name);
+        if (it != TextureUAVCache.end())
         {
-
+            return it->second;
         }
 
-        RenderGraphBufferSRVDesc desc;
-        desc.Buffer = bufferResource.get();
+        auto uav = Allocator.Allocate<RenderGraphTextureUAV>(name, desc);
 
-
-        return std::make_shared<RenderGraphBufferSRV>(name,desc);
+        TextureUAVCache[name] = uav;
+        return uav;
     }
 
-    RenderGraphTextureUAVSP RenderGraphBuilder::CreateTextureUAV(const std::string& name, RenderGraphResourceSP resource)
+    RenderGraphBufferUAVRef RenderGraphBuilder::CreateBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc)
     {
-        auto textureResource = std::dynamic_pointer_cast<RenderGraphTexture>(resource);
-        if (!textureResource)
+        auto it = BufferUAVCache.find(name);
+        if (it != BufferUAVCache.end())
         {
-
+            return it->second;
         }
 
-        RenderGraphTextureUAVDesc desc;
-        desc.Texture = textureResource.get();
+        auto uav = Allocator.Allocate<RenderGraphBufferUAV>(name, desc);
 
-        return std::make_shared<RenderGraphTextureUAV>(name,desc);
+        BufferUAVCache[name] = uav;
+        return uav;
     }
-
-    RenderGraphBufferUAVSP RenderGraphBuilder::CreateBufferUAV(const std::string& name, RenderGraphResourceSP resource)
-    {
-        auto bufferResource = std::dynamic_pointer_cast<RenderGraphBuffer>(resource);
-        if (!bufferResource)
-        {
-            
-        }
-
-        RenderGraphBufferUAVDesc desc;
-        desc.Buffer = bufferResource.get();
-
-        return std::make_shared<RenderGraphBufferUAV>(name, desc);
-    }
-    RenderGraphTextureSP RenderGraphBuilder::RegisterExternalTexture(const std::string& name, RHITexture* texture)
+    RenderGraphTextureRef RenderGraphBuilder::RegisterExternalTexture(const std::string& name, PooledRenderTarget* target)
     {
         auto it = ExternalTextureCache.find(name);
         if (it != ExternalTextureCache.end())
@@ -124,41 +125,43 @@ namespace RenderCore {
             return it->second; // Return the cached texture
         }
         RenderGraphTextureDesc desc;
-        (RHI::RHITextureDesc)desc = texture->GetDesc();
-        auto textureResource = std::make_shared<RenderGraphTexture>(name, desc);
-        textureResource->SetRHITexture(texture);
+        (RHI::RHITextureDesc)desc = PoolRenderTargetDesc::ConvertToRHITextureDesc(target->GetDesc());
+        auto textureResource = CreateTexture(name, desc);
+        textureResource->SetRHITexture(target->GetRHI());
         ExternalTextureCache[name] = textureResource;
+        PoolTarget2RDGTexture[target] =  ExternalTextureCache[name];
         return ExternalTextureCache[name];
     }
-    RenderGraphTextureSP RenderGraphBuilder::GetExternalTexture(const std::string& name)
+    RenderGraphTextureRef RenderGraphBuilder::GetExternalTexture(const std::string& name)
     {
         return ExternalTextureCache[name];
     }
-    RHITexture* RenderGraphBuilder::GetTexture(RenderGraphResourceSP resource)
+    RHITexture* RenderGraphBuilder::GetTexture(RenderGraphResourceRef resource)
     {
-        auto textureResource = std::dynamic_pointer_cast<RenderGraphTexture>(resource);
+        auto textureResource = static_cast<RenderGraphTexture*>(resource);
         if (!textureResource)
         {
+            // handle error
         }
         return textureResource->GetRHITexture();
     }
 
-    RHIBuffer* RenderGraphBuilder::GetBuffer(RenderGraphResourceSP resource)
+    RHIBuffer* RenderGraphBuilder::GetBuffer(RenderGraphResourceRef resource)
     {
-        auto bufferResource = std::dynamic_pointer_cast<RenderGraphBuffer>(resource);
+        auto bufferResource = static_cast<RenderGraphBuffer*>(resource);
         if (!bufferResource)
         {
-
+            // handle error
         }
         return bufferResource->GetRHIBuffer();
     }
 
-    RenderGraphTextureSP RenderGraphBuilder::GetTexture(const std::string& name)
+    RenderGraphTextureRef RenderGraphBuilder::GetTexture(const std::string& name)
     {
         return TextureCache[name];
     }
 
-    RenderGraphBufferSP RenderGraphBuilder::GetBuffer(const std::string& name)
+    RenderGraphBufferRef RenderGraphBuilder::GetBuffer(const std::string& name)
     {
         return BufferCache[name];
     }
@@ -166,137 +169,328 @@ namespace RenderCore {
     void RenderGraphBuilder::Execute()
     {
 
-        // use Common::TaskPool from Common/TaskPool.h
         Core::TaskPool taskPool(std::thread::hardware_concurrency());
 
-        std::vector<Core::TaskHandle> handles;
-        handles.reserve(ParallelPasses.size());
-        std::vector<RHI::RHICommandListBase*> RecordedCommansLists;
-		RecordedCommansLists.reserve(ParallelPasses.size());
-        // For each parallel group, create one task that creates a command context/list
-        // and executes each pass in the group sequentially: begin barriers, pass work, end barriers.
-        for (const auto& group : ParallelPasses)
+        struct RecordedGroup
         {
-            // capture a copy of the group
-            std::vector<RenderGraphPass*> groupCopy;
-            groupCopy.reserve(group.size());
-            for (auto* p : group) groupCopy.push_back(p);
+            std::unordered_map<RHI::EQueueType, RHI::RHICommandListBase*> CmdLists;
+            std::unordered_map<RHI::EQueueType, std::vector<RHI::RHITransitionInfo>> BeginBarriers;
+            std::unordered_map<RHI::EQueueType, RHI::RHIContextBase*> CmdContexts;
+        };
 
-            // create a command context from global RHI
-            RHI::RHIApi* api = GRHIApi;
-            if (!api) return;
+        std::vector<RecordedGroup> RecordedGroups(ParallelPasses.size());
+        std::vector<Core::TaskHandle> handles;
 
-            RHI::RHIQueue* queue = api->GetQueue(RHI::EQueueType::Graphics);
-            if (!queue) return;
+        RHI::RHIApi* api = GRHIApi;
+        if (!api) return;
 
-            RHI::RHIContextBase* ctx = queue->AcquireCommandContext();
-            if (!ctx) return;
+        // =========================
+        // 1Ô∏è‚É£ Âπ∂Ë°åÂΩïÂà∂
+        // =========================
+        int i = 0;
+        for (auto iter = ParallelPasses.begin(); iter != ParallelPasses.end(); ++iter,++i)
+        {
+            auto group = *iter;
 
-            auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(ctx);
-            if (!graphicContext) return;
-
-            RHI::RHICommandListBase* cmdListSP = new RHI::RHIGraphicCommandList(graphicContext);
-            RecordedCommansLists.push_back(cmdListSP);
-
-            auto handle = taskPool.AddTask([groupCopy = std::move(groupCopy), cmdListSP]() {
-
-
-                RHI::RHICommandListBase& cmdList = *cmdListSP;
-
-                for (auto* pass : groupCopy)
+            handles.push_back(taskPool.AddTask([this, api, group, &RecordedGroups, i]()
                 {
-                    if (!pass) continue;
+                    auto& outGroup = RecordedGroups[i];
+                    auto& cmdLists = outGroup.CmdLists;
+					auto& cmdContexts = outGroup.CmdContexts;
 
-                    // Execute begin barriers
-                    pass->BeginBarrier.Execute(cmdList);
+                    auto getCmd = [&](RHI::EQueueType q)
+                        {
+                            if (cmdLists.count(q)) return cmdLists[q];
 
-                    // Execute pass (uses RHICommandList)
-                    try {
-                        pass->Execute(cmdList);
-                    } catch (...) {
-                        // swallow; user can log/handle
+                            auto* queue = api->GetQueue(q);
+                            auto* ctx = queue->AcquireCommandContext();
+
+                            RHI::RHICommandListBase* cmd = nullptr;
+
+                            if (q == RHI::EQueueType::Graphics)
+                                cmd = Allocator.Allocate<RHI::RHIGraphicCommandList>(dynamic_cast<RHI::RHIGraphicContex*>(ctx));
+                            else if (q == RHI::EQueueType::Compute)
+                                cmd = Allocator.Allocate <RHI::RHIComputeCommandList>(dynamic_cast<RHI::RHIComputeContex*>(ctx));
+                            else
+                                cmd = Allocator.Allocate<RHI::RHITransferCommandList>(dynamic_cast<RHI::RHITransferContext*>(ctx));
+
+                            cmd->Begin();
+                            cmdLists[q] = cmd;
+                            cmdContexts[q] = ctx;
+                            return cmd;
+                        };
+
+                    // üëâ Êî∂ÈõÜ barrier
+                    for (auto* pass : group)
+                    {
+                        auto q = (RHI::EQueueType)pass->GetPassFlag();
+
+                        for (auto& t : pass->BeginBarrier.GetTransitions())
+                        {
+                            outGroup.BeginBarriers[q].push_back(t);
+                        }
                     }
 
-                    // Execute end barriers
-                    //pass->EndBarrier.Execute(cmdList);
-                }
+                    // üëâ ÊâßË°å barrierÔºàÂêàÂπ∂Ôºâ
+                    for (auto& [q, transitions] : outGroup.BeginBarriers)
+                    {
+                        auto* cmd = getCmd(q);
 
-                // Optionally submit the command list via ctx / api if required by RHI.
-            });
+                        if (!transitions.empty())
+                        {
+							void* mem = Allocator.AllocateBytes(RHI::G_RHITransition_TotalSize);
+							RHI::RHITransition* transitionObj = new(mem) RHI::RHITransition();
+							RHI::RHITransitionCreateInfo createInfo;
+							createInfo.Flags = RHI::ERHITransitionCreateFlags::None;
+                            createInfo.TransitionInfos = transitions;
+                            RHI::GRHIApi->RHICreateTransition(transitionObj, createInfo);
+                            cmd->BeginTransitions({ transitionObj });
+                            cmd->EndTransitions({ transitionObj });
+                        }
+                    }
 
-            handles.push_back(handle);
+                    // üëâ ÊâßË°å pass
+                    for (auto* pass : group)
+                    {
+                        auto q = (RHI::EQueueType)pass->GetPassFlag();
+                        auto* cmd = getCmd(q);
+
+                        pass->Execute(*cmd);
+                    }
+
+                    for (auto& [_, cmd] : cmdLists)
+                    {
+                        cmd->End();
+                    }
+                }));
         }
 
-        // wait for all groups to finish
         taskPool.WaitAll(handles);
 
-        // merge commandlist
+        // =========================
+        // 2Ô∏è‚É£ È°∫Â∫èÊèê‰∫§ÔºàÂ∏¶ÂøÖË¶ÅÂêåÊ≠•Ôºâ
+        // =========================
+        std::unordered_map<RHI::EQueueType, uint64_t> Timeline;
 
+        for (int i = 0; i < RecordedGroups.size(); ++i)
+        {
+            auto& group = RecordedGroups[i];
 
-        // enqueue command
-        EnqueueRenderCommand("Execute Render Graph Builder", [RecordedCommansLists](RHI::RHICommandListBase& commandList) {
-            for (auto cmdList : RecordedCommansLists) {
-                if (cmdList) {
-                    commandList.Merge(*cmdList);
+            for (auto& [q, cmd] : group.CmdLists)
+            {
+                auto* queue = api->GetQueue(q);
+				std::vector<RHI::RHIWaitInfo> waitInfos;
+                for (auto& [otherQ, value] : Timeline)
+                {
+                    if (otherQ == q) continue;
+
+                    RHI::RHIWaitInfo waitInfo;
+                    waitInfo.QueueType = otherQ;
+                    waitInfo.Value = value;
+                    waitInfo.WaitStage = RHI::ERHIPipelineStage::AllCommands;
+
+                    waitInfos.push_back(waitInfo);
                 }
+
+				RHI::RHIWaitInfo lastTransInfo;
+                RHI::RHIFence fence = queue->ExecuteContext({ group.CmdContexts[q] }, waitInfos);
+                Timeline[q] = fence.Value;
             }
-        });
+
+            // üëâ TODOÔºöÂè™Ê†πÊçÆ‰æùËµñÊèíÂÖ• waitÔºà‰Ω†ÂêéÈù¢ÂèØ‰ª•Âä†Ôºâ
+        }
+		Allocator.Reset();
+        ApplyFinalStates();
     }
 
     void RenderGraphBuilder::AnalyzePasses()
     {
-        // ◊∑◊Ÿ√ø∏ˆ◊ ‘¥µƒµ±«∞◊¥Ã¨
-        struct LocalResState {
+        // =========================================
+            // Ê∏ÖÁêÜÊóßÊï∞ÊçÆ
+            // =========================================
+        ParallelPasses.clear();
+        InitialStates.clear();
+        FinalStates.clear();
+
+
+        // =========================================
+        // Â∑•ÂÖ∑ÂáΩÊï∞
+        // =========================================
+
+        auto IsWrite = [](ERHIResourceAccess A)
+            {
+                return EnumHasAnyFlags(A, ERHIResourceAccess::WritableMask);
+            };
+
+        auto IsUAV = [](ERHIResourceAccess A)
+            {
+                return EnumHasAnyFlags(A, ERHIResourceAccess::UAVMask);
+            };
+
+        auto NeedBarrier = [&](ERHIResourceAccess Before, ERHIResourceAccess After)
+            {
+                const bool BeforeWrite = IsWrite(Before);
+                const bool AfterWrite = IsWrite(After);
+
+                if (IsUAV(Before) && IsUAV(After))
+                    return true;
+
+                if (!BeforeWrite && !AfterWrite)
+                    return false;
+
+                return Before != After;
+            };
+
+        // =========================================
+        // Runtime tracking
+        // =========================================
+        struct LocalResState
+        {
             RenderGraphPass* LastVisitor = nullptr;
             ERHIResourceAccess LastAccess = ERHIResourceAccess::Unknown;
+            bool bInitialized = false;
         };
-        std::unordered_map<RenderGraphResource*, LocalResState> ResourceStates;
 
-        // --- µ⁄“ªΩ◊∂Œ£∫±È¿˙À˘”– Pass£¨ ’ºØ Intent ≤¢Ω®¡¢“¿¿µ/∆¡’œ ---
+        std::unordered_map<ResourceSubresourceKey, LocalResState, KeyHasher> ResourceStates;
+
+        // =========================================
+        // Pass indexÔºàüëâ Áî®‰∫é lifetimeÔºâ
+        // =========================================
+        std::unordered_map<RenderGraphPass*, uint32_t> PassIndex;
+        uint32_t passOrder = 0;
+
+        for (auto* p : Passes)
+        {
+            PassIndex[p] = passOrder++;
+        }
+
+        // =========================================
+        // Ëé∑ÂèñÂàùÂßãÁä∂ÊÄÅ
+        // =========================================
+        auto GetInitialAccess = [&](const ResourceSubresourceKey& Key)
+            -> ERHIResourceAccess
+            {
+                auto it = InitialStates.find(Key);
+                if (it != InitialStates.end())
+                    return it->second;
+
+                ERHIResourceAccess access = ERHIResourceAccess::Undefined;
+
+                InitialStates[Key] = access;
+                return access;
+            };
+
+        // =========================================
+        // Phase 1: Barrier + DAG + Lifetime tracking
+        // =========================================
         for (auto* Pass : Passes)
         {
-            // 1. ¥¶¿ÌŒ∆¿Ì“‚Õº (TextureIntents)
+            // =========================
+            // Texture
+            // =========================
             for (const auto& Intent : Pass->TextureIntents)
             {
-                auto& State = ResourceStates[Intent.Texture];
+                ResourceSubresourceKey Key{
+                    Intent.Texture,
+                    Intent.SubresourceRange,
+                    false
+                };
 
-                // »Áπ˚÷Æ«∞”– Pass ∑√Œ π˝£¨«“∑√Œ »®œﬁ≤ªºÊ»›£®ªÚ «Œ™¡À»∑±£◊¥Ã¨«–ªª£©
+                auto& State = ResourceStates[Key];
+
+                if (!State.bInitialized)
+                {
+                    State.LastAccess = GetInitialAccess(Key);
+                    State.bInitialized = true;
+                }
+
+                // =========================
+                // üëâ Lifetime trackingÔºàÊ†∏ÂøÉÊñ∞Â¢ûÔºâ
+                // =========================
+                {
+                    auto* Res = Intent.Texture;
+                    auto& LT = ResourceLifetimes[Res];
+
+                    if (!LT.FirstPass)
+                        LT.FirstPass = Pass;
+
+                    LT.LastPass = Pass;
+
+                    uint32_t idx = PassIndex[Pass];
+                    LT.BeginPassIndex = std::min(LT.BeginPassIndex, idx);
+                    LT.EndPassIndex = std::max(LT.EndPassIndex, idx);
+                }
+
+                // =========================
+                // Barrier + DAG
+                // =========================
                 if (State.LastVisitor && State.LastVisitor != Pass)
                 {
-                    // ÷ª”–◊¥Ã¨»∑ µ–Ë“™∏ƒ±‰ ±≤≈ÃÌº”∆¡’œ£®ªÚ’ﬂ¥¶¿Ì Read-after-Write µ»£©
-                    if (State.LastAccess != Intent.RequiredAccess)
+                    if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
                     {
                         RHI::RHITransitionInfo Transition{};
                         Transition.Type = RHI::RHITransitionInfo::EType::Texture;
-                        Transition.Texture = Intent.Texture->GetRHITexture(); // ◊¢“‚£∫’‚¿Ôø…ƒ‹–Ë“™—”≥ŸµΩ’Ê’˝µƒ÷¥–– ±øÃªÒ»°
+                        Transition.Texture = Intent.Texture->GetRHITexture();
                         Transition.AccessBefore = State.LastAccess;
                         Transition.AccessAfter = Intent.RequiredAccess;
-                        Transition.MipIndex = Intent.SubresourceRange.MipIndex;
-                        Transition.ArraySlice = Intent.SubresourceRange.ArraySlice;
-                        Transition.PlaneSlice = Intent.SubresourceRange.PlaneSlice;
 
-                        // ∫À–ƒ–ﬁ∏ƒ£∫Ω´∆¡’œ∑≈‘⁄µ±«∞ Pass ÷¥––÷Æ«∞
                         Pass->BeginBarrier.AddTransition(Transition);
-                    }
 
-                    // Ω®¡¢ DAG “¿¿µ
-                    State.LastVisitor->PassConsumers.push_back(Pass);
-                    Pass->PassProducers.push_back(State.LastVisitor);
+                        State.LastVisitor->PassConsumers.push_back(Pass);
+                        Pass->PassProducers.push_back(State.LastVisitor);
+                    }
                 }
 
-                // ∏¸–¬◊ ‘¥◊Ó∫Û∑√Œ ◊¥Ã¨
                 State.LastVisitor = Pass;
                 State.LastAccess = Intent.RequiredAccess;
+
+                FinalStates[Key] = Intent.RequiredAccess;
             }
 
-            // 2. ¥¶¿Ì Buffer “‚Õº (BufferStates)
+            // =========================
+            // Buffer
+            // =========================
             for (const auto& Intent : Pass->BufferStates)
             {
-                auto& State = ResourceStates[Intent.Buffer];
+                ResourceSubresourceKey Key{
+                    Intent.Buffer,
+                    RHI::RHISubresourceRange(),
+                    true,
+                    Intent.Offset,
+                    Intent.Size
+                };
 
+                auto& State = ResourceStates[Key];
+
+                if (!State.bInitialized)
+                {
+                    State.LastAccess = GetInitialAccess(Key);
+                    State.bInitialized = true;
+                }
+
+                // =========================
+                // üëâ Lifetime trackingÔºàÊ†∏ÂøÉÊñ∞Â¢ûÔºâ
+                // =========================
+                {
+                    auto* Res = Intent.Buffer;
+                    auto& LT = ResourceLifetimes[Res];
+
+                    if (!LT.FirstPass)
+                        LT.FirstPass = Pass;
+
+                    LT.LastPass = Pass;
+
+                    uint32_t idx = PassIndex[Pass];
+                    LT.BeginPassIndex = std::min(LT.BeginPassIndex, idx);
+                    LT.EndPassIndex = std::max(LT.EndPassIndex, idx);
+                }
+
+                // =========================
+                // Barrier + DAG
+                // =========================
                 if (State.LastVisitor && State.LastVisitor != Pass)
                 {
-                    if (State.LastAccess != Intent.RequiredAccess)
+                    if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
                     {
                         RHI::RHITransitionInfo Transition{};
                         Transition.Type = RHI::RHITransitionInfo::EType::Buffer;
@@ -305,147 +499,397 @@ namespace RenderCore {
                         Transition.AccessAfter = Intent.RequiredAccess;
 
                         Pass->BeginBarrier.AddTransition(Transition);
-                    }
 
-                    State.LastVisitor->PassConsumers.push_back(Pass);
-                    Pass->PassProducers.push_back(State.LastVisitor);
+                        State.LastVisitor->PassConsumers.push_back(Pass);
+                        Pass->PassProducers.push_back(State.LastVisitor);
+                    }
                 }
 
                 State.LastVisitor = Pass;
                 State.LastAccess = Intent.RequiredAccess;
+
+                FinalStates[Key] = Intent.RequiredAccess;
             }
         }
 
-        // Build dependency graph (Kahn's algorithm) using PassProducers/PassConsumers
+        // =========================================
+        // Phase 2: ÊãìÊâëÊéíÂ∫èÔºà‰∏çÂΩ±Âìç lifetimeÔºâ
+        // =========================================
         std::unordered_map<RenderGraphPass*, size_t> indegree;
         std::unordered_set<RenderGraphPass*> allNodes;
-        for (auto* pass : Passes) {
+
+        for (auto* pass : Passes)
+        {
             allNodes.insert(pass);
             indegree[pass] = pass->PassProducers.size();
         }
 
         std::queue<RenderGraphPass*> zeroQueue;
-        for (auto* node : allNodes) {
-            if (indegree[node] == 0) zeroQueue.push(node);
+
+        for (auto* node : allNodes)
+        {
+            if (indegree[node] == 0)
+                zeroQueue.push(node);
         }
 
-        ParallelPasses.clear();
         std::unordered_set<RenderGraphPass*> processed;
 
-        while (!allNodes.empty()) {
+        while (!allNodes.empty())
+        {
             std::vector<RenderGraphPass*> currentSet;
-            if (zeroQueue.empty()) {
-                // Defensive: break cycle by taking one node
+
+            if (zeroQueue.empty())
+            {
                 auto it = allNodes.begin();
-                if (it == allNodes.end()) break;
                 currentSet.push_back(*it);
-            } else {
-                size_t qCount = zeroQueue.size();
-                for (size_t i = 0; i < qCount; ++i) {
-                    auto* n = zeroQueue.front(); zeroQueue.pop();
-                    if (processed.find(n) != processed.end()) continue;
-                    currentSet.push_back(n);
+            }
+            else
+            {
+                size_t count = zeroQueue.size();
+                for (size_t i = 0; i < count; ++i)
+                {
+                    auto* n = zeroQueue.front();
+                    zeroQueue.pop();
+
+                    if (!processed.count(n))
+                        currentSet.push_back(n);
                 }
             }
 
-            // create a PassList for this parallel group
-            PassList groupList;
-            for (auto* node : currentSet) {
-                groupList.push_back(node);
+            PassList group;
+
+            for (auto* node : currentSet)
+            {
+                group.push_back(node);
                 processed.insert(node);
                 allNodes.erase(node);
             }
 
-            // reduce indegree of consumers
-            for (auto* node : currentSet) {
-                for (auto* consumer : node->PassConsumers) {
-                    auto it = indegree.find(consumer);
-                    if (it == indegree.end()) continue;
-                    if (it->second > 0) {
-                        it->second--;
-                        if (it->second == 0) zeroQueue.push(consumer);
-                    }
+            for (auto* node : currentSet)
+            {
+                for (auto* consumer : node->PassConsumers)
+                {
+                    if (--indegree[consumer] == 0)
+                        zeroQueue.push(consumer);
                 }
             }
 
-            if (!groupList.empty()) {
-                ParallelPasses.push_back(groupList);
-            }
+            if (!group.empty())
+                ParallelPasses.push_back(group);
         }
 
-        // Append any unprocessed nodes (cycle fallback)
-        for (auto* remaining : Passes) {
-            if (processed.find(remaining) == processed.end()) {
+        // fallback
+        for (auto* pass : Passes)
+        {
+            if (!processed.count(pass))
+            {
                 PassList single;
-                single.push_back(remaining);
+                single.push_back(pass);
                 ParallelPasses.push_back(single);
             }
         }
+
+        // =========================================
+        // üëâ ÔºàÂèØÈÄâÔºâËøôÈáåÂèØ‰ª•ÂÅö lifetime finalize
+        // =========================================
+        // ResourceLifetimes Â∞±Â∑≤ÁªèÂÆåÊï¥‰∫ÜÔºö
+        //
+        // BeginPassIndex / EndPassIndex
+        // FirstPass / LastPass
     }
 
-    void RenderGraphBuilder::SetupPassInternal(RenderGraphPass* Pass, const ShaderParametersMetadata* Metadata, const void* Parameters)
+    void RenderGraphBuilder::AllocateResources()
+    {
+        // =========================
+            // Texture
+            // =========================
+        for (auto& [name, tex] : TextureCache)
+        {
+            if (!tex) continue;
+
+            // Â§ñÈÉ®ËµÑÊ∫êË∑≥Ëøá
+            if (tex->IsExternal)
+                continue;
+
+            // Â∑≤ÂàõÂª∫Ë∑≥Ëøá
+            if (tex->GetRHITexture())
+                continue;
+
+            // =========================================
+            // üëâ ÂÖ≥ÈîÆÊîπÂä®ÔºöËØªÂèñ lifetime
+            // =========================================
+            auto it = ResourceLifetimes.find(tex);
+            if (it == ResourceLifetimes.end())
+                continue; // Ê≤°ÊúâË¢´ graph ‰ΩøÁî®ÁöÑËµÑÊ∫ê‰∏çÂàõÂª∫
+
+            const ResourceLifetime& LT = it->second;
+
+            // =========================================
+            // ÂàõÂª∫ transient textureÔºàÂ∏¶ÁîüÂëΩÂë®ÊúüÔºâ
+            // =========================================
+            PoolRenderTargetDesc Desc =
+                PoolRenderTargetDesc::ConvertFromRHITextureDesc(tex->GetDesc());
+
+            auto rhiTex = TransientAllocator->AllocateRenderTarget(
+                Desc,
+                LT.BeginPassIndex,
+                LT.EndPassIndex
+            );
+
+            tex->SetRHITexture(rhiTex->GetRHI());
+        }
+
+        // =========================
+        // Buffer
+        // =========================
+        for (auto& [name, buf] : BufferCache)
+        {
+            if (!buf) continue;
+
+            if (buf->IsExternal)
+                continue;
+
+            if (buf->GetRHIBuffer())
+                continue;
+
+            // =========================================
+            // üëâ lifetime driven
+            // =========================================
+            auto it = ResourceLifetimes.find(buf);
+            if (it == ResourceLifetimes.end())
+                continue;
+
+            const ResourceLifetime& LT = it->second;
+
+            auto rhiBuf = TransientAllocator->AllocateBuffer(
+                RenderGraphBufferDesc::ConvertToRHIDesc(buf->GetDesc()),
+                LT.BeginPassIndex,
+                LT.EndPassIndex
+            );
+
+            buf->SetRHIBuffer(rhiBuf->GetRHI());
+        }
+    }
+
+    void RenderGraphBuilder::SetupPassInternal(
+        RenderGraphPass* Pass,
+        const ShaderParametersMetadata* Metadata,
+        const void* Parameters)
     {
         const uint8_t* BaseDataPtr = reinterpret_cast<const uint8_t*>(Parameters);
 
-        // ±È¿˙À˘”–≥…‘±£¨—∞’“◊ ‘¥¿‡–Õ
         for (const auto& Member : Metadata->GetMembers())
         {
-            // º∆À„≥…‘±‘⁄Ω·ππÃÂ÷–µƒ µº µÿ÷∑
             const uint8_t* MemberAddr = BaseDataPtr + Member.Offset;
 
             if (Member.IsResource())
             {
-                // 1. ¥¶¿ÌŒ∆¿Ìœ‡πÿ (Texture, Texture_UAV)
-                if (Member.BaseType == EShaderUniformBaseType::Texture ||
-                    Member.BaseType == EShaderUniformBaseType::Texture_UAV)
+                // ============================
+                // Texture SRV
+                // ============================
+                if (Member.BaseType == EShaderUniformBaseType::Texture_SRV)
                 {
-                    // ’‚¿Ôµƒπÿº¸£∫÷±Ω”Ω´ƒ⁄¥ÊΩ‚ŒˆŒ™ RenderGraphTexture* ÷∏’Î
-                    // ◊¢“‚£∫»Áπ˚ƒ„µƒ≤Œ ˝∫Í÷ß≥÷µƒ « RDG_TEXTURE_UAV µ»∞¸◊∞¿‡£¨’‚¿Ô–Ë“™∂‘”¶µ˜’˚
-                    RenderGraphTexture* Tex = *reinterpret_cast<RenderGraphTexture* const*>(MemberAddr);
+                    auto SRV = *reinterpret_cast<RenderGraphTextureSRV* const*>(MemberAddr);
+
+                    if (SRV)
+                    {
+                        auto* Tex = static_cast<RenderGraphTexture*>(SRV->GetResource());
+                        const auto& Desc = SRV->GetDesc();
+
+                        RenderGraphPass::RenderGraphTextureIntent Intent;
+                        Intent.Texture = Tex;
+
+                        Intent.SubresourceRange = RHISubresourceRange(
+                            Desc.MipLevel,
+                            Desc.ArraySlice,
+                            RHISubresourceRange::kAllSubresources
+                        );
+
+                        // SRV ‚Üí ReadOnly
+                        Intent.RequiredAccess =
+                            (Pass->GetPassFlag() == EPassFlag::Compute)
+                            ? ERHIResourceAccess::SRVCompute
+                            : ERHIResourceAccess::SRVGraphics;
+
+                        Pass->TextureIntents.push_back(Intent);
+                    }
+                }
+                // ============================
+                // Texture UAV
+                // ============================
+                else if (Member.BaseType == EShaderUniformBaseType::Texture_UAV)
+                {
+                    auto UAV = *reinterpret_cast<RenderGraphTextureUAV* const*>(MemberAddr);
+
+                    if (UAV)
+                    {
+                        auto* Tex = static_cast<RenderGraphTexture*>(UAV->GetResource());
+                        const auto& Desc = UAV->GetDesc();
+
+                        RenderGraphPass::RenderGraphTextureIntent Intent;
+                        Intent.Texture = Tex;
+
+                        Intent.SubresourceRange = RHISubresourceRange(
+                            Desc.MipLevel,
+                            Desc.ArraySlice,
+                            RHISubresourceRange::kAllSubresources
+                        );
+
+                        // UAV ‚Üí ReadWrite
+                        Intent.RequiredAccess =
+                            (Pass->GetPassFlag() == EPassFlag::Compute)
+                            ? ERHIResourceAccess::UAVCompute
+                            : ERHIResourceAccess::UAVGraphics;
+
+                        Pass->TextureIntents.push_back(Intent);
+                    }
+                }
+                // ============================
+                // Texture (Ë£∏TextureÔºåÊûÅÂ∞ëÁî®)
+                // ============================
+                else if (Member.BaseType == EShaderUniformBaseType::Texture)
+                {
+                    auto Tex = *reinterpret_cast<RenderGraphTexture* const*>(MemberAddr);
 
                     if (Tex)
                     {
                         RenderGraphPass::RenderGraphTextureIntent Intent;
                         Intent.Texture = Tex;
-                        Intent.SubresourceRange = RHISubresourceRange(); // ƒ¨»œ»´◊ ‘¥∑√Œ 
+                        Intent.SubresourceRange = RHISubresourceRange(); // whole
 
-                        // ∏˘æ›‘™ ˝æ›¿‡–Õæˆ∂® RHI ∑√Œ »®œﬁ
-                        Intent.RequiredAccess = (Member.BaseType == EShaderUniformBaseType::Texture_UAV)
-                            ? ERHIResourceAccess::UAVGraphics
-                            : ERHIResourceAccess::UAVGraphics;
+                        Intent.RequiredAccess =
+                            (Pass->GetPassFlag() == EPassFlag::Compute)
+                            ? ERHIResourceAccess::SRVCompute
+                            : ERHIResourceAccess::SRVGraphics;
 
-                        // °æ∫À–ƒ°ø“ÚŒ™ «”—‘™£¨÷±Ω” push µΩ Pass µƒÀΩ”– vector ÷–
                         Pass->TextureIntents.push_back(Intent);
-
-
                     }
                 }
-                // 2. ¥¶¿Ì Buffer œ‡πÿ (Buffer, Buffer_UAV)
-                else if (Member.BaseType == EShaderUniformBaseType::Buffer ||
-                    Member.BaseType == EShaderUniformBaseType::Buffer_UAV)
+
+                // ============================
+                // Buffer SRV
+                // ============================
+                else if (Member.BaseType == EShaderUniformBaseType::Buffer_SRV)
                 {
-                    RenderGraphBuffer* Buf = *reinterpret_cast<RenderGraphBuffer* const*>(MemberAddr);
+                    auto SRV = *reinterpret_cast<RenderGraphBufferSRV* const*>(MemberAddr);
+                    auto vDesc = SRV->GetDesc();
+                    if (SRV)
+                    {
+                        auto* Buf = static_cast<RenderGraphBuffer*>(SRV->GetResource());
+
+                        RenderGraphPass::RenderGraphBufferIntent Intent;
+                        Intent.Buffer = Buf;
+
+                        // Buffer SRV ÈªòËÆ§ whole buffer
+                        Intent.Offset = vDesc.Offset;
+                        Intent.Size = vDesc.Size;
+
+                        Intent.RequiredAccess =
+                            (Pass->GetPassFlag() == EPassFlag::Compute)
+                            ? ERHIResourceAccess::SRVCompute
+                            : ERHIResourceAccess::SRVGraphics;
+
+                        Pass->BufferStates.push_back(Intent);
+                    }
+                }
+
+                // ============================
+                // Buffer UAV
+                // ============================
+                else if (Member.BaseType == EShaderUniformBaseType::Buffer_UAV)
+                {
+                    auto UAV = *reinterpret_cast<RenderGraphBufferUAV* const*>(MemberAddr);
+					auto uavDesc = UAV->GetDesc();
+                    if (UAV)
+                    {
+                        auto* Buf = static_cast<RenderGraphBuffer*>(UAV->GetResource());
+
+                        RenderGraphPass::RenderGraphBufferIntent Intent;
+                        Intent.Buffer = Buf;
+
+                        Intent.Offset = uavDesc.Offset;
+                        Intent.Size = uavDesc.Size;
+
+                        Intent.RequiredAccess =
+                            (Pass->GetPassFlag() == EPassFlag::Compute)
+                            ? ERHIResourceAccess::UAVCompute
+                            : ERHIResourceAccess::UAVGraphics;
+
+                        Pass->BufferStates.push_back(Intent);
+                    }
+                }
+
+                // ============================
+                // BufferÔºàË£∏Ôºâ
+                // ============================
+                else if (Member.BaseType == EShaderUniformBaseType::Buffer)
+                {
+                    auto Buf = *reinterpret_cast<RenderGraphBuffer* const*>(MemberAddr);
 
                     if (Buf)
                     {
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
                         Intent.Offset = 0;
-                        Intent.Size = 0; // »´ª∫≥Â
-                        Intent.RequiredAccess = (Member.BaseType == EShaderUniformBaseType::Buffer_UAV)
-                            ? ERHIResourceAccess::UAVGraphics
-                            : ERHIResourceAccess::UAVGraphics;
+                        Intent.Size = 0;
 
-                        // °æ∫À–ƒ°ø÷±Ω”≤Ÿ◊˜ÀΩ”–≥…‘± BufferStates
+                        Intent.RequiredAccess =
+                            (Pass->GetPassFlag() == EPassFlag::Compute)
+                            ? ERHIResourceAccess::SRVCompute
+                            : ERHIResourceAccess::SRVGraphics;
+
                         Pass->BufferStates.push_back(Intent);
-
                     }
                 }
             }
-            // 3. ¥¶¿Ì«∂Ã◊Ω·ππÃÂ (»Áπ˚ƒ„µƒ Metadata ÷ß≥÷«∂Ã◊)
             else if (Member.IsStruct())
             {
                 SetupPassInternal(Pass, Member.StructMetadata, MemberAddr);
+            }
+        }
+    }
+
+    void RenderGraphBuilder::ApplyFinalStates()
+    {
+        for (auto& [Key, Access] : FinalStates)
+        {
+            if (!Key.Resource)
+                continue;
+
+
+
+            // =========================
+            // Texture
+            // =========================
+            if (!Key.isBuffer)
+            {
+                auto* tex = static_cast<RenderGraphTexture*>(Key.Resource);
+                if (!tex->IsExternal)
+                    continue;
+                auto it = RDGTexture2PoolTarget.find(tex);
+                if (it == RDGTexture2PoolTarget.end())
+                    continue;
+
+                PooledRenderTarget* pool = it->second;
+                if (!pool)
+                    continue;
+
+                // üëâ ÂÜôÂõû subresource state
+                pool->GetTracker().UpdateSubresourceAccess(Key.Range, Access);
+            }
+            // =========================
+            // Buffer
+            // =========================
+            else
+            {
+                auto* buf = static_cast<RenderGraphBuffer*>(Key.Resource);
+                if (!buf->IsExternal)
+                    continue;
+                // Â¶ÇÊûú‰ª•ÂêéÊúâ external bufferÔºåÂÜçË°•Êò†Â∞Ñ
+                // ÂΩìÂâçÂèØ‰ª•ÂøΩÁï•ÊàñÁïô TODO
+
+                // Á§∫‰æãÔºö
+                // ExternalBufferState[buf->GetRHIBuffer()] = Access;
             }
         }
     }
