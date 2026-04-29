@@ -396,8 +396,8 @@ void VulkanShaderResourceView::CreateTextureView(
         ? texture->GetFormat()
         : TransformFormatFrom(SRVInfo.Format);
 
-    BaseMipLevel = SRVInfo.MostDetailedMip;
-    MipLevelCount = SRVInfo.MipLevelCount;
+    BaseMipLevel = SRVInfo.FirstMipSlice;
+    MipLevelCount = SRVInfo.MipCount;
     BaseArrayLayer = SRVInfo.FirstArraySlice;
     LayerCount = SRVInfo.ArraySize;
 
@@ -545,8 +545,8 @@ void VulkanUnorderedAccessView::CreateTextureView(
         ? texture->GetFormat()
         : TransformFormatFrom(UAVInfo.Format);
 
-    BaseMipLevel = UAVInfo.MipSlice;
-    MipLevelCount = 1;
+    BaseMipLevel = UAVInfo.FirstMipSlice;
+    MipLevelCount = UAVInfo.MipCount;
     BaseArrayLayer = UAVInfo.FirstArraySlice;
     LayerCount = UAVInfo.ArraySize;
 

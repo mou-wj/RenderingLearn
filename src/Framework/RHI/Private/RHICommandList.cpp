@@ -66,6 +66,30 @@ void RHICommandBlitTexture::Execute(RHICommandListBase& cmdList)
         transferContext->BlitTexture(Src, Dst, BlitDesc);
     }
 }
+RHICommandUpdateTexture::RHICommandUpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& region)
+    : texture(texture), data(data), region(region)
+{
+}
+void RHICommandUpdateTexture::Execute(RHICommandListBase& cmdList)
+{
+    auto* transferContext = dynamic_cast<RHITransferContext*>(cmdList.GetContext());
+    if (transferContext)
+    {
+        transferContext->UpdateTexture(texture, data, region);
+    }
+}
+RHICommandUpdateBuffer::RHICommandUpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
+    : buffer(buffer), data(data), region(region)
+{
+}
+void RHICommandUpdateBuffer::Execute(RHICommandListBase& cmdList)
+{
+    auto* transferContext = dynamic_cast<RHITransferContext*>(cmdList.GetContext());
+    if (transferContext)
+    {
+        transferContext->UpdateBuffer(buffer, data, region);
+    }
+}
 
 RHICommandSetComputePipelineState::RHICommandSetComputePipelineState(RHIComputePipelineState* pipelineState)
     : PipelineState(pipelineState)

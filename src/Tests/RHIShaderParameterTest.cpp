@@ -436,7 +436,7 @@ private:
 
         // 创建 SRV
         RHI::RHITexSRVCreateInfo srvDesc;
-        srvDesc.MipLevelCount = 1;
+        srvDesc.FirstMipSlice = 1;
         srvDesc.Format = RHI::ERHIFormat::R8G8B8A8_UNorm;
         TestTextureSRV = api->CreateTextureShaderResourceView(TestTexture.get(), srvDesc);
 

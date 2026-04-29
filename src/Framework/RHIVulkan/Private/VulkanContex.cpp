@@ -3,6 +3,7 @@
 #include "VulkanQueue.h"
 #include "VulkanShader.h"
 #include "VulkanDescriptorSets.h"
+#include "VulkanRHIUtils.h"
 
 namespace RHIVulkan {
 
@@ -74,6 +75,91 @@ void VulkanTransferContext::CopyTexture(RHITexture* src, RHITexture* dst, const 
 void VulkanTransferContext::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc)
 {
     
+}
+
+void VulkanTransferContext::UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& region)
+{
+    if (!texture || !data)
+        return;
+    auto format = texture->GetDesc().Format;
+
+    VkDeviceSize totalSize = region.width * region.height * region.depth * RHI::GFormatInfoMap.at(format).BytesPerPixel; // 假设格式是RGBA8
+
+
+    // 1. 获取 staging buffer
+    auto staging = device->GetStagingManager()->Acquire(totalSize);
+    void* mapped = staging->Map(0, totalSize);
+
+
+    // 复制数据到 staging buffer
+    memcpy(mapped, data, totalSize);
+
+    auto VkFormat = TransformFormatFrom(format);
+    auto imageFlag = GetImageAspectFlags(VkFormat);
+
+    // 3. 记录 CopyBufferToImage 命令
+    VkBufferImageCopy copyRegion{};
+    copyRegion.bufferOffset = 0;
+    copyRegion.bufferRowLength = 0;
+    copyRegion.bufferImageHeight = 0;
+    copyRegion.imageSubresource.aspectMask = imageFlag;
+    copyRegion.imageSubresource.mipLevel = region.mipLevel;
+    copyRegion.imageSubresource.baseArrayLayer = region.arraySlice;
+    copyRegion.imageSubresource.layerCount = region.numArraySlices;
+    copyRegion.imageOffset = { static_cast<int32_t>(region.xOffset),
+    static_cast<int32_t>(region.yOffset),
+    static_cast<int32_t>(region.zOffset) };
+    copyRegion.imageExtent = { region.width, region.height, region.depth };
+
+    VulkanTexture* vulkanTexture = dynamic_cast<VulkanTexture*>(texture);
+
+    VulkanCommandBuffer* cmdBuffer = commandBufferManager->GetActiveCommandBuffer();
+
+    VKFunc::CmdCopyBufferToImage(
+        cmdBuffer->GetHandle(),
+        staging->GetHandle(),
+        vulkanTexture->GetImage(),
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &copyRegion
+    );
+    device->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
+}
+
+void VulkanTransferContext::UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
+{
+    if (!buffer || !data)
+        return;
+
+    VkDeviceSize totalSize = region.size;
+
+    // 1. 获取 staging buffer
+    auto staging = device->GetStagingManager()->Acquire(totalSize);
+    void* mapped = staging->Map(0, totalSize);
+
+    // 2. 拷贝 CPU 数据
+    memcpy(mapped, data, totalSize);
+
+    // 3. 构造 CopyBuffer 区域
+    VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = region.offset;
+    copyRegion.size = totalSize;
+
+    VulkanBuffer* vulkanBuffer = dynamic_cast<VulkanBuffer*>(buffer);
+    VulkanCommandBuffer* cmdBuffer =
+        commandBufferManager->GetActiveCommandBuffer();
+
+    VKFunc::CmdCopyBuffer(
+        cmdBuffer->GetHandle(),
+        staging->GetHandle(),
+        vulkanBuffer->GetHandle(),
+        1,
+        &copyRegion
+    );
+
+    device->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
+
 }
 
 VulkanComputeContext* VulkanComputeContext::CastFrom(RHIComputeContext* context)

@@ -19,27 +19,32 @@ class RenderGraphBuilder;
 
 class RENDERCORE_API BarrierBatchBegin {
 public:
-    void AddTransition(const RHI::RHITransitionInfo& transientInfo) {
-        transitions.push_back(transientInfo);
-    }
 
+    void AddTransition(RenderGraphResource* resource,const RHI::RHITransitionInfo& transientInfo) {
+        transitions.push_back(transientInfo);
+        resources.push_back(resource);
+    }
+    void Process();
     const std::vector<RHI::RHITransitionInfo>& GetTransitions() const { return transitions; }
 
 private:
     std::vector<RHI::RHITransitionInfo> transitions;
+    std::vector<RenderGraphResource*> resources;
 };
 
 class RENDERCORE_API BarrierBatchEnd {
 public:
-    void AddTransition(const RHI::RHITransitionInfo& transientInfo) {
+    void AddTransition(RenderGraphResource* resource, const RHI::RHITransitionInfo& transientInfo) {
         transitions.push_back(transientInfo);
+        resources.push_back(resource);
     }
-
+    void Process();
 
     const std::vector<RHI::RHITransitionInfo>& GetTransitions() const { return transitions; }
 
 private:
     std::vector<RHI::RHITransitionInfo> transitions;
+    std::vector<RenderGraphResource*> resources;
 };
 
 enum class EPassFlag {
@@ -141,10 +146,6 @@ protected:
         // 该 Pass 需要的访问权限 (如：ShaderResource, UnorderedAccess, VertexBuffer 等)
         RHI::ERHIResourceAccess RequiredAccess = RHI::ERHIResourceAccess::Unknown;
 
-        // 虽然 Buffer 通常视为整体，但为了严谨，可以预留偏移和大小
-        // 某些高级优化（如 Buffer Aliasing）可能会用到
-        uint64_t Offset = 0;
-        uint64_t Size = 0; // 0 表示整个 Buffer
     };
 
     std::vector<RenderGraphTextureIntent> TextureIntents;

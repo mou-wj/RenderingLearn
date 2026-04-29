@@ -51,6 +51,8 @@ public:
 
     void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) override;
     void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) override;
+    void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& region) override;
+    void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) override;
 };
 
 class RHIVULKAN_API VulkanComputeContext : public VulkanCommandContext, public RHI::RHIComputeContex

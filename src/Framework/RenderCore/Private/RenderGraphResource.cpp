@@ -69,10 +69,7 @@ RenderGraphView::RenderGraphView(const std::string& name)
 RenderGraphView::~RenderGraphView()
 {
 }
-RenderGraphResource* RenderGraphView::GetResource() const
-{
-	return Resource;
-}
+
 
 
 RenderGraphTextureSRV::RenderGraphTextureSRV(const std::string& name, const RenderGraphTextureSRVDesc& desc)   
@@ -119,18 +116,5 @@ RenderGraphBufferUAV::~RenderGraphBufferUAV()
 }
 
 
-
-
-
-
-
-
-
-RenderGraphTextureDesc RenderGraphTextureDesc::ConvertFrom(const RHI::RHITextureDesc& other)
-{
-    RenderGraphTextureDesc desc;
-    (RHI::RHITextureDesc)desc = other;
-    return desc;
-}
 
 } // namespace WR::RenderCore

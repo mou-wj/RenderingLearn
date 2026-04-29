@@ -216,4 +216,87 @@ void TransientResourceAllocator::ReleaseRHI()
 	TransientResourceManager.reset();
 }
 
+void TransientResourceAllocator::GarbageCollect() 
+{
+	auto* api = RHI::GRHIApi;
+	if (!api) return;
+
+	uint64_t gfx = api->GetQueue(RHI::EQueueType::Graphics)->GetCurrentTimelineValue();
+	uint64_t compute = api->GetQueue(RHI::EQueueType::Compute)->GetCurrentTimelineValue();
+	uint64_t transfer = api->GetQueue(RHI::EQueueType::Transfer)->GetCurrentTimelineValue();
+
+	auto IsFenceDone = [&](const RHI::RHIFence& f)
+		{
+			uint64_t current = 0;
+
+			switch (f.QueueType)
+			{
+			case RHI::EQueueType::Graphics: current = gfx; break;
+			case RHI::EQueueType::Compute:  current = compute; break;
+			case RHI::EQueueType::Transfer: current = transfer; break;
+			default: break;
+			}
+
+			return f.Value <= current;
+		};
+
+	// =========================
+	// Texture
+	// =========================
+	auto itTex = AllocatedTextures.begin();
+	while (itTex != AllocatedTextures.end())
+	{
+		auto& tex = *itTex;
+
+		if (!tex)
+		{
+			itTex = AllocatedTextures.erase(itTex);
+			continue;
+		}
+
+		const auto& fence = tex->GetTracker().GetLastAccessFence();
+
+		if (IsFenceDone(fence))
+		{
+			// 👉 这里才真正释放 RHI 资源
+			delete tex->GetRHI();
+
+			itTex = AllocatedTextures.erase(itTex);
+		}
+		else
+		{
+			++itTex;
+		}
+	}
+
+	// =========================
+	// Buffer
+	// =========================
+	auto itBuf = AllocatedBuffers.begin();
+	while (itBuf != AllocatedBuffers.end())
+	{
+		auto& buf = *itBuf;
+
+		if (!buf)
+		{
+			itBuf = AllocatedBuffers.erase(itBuf);
+			continue;
+		}
+
+		const auto& fence = buf->GetTracker().GetLastAccessFence();
+
+		if (IsFenceDone(fence))
+		{
+			delete buf->GetRHI();
+
+			itBuf = AllocatedBuffers.erase(itBuf);
+		}
+		else
+		{
+			++itBuf;
+		}
+	}
+}
+
+
 } // namespace RenderCore

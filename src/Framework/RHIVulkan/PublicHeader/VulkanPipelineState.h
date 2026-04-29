@@ -10,10 +10,7 @@
 #include "VulkanResource.h"
 #include "RHIDefine.h"
 #include "VulkanFuncWrapper.h"
-inline void HashCombine(size_t& seed, size_t value)
-{
-    seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
+#include "HashHelper.hpp"
 
 namespace RHIVulkan{
     struct PipelineLayoutInfo

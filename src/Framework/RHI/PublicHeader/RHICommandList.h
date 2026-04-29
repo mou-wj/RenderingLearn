@@ -65,7 +65,23 @@ namespace RHI {
         RHICommandBlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc);
         void Execute(RHICommandListBase& cmdList) override;
     };
+    struct RHI_API RHICommandUpdateTexture : public RHICommandBase
+    {
+        RHITexture* texture;
+        const void* data;
+        RHITextureRegion region;
+        RHICommandUpdateTexture(RHITexture* src, const void* data, const RHITextureRegion& region);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
 
+    struct RHI_API RHICommandUpdateBuffer : public RHICommandBase
+    {
+        RHIBuffer* buffer;
+        const void* data;
+        RHIBufferRegion region;
+        RHICommandUpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
 
     struct RHI_API RHICommandSetComputePipelineState : public RHICommandBase
     {
@@ -217,6 +233,8 @@ namespace RHI {
         RHITransferContext* GetTransferContext() const;
         void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
 		void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc);
+        void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size);
+        void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);
     };
 
     class RHI_API RHIComputeCommandList : public RHICommandListBase

@@ -9,6 +9,7 @@
 #include "ShaderCompiler.h"
 #include "RHIApi.h"
 #include "VulkanRHIApi.h"
+#include "ToolShaders.h"
 #include <unordered_map>
 using namespace RenderCore;
 #include "TestBase.h"
@@ -128,82 +129,137 @@ public:
 
     void Run() override {
         using namespace RHI;
+        using namespace RenderCore;
+
         auto* api = GRHIApi;
         constexpr int kFrameCount = 10;
-        // 1. 创建随机数据纹理并上传
+
+        // =========================================
+        // 1️⃣ 创建随机源纹理（只做一次）
+        // =========================================
         RHITextureDesc randomTexDesc = texDesc;
         randomTexDesc.Usage |= ERHITextureCreateFlag::CopyDest | ERHITextureCreateFlag::ShaderResource;
-        auto randomTex = api->CreateTexture(randomTexDesc);
+
+        RenderTextureSP randomTex = std::make_shared<RenderTexture>(randomTexDesc);
+
         std::vector<uint32_t> randomData(randomTexDesc.Width * randomTexDesc.Height);
         for (auto& v : randomData) v = rand();
-        auto* queue = api->GetQueue(EQueueType::Graphics);
-        auto* cmdContext = queue->AcquireCommandContext();
-        auto* graphicContext = dynamic_cast<RHIGraphicContex*>(cmdContext);
-        RHIGraphicCommandList cmdList(graphicContext);
-        TransitionResource(api, cmdList, randomTex.get(), ERHIResourceAccess::CopyDest);
-        api->UpdateTexture(cmdList, randomTex.get(), randomData.data(), RHITextureRegion::Create2DRegion(randomTexDesc.Width, randomTexDesc.Height));
-        TransitionResource(api, cmdList, randomTex.get(), ERHIResourceAccess::SRVGraphics);
 
-        for (int frame = 0; frame < kFrameCount; ++frame) {
-            // 2. 从全局RenderTargetPool获取2D RenderTarget
-            PoolRenderTargetDesc rtDesc = {};
+        {
+            auto* queue = api->GetQueue(EQueueType::Graphics);
+            auto* ctx = queue->AcquireCommandContext();
+            RHIGraphicCommandList cmd(dynamic_cast<RHIGraphicContex*>(ctx));
+
+            cmd.Begin();
+
+            TransitionResource(api, cmd, randomTex.get()->GetRHI(), ERHIResourceAccess::CopyDest);
+
+            api->UpdateTexture(cmd, randomTex.get()->GetRHI(), randomData.data(),
+                RHITextureRegion::Create2DRegion(randomTexDesc.Width, randomTexDesc.Height));
+
+            TransitionResource(api, cmd, randomTex.get()->GetRHI(), ERHIResourceAccess::SRVGraphics);
+
+            cmd.End();
+
+            queue->ExecuteContext({ ctx }, {});
+        }
+
+        // =========================================
+        // 2️⃣ 每帧执行 RDG
+        // =========================================
+        for (int frame = 0; frame < kFrameCount; ++frame)
+        {
+            // -------------------------------------
+            // 从 pool 取 RT
+            // -------------------------------------
+            PoolRenderTargetDesc rtDesc{};
             rtDesc.Width = texDesc.Width;
             rtDesc.Height = texDesc.Height;
             rtDesc.Format = texDesc.Format;
-            rtDesc.Usage = ERHITextureCreateFlag::RenderTarget | ERHITextureCreateFlag::CopySrc | ERHITextureCreateFlag::CopyDest;
+            rtDesc.Usage = ERHITextureCreateFlag::UAV |
+                ERHITextureCreateFlag::CopySrc |
+                ERHITextureCreateFlag::CopyDest;
+
             auto renderTarget = GRenderTargetPool->GetFreeRenderTarget(rtDesc);
-            // 资源访问转换
-            auto lastAccess = renderTarget->GetTracker().GetSubresourceAccess(RHISubresourceRange{});
-            if (lastAccess != ERHIResourceAccess::RenderTargetView) {
-                TransitionResource(api, cmdList, renderTarget->GetRHI(), ERHIResourceAccess::RenderTargetView);
-                renderTarget->GetTracker().UpdateSubresourceAccess(RHISubresourceRange{}, ERHIResourceAccess::RenderTargetView);
-            }
 
-            // 3. 注册到builder，获取RDGTexture
+            // -------------------------------------
+            // RDG 构建
+            // -------------------------------------
             RenderGraphBuilder builder;
-            //auto rdgSrc = builder.RegisterExternalTexture("SrcTex", randomTex.get());
-            //auto rdgDst = builder.RegisterExternalTexture("DstTex", renderTarget->GetRHI());
 
-            // 4. 初始化参数
-            auto* params = builder.AllocateParameter<CopyTexturePassParameters>();
-           //params->SrcTexture = rdgSrc;
-           //params->DstTexture = rdgDst;
+            // 👉 注册 external
+            auto rdgSrc = builder.RegisterExternalTexture("SrcTex", randomTex.get());
+            auto rdgDst = builder.RegisterExternalTexture("DstTex", renderTarget.get());
 
-            // 5. 添加拷贝pass
-            builder.AddPass<CopyTexturePassParameters>(
-                "CopyTexturePass",
-                &CopyTexturePassParameters::GetMetaData(),
+            // 👉 创建 SRV / UAV
+            //auto srcTexture = builder.CreateTextureSRV("SrcSRV", { rdgSrc });
+            //auto dstUAV = builder.CreateTextureUAV("DstUAV", { rdgDst });
+
+            // 👉 参数
+            auto* params = builder.AllocateParameter<BlitTextureParameters>();
+
+            //params->SrcTexture = srcSRV;
+            //params->DstTexture = dstUAV;
+
+            params->SrcSize = { (float)texDesc.Width, (float)texDesc.Height };
+            params->SrcInvSize = { 1.0f / texDesc.Width, 1.0f / texDesc.Height };
+            params->DstSize = params->SrcSize;
+            params->DstInvSize = params->SrcInvSize;
+            params->SrcMipLevel = 0;
+
+            // -------------------------------------
+            // 添加 pass
+            // -------------------------------------
+            builder.AddPass<BlitTextureParameters>(
+                "BlitPass",
+                &BlitTextureParameters::GetMetaData(),
                 params,
-                EPassFlag::Transfer,
-                [=](RHI::RHICommandListBase& RHICmdList) {
-					auto& gTransferCommandList = static_cast<RHI::RHITransferCommandList&>(RHICmdList);
-					RHICopyTextureDesc copyDesc;
-                    gTransferCommandList.CopyTexture(params->SrcTexture->GetRHITexture(), params->DstTexture->GetRHITexture(), copyDesc);
+                EPassFlag::Compute,
+                [=](RHI::RHICommandListBase& RHICmdList)
+                {
+                    auto& cmd = static_cast<RHI::RHIComputeCommandList&>(RHICmdList);
+
+                    cmd.SetComputePipelineState(ComputePipelineState.get());
+                    //cmd.SetShaderParameters(params);
+
+                    cmd.Dispatch(
+                        texDesc.Width / 8,
+                        texDesc.Height / 8,
+                        1);
                 }
             );
+
+            // -------------------------------------
+            // 执行 RDG
+            // -------------------------------------
             builder.Execute();
 
-            // 6. 获取swapchain backbuffer
-            // 假设有Swapchain对象
-            auto swapchainSlot = Swapchain->AcquireNextSlot();
-            auto* backTexture = swapchainSlot.Texture;
-            // 访问转换
-            // 这里假设有backbuffer的访问记录，实际可用静态变量或全局map
-            static std::unordered_map<void*, ERHIResourceAccess> backbufferAccess;
-            auto& lastBackAccess = backbufferAccess[backTexture];
-            if (lastBackAccess != ERHIResourceAccess::CopyDest) {
-                TransitionResource(api, cmdList, backTexture, ERHIResourceAccess::CopyDest);
-                lastBackAccess = ERHIResourceAccess::CopyDest;
-            }
-            auto TransferContext = dynamic_cast<RHITransferContext*>(api->GetQueue(EQueueType::Transfer)->AcquireCommandContext());
+            // =========================================
+            // 3️⃣ Blit 到 swapchain
+            // =========================================
+            auto slot = Swapchain->AcquireNextSlot();
+            auto* backTexture = slot.Texture;
 
-			RHI::RHITransferCommandList transferCmdList(TransferContext);
-            // 7. Blit到swapchain
-            transferCmdList.BlitTexture(renderTarget->GetRHI(), backTexture, RHIBlitTextureDesc{});
-            // 8. 转换为Present
-            TransitionResource(api, transferCmdList, backTexture, ERHIResourceAccess::Present);
-            lastBackAccess = ERHIResourceAccess::Present;
-            // 9. Present
+            auto* transferQueue = api->GetQueue(EQueueType::Transfer);
+            auto* ctx = transferQueue->AcquireCommandContext();
+            RHITransferCommandList cmd(dynamic_cast<RHITransferContext*>(ctx));
+
+            cmd.Begin();
+
+            TransitionResource(api, cmd, renderTarget->GetRHI(), ERHIResourceAccess::CopySrc);
+            TransitionResource(api, cmd, backTexture, ERHIResourceAccess::CopyDest);
+
+            cmd.BlitTexture(renderTarget->GetRHI(), backTexture, {});
+
+            TransitionResource(api, cmd, backTexture, ERHIResourceAccess::Present);
+
+            cmd.End();
+
+            auto fence = transferQueue->ExecuteContext({ ctx }, {});
+
+            // 👉 更新 tracker（关键！）
+            renderTarget->GetTracker().UpdateLastAccessFence(fence);
+
             api->GetPresentExecutor()->Present(Swapchain.get(), {});
         }
         std::cout << "RenderGraph CopyTexturePass test finished for " << kFrameCount << " frames." << std::endl;

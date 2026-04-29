@@ -25,6 +25,8 @@ namespace RHI
         virtual void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) = 0;
         // 新增：BlitTexture接口
         virtual void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) = 0;
+        virtual void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size) = 0;
+        virtual void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) = 0;
     };
 
     class RHI_API RHIComputeContex : public virtual RHIContextBase

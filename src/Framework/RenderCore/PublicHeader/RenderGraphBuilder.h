@@ -159,7 +159,8 @@ public:
     RenderGraphBufferUAVRef CreateBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc);
 
     RenderGraphTextureRef RegisterExternalTexture(const std::string& name, PooledRenderTarget* target);
-    RenderGraphTextureRef GetExternalTexture(const std::string& name);
+    RenderGraphTextureRef RegisterExternalTexture(const std::string& name, RenderTexture* texture);
+    RenderGraphBufferRef RegisterExternalBuffer(const std::string& name, RenderBuffer* buffer);
 
     // Resource Access (Get RHI resources from RenderGraphResources)
     RHI::RHITexture* GetTexture(RenderGraphResourceRef resource);
@@ -198,41 +199,81 @@ private:
     std::unordered_map<std::string, RenderGraphBufferUAVRef> BufferUAVCache;   // Cache for buffer UAVs
 
     // 新增：Builder 内部状态缓存
-    struct ResourceSubresourceKey
+    struct TextureKey
     {
-        RenderGraphResource* Resource;
+        RenderGraphTexture* Texture;
         RHI::RHISubresourceRange Range;
-        bool isBuffer = false;
-        // true if buffer, false if texture
-        uint64_t Offset = 0; // For buffers, the offset of the accessed range
-        uint64_t Size = 0;
 
-        bool operator==(const ResourceSubresourceKey& other) const
+        bool operator==(const TextureKey& o) const
         {
-            return Resource == other.Resource && Range == other.Range && isBuffer == other.isBuffer && Offset == other.Offset && Size == other.Size;
+            return Texture == o.Texture && Range == o.Range;
         }
     };
 
-    struct KeyHasher
+    struct TextureKeyHasher
     {
-        size_t operator()(const ResourceSubresourceKey& k) const
+        size_t operator()(const TextureKey& k) const
         {
-            size_t h = std::hash<void*>()(k.Resource);
+            size_t h = std::hash<void*>()(k.Texture);
             h ^= (size_t(k.Range.MipIndex) << 1);
             h ^= (size_t(k.Range.ArraySlice) << 2);
             h ^= (size_t(k.Range.PlaneSlice) << 3);
-            h ^= (size_t(k.isBuffer) << 4);
-            h ^= (size_t(k.Offset) << 5);
-            h ^= (size_t(k.Size) << 6);
             return h;
         }
     };
-    std::unordered_map<ResourceSubresourceKey, RHI::ERHIResourceAccess, KeyHasher> InitialStates;
-    std::unordered_map<ResourceSubresourceKey, RHI::ERHIResourceAccess, KeyHasher> FinalStates;
+
+    struct BufferKey
+    {
+        RenderGraphBuffer* Buffer;
+
+        bool operator==(const BufferKey& o) const
+        {
+            return Buffer == o.Buffer ;
+        }
+    };
+
+    struct BufferKeyHasher
+    {
+        size_t operator()(const BufferKey& k) const
+        {
+            size_t h = std::hash<void*>()(k.Buffer);
+            return h;
+        }
+    };
+    std::unordered_map<TextureKey, RHI::ERHIResourceAccess, TextureKeyHasher> InitialTextureStates;
+    std::unordered_map<TextureKey, RHI::ERHIResourceAccess, TextureKeyHasher> FinalTextureStates;
+
+    std::unordered_map<BufferKey, RHI::ERHIResourceAccess, BufferKeyHasher>   InitialBufferStates;
+    std::unordered_map<BufferKey, RHI::ERHIResourceAccess, BufferKeyHasher>   FinalBufferStates;
+
     //
-    std::unordered_map<std::string, RenderGraphTextureRef> ExternalTextureCache; // Cache for resources
-    std::unordered_map<PooledRenderTarget*, RenderGraphTextureRef> PoolTarget2RDGTexture;
-    std::unordered_map<RenderGraphTexture*, PooledRenderTarget*> RDGTexture2PoolTarget;
+// Texture
+    struct ExternalTextureEntry
+    {
+        RenderGraphTextureRef RDGTexture;
+        RenderTextureTracker* Tracker = nullptr;
+        TextureViewCache* ViewCache = nullptr;
+		RHI::RHITexture* RHITexture = nullptr;
+    };
+
+    std::unordered_map<RHI::RHITexture*, ExternalTextureEntry> ExternalTextures;
+
+
+    // Buffer
+    struct ExternalBufferEntry
+    {
+        RenderGraphBufferRef RDGBuffer;
+        RenderBufferTracker* Tracker = nullptr;
+        BufferViewCache* ViewCache = nullptr;
+		RHI::RHIBuffer* RHIBuffer = nullptr;
+    };
+
+    std::unordered_map<RHI::RHIBuffer*, ExternalBufferEntry> ExternalBuffers;
+
+    //
+    std::unordered_map<RenderGraphTexture*, RHI::RHITexture*> RDGToRHITexture;
+    std::unordered_map<RenderGraphBuffer*, RHI::RHIBuffer*>  RDGToRHIBuffer;
+
 
     RenderGraphAllocator Allocator;
     TransientResourceAllocator* TransientAllocator;
@@ -247,6 +288,7 @@ private:
     };
 
     std::unordered_map<RenderGraphResource*, ResourceLifetime> ResourceLifetimes;
+    std::unordered_map<RenderGraphPass*, std::vector<RenderGraphResource*>> PassLastUseResources;
 };
 
 } // namespace WR::RenderCore

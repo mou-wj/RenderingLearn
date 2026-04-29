@@ -119,22 +119,106 @@ namespace RenderCore {
     }
     RenderGraphTextureRef RenderGraphBuilder::RegisterExternalTexture(const std::string& name, PooledRenderTarget* target)
     {
-        auto it = ExternalTextureCache.find(name);
-        if (it != ExternalTextureCache.end())
+        if (!target)
+            return nullptr;
+
+        RHI::RHITexture* rhiTex = target->GetRHI();
+
+        // 👉 已注册（按 RHI 去重）
+        auto it = ExternalTextures.find(rhiTex);
+        if (it != ExternalTextures.end())
         {
-            return it->second; // Return the cached texture
+            return it->second.RDGTexture;
         }
+
+        // 👉 创建 RDGTexture
         RenderGraphTextureDesc desc;
-        (RHI::RHITextureDesc)desc = PoolRenderTargetDesc::ConvertToRHITextureDesc(target->GetDesc());
-        auto textureResource = CreateTexture(name, desc);
-        textureResource->SetRHITexture(target->GetRHI());
-        ExternalTextureCache[name] = textureResource;
-        PoolTarget2RDGTexture[target] =  ExternalTextureCache[name];
-        return ExternalTextureCache[name];
+        desc = (RenderGraphTextureDesc)PoolRenderTargetDesc::ConvertToRHITextureDesc(target->GetDesc());
+
+        auto rdgTex = CreateTexture(name, desc);
+
+        rdgTex->SetRHITexture(rhiTex);
+        rdgTex->IsExternal = true;
+
+        // 👉 建立映射
+        RDGToRHITexture[rdgTex] = rhiTex;
+
+        ExternalTextureEntry entry;
+        entry.RDGTexture = rdgTex;
+        entry.Tracker = &target->GetTracker();
+        entry.ViewCache = &target->GetViewCache();
+        entry.RHITexture = rhiTex;
+
+        ExternalTextures[rhiTex] = entry;
+
+        return rdgTex;
     }
-    RenderGraphTextureRef RenderGraphBuilder::GetExternalTexture(const std::string& name)
+    RenderGraphTextureRef RenderGraphBuilder::RegisterExternalTexture(const std::string& name, RenderTexture* texture)
     {
-        return ExternalTextureCache[name];
+        if (!texture)
+            return nullptr;
+
+        RHI::RHITexture* rhiTex = texture->GetRHI();
+
+        auto it = ExternalTextures.find(rhiTex);
+        if (it != ExternalTextures.end())
+        {
+            return it->second.RDGTexture;
+        }
+
+        // 👉 构造 desc（你可能需要补一个转换函数）
+        RenderGraphTextureDesc desc;
+        static_cast<RHI::RHITextureDesc>(desc) = texture->GetRHI()->GetDesc(); // ⚠️ 如果没有，需要你自己实现转换
+
+        auto rdgTex = CreateTexture(name, desc);
+
+        rdgTex->SetRHITexture(rhiTex);
+        rdgTex->IsExternal = true;
+
+        RDGToRHITexture[rdgTex] = rhiTex;
+
+        ExternalTextureEntry entry;
+        entry.RDGTexture = rdgTex;
+        entry.Tracker = &texture->GetTracker();
+        entry.RHITexture = rhiTex;
+        entry.ViewCache = &texture->GetViewCache();
+
+        ExternalTextures[rhiTex] = entry;
+
+        return rdgTex;
+    }
+    RenderGraphBufferRef RenderGraphBuilder::RegisterExternalBuffer(const std::string& name, RenderBuffer* buffer)
+    {
+        if (!buffer)
+            return nullptr;
+
+        RHI::RHIBuffer* rhiBuf = buffer->GetRHI();
+
+        auto it = ExternalBuffers.find(rhiBuf);
+        if (it != ExternalBuffers.end())
+        {
+            return it->second.RDGBuffer;
+        }
+
+        // 👉 构造 desc
+        RenderGraphBufferDesc desc;
+        static_cast<RHI::RHIBufferDesc>(desc) = buffer->GetRHI()->GetDesc(); // ⚠️ 同样需要转换
+
+        auto rdgBuf = CreateBuffer(name, desc);
+
+        rdgBuf->SetRHIBuffer(rhiBuf);
+        rdgBuf->IsExternal = true;
+
+        RDGToRHIBuffer[rdgBuf] = rhiBuf;
+
+        ExternalBufferEntry entry;
+        entry.RDGBuffer = rdgBuf;
+        entry.Tracker = &buffer->GetTracker();
+        entry.RHIBuffer = rhiBuf;
+
+        ExternalBuffers[rhiBuf] = entry;
+
+        return rdgBuf;
     }
     RHITexture* RenderGraphBuilder::GetTexture(RenderGraphResourceRef resource)
     {
@@ -196,7 +280,7 @@ namespace RenderCore {
                 {
                     auto& outGroup = RecordedGroups[i];
                     auto& cmdLists = outGroup.CmdLists;
-					auto& cmdContexts = outGroup.CmdContexts;
+                    auto& cmdContexts = outGroup.CmdContexts;
 
                     auto getCmd = [&](RHI::EQueueType q)
                         {
@@ -224,7 +308,7 @@ namespace RenderCore {
                     for (auto* pass : group)
                     {
                         auto q = (RHI::EQueueType)pass->GetPassFlag();
-
+                        pass->BeginBarrier.Process();
                         for (auto& t : pass->BeginBarrier.GetTransitions())
                         {
                             outGroup.BeginBarriers[q].push_back(t);
@@ -271,8 +355,8 @@ namespace RenderCore {
         // 2️⃣ 顺序提交（带必要同步）
         // =========================
         std::unordered_map<RHI::EQueueType, uint64_t> Timeline;
-
-        for (int i = 0; i < RecordedGroups.size(); ++i)
+        auto passGroupIter = ParallelPasses.begin();
+        for (int i = 0; i < RecordedGroups.size(); ++i, passGroupIter++)
         {
             auto& group = RecordedGroups[i];
 
@@ -295,6 +379,32 @@ namespace RenderCore {
 				RHI::RHIWaitInfo lastTransInfo;
                 RHI::RHIFence fence = queue->ExecuteContext({ group.CmdContexts[q] }, waitInfos);
                 Timeline[q] = fence.Value;
+
+                // 👉 关键：更新 fence
+                for (auto* pass : *passGroupIter)
+                {
+                    auto it = PassLastUseResources.find(pass);
+                    if (it == PassLastUseResources.end())
+                        continue;
+
+                    for (auto* res : it->second)
+                    {
+                        if (auto* tex = dynamic_cast<RenderGraphTexture*>(res))
+                        {
+                            if (tex->GetRHITexture())
+                            {
+                                tex->GetTracker().UpdateLastAccessFence(fence);
+                            }
+                        }
+                        else if (auto* buf = dynamic_cast<RenderGraphBuffer*>(res))
+                        {
+                            if (buf->GetRHIBuffer())
+                            {
+                                buf->GetTracker().UpdateLastAccessFence(fence);
+                            }
+                        }
+                    }
+                }
             }
 
             // 👉 TODO：只根据依赖插入 wait（你后面可以加）
@@ -309,14 +419,16 @@ namespace RenderCore {
             // 清理旧数据
             // =========================================
         ParallelPasses.clear();
-        InitialStates.clear();
-        FinalStates.clear();
-
+        InitialTextureStates.clear();
+        FinalTextureStates.clear();
+        InitialBufferStates.clear();
+        FinalBufferStates.clear();
+        ResourceLifetimes.clear();
+        PassLastUseResources.clear();
 
         // =========================================
         // 工具函数
         // =========================================
-
         auto IsWrite = [](ERHIResourceAccess A)
             {
                 return EnumHasAnyFlags(A, ERHIResourceAccess::WritableMask);
@@ -344,17 +456,25 @@ namespace RenderCore {
         // =========================================
         // Runtime tracking
         // =========================================
-        struct LocalResState
+        struct TextureState
         {
             RenderGraphPass* LastVisitor = nullptr;
             ERHIResourceAccess LastAccess = ERHIResourceAccess::Unknown;
             bool bInitialized = false;
         };
 
-        std::unordered_map<ResourceSubresourceKey, LocalResState, KeyHasher> ResourceStates;
+        struct BufferState
+        {
+            RenderGraphPass* LastVisitor = nullptr;
+            ERHIResourceAccess LastAccess = ERHIResourceAccess::Unknown;
+            bool bInitialized = false;
+        };
+
+        std::unordered_map<TextureKey, TextureState, TextureKeyHasher> TextureStates;
+        std::unordered_map<BufferKey, BufferState, BufferKeyHasher>  BufferStates;
 
         // =========================================
-        // Pass index（👉 用于 lifetime）
+        // Pass index（用于 lifetime）
         // =========================================
         std::unordered_map<RenderGraphPass*, uint32_t> PassIndex;
         uint32_t passOrder = 0;
@@ -365,23 +485,30 @@ namespace RenderCore {
         }
 
         // =========================================
-        // 获取初始状态
+        // 初始状态获取
         // =========================================
-        auto GetInitialAccess = [&](const ResourceSubresourceKey& Key)
-            -> ERHIResourceAccess
+        auto GetInitialTextureAccess = [&](const TextureKey& Key)
             {
-                auto it = InitialStates.find(Key);
-                if (it != InitialStates.end())
+                auto it = InitialTextureStates.find(Key);
+                if (it != InitialTextureStates.end())
                     return it->second;
 
-                ERHIResourceAccess access = ERHIResourceAccess::Undefined;
+                InitialTextureStates[Key] = ERHIResourceAccess::Undefined;
+                return ERHIResourceAccess::Undefined;
+            };
 
-                InitialStates[Key] = access;
-                return access;
+        auto GetInitialBufferAccess = [&](const BufferKey& Key)
+            {
+                auto it = InitialBufferStates.find(Key);
+                if (it != InitialBufferStates.end())
+                    return it->second;
+
+                InitialBufferStates[Key] = ERHIResourceAccess::Undefined;
+                return ERHIResourceAccess::Undefined;
             };
 
         // =========================================
-        // Phase 1: Barrier + DAG + Lifetime tracking
+        // Phase 1: Barrier + DAG + Lifetime
         // =========================================
         for (auto* Pass : Passes)
         {
@@ -390,23 +517,16 @@ namespace RenderCore {
             // =========================
             for (const auto& Intent : Pass->TextureIntents)
             {
-                ResourceSubresourceKey Key{
-                    Intent.Texture,
-                    Intent.SubresourceRange,
-                    false
-                };
-
-                auto& State = ResourceStates[Key];
+                TextureKey Key{ Intent.Texture, Intent.SubresourceRange };
+                auto& State = TextureStates[Key];
 
                 if (!State.bInitialized)
                 {
-                    State.LastAccess = GetInitialAccess(Key);
+                    State.LastAccess = GetInitialTextureAccess(Key);
                     State.bInitialized = true;
                 }
 
-                // =========================
-                // 👉 Lifetime tracking（核心新增）
-                // =========================
+                // ===== Lifetime =====
                 {
                     auto* Res = Intent.Texture;
                     auto& LT = ResourceLifetimes[Res];
@@ -421,20 +541,20 @@ namespace RenderCore {
                     LT.EndPassIndex = std::max(LT.EndPassIndex, idx);
                 }
 
-                // =========================
-                // Barrier + DAG
-                // =========================
+                // ===== Barrier =====
                 if (State.LastVisitor && State.LastVisitor != Pass)
                 {
                     if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
                     {
                         RHI::RHITransitionInfo Transition{};
                         Transition.Type = RHI::RHITransitionInfo::EType::Texture;
-                        Transition.Texture = Intent.Texture->GetRHITexture();
                         Transition.AccessBefore = State.LastAccess;
                         Transition.AccessAfter = Intent.RequiredAccess;
 
-                        Pass->BeginBarrier.AddTransition(Transition);
+                        // ✅ RDG层信息
+                        static_cast<RHI::RHISubresourceRange>(Transition) = Intent.SubresourceRange;
+
+                        Pass->BeginBarrier.AddTransition(Intent.Texture, Transition);
 
                         State.LastVisitor->PassConsumers.push_back(Pass);
                         Pass->PassProducers.push_back(State.LastVisitor);
@@ -444,7 +564,7 @@ namespace RenderCore {
                 State.LastVisitor = Pass;
                 State.LastAccess = Intent.RequiredAccess;
 
-                FinalStates[Key] = Intent.RequiredAccess;
+                FinalTextureStates[Key] = Intent.RequiredAccess;
             }
 
             // =========================
@@ -452,25 +572,16 @@ namespace RenderCore {
             // =========================
             for (const auto& Intent : Pass->BufferStates)
             {
-                ResourceSubresourceKey Key{
-                    Intent.Buffer,
-                    RHI::RHISubresourceRange(),
-                    true,
-                    Intent.Offset,
-                    Intent.Size
-                };
-
-                auto& State = ResourceStates[Key];
+                BufferKey Key{ Intent.Buffer };
+                auto& State = BufferStates[Key];
 
                 if (!State.bInitialized)
                 {
-                    State.LastAccess = GetInitialAccess(Key);
+                    State.LastAccess = GetInitialBufferAccess(Key);
                     State.bInitialized = true;
                 }
 
-                // =========================
-                // 👉 Lifetime tracking（核心新增）
-                // =========================
+                // ===== Lifetime =====
                 {
                     auto* Res = Intent.Buffer;
                     auto& LT = ResourceLifetimes[Res];
@@ -485,20 +596,17 @@ namespace RenderCore {
                     LT.EndPassIndex = std::max(LT.EndPassIndex, idx);
                 }
 
-                // =========================
-                // Barrier + DAG
-                // =========================
+                // ===== Barrier =====
                 if (State.LastVisitor && State.LastVisitor != Pass)
                 {
                     if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
                     {
                         RHI::RHITransitionInfo Transition{};
                         Transition.Type = RHI::RHITransitionInfo::EType::Buffer;
-                        Transition.Buffer = Intent.Buffer->GetRHIBuffer();
                         Transition.AccessBefore = State.LastAccess;
                         Transition.AccessAfter = Intent.RequiredAccess;
 
-                        Pass->BeginBarrier.AddTransition(Transition);
+                        Pass->BeginBarrier.AddTransition(Intent.Buffer, Transition);
 
                         State.LastVisitor->PassConsumers.push_back(Pass);
                         Pass->PassProducers.push_back(State.LastVisitor);
@@ -508,12 +616,12 @@ namespace RenderCore {
                 State.LastVisitor = Pass;
                 State.LastAccess = Intent.RequiredAccess;
 
-                FinalStates[Key] = Intent.RequiredAccess;
+                FinalBufferStates[Key] = Intent.RequiredAccess;
             }
         }
 
         // =========================================
-        // Phase 2: 拓扑排序（不影响 lifetime）
+        // Phase 2: 拓扑排序（并行分组）
         // =========================================
         std::unordered_map<RenderGraphPass*, size_t> indegree;
         std::unordered_set<RenderGraphPass*> allNodes;
@@ -589,17 +697,20 @@ namespace RenderCore {
             }
         }
 
-        // =========================================
-        // 👉 （可选）这里可以做 lifetime finalize
-        // =========================================
-        // ResourceLifetimes 就已经完整了：
-        //
-        // BeginPassIndex / EndPassIndex
-        // FirstPass / LastPass
+        //last use resource
+        for (auto& [res, lifetime] : ResourceLifetimes)
+        {
+            if (lifetime.LastPass)
+            {
+                PassLastUseResources[lifetime.LastPass].push_back(res);
+            }
+        }
     }
 
     void RenderGraphBuilder::AllocateResources()
     {
+        std::unordered_map<RHI::RHITexture*, TextureViewCache*> InternalTextureViewCaches;
+        std::unordered_map<RHI::RHIBuffer*, BufferViewCache*> InternalBufferViewCaches;
         // =========================
             // Texture
             // =========================
@@ -610,10 +721,7 @@ namespace RenderCore {
             // 外部资源跳过
             if (tex->IsExternal)
                 continue;
-
-            // 已创建跳过
-            if (tex->GetRHITexture())
-                continue;
+			
 
             // =========================================
             // 👉 关键改动：读取 lifetime
@@ -635,8 +743,9 @@ namespace RenderCore {
                 LT.BeginPassIndex,
                 LT.EndPassIndex
             );
-
+            InternalTextureViewCaches[rhiTex->GetRHI()] = &rhiTex->GetViewCache(); // 内部资源创建独立 view cache
             tex->SetRHITexture(rhiTex->GetRHI());
+
         }
 
         // =========================
@@ -662,13 +771,99 @@ namespace RenderCore {
             const ResourceLifetime& LT = it->second;
 
             auto rhiBuf = TransientAllocator->AllocateBuffer(
-                RenderGraphBufferDesc::ConvertToRHIDesc(buf->GetDesc()),
+                TransientBufferDesc::ConvertFromRHIBufferDesc(buf->GetDesc()),
                 LT.BeginPassIndex,
                 LT.EndPassIndex
             );
-
+            InternalBufferViewCaches[rhiBuf->GetRHI()] = &rhiBuf->GetViewCache();
             buf->SetRHIBuffer(rhiBuf->GetRHI());
         }
+
+        //view
+            // =========================
+            // Texture SRV
+            // =========================
+        for (auto& [name, srv] : TextureSRVCache)
+        {
+            if (!srv) continue;
+            if (srv->RHIShaderResourceView) continue;
+            RenderGraphTexture* parent = srv->Desc.Texture;
+            RHI::RHITexture* parentRHI = parent->GetRHITexture();
+            TextureViewCache* viewCache = nullptr;
+            if (parent->IsExternal) {
+                viewCache = InternalTextureViewCaches[parentRHI];
+            }
+            else {
+                viewCache = ExternalTextures[parentRHI].ViewCache;
+            }
+            RHI::RHITexSRVCreateInfo info = static_cast<RHI::RHITexSRVCreateInfo>(srv->Desc);
+            auto rhi = viewCache->GetOrCreateSRV(parentRHI, info);
+            srv->RHIShaderResourceView = rhi;
+        }
+
+        // =========================
+        // Texture UAV
+        // =========================
+        for (auto& [name, uav] : TextureUAVCache)
+        {
+            if (!uav) continue;
+            if (uav->RHIUnorderedAccessView) continue;
+            RenderGraphTexture* parent = uav->Desc.Texture;
+            RHI::RHITexture* parentRHI = parent->GetRHITexture();
+            TextureViewCache* viewCache = nullptr;
+            if (parent->IsExternal) {
+                viewCache = InternalTextureViewCaches[parentRHI];
+            }
+            else {
+                viewCache = ExternalTextures[parentRHI].ViewCache;
+            }
+            RHI::RHITexUAVCreateInfo info = static_cast<RHI::RHITexUAVCreateInfo>(uav->Desc);
+            auto rhi = viewCache->GetOrCreateUAV(parentRHI, info);
+            uav->RHIUnorderedAccessView = rhi;
+        }
+
+        // =========================
+        // Buffer SRV
+        // =========================
+        for (auto& [name, srv] : BufferSRVCache)
+        {
+            if (!srv) continue;
+            if (srv->RHIShaderResourceView) continue;
+            RenderGraphBuffer* parent = srv->Desc.Buffer;
+            RHI::RHIBuffer* parentRHI = parent->GetRHIBuffer();
+            BufferViewCache* viewCache = nullptr;
+            if (parent->IsExternal) {
+                viewCache = InternalBufferViewCaches[parentRHI];
+            }
+            else {
+                viewCache = ExternalBuffers[parentRHI].ViewCache;
+            }
+            RHI::RHIBufferSRVCreateInfo info = static_cast<RHI::RHIBufferSRVCreateInfo>(srv->Desc);
+            auto rhi = viewCache->GetOrCreateSRV(parentRHI, info);
+            srv->RHIShaderResourceView = rhi;
+        }
+
+        // =========================
+        // Buffer UAV
+        // =========================
+        for (auto& [name, uav] : BufferUAVCache)
+        {
+            if (!uav) continue;
+            if (uav->RHIUnorderedAccessView) continue;
+            RenderGraphBuffer* parent = uav->Desc.Buffer;
+            RHI::RHIBuffer* parentRHI = parent->GetRHIBuffer();
+            BufferViewCache* viewCache = nullptr;
+            if (parent->IsExternal) {
+                viewCache = InternalBufferViewCaches[parentRHI];
+            }
+            else {
+                viewCache = ExternalBuffers[parentRHI].ViewCache;
+            }
+            RHI::RHIBufferUAVCreateInfo info = static_cast<RHI::RHIBufferUAVCreateInfo>(uav->Desc);
+            auto rhi = viewCache->GetOrCreateUAV(parentRHI, info);
+            uav->RHIUnorderedAccessView = rhi;
+        }
+
     }
 
     void RenderGraphBuilder::SetupPassInternal(
@@ -693,15 +888,15 @@ namespace RenderCore {
 
                     if (SRV)
                     {
-                        auto* Tex = static_cast<RenderGraphTexture*>(SRV->GetResource());
-                        const auto& Desc = SRV->GetDesc();
+                        auto* Tex = static_cast<RenderGraphTexture*>(SRV->Parent);
+                        const auto& Desc = SRV->Desc;
 
                         RenderGraphPass::RenderGraphTextureIntent Intent;
                         Intent.Texture = Tex;
 
                         Intent.SubresourceRange = RHISubresourceRange(
-                            Desc.MipLevel,
-                            Desc.ArraySlice,
+                            Desc.FirstMipSlice,
+                            Desc.FirstArraySlice,
                             RHISubresourceRange::kAllSubresources
                         );
 
@@ -723,15 +918,15 @@ namespace RenderCore {
 
                     if (UAV)
                     {
-                        auto* Tex = static_cast<RenderGraphTexture*>(UAV->GetResource());
-                        const auto& Desc = UAV->GetDesc();
+                        auto* Tex = static_cast<RenderGraphTexture*>(UAV->Parent);
+                        const auto& Desc = UAV->Desc;
 
                         RenderGraphPass::RenderGraphTextureIntent Intent;
                         Intent.Texture = Tex;
 
                         Intent.SubresourceRange = RHISubresourceRange(
-                            Desc.MipLevel,
-                            Desc.ArraySlice,
+                            Desc.FirstMipSlice,
+                            Desc.FirstArraySlice,
                             RHISubresourceRange::kAllSubresources
                         );
 
@@ -772,17 +967,13 @@ namespace RenderCore {
                 else if (Member.BaseType == EShaderUniformBaseType::Buffer_SRV)
                 {
                     auto SRV = *reinterpret_cast<RenderGraphBufferSRV* const*>(MemberAddr);
-                    auto vDesc = SRV->GetDesc();
+                    auto vDesc = SRV->Desc;
                     if (SRV)
                     {
-                        auto* Buf = static_cast<RenderGraphBuffer*>(SRV->GetResource());
+                        auto* Buf = static_cast<RenderGraphBuffer*>(SRV->Parent);
 
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
-
-                        // Buffer SRV 默认 whole buffer
-                        Intent.Offset = vDesc.Offset;
-                        Intent.Size = vDesc.Size;
 
                         Intent.RequiredAccess =
                             (Pass->GetPassFlag() == EPassFlag::Compute)
@@ -799,16 +990,13 @@ namespace RenderCore {
                 else if (Member.BaseType == EShaderUniformBaseType::Buffer_UAV)
                 {
                     auto UAV = *reinterpret_cast<RenderGraphBufferUAV* const*>(MemberAddr);
-					auto uavDesc = UAV->GetDesc();
+					auto uavDesc = UAV->Desc;
                     if (UAV)
                     {
-                        auto* Buf = static_cast<RenderGraphBuffer*>(UAV->GetResource());
+                        auto* Buf = static_cast<RenderGraphBuffer*>(UAV->Parent);
 
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
-
-                        Intent.Offset = uavDesc.Offset;
-                        Intent.Size = uavDesc.Size;
 
                         Intent.RequiredAccess =
                             (Pass->GetPassFlag() == EPassFlag::Compute)
@@ -830,8 +1018,6 @@ namespace RenderCore {
                     {
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
-                        Intent.Offset = 0;
-                        Intent.Size = 0;
 
                         Intent.RequiredAccess =
                             (Pass->GetPassFlag() == EPassFlag::Compute)
@@ -851,46 +1037,59 @@ namespace RenderCore {
 
     void RenderGraphBuilder::ApplyFinalStates()
     {
-        for (auto& [Key, Access] : FinalStates)
+        // =========================
+    // Texture
+    // =========================
+        for (auto& [Key, Access] : FinalTextureStates)
         {
-            if (!Key.Resource)
+            auto* tex = Key.Texture;
+            if (!tex || !tex->IsExternal)
                 continue;
 
+            RHI::RHITexture* rhiTex = tex->GetRHITexture();
+            if (!rhiTex)
+                continue;
 
+            auto it = ExternalTextures.find(rhiTex);
+            if (it == ExternalTextures.end())
+                continue;
+
+            ExternalTextureEntry& entry = it->second;
+            if (!entry.Tracker)
+                continue;
+
+            // ✅ 写回 subresource
+            entry.Tracker->UpdateSubresourceAccess(Key.Range, Access);
+        }
+
+        // =========================
+        // Buffer
+        // =========================
+        for (auto& [Key, Access] : FinalBufferStates)
+        {
+            auto* buf = Key.Buffer;
+            if (!buf || !buf->IsExternal)
+                continue;
+
+            RHI::RHIBuffer* rhiBuf = buf->GetRHIBuffer();
+            if (!rhiBuf)
+                continue;
+
+            auto it = ExternalBuffers.find(rhiBuf);
+            if (it == ExternalBuffers.end())
+                continue;
+
+            ExternalBufferEntry& entry = it->second;
+            if (!entry.Tracker)
+                continue;
 
             // =========================
-            // Texture
+            // 👉 如果你支持 range（推荐）
             // =========================
-            if (!Key.isBuffer)
-            {
-                auto* tex = static_cast<RenderGraphTexture*>(Key.Resource);
-                if (!tex->IsExternal)
-                    continue;
-                auto it = RDGTexture2PoolTarget.find(tex);
-                if (it == RDGTexture2PoolTarget.end())
-                    continue;
 
-                PooledRenderTarget* pool = it->second;
-                if (!pool)
-                    continue;
+            // ❗ fallback：整 buffer
+            entry.Tracker->UpdateAccess(Access);
 
-                // 👉 写回 subresource state
-                pool->GetTracker().UpdateSubresourceAccess(Key.Range, Access);
-            }
-            // =========================
-            // Buffer
-            // =========================
-            else
-            {
-                auto* buf = static_cast<RenderGraphBuffer*>(Key.Resource);
-                if (!buf->IsExternal)
-                    continue;
-                // 如果以后有 external buffer，再补映射
-                // 当前可以忽略或留 TODO
-
-                // 示例：
-                // ExternalBufferState[buf->GetRHIBuffer()] = Access;
-            }
         }
     }
 

@@ -8,7 +8,99 @@
 #include "RHIDefine.h"
 #include "RHICommandContex.h"
 #include "RenderResourceTracker.h"
+#include "RHIApi.h"
+
 namespace RenderCore {
+
+    class TextureViewCache
+    {
+    public:
+        TextureViewCache()
+        {
+        }
+
+        RHI::RHIShaderResourceView* GetOrCreateSRV(
+            RHI::RHITexture* texture,
+            const RHI::RHITexSRVCreateInfo& desc)
+        {
+            auto it = SRVs.find(desc);
+            if (it != SRVs.end())
+                return it->second.get
+                ();
+
+            auto view = RHI::GRHIApi->CreateTextureShaderResourceView(texture, desc);
+            SRVs.emplace(desc, view);
+            return view.get();
+        }
+
+        RHI::RHIUnorderedAccessView* GetOrCreateUAV(
+            RHI::RHITexture* texture,
+            const RHI::RHITexUAVCreateInfo& desc)
+        {
+            auto it = UAVs.find(desc);
+            if (it != UAVs.end())
+                return it->second.get();
+
+            auto view = RHI::GRHIApi->CreateTextureUnorderedAccessView(texture, desc);
+            UAVs.emplace(desc, view);
+            return view.get();
+        }
+
+        void Clear()
+        {
+            SRVs.clear();
+            UAVs.clear();
+        }
+
+    private:
+        std::unordered_map<RHI::RHITexSRVCreateInfo, RHI::RHIShaderResourceViewSP> SRVs;
+        std::unordered_map<RHI::RHITexUAVCreateInfo, RHI::RHIUnorderedAccessViewSP> UAVs;
+    };
+
+
+    class BufferViewCache
+    {
+    public:
+        BufferViewCache()
+        {
+        }
+
+        RHI::RHIShaderResourceView* GetOrCreateSRV(
+            RHI::RHIBuffer* buffer,
+            const RHI::RHIBufferSRVCreateInfo& desc)
+        {
+            auto it = SRVs.find(desc);
+            if (it != SRVs.end())
+                return it->second.get();
+
+            auto view = RHI::GRHIApi->CreateBufferShaderResourceView(buffer, desc);
+            SRVs.emplace(desc, view);
+            return view.get();
+        }
+
+        RHI::RHIUnorderedAccessView* GetOrCreateUAV(
+            RHI::RHIBuffer* buffer,
+            const RHI::RHIBufferUAVCreateInfo& desc)
+        {
+            auto it = UAVs.find(desc);
+            if (it != UAVs.end())
+                return it->second.get();
+
+            auto view = RHI::GRHIApi->CreateBufferUnorderedAccessView(buffer, desc);
+            UAVs.emplace(desc, view);
+            return view.get();
+        }
+
+        void Clear()
+        {
+            SRVs.clear();
+            UAVs.clear();
+        }
+
+    private:
+        std::unordered_map<RHI::RHIBufferSRVCreateInfo, RHI::RHIShaderResourceViewSP> SRVs;
+        std::unordered_map<RHI::RHIBufferUAVCreateInfo, RHI::RHIUnorderedAccessViewSP> UAVs;
+    };
 
 // 渲染资源生命周期管理基类
 class RENDERCORE_API RenderResource
@@ -39,8 +131,12 @@ public:
 
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
-    RHI::RHITextureSP GetRHI() const { return Texture; }
+    RHI::RHITexture* GetRHI() const { return Texture.get(); }
+    RenderTextureTracker& GetTracker() { return Tracker; }
+    TextureViewCache& GetViewCache() { return ViewCache; }
 private:
+    TextureViewCache ViewCache;
+    RenderTextureTracker Tracker;
     // 其他纹理相关接口
 	RHI::RHITextureDesc Desc;
     RHI::RHITextureSP Texture;
@@ -56,8 +152,12 @@ public:
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
     // 其他缓冲区相关接口
-	RHI::RHIBufferSP GetRHI() const { return Buffer; }
+	RHI::RHIBuffer* GetRHI() const { return Buffer.get(); }
+    RenderBufferTracker& GetTracker() { return Tracker; }
+	BufferViewCache& GetViewCache() { return ViewCache; }
 private:
+    BufferViewCache ViewCache;
+    RenderBufferTracker Tracker;
     RHI::RHIBufferDesc Desc;
     RHI::RHIBufferSP Buffer;
 };
@@ -175,7 +275,9 @@ struct RENDERCORE_API IPooledRenderTarget
     virtual RHI::RHITexture* GetRHI() { return nullptr; };
 
     RenderTextureTracker& GetTracker() { return Tracker; }
+    TextureViewCache& GetViewCache() { return ViewCache; }
 protected:
+    TextureViewCache ViewCache;
     RenderTextureTracker Tracker;
 };
 
@@ -200,41 +302,6 @@ public:
 private:
     PoolRenderTargetDesc Desc;
     RHI::RHITextureSP TargetTexture;
-};
-
-class RENDERCORE_API PooledTransientRenderTarget final : public IPooledRenderTarget
-{
-public:
-    PooledTransientRenderTarget(
-        const PoolRenderTargetDesc& InDesc,
-        RHI::RHITransientTextureSP InTransientTexture)
-        : Desc(InDesc)
-        , TransientTexture(std::move(InTransientTexture))
-    {
-    }
-
-    virtual const PoolRenderTargetDesc& GetDesc() const override
-    {
-        return Desc;
-    }
-
-    virtual RHI::RHITransientTexture* GetTransientRHI()
-    {
-        return TransientTexture.get();
-    }
-
-    virtual RHI::RHITexture* GetRHI() override
-    {
-        return TransientTexture
-            ? TransientTexture->GetTexture().get()
-            : nullptr;
-    }
-
-private:
-    PoolRenderTargetDesc Desc;
-
-    // ✅ 改成 shared_ptr（核心）
-    RHI::RHITransientTextureSP TransientTexture;
 };
 
 // -------------------------------
@@ -265,29 +332,92 @@ private:
 
 extern RENDERCORE_API RenderTargetPool* GRenderTargetPool;
 
-struct TransientBufferDesc{
-
+struct TransientBufferDesc {
+    uint64_t Size = 0;                   // 缓冲区大小（字节）
+    uint32_t Stride = 0;                 // 结构化缓冲区的元素大小
+    RHI::ERHIBufferUsageFlags Usage = RHI::ERHIBufferUsageFlag::None; // 缓冲区用途
+    bool bCPUAccessible = false;         // CPU是否可访问
+    RHI::EQueueType InitialQueueType = RHI::EQueueType::Graphics; // 初始所属队列
+    static RHI::RHIBufferDesc ConvertToRHIBufferDesc(const TransientBufferDesc& InDesc) {
+        RHI::RHIBufferDesc Desc;
+        Desc.Size = InDesc.Size;
+        Desc.Stride = InDesc.Stride;
+        Desc.Usage = InDesc.Usage;
+        Desc.bCPUAccessible = InDesc.bCPUAccessible;
+        Desc.InitialQueueType = InDesc.InitialQueueType;
+        return Desc;
+    }
+    static TransientBufferDesc ConvertFromRHIBufferDesc(const RHI::RHIBufferDesc& InDesc) {
+        TransientBufferDesc Desc;
+        Desc.Size = InDesc.Size;
+        Desc.Stride = InDesc.Stride;
+        Desc.Usage = InDesc.Usage;
+        Desc.bCPUAccessible = InDesc.bCPUAccessible;
+        Desc.InitialQueueType = InDesc.InitialQueueType;
+        return Desc;
+    }
 };
 
 class PooledTransientBuffer
 {
 public:
 	PooledTransientBuffer(
-		const RHI::RHIBufferDesc& InDesc,
+		const TransientBufferDesc& InDesc,
 		RHI::RHITransientBufferSP InTransientBuffer)
 		: Desc(InDesc)
 		, TransientBuffer(std::move(InTransientBuffer))
 	{
 	}
 
-    const RHI::RHIBufferDesc& GetDesc() const { return Desc; }
+    const TransientBufferDesc& GetDesc() const { return Desc; }
     RHI::RHIBuffer* GetRHI() const { return TransientBuffer->GetBuffer().get(); }
+    RenderBufferTracker& GetTracker() { return Tracker; }
+    BufferViewCache& GetViewCache() { return ViewCache; }
 private:
-    RHI::RHIBufferDesc Desc;
+    BufferViewCache ViewCache;
+    RenderBufferTracker Tracker;
+    TransientBufferDesc Desc;
     RHI::RHITransientBufferSP TransientBuffer = nullptr;
 
 
 };
+
+
+class RENDERCORE_API PooledTransientRenderTarget final : public IPooledRenderTarget
+{
+public:
+    PooledTransientRenderTarget(
+        const PoolRenderTargetDesc& InDesc,
+        RHI::RHITransientTextureSP InTransientTexture)
+        : Desc(InDesc)
+        , TransientTexture(std::move(InTransientTexture))
+    {
+    }
+
+    virtual const PoolRenderTargetDesc& GetDesc() const override
+    {
+        return Desc;
+    }
+
+    virtual RHI::RHITransientTexture* GetTransientRHI()
+    {
+        return TransientTexture.get();
+    }
+
+    virtual RHI::RHITexture* GetRHI() override
+    {
+        return TransientTexture
+            ? TransientTexture->GetTexture().get()
+            : nullptr;
+    }
+
+
+private:
+    PoolRenderTargetDesc Desc;
+    // ✅ 改成 shared_ptr（核心）
+    RHI::RHITransientTextureSP TransientTexture;
+};
+
 
 // -------------------------------
 // 精简 Transient Allocator（无 PassHandle）
@@ -317,30 +447,36 @@ public:
             endIndex);
 
         // 👉 创建 wrapper（不复用）
-        return std::make_shared<PooledTransientRenderTarget>(
+        auto target = std::make_shared<PooledTransientRenderTarget>(
             Desc,
             transientTex);
+        AllocatedTextures.push_back(target);
+        return target;
     }
     std::shared_ptr<PooledTransientBuffer> AllocateBuffer(
-        const RHI::RHIBufferDesc& Desc,
+        const TransientBufferDesc& Desc,
         uint32_t beginIndex,
         uint32_t endIndex)
     {
         // 👉 直接创建 transient texture（核心）
-        auto transientTex = TransientResourceManager->CreateTransientBuffer(
-            Desc,
+        auto transientBuf = TransientResourceManager->CreateTransientBuffer(
+            TransientBufferDesc::ConvertToRHIBufferDesc(Desc),
             beginIndex,
             endIndex);
 
         // 👉 创建 wrapper（不复用）
-        return std::make_shared<PooledTransientBuffer>(
+        auto buf = std::make_shared<PooledTransientBuffer>(
             Desc,
-            transientTex);
+            transientBuf);
+        AllocatedBuffers.push_back(buf);
+        return buf;
     }
 
 
 private:
-
+    void GarbageCollect();
+    std::vector<std::shared_ptr<PooledTransientRenderTarget>> AllocatedTextures;
+    std::vector<std::shared_ptr<PooledTransientBuffer>>      AllocatedBuffers;
     RHI::RHITransientResourceManagerSP TransientResourceManager;
 };
 

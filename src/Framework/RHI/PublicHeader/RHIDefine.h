@@ -7,6 +7,7 @@
 #include <string>
 #include <type_traits>
 #include "Flags.h"
+#include "HashHelper.hpp"
 
 
 namespace RHI
@@ -522,15 +523,48 @@ enum class ERHIShaderFrequency
     };
 
     // ---------------------------
-// Texture Shader Resource View
-// ---------------------------
+    // Texture Shader Resource View
+    // ---------------------------
     struct RHI_API RHITexSRVCreateInfo
     {
-        uint32_t MostDetailedMip = 0;
-        uint32_t MipLevelCount = 1;
+        uint32_t FirstMipSlice = 0;
+        uint32_t MipCount = 1;
         uint32_t FirstArraySlice = 0;
         uint32_t ArraySize = 1;
         ERHIFormat Format = ERHIFormat::Unknown;
+        uint64_t CalculateHash() const
+        {
+            uint64_t h = 0;
+
+            HashCombine(h, FirstMipSlice);
+            HashCombine(h, MipCount);
+            HashCombine(h, FirstArraySlice);
+            HashCombine(h, ArraySize);
+            HashCombine(h, static_cast<uint32_t>(Format));
+
+            return h;
+        }
+
+        bool operator==(const RHITexSRVCreateInfo& rhs) const
+        {
+            return FirstMipSlice == rhs.FirstMipSlice &&
+                MipCount == rhs.MipCount &&
+                FirstArraySlice == rhs.FirstArraySlice &&
+                ArraySize == rhs.ArraySize &&
+                Format == rhs.Format;
+        }
+        RHITexSRVCreateInfo& operator=(const RHITexSRVCreateInfo& rhs)
+        {
+            if (this != &rhs)
+            {
+                FirstMipSlice = rhs.FirstMipSlice;
+                MipCount = rhs.MipCount;
+                FirstArraySlice = rhs.FirstArraySlice;
+                ArraySize = rhs.ArraySize;
+                Format = rhs.Format;
+            }
+            return *this;
+        }
     };
 
     // ---------------------------
@@ -538,10 +572,44 @@ enum class ERHIShaderFrequency
     // ---------------------------
     struct RHI_API RHITexUAVCreateInfo
     {
-        uint32_t MipSlice = 0;
+        uint32_t FirstMipSlice = 0;
+        uint32_t MipCount = 1;
         uint32_t FirstArraySlice = 0;
         uint32_t ArraySize = 1;
         ERHIFormat Format = ERHIFormat::Unknown;
+        uint64_t CalculateHash() const
+        {
+            uint64_t h = 0;
+
+            HashCombine(h, FirstMipSlice);
+            HashCombine(h, MipCount);
+            HashCombine(h, FirstArraySlice);
+            HashCombine(h, ArraySize);
+            HashCombine(h, static_cast<uint32_t>(Format));
+
+            return h;
+        }
+
+        bool operator==(const RHITexUAVCreateInfo& rhs) const
+        {
+            return FirstMipSlice == rhs.FirstMipSlice &&
+                MipCount == rhs.MipCount &&
+                FirstArraySlice == rhs.FirstArraySlice &&
+                ArraySize == rhs.ArraySize &&
+                Format == rhs.Format;
+        }
+        RHITexUAVCreateInfo& operator=(const RHITexUAVCreateInfo& rhs)
+        {
+            if (this != &rhs)
+            {
+                FirstMipSlice = rhs.FirstMipSlice;
+                MipCount = rhs.MipCount;
+                FirstArraySlice = rhs.FirstArraySlice;
+                ArraySize = rhs.ArraySize;
+                Format = rhs.Format;
+            }
+            return *this;
+        }
     };
 
     // ---------------------------
@@ -553,6 +621,37 @@ enum class ERHIShaderFrequency
         uint64_t NumElements = 0;   // 元素数量
         uint32_t Stride = 0;        // 每个元素字节数
         ERHIFormat Format = ERHIFormat::Unknown;
+        uint64_t CalculateHash() const
+        {
+            uint64_t h = 0;
+
+            HashCombine(h, Offset);
+            HashCombine(h, NumElements);
+            HashCombine(h, Stride);
+            HashCombine(h, static_cast<uint32_t>(Format));
+
+            return h;
+        }
+
+        bool operator==(const RHIBufferSRVCreateInfo& rhs) const
+        {
+            return Offset == rhs.Offset &&
+                NumElements == rhs.NumElements &&
+                Stride == rhs.Stride &&
+                Format == rhs.Format;
+        }
+        RHIBufferSRVCreateInfo& operator=(const RHIBufferSRVCreateInfo& rhs)
+        {
+            if (this != &rhs)
+            {
+                Offset = rhs.Offset;
+                NumElements = rhs.NumElements;
+                Stride = rhs.Stride;
+                Format = rhs.Format;
+            }
+            return *this;
+        }
+
     };
 
     // ---------------------------
@@ -769,6 +868,34 @@ enum class ERHIShaderFrequency
         inline bool operator != (RHISubresourceRange const& RHS) const
         {
             return !(*this == RHS);
+        }
+    };
+}
+
+namespace std
+{
+    template<>
+    struct hash<RHI::RHITexSRVCreateInfo>
+    {
+        size_t operator()(const RHI::RHITexSRVCreateInfo& v) const noexcept
+        {
+            return v.CalculateHash();
+        }
+    };
+    template<>
+    struct hash<RHI::RHITexUAVCreateInfo>
+    {
+        size_t operator()(const RHI::RHITexUAVCreateInfo& v) const noexcept
+        {
+            return v.CalculateHash();
+        }
+    };
+    template<>
+    struct hash<RHI::RHIBufferSRVCreateInfo>
+    {
+        size_t operator()(const RHI::RHIBufferSRVCreateInfo& v) const noexcept
+        {
+            return v.CalculateHash();
         }
     };
 }
