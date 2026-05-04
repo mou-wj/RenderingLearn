@@ -1,5 +1,6 @@
 #include "RHICommandList.h"
 #include "RHICommandContex.h"
+#include "RHIApi.h"
 
 namespace RHI {
 
@@ -46,10 +47,10 @@ RHICommandCopyTexture::RHICommandCopyTexture(RHITexture* src, RHITexture* dst, c
 
 void RHICommandCopyTexture::Execute(RHICommandListBase& cmdList)
 {
-    auto* transferContext = dynamic_cast<RHITransferContext*>(cmdList.GetContext());
-    if (transferContext)
+    auto* context = dynamic_cast<RHIContextBase*>(cmdList.GetContext());
+    if (context)
     {
-        transferContext->CopyTexture(Src, Dst, CopyDesc);
+        context->CopyTexture(Src, Dst, CopyDesc);
     }
 }
 
@@ -60,23 +61,19 @@ RHICommandBlitTexture::RHICommandBlitTexture(RHITexture* src, RHITexture* dst, c
 
 void RHICommandBlitTexture::Execute(RHICommandListBase& cmdList)
 {
-    auto* transferContext = dynamic_cast<RHITransferContext*>(cmdList.GetContext());
-    if (transferContext)
+    auto* context = dynamic_cast<RHIContextBase*>(cmdList.GetContext());
+    if (context)
     {
-        transferContext->BlitTexture(Src, Dst, BlitDesc);
+        context->BlitTexture(Src, Dst, BlitDesc);
     }
 }
-RHICommandUpdateTexture::RHICommandUpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& region)
+RHICommandUpdateTexture::RHICommandUpdateTexture(RHITexture* texture, const void* data, const RHIUpdateTextureRegion& region)
     : texture(texture), data(data), region(region)
 {
 }
 void RHICommandUpdateTexture::Execute(RHICommandListBase& cmdList)
 {
-    auto* transferContext = dynamic_cast<RHITransferContext*>(cmdList.GetContext());
-    if (transferContext)
-    {
-        transferContext->UpdateTexture(texture, data, region);
-    }
+    GRHIApi->UpdateTexture(cmdList,texture, data, region);
 }
 RHICommandUpdateBuffer::RHICommandUpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
     : buffer(buffer), data(data), region(region)
@@ -84,11 +81,7 @@ RHICommandUpdateBuffer::RHICommandUpdateBuffer(RHIBuffer* buffer, const void* da
 }
 void RHICommandUpdateBuffer::Execute(RHICommandListBase& cmdList)
 {
-    auto* transferContext = dynamic_cast<RHITransferContext*>(cmdList.GetContext());
-    if (transferContext)
-    {
-        transferContext->UpdateBuffer(buffer, data, region);
-    }
+    GRHIApi->UpdateBuffer(cmdList, buffer, data, region);
 }
 
 RHICommandSetComputePipelineState::RHICommandSetComputePipelineState(RHIComputePipelineState* pipelineState)
@@ -309,29 +302,21 @@ void RHICommandListBase::EndTransitions(std::vector<const RHITransition*> Transi
         Context->EndTransitions(std::move(Transitions));
     }
 }
+void RHICommandListBase::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
+{
+    AddCommand<RHICommandCopyTexture>(src, dst, copyDesc);
+}
+void RHICommandListBase::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) {
+    AddCommand<RHICommandBlitTexture>(src, dst, blitDesc);
+}
+
 
 void RHICommandListBase::Merge(const RHICommandListBase& other)
 {
     commands.insert(commands.end(), other.commands.begin(), other.commands.end());
 }
 
-RHITransferCommandList::RHITransferCommandList(RHITransferContext* context)
-    : RHICommandListBase(context)
-{
-}
 
-RHITransferContext* RHITransferCommandList::GetTransferContext() const
-{
-    return dynamic_cast<RHITransferContext*>(Context);
-}
-
-void RHITransferCommandList::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
-{
-    AddCommand<RHICommandCopyTexture>(src, dst, copyDesc);
-}
-void RHITransferCommandList::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) {
-    AddCommand<RHICommandBlitTexture>(src, dst, blitDesc);
-}
 
 RHIComputeCommandList::RHIComputeCommandList(RHIComputeContex* context)
     : RHICommandListBase(context)

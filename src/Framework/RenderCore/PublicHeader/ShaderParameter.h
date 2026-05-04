@@ -272,7 +272,7 @@ BEGIN_SHADER_PARAMETER_STRUCT(A)
 END_SHADER_PARAMETER_STRUCT(A)
 
 class Shader;
-void SetShaderParameters(
+RENDERCORE_API void SetShaderParameters(
     RHI::RHICommandListBase& cmdList,
     const Shader* shader,
     const ShaderParametersMetadata& ParametersMetaData,

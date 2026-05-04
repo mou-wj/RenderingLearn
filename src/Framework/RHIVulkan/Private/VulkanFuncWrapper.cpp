@@ -93,6 +93,8 @@
     V(vkCmdDispatch) \
     V(vkCmdCopyBuffer) \
     V(vkCmdCopyBufferToImage) \
+    V(vkCmdCopyImage)\
+    V(vkCmdBlitImage)\
     V(vkCmdPipelineBarrier) \
     V(vkCmdBeginRenderPass)\
     V(vkCmdEndRenderPass) \
@@ -156,8 +158,6 @@ namespace VKFunc {
             vkGetInstanceProcAddr(nullptr, "vkCreateInstance");
 
         vkEnumerateInstanceLayerProperties = (PFN_vkEnumerateInstanceLayerProperties)vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceLayerProperties");
-
-
         return vkGetInstanceProcAddr != nullptr;
     }
 
@@ -181,6 +181,7 @@ namespace VKFunc {
 #ifdef DEBUG_INFO
         if (res != VK_SUCCESS) { LOG_ERROR("VK: CreateInstance failed with %d", res); return false; }
         LOG_INFO("VK: Instance created successfully");
+
 #endif
         if (res == VK_SUCCESS) LoadInstanceFunctions(*pInstance);
         return res == VK_SUCCESS;
@@ -311,6 +312,7 @@ namespace VKFunc {
         if (res != VK_SUCCESS) { LOG_ERROR("VK: CreateDevice failed: %d", res); return false; }
         LOG_INFO("VK: Logical Device created successfully");
 #endif
+        printf("vkCreateDevice ptr = %p\n", vkCreateDevice);
         if (res == VK_SUCCESS) LoadDeviceFunctions(*pDevice);
         return res == VK_SUCCESS;
     }
@@ -429,7 +431,6 @@ namespace VKFunc {
         if (!device || !pCreateInfo || !pImage) return false;
 #endif
         VkResult res = vkCreateImage(device, pCreateInfo, nullptr, pImage);
-        LOG_ERROR("VK: CreateImage: %x", pImage);
 #ifdef DEBUG_INFO
         if (res != VK_SUCCESS) { LOG_ERROR("VK: CreateImage failed: %d", res); }
 #endif
@@ -728,6 +729,14 @@ namespace VKFunc {
 
     void CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) {
         if (commandBuffer && srcBuffer && dstImage && pRegions) vkCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);
+    }
+    void CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageCopy* pRegions)
+    {
+        if (commandBuffer && srcImage && dstImage && pRegions) vkCmdCopyImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
+    }
+    void CmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter)
+    {
+        if (commandBuffer && srcImage && dstImage && pRegions) vkCmdBlitImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions, filter);
     }
 
     void CmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers) {

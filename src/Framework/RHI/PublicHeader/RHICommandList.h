@@ -69,8 +69,8 @@ namespace RHI {
     {
         RHITexture* texture;
         const void* data;
-        RHITextureRegion region;
-        RHICommandUpdateTexture(RHITexture* src, const void* data, const RHITextureRegion& region);
+        RHIUpdateTextureRegion region;
+        RHICommandUpdateTexture(RHITexture* src, const void* data, const RHIUpdateTextureRegion& region);
         void Execute(RHICommandListBase& cmdList) override;
     };
 
@@ -213,7 +213,8 @@ namespace RHI {
 
         void BeginTransitions(std::vector<const RHITransition*> Transitions);
         void EndTransitions(std::vector<const RHITransition*> Transitions);
-
+        void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
+        void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc);
         void Merge(const RHICommandListBase& other);
 
     protected:
@@ -225,18 +226,6 @@ namespace RHI {
         friend struct RHICommandDraw;
         friend struct RHICommandTraceRays;
     };
-
-    class RHI_API RHITransferCommandList : public RHICommandListBase
-    {
-    public:
-        explicit RHITransferCommandList(RHITransferContext* context);
-        RHITransferContext* GetTransferContext() const;
-        void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
-		void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc);
-        void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size);
-        void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);
-    };
-
     class RHI_API RHIComputeCommandList : public RHICommandListBase
     {
     public:

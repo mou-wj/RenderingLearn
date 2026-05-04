@@ -119,7 +119,7 @@ private:
 class RenderBufferTracker : public RenderResourceTrackerBase {
 public:
     void UpdateAccess(RHI::ERHIResourceAccess access) { BufferAccess = access; }
-    RHI::ERHIResourceAccess GetAccess() const { return BufferAccess; }
+    RHI::ERHIResourceAccess GetLastAccess() const { return BufferAccess; }
 private:
     RHI::ERHIResourceAccess BufferAccess = RHI::ERHIResourceAccess::Unknown;
 };

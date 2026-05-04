@@ -109,7 +109,7 @@ namespace RenderCore {
 
             std::string Result = Code.str();
 
-            LOG_INFO("%s", Result.c_str());
+            //LOG_INFO("%s", Result.c_str());
             GShaderVirtualFileSystem.RegisterVirtualFile(VirtualPath, Result);
 
             return Result;
@@ -401,7 +401,7 @@ bool ShaderCompiler::PreprocessSource(const ShaderCompileInput& input, std::stri
 
     // 3. Ӧ�ú궨��
     ApplyMacros(outSource, input.Environment.Definitions);
-    LOG_INFO("Preprocess shader source: %s", outSource.c_str());
+    //LOG_INFO("Preprocess shader source: %s", outSource.c_str());
     return true;
 }
 
@@ -567,6 +567,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     const char* sourceCStr = preprocessedSource.c_str();
     shader.setStrings(&sourceCStr, 1);
     shader.setEntryPoint(input.EntryPoint.c_str());
+    EShMessages messages = (EShMessages)(EShMsgDefault | EShMsgReadHlsl | EShMsgVulkanRules | EShMsgSpvRules);
     shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, 100);
     shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_2);
     shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_2);
@@ -645,7 +646,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         preprocessorDefines.push_back(defStr);
     }
 
-    if (!shader.parse(&resources, 100, false, EShMsgDefault))
+    if (!shader.parse(&resources, 100, false, messages))
     {
         out.ErrorMessage = shader.getInfoLog();
         out.ErrorMessage += "\n";
@@ -660,7 +661,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     glslang::TProgram program;
     program.addShader(&shader);
 
-    if (!program.link(EShMsgDefault))
+    if (!program.link(messages))
     {
         out.ErrorMessage = program.getInfoLog();
         out.ErrorMessage += "\n";
@@ -671,8 +672,67 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     // 5. ���� SPIR-V
     std::vector<uint32_t> spirv;
     glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
+    const uint32_t OpTypeImage = 25;
+    auto StripImageFormat = [](std::vector<uint32_t>& spirv)
+        {
+            if (spirv.size() <= 5)
+                return;
 
-    
+            // SPIR-V binary header is 5 words long:
+            // magic, version, generator, bound, schema
+            for (size_t i = 5; i < spirv.size(); )
+            {
+                uint32_t opword = spirv[i];
+                uint32_t opcode = opword & 0xFFFF;
+                uint32_t wc = opword >> 16;
+
+                // 防止无效 SPIR-V 数据导致越界或死循环
+                if (wc == 0)
+                    break;
+
+                if (i + wc > spirv.size())
+                    break;
+
+                if (opcode == OpTypeImage && wc >= 9)
+                {
+                    spirv[i + 8] = 0; // Unknown
+                }
+
+                i += wc;
+            }
+        };
+    StripImageFormat(spirv);
+    auto WriteSPIRVToFile = [](const std::string& filePath, const std::vector<uint32_t>& spirvData) {
+        if (spirvData.empty()) {
+            std::cerr << "Error: SPIR-V data is empty." << std::endl;
+            return false;
+        }
+
+        // 1. 以二进制覆盖模式打开文件
+        std::ofstream outFile(filePath, std::ios::out | std::ios::binary);
+
+        if (!outFile.is_open()) {
+            std::cerr << "Error: Failed to open file for writing: " << filePath << std::endl;
+            return false;
+        }
+
+        // 2. 将 uint32_t 指针强转为 char*，并计算字节总数 (size * 4)
+        outFile.write(reinterpret_cast<const char*>(spirvData.data()), spirvData.size() * sizeof(uint32_t));
+
+        // 3. 检查写入状态并关闭
+        outFile.close();
+
+        if (outFile.good()) {
+            std::cout << "Successfully wrote SPIR-V to: " << filePath << " (" << (spirvData.size() * 4) << " bytes)" << std::endl;
+            return true;
+        }
+        else {
+            std::cerr << "Error occurred during writing." << std::endl;
+            return false;
+        }
+        };
+    WriteSPIRVToFile("test.spv", spirv);
+
 
     // 6. ʹ�� SPIRV-Cross ������Դ
     spirv_cross::Compiler compiler(spirv);

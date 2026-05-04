@@ -197,8 +197,7 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
 	graphicsQueue_->InitContextPool(10);
     computeQueue_  = new VulkanQueue(this, computeQueue, computeQueueFamilyIndex_, EQueueType::Compute);
 	computeQueue_->InitContextPool(10);
-    transferQueue_ = new VulkanQueue(this, transferQueue, transferQueueFamilyIndex_, EQueueType::Transfer);
-	transferQueue_->InitContextPool(5);
+    transferQueue_ = nullptr;//暂时不做async transfer
 }
 
 bool VulkanDevice::InitPresentQueue(VkSurfaceKHR Surface)
@@ -383,7 +382,7 @@ void VulkanDeferredDeleteQueue::ReleaseResource(EResourceType Type, const FDefer
         VkImage Image = reinterpret_cast<VkImage>(Entry.Handle);
         device_->GetGraphicsQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
         device_->GetComputeQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
-        device_->GetTransferQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
+        //device_->GetTransferQueue()->GetImageLayoutManager()->NotifyDeletedImage(Image);
 
         VKFunc::DestroyImage(VulkanDevice, Image);
         break;

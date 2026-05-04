@@ -255,11 +255,11 @@ def main():
             # 1. Clone
             if not src_dir.exists():
                 src_info = meta.get("source", {})
-                run(["git", "clone", "--branch", src_info.get("branch", "main"), src_info["git"], str(src_dir)])
+                run(["git", "clone", "--depth=1","--single-branch","--branch", src_info.get("branch", "main"), src_info["git"], str(src_dir)])
                 # 2. Extra Repos (SPIRV-Tools)
                 for extra in src_info.get("extra_repos", []):
                     extra_path = src_dir / extra["path"]
-                    run(["git", "clone", "--branch", extra["branch"], extra["git"], str(extra_path)])
+                    run(["git", "clone", "--depth=1","--single-branch","--branch", extra["branch"], extra["git"], str(extra_path)])
             
             # 3. Build (若不存在 install 目录或 build_timing 为 pre_build)
             if meta.get("build_timing") == "pre_build":

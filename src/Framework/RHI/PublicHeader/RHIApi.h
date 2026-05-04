@@ -25,7 +25,7 @@ public:
 
     virtual RHITextureSP CreateTexture(const RHITextureDesc& desc) = 0;
     virtual RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) = 0;
-    virtual void UpdateTexture(RHICommandListBase& cmdList,RHITexture* texture, const void* data,const RHITextureRegion& size) = 0;
+    virtual void UpdateTexture(RHICommandListBase& cmdList,RHITexture* texture, const void* data,const RHIUpdateTextureRegion& size) = 0;
     virtual void UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const void* data,const RHIBufferRegion& region) = 0;
 
     virtual RHIShaderResourceViewSP CreateTextureShaderResourceView(

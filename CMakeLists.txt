@@ -20,10 +20,3 @@ message("INSTALLDIR: ${INSTALL_DIR}/${CONFIG}")
 
 
 add_subdirectory(src)
-
-#renderdoc tool
-set(Renderdoc_INSTALL_DIR "D:/RenderDoc")
-if(NOT EXISTS ${Renderdoc_INSTALL_DIR})
-	message("render not found in ${Renderdoc_INSTALL_DIR}")
-else()
-endif()

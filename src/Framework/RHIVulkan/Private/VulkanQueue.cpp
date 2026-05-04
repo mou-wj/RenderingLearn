@@ -16,8 +16,6 @@ VulkanCommandContext* CreateQueueContext(VulkanDevice* device, VulkanQueue* queu
 {
     switch (queueType)
     {
-    case RHI::EQueueType::Transfer:
-        return new VulkanTransferContext(device, queue);
     case RHI::EQueueType::Compute:
         return new VulkanComputeContext(device, queue);
     case RHI::EQueueType::Graphics:
@@ -78,9 +76,6 @@ VulkanQueue::VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyInd
 		break;
 	case RHI::EQueueType::Compute:
 		queueTypeName = "Compute";
-		break;
-	case RHI::EQueueType::Transfer:
-		queueTypeName = "Transfer";
 		break;
 	default:
 		queueTypeName = "Unknown";
@@ -203,8 +198,6 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
                 case EQueueType::Compute:
                     rhivkSyncPoint = device_->GetComputeQueue()->GetSyncPoint();
 					break;
-                case EQueueType::Transfer:
-					rhivkSyncPoint = device_->GetTransferQueue()->GetSyncPoint();
                 default:
                     break;
                 }

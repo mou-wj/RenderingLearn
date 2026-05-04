@@ -185,9 +185,6 @@ struct RENDERCORE_API PoolRenderTargetDesc
     // ----------------------
     RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown;
 
-    // UAV 可能用不同格式（可选）
-    RHI::ERHIFormat UAVFormat = RHI::ERHIFormat::Unknown;
-
     // ----------------------
     // 3. 用途（ImageUsage / BindFlags）
     // ----------------------
@@ -297,7 +294,7 @@ public:
     {
         return Desc;
     }
-
+    RHI::RHITexture* GetRHI() override { return TargetTexture ? TargetTexture.get() : nullptr ; } ;
 
 private:
     PoolRenderTargetDesc Desc;

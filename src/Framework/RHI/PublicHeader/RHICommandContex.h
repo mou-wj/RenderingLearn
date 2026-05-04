@@ -16,17 +16,9 @@ namespace RHI
         virtual void End() = 0;
         virtual void BeginTransitions(std::vector<const RHITransition*> Transitions) = 0;
         virtual void EndTransitions(std::vector<const RHITransition*> Transitions) = 0;
-    };
-
-    class RHI_API RHITransferContext : public virtual RHIContextBase
-    {
-    public:
-        virtual ~RHITransferContext() = default;
         virtual void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) = 0;
         // 新增：BlitTexture接口
         virtual void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) = 0;
-        virtual void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& size) = 0;
-        virtual void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) = 0;
     };
 
     class RHI_API RHIComputeContex : public virtual RHIContextBase
@@ -71,25 +63,15 @@ namespace RHI
         virtual void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) = 0;
     };
 
-    // Combined context keeps compatibility with existing backends that implement
-    // transfer + compute + graphic capabilities in one object.
-    class RHI_API RHICommandContext : public RHITransferContext, public RHIComputeContex, public RHIGraphicContex
-    {
-    public:
-        virtual ~RHICommandContext() = default;
-    };
 
     // Backward-compatible aliases.
     using RHIComputeContext = RHIComputeContex;
 
-    // Backward-compatible alias for the original type name.
-    using RHICommandContex = RHICommandContext;
 
-    using RHICommandContexSP = std::shared_ptr<RHICommandContex>;
+
     using RHIContextBaseSP = std::shared_ptr<RHIContextBase>;
-    using RHITransferContextSP = std::shared_ptr<RHITransferContext>;
     using RHIComputeContextSP = std::shared_ptr<RHIComputeContext>;
-    using RHICommandContextSP = std::shared_ptr<RHICommandContext>;
+    using RHIGraphicContextSP = std::shared_ptr<RHIGraphicContex>;
 
 
 

@@ -150,7 +150,6 @@ namespace RenderCore {
         entry.RHITexture = rhiTex;
 
         ExternalTextures[rhiTex] = entry;
-
         return rdgTex;
     }
     RenderGraphTextureRef RenderGraphBuilder::RegisterExternalTexture(const std::string& name, RenderTexture* texture)
@@ -252,163 +251,9 @@ namespace RenderCore {
 
     void RenderGraphBuilder::Execute()
     {
-
-        Core::TaskPool taskPool(std::thread::hardware_concurrency());
-
-        struct RecordedGroup
-        {
-            std::unordered_map<RHI::EQueueType, RHI::RHICommandListBase*> CmdLists;
-            std::unordered_map<RHI::EQueueType, std::vector<RHI::RHITransitionInfo>> BeginBarriers;
-            std::unordered_map<RHI::EQueueType, RHI::RHIContextBase*> CmdContexts;
-        };
-
-        std::vector<RecordedGroup> RecordedGroups(ParallelPasses.size());
-        std::vector<Core::TaskHandle> handles;
-
-        RHI::RHIApi* api = GRHIApi;
-        if (!api) return;
-
-        // =========================
-        // 1️⃣ 并行录制
-        // =========================
-        int i = 0;
-        for (auto iter = ParallelPasses.begin(); iter != ParallelPasses.end(); ++iter,++i)
-        {
-            auto group = *iter;
-
-            handles.push_back(taskPool.AddTask([this, api, group, &RecordedGroups, i]()
-                {
-                    auto& outGroup = RecordedGroups[i];
-                    auto& cmdLists = outGroup.CmdLists;
-                    auto& cmdContexts = outGroup.CmdContexts;
-
-                    auto getCmd = [&](RHI::EQueueType q)
-                        {
-                            if (cmdLists.count(q)) return cmdLists[q];
-
-                            auto* queue = api->GetQueue(q);
-                            auto* ctx = queue->AcquireCommandContext();
-
-                            RHI::RHICommandListBase* cmd = nullptr;
-
-                            if (q == RHI::EQueueType::Graphics)
-                                cmd = Allocator.Allocate<RHI::RHIGraphicCommandList>(dynamic_cast<RHI::RHIGraphicContex*>(ctx));
-                            else if (q == RHI::EQueueType::Compute)
-                                cmd = Allocator.Allocate <RHI::RHIComputeCommandList>(dynamic_cast<RHI::RHIComputeContex*>(ctx));
-                            else
-                                cmd = Allocator.Allocate<RHI::RHITransferCommandList>(dynamic_cast<RHI::RHITransferContext*>(ctx));
-
-                            cmd->Begin();
-                            cmdLists[q] = cmd;
-                            cmdContexts[q] = ctx;
-                            return cmd;
-                        };
-
-                    // 👉 收集 barrier
-                    for (auto* pass : group)
-                    {
-                        auto q = (RHI::EQueueType)pass->GetPassFlag();
-                        pass->BeginBarrier.Process();
-                        for (auto& t : pass->BeginBarrier.GetTransitions())
-                        {
-                            outGroup.BeginBarriers[q].push_back(t);
-                        }
-                    }
-
-                    // 👉 执行 barrier（合并）
-                    for (auto& [q, transitions] : outGroup.BeginBarriers)
-                    {
-                        auto* cmd = getCmd(q);
-
-                        if (!transitions.empty())
-                        {
-							void* mem = Allocator.AllocateBytes(RHI::G_RHITransition_TotalSize);
-							RHI::RHITransition* transitionObj = new(mem) RHI::RHITransition();
-							RHI::RHITransitionCreateInfo createInfo;
-							createInfo.Flags = RHI::ERHITransitionCreateFlags::None;
-                            createInfo.TransitionInfos = transitions;
-                            RHI::GRHIApi->RHICreateTransition(transitionObj, createInfo);
-                            cmd->BeginTransitions({ transitionObj });
-                            cmd->EndTransitions({ transitionObj });
-                        }
-                    }
-
-                    // 👉 执行 pass
-                    for (auto* pass : group)
-                    {
-                        auto q = (RHI::EQueueType)pass->GetPassFlag();
-                        auto* cmd = getCmd(q);
-
-                        pass->Execute(*cmd);
-                    }
-
-                    for (auto& [_, cmd] : cmdLists)
-                    {
-                        cmd->End();
-                    }
-                }));
-        }
-
-        taskPool.WaitAll(handles);
-
-        // =========================
-        // 2️⃣ 顺序提交（带必要同步）
-        // =========================
-        std::unordered_map<RHI::EQueueType, uint64_t> Timeline;
-        auto passGroupIter = ParallelPasses.begin();
-        for (int i = 0; i < RecordedGroups.size(); ++i, passGroupIter++)
-        {
-            auto& group = RecordedGroups[i];
-
-            for (auto& [q, cmd] : group.CmdLists)
-            {
-                auto* queue = api->GetQueue(q);
-				std::vector<RHI::RHIWaitInfo> waitInfos;
-                for (auto& [otherQ, value] : Timeline)
-                {
-                    if (otherQ == q) continue;
-
-                    RHI::RHIWaitInfo waitInfo;
-                    waitInfo.QueueType = otherQ;
-                    waitInfo.Value = value;
-                    waitInfo.WaitStage = RHI::ERHIPipelineStage::AllCommands;
-
-                    waitInfos.push_back(waitInfo);
-                }
-
-				RHI::RHIWaitInfo lastTransInfo;
-                RHI::RHIFence fence = queue->ExecuteContext({ group.CmdContexts[q] }, waitInfos);
-                Timeline[q] = fence.Value;
-
-                // 👉 关键：更新 fence
-                for (auto* pass : *passGroupIter)
-                {
-                    auto it = PassLastUseResources.find(pass);
-                    if (it == PassLastUseResources.end())
-                        continue;
-
-                    for (auto* res : it->second)
-                    {
-                        if (auto* tex = dynamic_cast<RenderGraphTexture*>(res))
-                        {
-                            if (tex->GetRHITexture())
-                            {
-                                tex->GetTracker().UpdateLastAccessFence(fence);
-                            }
-                        }
-                        else if (auto* buf = dynamic_cast<RenderGraphBuffer*>(res))
-                        {
-                            if (buf->GetRHIBuffer())
-                            {
-                                buf->GetTracker().UpdateLastAccessFence(fence);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 👉 TODO：只根据依赖插入 wait（你后面可以加）
-        }
+        AnalyzePasses();
+        AllocateResources();
+        ExecutaPasses();
 		Allocator.Reset();
         ApplyFinalStates();
     }
@@ -419,9 +264,7 @@ namespace RenderCore {
             // 清理旧数据
             // =========================================
         ParallelPasses.clear();
-        InitialTextureStates.clear();
         FinalTextureStates.clear();
-        InitialBufferStates.clear();
         FinalBufferStates.clear();
         ResourceLifetimes.clear();
         PassLastUseResources.clear();
@@ -487,23 +330,20 @@ namespace RenderCore {
         // =========================================
         // 初始状态获取
         // =========================================
-        auto GetInitialTextureAccess = [&](const TextureKey& Key)
+        auto GetInitialTextureAccess = [&](RHI::RHITexture* texture,const RHI::RHISubresourceRange& range)
             {
-                auto it = InitialTextureStates.find(Key);
-                if (it != InitialTextureStates.end())
-                    return it->second;
+                auto it = ExternalTextures.find(texture);
+                if (it != ExternalTextures.end())
+                    return it->second.Tracker->GetSubresourceAccess(range);
 
-                InitialTextureStates[Key] = ERHIResourceAccess::Undefined;
                 return ERHIResourceAccess::Undefined;
             };
 
-        auto GetInitialBufferAccess = [&](const BufferKey& Key)
+        auto GetInitialBufferAccess = [&](RHI::RHIBuffer* buffer)
             {
-                auto it = InitialBufferStates.find(Key);
-                if (it != InitialBufferStates.end())
-                    return it->second;
-
-                InitialBufferStates[Key] = ERHIResourceAccess::Undefined;
+                auto it = ExternalBuffers.find(buffer);
+                if (it != ExternalBuffers.end())
+                    return it->second.Tracker->GetLastAccess();
                 return ERHIResourceAccess::Undefined;
             };
 
@@ -522,7 +362,7 @@ namespace RenderCore {
 
                 if (!State.bInitialized)
                 {
-                    State.LastAccess = GetInitialTextureAccess(Key);
+                    State.LastAccess = GetInitialTextureAccess(Intent.Texture->GetRHITexture(),Intent.SubresourceRange);
                     State.bInitialized = true;
                 }
 
@@ -577,7 +417,7 @@ namespace RenderCore {
 
                 if (!State.bInitialized)
                 {
-                    State.LastAccess = GetInitialBufferAccess(Key);
+                    State.LastAccess = GetInitialBufferAccess(Intent.Buffer->GetRHIBuffer());
                     State.bInitialized = true;
                 }
 
@@ -790,7 +630,7 @@ namespace RenderCore {
             RenderGraphTexture* parent = srv->Desc.Texture;
             RHI::RHITexture* parentRHI = parent->GetRHITexture();
             TextureViewCache* viewCache = nullptr;
-            if (parent->IsExternal) {
+            if (!parent->IsExternal) {
                 viewCache = InternalTextureViewCaches[parentRHI];
             }
             else {
@@ -811,7 +651,7 @@ namespace RenderCore {
             RenderGraphTexture* parent = uav->Desc.Texture;
             RHI::RHITexture* parentRHI = parent->GetRHITexture();
             TextureViewCache* viewCache = nullptr;
-            if (parent->IsExternal) {
+            if (!parent->IsExternal) {
                 viewCache = InternalTextureViewCaches[parentRHI];
             }
             else {
@@ -832,7 +672,7 @@ namespace RenderCore {
             RenderGraphBuffer* parent = srv->Desc.Buffer;
             RHI::RHIBuffer* parentRHI = parent->GetRHIBuffer();
             BufferViewCache* viewCache = nullptr;
-            if (parent->IsExternal) {
+            if (!parent->IsExternal) {
                 viewCache = InternalBufferViewCaches[parentRHI];
             }
             else {
@@ -853,7 +693,7 @@ namespace RenderCore {
             RenderGraphBuffer* parent = uav->Desc.Buffer;
             RHI::RHIBuffer* parentRHI = parent->GetRHIBuffer();
             BufferViewCache* viewCache = nullptr;
-            if (parent->IsExternal) {
+            if (!parent->IsExternal) {
                 viewCache = InternalBufferViewCaches[parentRHI];
             }
             else {
@@ -888,7 +728,7 @@ namespace RenderCore {
 
                     if (SRV)
                     {
-                        auto* Tex = static_cast<RenderGraphTexture*>(SRV->Parent);
+                        auto* Tex = static_cast<RenderGraphTexture*>(SRV->Desc.Texture);
                         const auto& Desc = SRV->Desc;
 
                         RenderGraphPass::RenderGraphTextureIntent Intent;
@@ -918,7 +758,7 @@ namespace RenderCore {
 
                     if (UAV)
                     {
-                        auto* Tex = static_cast<RenderGraphTexture*>(UAV->Parent);
+                        auto* Tex = static_cast<RenderGraphTexture*>(UAV->Desc.Texture);
                         const auto& Desc = UAV->Desc;
 
                         RenderGraphPass::RenderGraphTextureIntent Intent;
@@ -970,7 +810,7 @@ namespace RenderCore {
                     auto vDesc = SRV->Desc;
                     if (SRV)
                     {
-                        auto* Buf = static_cast<RenderGraphBuffer*>(SRV->Parent);
+                        auto* Buf = static_cast<RenderGraphBuffer*>(SRV->Desc.Buffer);
 
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
@@ -993,7 +833,7 @@ namespace RenderCore {
 					auto uavDesc = UAV->Desc;
                     if (UAV)
                     {
-                        auto* Buf = static_cast<RenderGraphBuffer*>(UAV->Parent);
+                        auto* Buf = static_cast<RenderGraphBuffer*>(UAV->Desc.Buffer);
 
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
@@ -1093,5 +933,161 @@ namespace RenderCore {
         }
     }
 
+    void RenderGraphBuilder::ExecutaPasses() 
+    {
+        Core::TaskPool taskPool(std::thread::hardware_concurrency());
 
+        struct RecordedGroup
+        {
+            std::unordered_map<RHI::EQueueType, RHI::RHICommandListBase*> CmdLists;
+            std::unordered_map<RHI::EQueueType, std::vector<RHI::RHITransitionInfo>> BeginBarriers;
+            std::unordered_map<RHI::EQueueType, RHI::RHIContextBase*> CmdContexts;
+        };
+
+        std::vector<RecordedGroup> RecordedGroups(ParallelPasses.size());
+        std::vector<Core::TaskHandle> handles;
+
+        RHI::RHIApi* api = GRHIApi;
+        if (!api) return;
+
+        // =========================
+        // 1️⃣ 并行录制
+        // =========================
+        int i = 0;
+        for (auto iter = ParallelPasses.begin(); iter != ParallelPasses.end(); ++iter, ++i)
+        {
+            auto group = *iter;
+
+            handles.push_back(taskPool.AddTask([this, api, group, &RecordedGroups, i]()
+                {
+                    auto& outGroup = RecordedGroups[i];
+                    auto& cmdLists = outGroup.CmdLists;
+                    auto& cmdContexts = outGroup.CmdContexts;
+
+                    auto getCmd = [&](RHI::EQueueType q)
+                        {
+                            if (cmdLists.count(q)) return cmdLists[q];
+
+                            auto* queue = api->GetQueue(q);
+                            auto* ctx = queue->AcquireCommandContext();
+
+                            RHI::RHICommandListBase* cmd = nullptr;
+
+                            if (q == RHI::EQueueType::Graphics)
+                                cmd = Allocator.Allocate<RHI::RHIGraphicCommandList>(dynamic_cast<RHI::RHIGraphicContex*>(ctx));
+                            else if (q == RHI::EQueueType::Compute)
+                                cmd = Allocator.Allocate <RHI::RHIComputeCommandList>(dynamic_cast<RHI::RHIComputeContex*>(ctx));
+
+                            cmd->Begin();
+                            cmdLists[q] = cmd;
+                            cmdContexts[q] = ctx;
+                            return cmd;
+                        };
+
+                    // 👉 收集 barrier
+                    for (auto* pass : group)
+                    {
+                        auto q = (RHI::EQueueType)pass->GetPassFlag();
+                        pass->BeginBarrier.Process();
+                        for (auto& t : pass->BeginBarrier.GetTransitions())
+                        {
+                            outGroup.BeginBarriers[q].push_back(t);
+                        }
+                    }
+
+                    // 👉 执行 barrier（合并）
+                    for (auto& [q, transitions] : outGroup.BeginBarriers)
+                    {
+                        auto* cmd = getCmd(q);
+
+                        if (!transitions.empty())
+                        {
+                            void* mem = Allocator.AllocateBytes(RHI::G_RHITransition_TotalSize);
+                            RHI::RHITransition* transitionObj = new(mem) RHI::RHITransition();
+                            RHI::RHITransitionCreateInfo createInfo;
+                            createInfo.Flags = RHI::ERHITransitionCreateFlags::None;
+                            createInfo.TransitionInfos = transitions;
+                            RHI::GRHIApi->RHICreateTransition(transitionObj, createInfo);
+                            cmd->BeginTransitions({ transitionObj });
+                            cmd->EndTransitions({ transitionObj });
+                        }
+                    }
+
+                    // 👉 执行 pass
+                    for (auto* pass : group)
+                    {
+                        auto q = (RHI::EQueueType)pass->GetPassFlag();
+                        auto* cmd = getCmd(q);
+
+                        pass->Execute(*cmd);
+                    }
+
+                    for (auto& [_, cmd] : cmdLists)
+                    {
+                        cmd->End();
+                    }
+                }));
+        }
+
+        taskPool.WaitAll(handles);
+
+        // =========================
+        // 2️⃣ 顺序提交（带必要同步）
+        // =========================
+        std::unordered_map<RHI::EQueueType, uint64_t> Timeline;
+        auto passGroupIter = ParallelPasses.begin();
+        for (int i = 0; i < RecordedGroups.size(); ++i, passGroupIter++)
+        {
+            auto& group = RecordedGroups[i];
+
+            for (auto& [q, cmd] : group.CmdLists)
+            {
+                auto* queue = api->GetQueue(q);
+                std::vector<RHI::RHIWaitInfo> waitInfos;
+                for (auto& [otherQ, value] : Timeline)
+                {
+                    if (otherQ == q) continue;
+
+                    RHI::RHIWaitInfo waitInfo;
+                    waitInfo.QueueType = otherQ;
+                    waitInfo.Value = value;
+                    waitInfo.WaitStage = RHI::ERHIPipelineStage::AllCommands;
+
+                    waitInfos.push_back(waitInfo);
+                }
+
+                RHI::RHIWaitInfo lastTransInfo;
+                RHI::RHIFence fence = queue->ExecuteContext({ group.CmdContexts[q] }, waitInfos);
+                Timeline[q] = fence.Value;
+
+                // 👉 关键：更新 fence
+                for (auto* pass : *passGroupIter)
+                {
+                    auto it = PassLastUseResources.find(pass);
+                    if (it == PassLastUseResources.end())
+                        continue;
+
+                    for (auto* res : it->second)
+                    {
+                        if (auto* tex = dynamic_cast<RenderGraphTexture*>(res))
+                        {
+                            if (tex->GetRHITexture())
+                            {
+                                tex->GetTracker().UpdateLastAccessFence(fence);
+                            }
+                        }
+                        else if (auto* buf = dynamic_cast<RenderGraphBuffer*>(res))
+                        {
+                            if (buf->GetRHIBuffer())
+                            {
+                                buf->GetTracker().UpdateLastAccessFence(fence);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 👉 TODO：只根据依赖插入 wait（你后面可以加）
+        }
+    }
 } // namespace RenderCore

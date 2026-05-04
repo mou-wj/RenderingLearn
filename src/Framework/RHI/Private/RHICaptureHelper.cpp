@@ -51,11 +51,13 @@ void RHICaptureHelper::Load()
 	loaded = true;
 
 }
-
+void RHICaptureHelper::Shutdown() {
+	if (rdoc_api) reinterpret_cast<RenderDocAPIType*>(rdoc_api)->Shutdown();
+}
 void RHICaptureHelper::CaptureBegin() {
 	if (numCaptures == 0) return;
 #ifdef ENABLE_RENDERDOC_CAPTURE
-	if (rdoc_api) reinterpret_cast<RenderDocAPIType*>(rdoc_api)->StartFrameCapture(devicePointer, nullptr);
+	if (rdoc_api) reinterpret_cast<RenderDocAPIType*>(rdoc_api)->StartFrameCapture(devicePointer, windowPointer);
 #endif
 	numCaptures--;
 }
@@ -65,7 +67,7 @@ void RHICaptureHelper::CaptureEnd() {
 #ifdef ENABLE_RENDERDOC_CAPTURE
 	if (rdoc_api)
 	{
-		auto res = reinterpret_cast<RenderDocAPIType*>(rdoc_api)->EndFrameCapture(devicePointer, nullptr);
+		auto res = reinterpret_cast<RenderDocAPIType*>(rdoc_api)->EndFrameCapture(devicePointer, windowPointer);
 		if (res == 0) {
 			printf("Failed to end capture!\n");
 			// 获取当前 RenderDoc 正在写入的日志文件路径
@@ -99,7 +101,9 @@ void RHICaptureHelper::WriteCaptureOut() {
 void RHICaptureHelper::SetDevice(void* device) {
 	devicePointer = device;
 }
-
+void RHICaptureHelper::SetWindow(void* window) {
+	windowPointer = window;
+}
 bool RHICaptureHelper::IsCapturing() {
 #ifdef ENABLE_RENDERDOC_CAPTURE
 	if (rdoc_api) return reinterpret_cast<RenderDocAPIType*>(rdoc_api)->IsFrameCapturing();

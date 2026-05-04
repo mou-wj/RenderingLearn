@@ -137,10 +137,12 @@ public:
             return;
         }
         RHI::RHIGraphicCommandList cmdList(graphicContext);
-        constexpr int kMaxFrames = 3000;
+        constexpr int kMaxFrames = 4000;
+        RHICapture_SetNum(4);
+        RHICapture_SetWindow(Window->GetNativeHandle());
         for (int frameIndex = 0; frameIndex < kMaxFrames; ++frameIndex) {
             // 设置为即时执行模式
-            RHICapture_Begin();
+
             cmdList.SetImmediate(true);
             cmdList.Begin();
             // 设置图形管线状态
@@ -192,13 +194,14 @@ public:
             {
                 waitInfos.push_back({ swapchainSlot.ReadySync, EQueueType::Graphics, 0,RHI::ERHIPipelineStage::ColorAttachmentOutput });
             }
+
             RHI::RHIFence submitResult = queue->ExecuteContext({ graphicContext }, waitInfos);
             queue->WaitFence(submitResult);
             RHI::RHIWaitInfo presentWait;
             presentWait.SyncPoint = queue->GetSyncPoint();
 			presentWait.Value = submitResult.Value;
             presentWait.WaitStage = RHI::ERHIPipelineStage::ColorAttachmentOutput;
-            
+            RHICapture_Begin();
             GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentWait);
             RHICapture_End();
             cmdList.Clear();

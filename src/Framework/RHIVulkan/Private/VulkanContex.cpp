@@ -4,6 +4,7 @@
 #include "VulkanShader.h"
 #include "VulkanDescriptorSets.h"
 #include "VulkanRHIUtils.h"
+#include "Log.h"
 
 namespace RHIVulkan {
 
@@ -59,108 +60,191 @@ void VulkanCommandContext::EndTransitions(std::vector<const RHITransition*> Tran
     }
 }
 
-VulkanTransferContext* VulkanTransferContext::CastFrom(RHITransferContext* context)
+void VulkanCommandContext::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
 {
-    return dynamic_cast<VulkanTransferContext*>(context);
-}
 
-VulkanTransferContext::VulkanTransferContext(VulkanDevice* device, VulkanQueue* queue)
-    : VulkanCommandContext(device, queue)
-{
-}
-
-void VulkanTransferContext::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
-{
-}
-void VulkanTransferContext::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc)
-{
-    
-}
-
-void VulkanTransferContext::UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& region)
-{
-    if (!texture || !data)
+    if (!(copyDesc.SrcRegion.Width == copyDesc.DstRegion.Width &&
+        copyDesc.SrcRegion.Height == copyDesc.DstRegion.Height &&
+        copyDesc.SrcRegion.Depth == copyDesc.DstRegion.Depth)) {
+#ifdef DEBUG_INFO
+        LOG_ERROR("%s", "src extent no match dst");
+#endif // DEBUG_INFO
         return;
-    auto format = texture->GetDesc().Format;
-
-    VkDeviceSize totalSize = region.width * region.height * region.depth * RHI::GFormatInfoMap.at(format).BytesPerPixel; // 假设格式是RGBA8
+     }
 
 
-    // 1. 获取 staging buffer
-    auto staging = device->GetStagingManager()->Acquire(totalSize);
-    void* mapped = staging->Map(0, totalSize);
+
+    VulkanTexture* vkSrc = static_cast<VulkanTexture*>(src);
+    VulkanTexture* vkDst = static_cast<VulkanTexture*>(dst);
+
+    VkImage srcImage = vkSrc->GetImage();
+    VkImage dstImage = vkDst->GetImage();
+
+    auto srcImageLayout = queue->GetImageLayoutManager()
+        ->GetFullLayout(srcImage)
+        ->Get(copyDesc.SrcMipIndex, copyDesc.SrcArraySlice);
+
+    auto dstImageLayout = queue->GetImageLayoutManager()
+        ->GetFullLayout(dstImage)
+        ->Get(copyDesc.DstMipIndex, copyDesc.DstArraySlice);
+
+    VkImageCopy region{};
+
+    // =========================
+    // Src
+    // =========================
+    region.srcSubresource.aspectMask = vkSrc->GetAspectFlags();
+    region.srcSubresource.mipLevel = copyDesc.SrcMipIndex;
+    region.srcSubresource.baseArrayLayer = copyDesc.SrcArraySlice;
+    region.srcSubresource.layerCount = 1;
+
+    region.srcOffset = {
+        copyDesc.SrcRegion.OffsetX,
+        copyDesc.SrcRegion.OffsetY,
+        copyDesc.SrcRegion.OffsetZ
+    };
+
+    // =========================
+    // Dst（你现在设计是“对齐 copy”，所以 offset 相同）
+    // =========================
+    region.dstSubresource.aspectMask = vkDst->GetAspectFlags();
+    region.dstSubresource.mipLevel = copyDesc.DstMipIndex;
+    region.dstSubresource.baseArrayLayer = copyDesc.DstArraySlice;
+    region.dstSubresource.layerCount = 1;
+
+    region.dstOffset = {
+        copyDesc.DstRegion.OffsetX,
+        copyDesc.DstRegion.OffsetY,
+        copyDesc.DstRegion.OffsetZ
+    };
 
 
-    // 复制数据到 staging buffer
-    memcpy(mapped, data, totalSize);
+    region.extent = {
+        copyDesc.SrcRegion.Width,
+        copyDesc.SrcRegion.Height,
+        copyDesc.SrcRegion.Depth == 0 ? 1u : copyDesc.SrcRegion.Depth
+    };
 
-    auto VkFormat = TransformFormatFrom(format);
-    auto imageFlag = GetImageAspectFlags(VkFormat);
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
 
-    // 3. 记录 CopyBufferToImage 命令
-    VkBufferImageCopy copyRegion{};
-    copyRegion.bufferOffset = 0;
-    copyRegion.bufferRowLength = 0;
-    copyRegion.bufferImageHeight = 0;
-    copyRegion.imageSubresource.aspectMask = imageFlag;
-    copyRegion.imageSubresource.mipLevel = region.mipLevel;
-    copyRegion.imageSubresource.baseArrayLayer = region.arraySlice;
-    copyRegion.imageSubresource.layerCount = region.numArraySlices;
-    copyRegion.imageOffset = { static_cast<int32_t>(region.xOffset),
-    static_cast<int32_t>(region.yOffset),
-    static_cast<int32_t>(region.zOffset) };
-    copyRegion.imageExtent = { region.width, region.height, region.depth };
-
-    VulkanTexture* vulkanTexture = dynamic_cast<VulkanTexture*>(texture);
-
-    VulkanCommandBuffer* cmdBuffer = commandBufferManager->GetActiveCommandBuffer();
-
-    VKFunc::CmdCopyBufferToImage(
-        cmdBuffer->GetHandle(),
-        staging->GetHandle(),
-        vulkanTexture->GetImage(),
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    VKFunc::CmdCopyImage(
+        commandBuffer->GetHandle(),
+        srcImage,
+        srcImageLayout,
+        dstImage,
+        dstImageLayout,
         1,
-        &copyRegion
-    );
-    device->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
-}
+        &region);
 
-void VulkanTransferContext::UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
+}
+void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc)
 {
-    if (!buffer || !data)
-        return;
+    if (blitDesc.SrcRegion.Width > 0 &&
+        blitDesc.SrcRegion.Height > 0 &&
+        blitDesc.DstRegion.Width > 0 &&
+        blitDesc.DstRegion.Height > 0) {
+#ifdef DEBUG_INFO
+        LOG_ERROR("%s","BlitTexture: Region size must be > 0");
+#endif // DEBUG_INFO
 
-    VkDeviceSize totalSize = region.size;
 
-    // 1. 获取 staging buffer
-    auto staging = device->GetStagingManager()->Acquire(totalSize);
-    void* mapped = staging->Map(0, totalSize);
+    }
+    VulkanTexture* vkSrc = static_cast<VulkanTexture*>(src);
+    VulkanTexture* vkDst = static_cast<VulkanTexture*>(dst);
 
-    // 2. 拷贝 CPU 数据
-    memcpy(mapped, data, totalSize);
+    VkImage srcImage = vkSrc->GetImage();
+    VkImage dstImage = vkDst->GetImage();
 
-    // 3. 构造 CopyBuffer 区域
-    VkBufferCopy copyRegion{};
-    copyRegion.srcOffset = 0;
-    copyRegion.dstOffset = region.offset;
-    copyRegion.size = totalSize;
+    // =========================
+    // Layout 获取（注意对象别取错）
+    // =========================
+    auto srcImageLayout = queue->GetImageLayoutManager()
+        ->GetFullLayout(srcImage)
+        ->Get(blitDesc.SrcMipIndex, blitDesc.SrcArraySlice);
 
-    VulkanBuffer* vulkanBuffer = dynamic_cast<VulkanBuffer*>(buffer);
-    VulkanCommandBuffer* cmdBuffer =
-        commandBufferManager->GetActiveCommandBuffer();
+    auto dstImageLayout = queue->GetImageLayoutManager()
+        ->GetFullLayout(dstImage)
+        ->Get(blitDesc.DstMipIndex, blitDesc.DstArraySlice);
 
-    VKFunc::CmdCopyBuffer(
-        cmdBuffer->GetHandle(),
-        staging->GetHandle(),
-        vulkanBuffer->GetHandle(),
+    // =========================
+    // 基本校验（建议保留）
+    // =========================
+
+
+    // =========================
+    // VkImageBlit 构建
+    // =========================
+    VkImageBlit region{};
+
+    // ---- Src ----
+    region.srcSubresource.aspectMask = vkSrc->GetAspectFlags();
+    region.srcSubresource.mipLevel = blitDesc.SrcMipIndex;
+    region.srcSubresource.baseArrayLayer = blitDesc.SrcArraySlice;
+    region.srcSubresource.layerCount = 1;
+
+    region.srcOffsets[0] = {
+        blitDesc.SrcRegion.OffsetX,
+        blitDesc.SrcRegion.OffsetY,
+        blitDesc.SrcRegion.OffsetZ
+    };
+
+    region.srcOffsets[1] = {
+        blitDesc.SrcRegion.OffsetX + (int32_t)blitDesc.SrcRegion.Width,
+        blitDesc.SrcRegion.OffsetY + (int32_t)blitDesc.SrcRegion.Height,
+        blitDesc.SrcRegion.OffsetZ + (int32_t)(blitDesc.SrcRegion.Depth == 0 ? 1 : blitDesc.SrcRegion.Depth)
+    };
+
+    // ---- Dst ----
+    region.dstSubresource.aspectMask = vkDst->GetAspectFlags();
+    region.dstSubresource.mipLevel = blitDesc.DstMipIndex;
+    region.dstSubresource.baseArrayLayer = blitDesc.DstArraySlice;
+    region.dstSubresource.layerCount = 1;
+
+    region.dstOffsets[0] = {
+        blitDesc.DstRegion.OffsetX,
+        blitDesc.DstRegion.OffsetY,
+        blitDesc.DstRegion.OffsetZ
+    };
+
+    region.dstOffsets[1] = {
+        blitDesc.DstRegion.OffsetX + (int32_t)blitDesc.DstRegion.Width,
+        blitDesc.DstRegion.OffsetY + (int32_t)blitDesc.DstRegion.Height,
+        blitDesc.DstRegion.OffsetZ + (int32_t)(blitDesc.DstRegion.Depth == 0 ? 1 : blitDesc.DstRegion.Depth)
+    };
+
+    // =========================
+    // Filter 映射
+    // =========================
+    VkFilter vkFilter = VK_FILTER_LINEAR;
+    switch (blitDesc.Filter)
+    {
+    case ERHIFilter::Nearest:
+        vkFilter = VK_FILTER_NEAREST;
+        break;
+    case ERHIFilter::Linear:
+        vkFilter = VK_FILTER_LINEAR;
+        break;
+    default:
+        vkFilter = VK_FILTER_LINEAR;
+        break;
+    }
+
+    // =========================
+    // 提交命令
+    // =========================
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+
+    VKFunc::CmdBlitImage(
+        commandBuffer->GetHandle(),
+        srcImage,
+        srcImageLayout,
+        dstImage,
+        dstImageLayout,
         1,
-        &copyRegion
-    );
-
-    device->GetStagingManager()->ReleaseToCmdBuffer(cmdBuffer, staging);
-
+        &region,
+        vkFilter);
 }
+
 
 VulkanComputeContext* VulkanComputeContext::CastFrom(RHIComputeContext* context)
 {

@@ -28,6 +28,8 @@ public:
     void End() override;
     void BeginTransitions(std::vector<const RHITransition*> Transitions) override;
     void EndTransitions(std::vector<const RHITransition*> Transitions) override;
+    void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) override;
+    void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) override;
 
     VulkanQueue* GetQueue() const { return queue; }
     VulkanCommandBufferManager* GetCommandBufferManager() const { return commandBufferManager; }
@@ -39,20 +41,6 @@ protected:
     VulkanCommandBufferManager* commandBufferManager = nullptr;
     VulkanCommandBuffer* RecordedCommandBuffer = nullptr;
 
-};
-
-class RHIVULKAN_API VulkanTransferContext : public VulkanCommandContext, public RHI::RHITransferContext
-{
-public:
-    static VulkanTransferContext* CastFrom(RHITransferContext* context);
-
-    VulkanTransferContext(VulkanDevice* device, VulkanQueue* queue);
-    ~VulkanTransferContext() override = default;
-
-    void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc) override;
-    void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc) override;
-    void UpdateTexture(RHITexture* texture, const void* data, const RHITextureRegion& region) override;
-    void UpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region) override;
 };
 
 class RHIVULKAN_API VulkanComputeContext : public VulkanCommandContext, public RHI::RHIComputeContex

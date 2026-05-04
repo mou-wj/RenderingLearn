@@ -48,10 +48,8 @@ private:
 };
 
 enum class EPassFlag {
-    None,
     Graphic,
-    Compute,
-    Transfer
+    Compute
 };
 
 /**

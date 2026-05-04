@@ -115,7 +115,7 @@ public:
         }
         RHI::RHIComputeCommandList cmdList(computeContext);
 
-
+        RHICapture_SetNum(10);
 
         // ========================
         // 执行计算着色器 (4 次迭代)
@@ -332,7 +332,8 @@ private:
 
         csInput.Environment.VirtualIncludes["param_cs.hlsl"] = R"(
         Texture2D InputTexture : register(t0);
-        RWTexture2D<unorm float4> OutputTexture : register(u0);
+        [[vk::image_format("rgba8")]]
+        RWTexture2D<uint> OutputTexture : register(u0);
         RWStructuredBuffer<float4> InputBuffer : register(u1);
         RWStructuredBuffer<float4> OutputBuffer : register(u2);
 
@@ -424,7 +425,7 @@ private:
         cmdList.SetImmediate(true);
         cmdList.Begin();
         TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::CopyDest);
-        api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHITextureRegion::Create2DRegion(2, 2));
+        api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHIUpdateTextureRegion::Create2DRegion(2, 2));
         TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRVCompute);
         cmdList.End();
         cmdList.ExecuteAll();
@@ -436,7 +437,7 @@ private:
 
         // 创建 SRV
         RHI::RHITexSRVCreateInfo srvDesc;
-        srvDesc.FirstMipSlice = 1;
+        srvDesc.FirstMipSlice = 0;
         srvDesc.Format = RHI::ERHIFormat::R8G8B8A8_UNorm;
         TestTextureSRV = api->CreateTextureShaderResourceView(TestTexture.get(), srvDesc);
 

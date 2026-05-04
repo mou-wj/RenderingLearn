@@ -50,7 +50,7 @@ bool VulkanRHIApi::Init()
 	if (ValidFlag) {
 		return true;
 	}
-	RHICaptureHelper::GetInstance();
+	RHICaptureHelper::GetInstance().Init();
 	VKFunc::InitializeLoader();
 	GShaderPlatform = ERHIShaderPlatform::Vulkan;
     // 创建Vulkan实例
@@ -108,7 +108,7 @@ bool VulkanRHIApi::Init()
 	}
 #endif
 
-	RHI::RHICaptureHelper::GetInstance().Init();
+	//RHI::RHICaptureHelper::GetInstance().Init();
 	// 初始化Vulkan设备和其他资源
 	// 这里可以添加更多的初始化逻辑，如选择物理设备、创建逻辑设备等
 	PhysicalDevice = PickPhysicalDevice();
@@ -128,7 +128,6 @@ bool VulkanRHIApi::Init()
 		return false;
 	}
 	Device = device;
-
 	// 1. 确定头大小
 	uint32_t HeaderSize = sizeof(RHITransition);
 
@@ -155,7 +154,7 @@ void VulkanRHIApi::Shutdown()
 	if (!ValidFlag) {
 		return;
 	}
-
+	RHI::RHICaptureHelper::GetInstance().Shutdown();
 	ValidFlag = false;
 	RHI::RHIPipelineStateCache::ClearAll();
 
@@ -195,7 +194,7 @@ RHIBufferSP VulkanRHIApi::CreateBuffer(const RHIBufferDesc& desc)
 
 
 
-void VulkanRHIApi::UpdateTexture(RHICommandListBase& cmdList, RHITexture* texture, const void* data,const RHITextureRegion& region)
+void VulkanRHIApi::UpdateTexture(RHICommandListBase& cmdList, RHITexture* texture, const void* data,const RHIUpdateTextureRegion& region)
 {
 	if (!texture || !data)
 		return;
@@ -438,20 +437,6 @@ RHIQueue* VulkanRHIApi::GetQueue(EQueueType Type)
 		return Device ? Device->GetGraphicsQueue() : nullptr;
 	case EQueueType::Compute:
 		return Device ? (Device->GetComputeQueue() ? Device->GetComputeQueue() : Device->GetGraphicsQueue()) : nullptr;
-	case EQueueType::Transfer:
-		if (!Device)
-		{
-			return nullptr;
-		}
-		if (Device->GetTransferQueue())
-		{
-			return Device->GetTransferQueue();
-		}
-		if (Device->GetComputeQueue())
-		{
-			return Device->GetComputeQueue();
-		}
-		return Device->GetGraphicsQueue();
 	default:
 		return nullptr;
 	}
@@ -492,16 +477,6 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
 				return Device->GetComputeQueue()->GetFamilyIndex();
 			}
 			return Device->GetGraphicsQueue() ? Device->GetGraphicsQueue()->GetFamilyIndex() : VK_QUEUE_FAMILY_IGNORED;
-		case EQueueType::Transfer:
-			if (Device->GetTransferQueue())
-			{
-				return Device->GetTransferQueue()->GetFamilyIndex();
-			}
-			if (Device->GetComputeQueue())
-			{
-				return Device->GetComputeQueue()->GetFamilyIndex();
-			}
-			return Device->GetGraphicsQueue() ? Device->GetGraphicsQueue()->GetFamilyIndex() : VK_QUEUE_FAMILY_IGNORED;
 		default:
 			return VK_QUEUE_FAMILY_IGNORED;
 		}
@@ -535,11 +510,6 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
 			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::CopyDest) ||
 			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveSrc) ||
 			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveDst);
-
-		if (hasTransfer && !hasCompute && !hasGraphics)
-		{
-			return EQueueType::Transfer;
-		}
 
 		if (hasCompute && !hasGraphics)
 		{
@@ -679,6 +649,9 @@ VkPhysicalDevice VulkanRHIApi::PickPhysicalDevice() {
         if (GetVendorIdFromUint32(deviceProperties.vendorID) == preferredVendor) {
 			return device; // 返回第一个符合条件的设备
         }
+	}
+	if (!physicalDevices.empty()) {
+		return physicalDevices[0];
 	}
     return nullptr;
 

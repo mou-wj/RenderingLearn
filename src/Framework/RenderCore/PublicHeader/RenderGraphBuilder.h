@@ -185,6 +185,7 @@ protected:
         const ShaderParametersMetadata* Metadata,
         const void* Parameters);
     void ApplyFinalStates();
+    void ExecutaPasses();
 private:
     using PassList = std::list<RenderGraphPass*>; // Using std::list for pass management
     using PassListGroup = std::list<PassList>; // Group of passes for execution
@@ -240,10 +241,8 @@ private:
             return h;
         }
     };
-    std::unordered_map<TextureKey, RHI::ERHIResourceAccess, TextureKeyHasher> InitialTextureStates;
     std::unordered_map<TextureKey, RHI::ERHIResourceAccess, TextureKeyHasher> FinalTextureStates;
 
-    std::unordered_map<BufferKey, RHI::ERHIResourceAccess, BufferKeyHasher>   InitialBufferStates;
     std::unordered_map<BufferKey, RHI::ERHIResourceAccess, BufferKeyHasher>   FinalBufferStates;
 
     //

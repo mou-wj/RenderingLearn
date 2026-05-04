@@ -128,7 +128,6 @@ public:
 protected:
     friend class RenderGraphBuilder;
     std::string Name;
-    RenderGraphResource*  Parent;//关联的资源
 };
 
 class RENDERCORE_API RenderGraphSRV : public RenderGraphView{

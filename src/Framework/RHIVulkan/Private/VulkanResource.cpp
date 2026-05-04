@@ -26,12 +26,6 @@ static VulkanQueue* ResolveInitialQueue(VulkanDevice* device, EQueueType queueTy
         return device->GetGraphicsQueue();
     case EQueueType::Compute:
         return device->GetComputeQueue() ? device->GetComputeQueue() : device->GetGraphicsQueue();
-    case EQueueType::Transfer:
-        if (device->GetTransferQueue())
-        {
-            return device->GetTransferQueue();
-        }
-        return device->GetComputeQueue() ? device->GetComputeQueue() : device->GetGraphicsQueue();
     default:
         return device->GetGraphicsQueue();
     }
@@ -290,7 +284,7 @@ VulkanBuffer::VulkanBuffer(VulkanDevice* device, const RHIBufferDesc& desc, bool
 
     VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
     // Get memory requirements
-    if (externalAllocated) {
+    if (!externalAllocated) {
         VkMemoryRequirements memRequirements;
         VKFunc::GetBufferMemoryRequirements(vkDevice, Buffer, &memRequirements);
         // Allocate memory
@@ -695,8 +689,6 @@ void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, const RHI::RHIWaitIn
         case EQueueType::Compute:
             rhivkSyncPoint = Device->GetComputeQueue()->GetSyncPoint();
             break;
-        case EQueueType::Transfer:
-            rhivkSyncPoint = Device->GetTransferQueue()->GetSyncPoint();
         default:
             break;
         }
@@ -711,7 +703,7 @@ void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, const RHI::RHIWaitIn
     {
         // 【核心修改】：将 Timeline SyncPoint 桥接到一个 Binary Semaphore
         // 我们提交一个没有任何命令的空包，让它等待 Timeline 达到指定 Value，完成后触发一个 Binary Semaphore
-        auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(waitInfo.SyncPoint);
+        auto* vkSyncPoint = static_cast<VulkanRHISyncPoint*>(rhivkSyncPoint);
 
         // 从对象池或 Swapchain 预留的信号量中获取一个临时的 Binary Semaphore
         VulkanSemaphore* bridgeSemaphore = Device->GetSemaphoreManager()->Acquire(true);

@@ -98,8 +98,6 @@ void RenderTargetPool::GarbageCollect()
 {
 	auto graphicsQueueFrame = RHI::GRHIApi->GetQueue(EQueueType::Graphics)->GetCurrentTimelineValue(); // 需RHI支持此接口
 	auto computeQueueFrame = RHI::GRHIApi->GetQueue(EQueueType::Compute)->GetCurrentTimelineValue(); // 需RHI支持
-    auto copyQueueFrame = RHI::GRHIApi->GetQueue(EQueueType::Transfer)->GetCurrentTimelineValue(); // 需RHI
-
 
 	// 一次遍历，按队列类型和frame判断是否回收
 	auto it = AllocatedList.begin();
@@ -115,9 +113,6 @@ void RenderTargetPool::GarbageCollect()
 				break;
 			case EQueueType::Compute:
 				currentFrame = computeQueueFrame;
-				break;
-			case EQueueType::Transfer:
-				currentFrame = copyQueueFrame;
 				break;
 			default:
 				break;
@@ -195,7 +190,7 @@ RenderTexture* CreateTexture(const std::string& Path)
 
 		// 3. 调用 RHI 创建纹理
 		RHITextureSP texture = GRHIApi->CreateTexture(desc);
-		GRHIApi->UpdateTexture(commandList, texture.get(), pixels, RHITextureRegion::Create2DRegion(desc.Width,desc.Height));
+		GRHIApi->UpdateTexture(commandList, texture.get(), pixels, RHIUpdateTextureRegion::Create2DRegion(desc.Width,desc.Height));
 		outTexture = new RenderCore::RenderTexture(desc);
 		outTexture->InitRHIResource();
 		});
@@ -223,7 +218,6 @@ void TransientResourceAllocator::GarbageCollect()
 
 	uint64_t gfx = api->GetQueue(RHI::EQueueType::Graphics)->GetCurrentTimelineValue();
 	uint64_t compute = api->GetQueue(RHI::EQueueType::Compute)->GetCurrentTimelineValue();
-	uint64_t transfer = api->GetQueue(RHI::EQueueType::Transfer)->GetCurrentTimelineValue();
 
 	auto IsFenceDone = [&](const RHI::RHIFence& f)
 		{
@@ -233,7 +227,6 @@ void TransientResourceAllocator::GarbageCollect()
 			{
 			case RHI::EQueueType::Graphics: current = gfx; break;
 			case RHI::EQueueType::Compute:  current = compute; break;
-			case RHI::EQueueType::Transfer: current = transfer; break;
 			default: break;
 			}
 

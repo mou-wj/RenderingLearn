@@ -125,8 +125,7 @@ enum class ERHIAddressMode { Repeat, ClampToEdge, MirrorClampToEdge, MirrorRepea
 enum class EQueueType
 {
     Graphics,
-    Compute,
-    Transfer
+    Compute
 };
 
 struct RHIFence {
@@ -491,7 +490,7 @@ enum class ERHIShaderFrequency
         // 可扩展像素格式、VSync等
     };
 
-    struct RHI_API RHITextureRegion{
+    struct RHI_API RHIUpdateTextureRegion{
         uint32_t mipLevel = 0; // Mip级别
         uint32_t arraySlice = 0; // 数组切片
         uint32_t numMipLevels = 1; // 更新区域Mip级别数量
@@ -502,8 +501,8 @@ enum class ERHIShaderFrequency
         uint32_t width = 0; // 更新区域宽度
         uint32_t height = 0; // 更新区域高度
         uint32_t depth = 1; // 更新区域深度（3D纹理）
-        static RHITextureRegion Create2DRegion(uint32_t InWidth,uint32_t InHeight) {
-			RHITextureRegion region;
+        static RHIUpdateTextureRegion Create2DRegion(uint32_t InWidth,uint32_t InHeight) {
+            RHIUpdateTextureRegion region;
 			region.mipLevel = 0;
 			region.arraySlice = 0;
 			region.numMipLevels = 1;
@@ -689,6 +688,27 @@ enum class ERHIShaderFrequency
 
     };
 
+    struct RHITextureRegion
+    {
+        int32_t OffsetX = 0;
+        int32_t OffsetY = 0;
+        int32_t OffsetZ = 0;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+        uint32_t Depth = 0;
+
+
+        RHITextureRegion() = default;
+
+
+        RHITextureRegion(int32_t InSrcX, int32_t InSrcY, int32_t InSrcZ,
+            uint32_t InWidth, uint32_t InHeight, uint32_t InDepth)
+            : OffsetX(InSrcX), OffsetY(InSrcY), OffsetZ(InSrcZ),
+            Width(InWidth), Height(InHeight), Depth(InDepth)
+        {
+        }
+    };
+
     struct RHICopyTextureDesc {
         // 源 mip / array slice
         uint32_t SrcMipIndex = 0;
@@ -697,6 +717,9 @@ enum class ERHIShaderFrequency
         // 目标 mip / array slice
         uint32_t DstMipIndex = 0;
         uint32_t DstArraySlice = 0;
+        uint32_t LayerCount = 1;
+        RHITextureRegion SrcRegion;
+        RHITextureRegion DstRegion;
     };
 
     // 纹理Blit描述结构体
@@ -708,59 +731,12 @@ enum class ERHIShaderFrequency
         uint32_t Width = 0;
         uint32_t Height = 0;
         // 可扩展：滤波方式、区域、颜色空间等
+        ERHIFilter Filter = ERHIFilter::Linear;
+        RHITextureRegion SrcRegion;
+        RHITextureRegion DstRegion;
+
     };
 
-
-    struct RHIUpdateTextureRegion2D
-    {
-        uint32_t DestX = 0; // 目标纹理起始 X
-        uint32_t DestY = 0; // 目标纹理起始 Y
-        uint32_t SrcX = 0; // 源数据起始 X
-        uint32_t SrcY = 0; // 源数据起始 Y
-        uint32_t Width = 0; // 更新宽度
-        uint32_t Height = 0; // 更新高度
-
-
-        RHIUpdateTextureRegion2D() = default;
-
-
-        RHIUpdateTextureRegion2D(uint32_t InDestX, uint32_t InDestY,
-            uint32_t InSrcX, uint32_t InSrcY,
-            uint32_t InWidth, uint32_t InHeight)
-            : DestX(InDestX), DestY(InDestY),
-            SrcX(InSrcX), SrcY(InSrcY),
-            Width(InWidth), Height(InHeight)
-        {
-        }
-    };
-
-
-
-    struct RHIUpdateTextureRegion3D
-    {
-        uint32_t DestX = 0;
-        uint32_t DestY = 0;
-        uint32_t DestZ = 0;
-        uint32_t SrcX = 0;
-        uint32_t SrcY = 0;
-        uint32_t SrcZ = 0;
-        uint32_t Width = 0;
-        uint32_t Height = 0;
-        uint32_t Depth = 0;
-
-
-        RHIUpdateTextureRegion3D() = default;
-
-
-        RHIUpdateTextureRegion3D(uint32_t InDestX, uint32_t InDestY, uint32_t InDestZ,
-            uint32_t InSrcX, uint32_t InSrcY, uint32_t InSrcZ,
-            uint32_t InWidth, uint32_t InHeight, uint32_t InDepth)
-            : DestX(InDestX), DestY(InDestY), DestZ(InDestZ),
-            SrcX(InSrcX), SrcY(InSrcY), SrcZ(InSrcZ),
-            Width(InWidth), Height(InHeight), Depth(InDepth)
-        {
-        }
-    };
 
     enum class ERenderTargetLoadOp : uint8_t
     {
