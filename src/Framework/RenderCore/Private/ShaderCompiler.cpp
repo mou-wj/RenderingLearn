@@ -672,11 +672,25 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     // 5. ���� SPIR-V
     std::vector<uint32_t> spirv;
     glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
+    
     const uint32_t OpTypeImage = 25;
     auto StripImageFormat = [](std::vector<uint32_t>& spirv)
         {
             if (spirv.size() <= 5)
                 return;
+
+            //
+            const uint32_t OpCapability = 17;
+
+            // 在 header 后插入（第5个word后）
+            size_t insertPos = 5;
+
+            std::vector<uint32_t> capInst = {
+                (2 << 16) | OpCapability,
+                spv::CapabilityStorageImageWriteWithoutFormat // StorageImageWriteWithoutFormat enum
+            };
+            ;
+            spirv.insert(spirv.begin() + insertPos, capInst.begin(), capInst.end());
 
             // SPIR-V binary header is 5 words long:
             // magic, version, generator, bound, schema
@@ -695,7 +709,9 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
                 if (opcode == OpTypeImage && wc >= 9)
                 {
-                    spirv[i + 8] = 0; // Unknown
+                    if (spirv[i + 7] == 2) {
+                        spirv[i + 8] = 0; // Unknown
+                    }
                 }
 
                 i += wc;

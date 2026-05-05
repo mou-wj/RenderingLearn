@@ -333,7 +333,7 @@ private:
         csInput.Environment.VirtualIncludes["param_cs.hlsl"] = R"(
         Texture2D InputTexture : register(t0);
         [[vk::image_format("rgba8")]]
-        RWTexture2D<uint> OutputTexture : register(u0);
+        RWTexture2D<float4> OutputTexture : register(u0);
         RWStructuredBuffer<float4> InputBuffer : register(u1);
         RWStructuredBuffer<float4> OutputBuffer : register(u2);
 

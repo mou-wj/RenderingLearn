@@ -1,5 +1,6 @@
 {
   "name": "RenderDoc",
+  "ignore": false,
   "type": "prebuilt",
   "config_type": "manual",
   "install_layout": {

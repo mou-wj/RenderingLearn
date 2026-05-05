@@ -247,6 +247,9 @@ def main():
     
     for name in order:
         meta = name_to_meta[name]
+        ignore = meta.get("ignore", False)
+        if ignore: 
+            continue
         lib_type = meta.get("type", "source")
         print(f"\n>>> Processing: {name} ({lib_type})")
         

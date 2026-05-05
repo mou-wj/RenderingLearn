@@ -1,13 +1,13 @@
 {
-  "name": "tinygltf",
+  "name": "SPIRV-Cross",
   "ignore": false,
   "type": "source",
   "config_type": "cmake_config",
   "source_type": "git",
   "build_timing": "pre_build",
   "source": {
-    "git": "https://github.com/syoyo/tinygltf.git",
-    "branch": "release"
+    "git": "https://github.com/KhronosGroup/SPIRV-Cross.git",
+    "branch": "main"
   },
   "compiler": {
     "windows": {
@@ -28,17 +28,19 @@
   },
   "build_config": {
     "configure_args": [
-      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/tinygltf/${CONFIG}",
-      "-DTINYGLTF_BUILD_EXAMPLES=OFF",
-      "-DTINYGLTF_BUILD_LOADER_EXAMPLE=OFF"
+      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/spirv-cross/${CONFIG}",
+      "-DSPIRV_CROSS_SHARED=ON",
+      "-DSPIRV_CROSS_CLI=OFF"
     ],
     "cmake_options": {}
   },
   "install_layout": {
-    "root": "${INSTALL_DIR}/tinygltf/${CONFIG}",
-    "include": "include",
+    "root": "${INSTALL_DIR}/spirv-cross/${CONFIG}",
+    "include": "include/spirv_cross",
     "lib": "lib",
     "bin": "bin"
   },
-  "dependencies": []
+  "dependencies": [
+    "SPIRV-Tools"
+  ]
 }
