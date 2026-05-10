@@ -115,14 +115,16 @@ namespace RenderCore {
         // --------- RenderCore 层的 Shader Parameter Binding ---------
         struct RENDERCORE_API ShaderUniformBinding
         {
-            EShaderUniformBaseType BaseType; // Float, Int, Bool 等基础类型
-            uint32_t Offset;                 // 在统一 buffer 中的偏移
+            EShaderParameterBaseType BaseType; // Float, Int, Bool 等基础类型
+            uint32_t BufferIndex;              // 所属 UniformBuffer 索引
+            uint32_t BaseIndex;                // GPU binding 中的索引
+            uint32_t Offset;                 // 在统一 CPU buffer 中的偏移
             uint32_t Size;                   // 字节大小
         };
 
         struct RENDERCORE_API ShaderResourceBinding
         {
-            EShaderUniformBaseType BaseType; // Texture / Buffer / UAV / Sampler
+            EShaderParameterBaseType BaseType; // Texture / Buffer / UAV / Sampler
             uint16_t BindSlot;               // GPU绑定槽
             uint16_t ArraySize = 1;          // 支持数组
             uint32_t Offset;

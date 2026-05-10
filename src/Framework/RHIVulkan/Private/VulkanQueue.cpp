@@ -117,8 +117,9 @@ void VulkanQueue::GarbageCollect()
                 cmd->MarkState(VulkanCommandBuffer::NeedRecycle);
             }
             PendingInfos.pop();
+            continue;
         }
-
+        break;
     }
 }
 

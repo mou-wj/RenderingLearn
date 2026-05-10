@@ -30,13 +30,15 @@ public:
 class RENDERCORE_API GlobalShaderMap {
 public:
     // 获取一个已编译的 Shader 实例
-    ShaderSP GetShader(ShaderType* shaderType, ShaderPermutationId id);
+    Shader* GetShader(ShaderType* shaderType, ShaderPermutationId id);
 
     /**
      * 初始化：遍历所有注册为 Global 的 ShaderType，并触发编译/加载
      * 建议在引擎初始化 RHI 后调用
      */
     bool Initialize();
+
+	void Clear();
 
 private:
     bool IsInitialized = false;

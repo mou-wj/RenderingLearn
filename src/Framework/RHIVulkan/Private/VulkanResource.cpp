@@ -228,10 +228,10 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
 
     // --- 6. 拷贝路径 ---
     // 如果资源的主要意图是作为拷贝目标（例如上传贴图数据）
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopyDest))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::TransferDest))
     {
         OutLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        OutAccess = ERHIResourceAccess::CopyDest;
+        OutAccess = ERHIResourceAccess::TransferDest;
         return;
     }
 
@@ -246,10 +246,10 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     }
 
     // --- 8. 拷贝源 ---
-    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopySrc))
+    if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::TransferSrc))
     {
         OutLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        OutAccess = ERHIResourceAccess::CopySrc;
+        OutAccess = ERHIResourceAccess::TransferSrc;
         return;
     }
 
@@ -801,7 +801,7 @@ void VulkanRHISwapchain::CreateSwapchain()
     ERHITextureType Type = ERHITextureType::Texture2D;   // 纹理类型
     uint32_t SampleCount = 1;            // 多重采样数量
     uint32_t SampleQuality = 0;          // 多重采样质量
-    textureDesc.Usage = ERHITextureCreateFlag::RenderTarget | ERHITextureCreateFlag::Presentable; // 纹理用途
+    textureDesc.Usage = ERHITextureCreateFlag::RenderTarget | ERHITextureCreateFlag::Presentable | ERHITextureCreateFlag::TransferDest | ERHITextureCreateFlag::TransferSrc; // 纹理用途
     auto imageCount = swapchainImages_.size();
     for (int i = 0; i < imageCount; i++) {
 
@@ -1079,5 +1079,87 @@ VulkanLooseUniformDataUploader::~VulkanLooseUniformDataUploader()
     delete CPUBuffer;
 }
 
+
+VulkanSampler::VulkanSampler(VulkanDevice* device, const RHISamplerDesc& desc) : RHISampler(desc), Device(device)
+{
+    VkSamplerCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+
+    // =========================================
+    // Filtering
+    // =========================================
+
+    info.magFilter = TransformFilter(desc.filter);
+    info.minFilter = TransformFilter(desc.filter);
+
+    info.mipmapMode = GetMipmapMode(desc.filter);
+
+    // =========================================
+    // Address Modes
+    // =========================================
+
+    info.addressModeU = TransformAddressMode(desc.addressU);
+    info.addressModeV = TransformAddressMode(desc.addressV);
+    info.addressModeW = TransformAddressMode(desc.addressW);
+
+    // =========================================
+    // LOD
+    // =========================================
+
+    info.mipLodBias = desc.mipLodBias;
+
+    info.minLod = desc.minLod;
+    info.maxLod = desc.maxLod;
+
+    // =========================================
+    // Anisotropy
+    // =========================================
+
+    info.anisotropyEnable =
+        desc.anisotropyEnable ? VK_TRUE : VK_FALSE;
+
+    info.maxAnisotropy = desc.maxAnisotropy;
+
+    // =========================================
+    // Depth Compare
+    // =========================================
+
+    info.compareEnable =
+        desc.CompareEnable ? VK_TRUE : VK_FALSE;
+
+    info.compareOp =
+        TransformCompareOp(desc.CompareOp);
+
+    // =========================================
+    // Border Color
+    // =========================================
+
+    info.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+
+    // =========================================
+    // Coordinates
+    // =========================================
+
+    info.unnormalizedCoordinates = VK_FALSE;
+
+    // =========================================
+    // Create
+    // =========================================
+
+
+    bool suc = VKFunc::CreateSampler(Device->GetHandle(), &info, &Sampler);
+	if (!suc) {
+		LOG_ERROR("Failed to create Vulkan sampler");
+	}
+
+}
+
+VulkanSampler::~VulkanSampler()
+{
+    if (Sampler != VK_NULL_HANDLE) {
+		Device->EnqueueSamplerForDeletion(Sampler);
+    }
+
+}
 
 }

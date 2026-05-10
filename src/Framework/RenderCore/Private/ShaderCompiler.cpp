@@ -221,10 +221,10 @@ namespace RenderCore {
 
             switch (member.BaseType)
             {
-            case EShaderUniformBaseType::Float32: base = "float"; break;
-            case EShaderUniformBaseType::Int32:   base = "int";   break;
-            case EShaderUniformBaseType::UInt32:  base = "uint";  break;
-            case EShaderUniformBaseType::Bool:    base = "bool";  break;
+            case EShaderParameterBaseType::Float32: base = "float"; break;
+            case EShaderParameterBaseType::Int32:   base = "int";   break;
+            case EShaderParameterBaseType::UInt32:  base = "uint";  break;
+            case EShaderParameterBaseType::Bool:    base = "bool";  break;
             default: return "float";
             }
 
@@ -248,20 +248,20 @@ namespace RenderCore {
             None
         };
 
-        EResourceBindClass GetResourceClass(EShaderUniformBaseType type)
+        EResourceBindClass GetResourceClass(EShaderParameterBaseType type)
         {
             switch (type)
             {
-            case EShaderUniformBaseType::Texture:
-            case EShaderUniformBaseType::Texture_SRV:
-            case EShaderUniformBaseType::Buffer_SRV:
+            case EShaderParameterBaseType::RDGTexture:
+            case EShaderParameterBaseType::RDGTexture_SRV:
+            case EShaderParameterBaseType::RDGBuffer_SRV:
                 return EResourceBindClass::SRV;
 
-            case EShaderUniformBaseType::Texture_UAV:
-            case EShaderUniformBaseType::Buffer_UAV:
+            case EShaderParameterBaseType::RDGTexture_UAV:
+            case EShaderParameterBaseType::RDGBuffer_UAV:
                 return EResourceBindClass::UAV;
 
-            case EShaderUniformBaseType::Sampler:
+            case EShaderParameterBaseType::RHISampler:
                 return EResourceBindClass::Sampler;
 
             default:
@@ -273,20 +273,20 @@ namespace RenderCore {
         {
             switch (member.BaseType)
             {
-            case EShaderUniformBaseType::Texture:
-            case EShaderUniformBaseType::Texture_SRV:
+            case EShaderParameterBaseType::RDGTexture:
+            case EShaderParameterBaseType::RDGTexture_SRV:
                 return "Texture2D";
 
-            case EShaderUniformBaseType::Texture_UAV:
+            case EShaderParameterBaseType::RDGTexture_UAV:
                 return "RWTexture2D<float4>";
 
-            case EShaderUniformBaseType::Sampler:
+            case EShaderParameterBaseType::RHISampler:
                 return "SamplerState";
 
-            case EShaderUniformBaseType::Buffer_SRV:
+            case EShaderParameterBaseType::RDGBuffer_SRV:
                 return "Buffer<float4>";
 
-            case EShaderUniformBaseType::Buffer_UAV:
+            case EShaderParameterBaseType::RDGBuffer_UAV:
                 return "RWBuffer<float4>";
 
             default:
@@ -302,8 +302,6 @@ struct SPIRVPackSource {
 	spirv_cross::Compiler *compiler;
     ERHIShaderFrequency frequency;
     std::string entryPoint;
-    int globalUniformBufferBinding = -1;
-    int globalUniformBufferSet = -1;
 };
 
 std::string ShaderCompiler::ShaderSourceDirectory = "";
@@ -521,7 +519,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     out.Platform = ERHIShaderPlatform::Vulkan;
     out.Success = false;
     out.PackedBinaryData.clear();
-
+    //LOG_INFO("%s", preprocessedSource.c_str());
     // 1. ӳ�� Shader Stage
     EShLanguage stage;
     std::string setId = "0";
@@ -754,8 +752,6 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     spirv_cross::Compiler compiler(spirv);
     spirv_cross::ShaderResources resourcesSC = compiler.get_shader_resources();
 
-    int globalUniformBufferIndex = -1;
-    int globalUniformBufferSet = -1;
     // ---------- Uniform Buffers ----------
     for (const auto& ub : resourcesSC.uniform_buffers)
     {
@@ -775,22 +771,13 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         // ============================================================
         // ⭐ 1. 记录整个 UniformBuffer（Descriptor 用）
         // ============================================================
-        if (!bIsLooseDataBlock)
-        {
-            out.ParameterMap.AddParameterAllocation(
-                bufferName,
-                static_cast<uint16_t>(set),       // UE语义：BufferIndex=Set
-                static_cast<uint16_t>(binding),   // BaseIndex=Binding
-                static_cast<uint16_t>(bufferSize),
-                EShaderParameterType::UniformBuffer
-            );
-        }
-        else
-        {
-            // 记录 global UB binding（可选）
-            globalUniformBufferIndex = static_cast<int>(binding);
-            globalUniformBufferSet = static_cast<int>(set);
-        }
+        out.ParameterMap.AddParameterAllocation(
+            bufferName,
+            static_cast<uint16_t>(set),       // UE语义：BufferIndex=Set
+            static_cast<uint16_t>(binding),   // BaseIndex=Binding
+            static_cast<uint16_t>(bufferSize),
+            EShaderParameterType::UniformBuffer
+        );
 
         // ============================================================
         // ⭐ 2. 展开所有成员（关键！！！）
@@ -961,8 +948,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 	packSource.spirvCode = &spirv;
     packSource.frequency = input.Frequency;
     packSource.entryPoint = input.EntryPoint;
-    packSource.globalUniformBufferBinding = globalUniformBufferIndex;
-    packSource.globalUniformBufferSet = globalUniformBufferSet;
+
 	SPIRVCompiledBinaryResultPacker packer;
 	std::vector<char> packedData;
 
@@ -1057,9 +1043,13 @@ void SPIRVCompiledBinaryResultPacker::Depack(const std::vector<char>& packedResu
     {
         read(&DepackedData.header.PushConstant, sizeof(PushConstantInfo));
     }
-
-    read(&DepackedData.header.GlobalUniformBufferBinding, sizeof(int));
-	read(&DepackedData.header.GlobalUniformBufferSet, sizeof(int));
+    uint32_t uniformBufferCount = 0;
+    read(&uniformBufferCount, sizeof(uint32_t));
+    DepackedData.header.UniformBufferBindings.resize(uniformBufferCount);
+    for (uint32_t i = 0; i < uniformBufferCount; ++i)
+    {
+        read(&DepackedData.header.UniformBufferBindings[i], sizeof(UniformBufferBindingInfo));
+    }
 }
 bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& packedResultOut)
 {
@@ -1117,8 +1107,25 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
             {
                 strncpy(info.Name, name.c_str(), sizeof(info.Name));
             }
+            if (type != ESPIRVShaderResourceType::UniformBuffer) {
+                DepackedData.header.DescriptorBindings.push_back(info);
+            }
+            else {
+                UniformBufferBindingInfo uniBinding;
+                uniBinding.Binding = info.Binding;
+                uniBinding.Set = info.Set;
+                if (name.empty()) {
+                    name = compiler->get_name(res.base_type_id); // fallback ($Globals)
+                }
+                strncpy(uniBinding.Name, name.c_str(), sizeof(uniBinding.Name));
+                const spirv_cross::SPIRType& type =
+                    compiler->get_type(res.base_type_id);
 
-            DepackedData.header.DescriptorBindings.push_back(info);
+                uniBinding.Size =
+                    (uint32_t)compiler->get_declared_struct_size(type);
+				DepackedData.header.UniformBufferBindings.push_back(uniBinding);
+            }
+
         };
 
     // =========================
@@ -1256,11 +1263,13 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
     {
         write(&DepackedData.header.PushConstant, sizeof(PushConstantInfo));
     }
-
-    DepackedData.header.GlobalUniformBufferBinding = src->globalUniformBufferBinding;
-	DepackedData.header.GlobalUniformBufferSet = src->globalUniformBufferSet;
-    write(&DepackedData.header.GlobalUniformBufferBinding, sizeof(int));
-    write(&DepackedData.header.GlobalUniformBufferSet, sizeof(int));
+    uint32_t uniformBufferCount =
+        (uint32_t)DepackedData.header.UniformBufferBindings.size();
+    write(&uniformBufferCount, sizeof(uint32_t));
+    for (auto& b : DepackedData.header.UniformBufferBindings)
+    {
+        write(&b, sizeof(UniformBufferBindingInfo));
+    }
     return true;
 }
 } // namespace RenderCore

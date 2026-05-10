@@ -13,27 +13,6 @@
 namespace RHI
 {
 
-    enum class EShaderUniformBaseType {
-        Unknown = 0,
-        Float32,
-        Int32,
-        UInt32,
-        Bool,
-        // 可根据需要扩展更多类型
-        Texture,
-        Texture_SRV,
-        Texture_UAV,
-        Buffer,
-        Buffer_SRV,
-        Buffer_UAV,
-        Sampler,
-        ColorBindings,
-        //
-        Struct//结构体类型，内部可以含有其他类型数据
-    };
-
-// 常
-
 // 常用的图形格式
 enum class ERHIFormat
 {
@@ -85,7 +64,7 @@ enum class ERHIResourceAccess
     VertexOrIndexBuffer = 1 << 4, // 顶点或索引缓冲区读取
     SRVGraphics = 1 << 5,  // 图形着色器 (VS/PS/etc.) 采样或读取
     SRVCompute = 1 << 6,  // 计算着色器读取
-    CopySrc = 1 << 7,  // 拷贝操作的源 (Transfer Src)
+    TransferSrc = 1 << 7,  // 拷贝操作的源 (Transfer Src)
     ResolveSrc = 1 << 8,  // 多重采样 Resolve 的源
     DSVRead = 1 << 9,  // 深度/模板只读测试 (Depth Read Only)
     ShadingRateSource = 1 << 10, // 可变速率着色掩码图
@@ -94,7 +73,7 @@ enum class ERHIResourceAccess
     UAVGraphics = 1 << 11, // 图形管线随机读写 (Storage Image/Buffer)
     UAVCompute = 1 << 12, // 计算管线随机读写
     RenderTargetView = 1 << 13, // 颜色附件写入
-    CopyDest = 1 << 14, // 拷贝操作的目的 (Transfer Dst)
+    TransferDest = 1 << 14, // 拷贝操作的目的 (Transfer Dst)
     ResolveDst = 1 << 15, // 多重采样 Resolve 的目的
     DSVWrite = 1 << 16, // 深度/模板写入
 
@@ -107,13 +86,13 @@ enum class ERHIResourceAccess
     UAVMask = UAVGraphics | UAVCompute,
 
     // 排他性只读掩码（这些状态通常不与写入状态并存）
-    ReadOnlyExclusiveMask = CPURead | Present | IndirectArgs | VertexOrIndexBuffer | SRVMask | CopySrc | ResolveSrc | BVHRead,
+    ReadOnlyExclusiveMask = CPURead | Present | IndirectArgs | VertexOrIndexBuffer | SRVMask | TransferSrc | ResolveSrc | BVHRead,
 
     // 可读状态掩码（包含 UAV）
     ReadableMask = ReadOnlyExclusiveMask | DSVRead | UAVMask,
 
     // 可写状态掩码
-    WritableMask = RenderTargetView | UAVMask | DSVWrite | CopyDest | ResolveDst | BVHWrite
+    WritableMask = RenderTargetView | UAVMask | DSVWrite | TransferDest | ResolveDst | BVHWrite
 };
 // 使用宏
 ENUM_CLASS_FLAGS(ERHIResourceAccess, ERHIResourceAccessFlags);
@@ -250,9 +229,9 @@ enum class ERHIShaderFrequency
         CPUReadback = 1ull << 6,  // CPU 需读取 (Host Visible)
         Memoryless = 1ull << 7,  // 仅存在于 Tile Memory (手机端优化)
 
-        // 拷贝属性
-        CopySrc = 1ull << 8,  // 可作为拷贝源
-        CopyDest = 1ull << 9,  // 可作为拷贝目的
+        // 拷贝 | blit 属性
+        TransferSrc = 1ull << 8,  // 可作为拷贝 | blit源
+        TransferDest = 1ull << 9,  // 可作为拷贝 | blit目的
     };
     // 使用宏
     
@@ -335,12 +314,12 @@ enum class ERHIShaderFrequency
         ERHIBufferUsageFlags Usage = ERHIBufferUsageFlag::None; // 视图用途
     };
 
+    enum class ERHICompareOp { Never, Less, Equal, LessOrEqual, Greater, NotEqual, GreaterOrEqual, Always };
 
     //采样器相关描述
     struct RHI_API RHISamplerDesc
     {
-        ERHIFilter magFilter = ERHIFilter::Linear;
-        ERHIFilter minFilter = ERHIFilter::Linear;
+        ERHIFilter filter = ERHIFilter::Linear;
         ERHIAddressMode addressU = ERHIAddressMode::Repeat;
         ERHIAddressMode addressV = ERHIAddressMode::Repeat;
         ERHIAddressMode addressW = ERHIAddressMode::Repeat;
@@ -350,6 +329,10 @@ enum class ERHIShaderFrequency
         bool anisotropyEnable = false;
         float maxAnisotropy = 1.0f;
         // 可扩展border color、compare op等
+        bool CompareEnable = false;
+
+        ERHICompareOp CompareOp = ERHICompareOp::LessOrEqual;
+
     };
 
 
@@ -412,7 +395,6 @@ enum class ERHIShaderFrequency
         // 可扩展logicOp
     };
 
-    enum class ERHICompareOp { Never, Less, Equal, LessOrEqual, Greater, NotEqual, GreaterOrEqual, Always };
 
 
     struct RHI_API RHIDepthStencilStateDesc
@@ -728,8 +710,7 @@ enum class ERHIShaderFrequency
         uint32_t SrcArraySlice = 0;
         uint32_t DstMipIndex = 0;
         uint32_t DstArraySlice = 0;
-        uint32_t Width = 0;
-        uint32_t Height = 0;
+        uint32_t LayerCount = 1;
         // 可扩展：滤波方式、区域、颜色空间等
         ERHIFilter Filter = ERHIFilter::Linear;
         RHITextureRegion SrcRegion;

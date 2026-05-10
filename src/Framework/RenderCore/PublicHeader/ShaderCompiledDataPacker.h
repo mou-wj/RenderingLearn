@@ -42,6 +42,14 @@ namespace RenderCore {
             char Name[32] = {};
         };
 
+        struct UniformBufferBindingInfo 
+        {
+			uint16_t Set = 0;
+			uint16_t Binding = 0;
+			uint16_t Size = 0;
+			char Name[32] = {};
+        };
+
         struct PushConstantInfo
         {
             uint16_t Size = 0;
@@ -58,8 +66,7 @@ namespace RenderCore {
             std::vector<DescriptorBindingInfo> DescriptorBindings;
             bool HasPushConstant = false;
             PushConstantInfo PushConstant;
-            int GlobalUniformBufferBinding = -1;
-            int GlobalUniformBufferSet = -1;
+            std::vector<UniformBufferBindingInfo> UniformBufferBindings;
         };
 
         struct PackedCode {

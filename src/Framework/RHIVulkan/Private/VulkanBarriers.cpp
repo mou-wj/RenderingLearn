@@ -87,7 +87,7 @@ namespace RHIVulkan {
 			OutAccessMask |= VK_ACCESS_SHADER_READ_BIT;
 			OutStageMask |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 		}
-		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::CopySrc))
+		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::TransferSrc))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 			OutAccessMask |= VK_ACCESS_TRANSFER_READ_BIT;
@@ -120,7 +120,7 @@ namespace RHIVulkan {
 			OutAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			OutStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 		}
-		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::CopyDest))
+		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::TransferDest))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 			OutAccessMask |= VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -588,12 +588,12 @@ namespace RHIVulkan {
 		}
 
 		// 6. 拷贝/传输状态
-		if (EnumHasAnyFlags(access, ERHIResourceAccess::CopyDest))
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::TransferDest))
 		{
 			return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 		}
 
-		if (EnumHasAnyFlags(access, ERHIResourceAccess::CopySrc))
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::TransferSrc))
 		{
 			return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 		}

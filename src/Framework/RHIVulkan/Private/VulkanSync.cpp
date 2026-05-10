@@ -90,7 +90,7 @@ namespace RHIVulkan{
     VulkanSemaphore::~VulkanSemaphore()
     {
         if (semaphore_ != VK_NULL_HANDLE) {
-            VKFunc::DestroySemaphore(device_->GetHandle(), semaphore_);
+            device_->EnqueueSemaphoreForDeletion(semaphore_);
             semaphore_ = VK_NULL_HANDLE;
         }
     }

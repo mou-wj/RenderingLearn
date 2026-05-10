@@ -2,6 +2,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "RHIDefine.h"
 
 namespace RenderCore {
 
@@ -176,4 +177,23 @@ namespace RenderCore {
     };
 
 
+    enum class EShaderParameterBaseType {
+        Unknown = 0,
+        Float32,
+        Int32,
+        UInt32,
+        Bool,
+        // 可根据需要扩展更多类型
+        RDGTexture,
+        RDGTexture_SRV,
+        RDGTexture_UAV,
+        RDGBuffer,
+        RDGBuffer_SRV,
+        RDGBuffer_UAV,
+        RHISampler,
+        ColorBindings,
+        //
+        Struct//结构体类型，内部可以含有其他类型数据
+    };
+    
 }

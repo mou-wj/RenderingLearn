@@ -137,7 +137,7 @@ namespace RenderCore {
 
         auto rdgTex = CreateTexture(name, desc);
 
-        rdgTex->SetRHITexture(rhiTex);
+        rdgTex->Resource = rhiTex;
         rdgTex->IsExternal = true;
 
         // 👉 建立映射
@@ -171,7 +171,7 @@ namespace RenderCore {
 
         auto rdgTex = CreateTexture(name, desc);
 
-        rdgTex->SetRHITexture(rhiTex);
+        rdgTex->Resource = rhiTex;
         rdgTex->IsExternal = true;
 
         RDGToRHITexture[rdgTex] = rhiTex;
@@ -205,7 +205,7 @@ namespace RenderCore {
 
         auto rdgBuf = CreateBuffer(name, desc);
 
-        rdgBuf->SetRHIBuffer(rhiBuf);
+        rdgBuf->Resource = rhiBuf;
         rdgBuf->IsExternal = true;
 
         RDGToRHIBuffer[rdgBuf] = rhiBuf;
@@ -382,23 +382,24 @@ namespace RenderCore {
                 }
 
                 // ===== Barrier =====
+                if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
+                {
+                    RHI::RHITransitionInfo Transition{};
+                    Transition.Type = RHI::RHITransitionInfo::EType::Texture;
+                    Transition.AccessBefore = State.LastAccess;
+                    Transition.AccessAfter = Intent.RequiredAccess;
+
+                    // ✅ RDG层信息
+                    static_cast<RHI::RHISubresourceRange>(Transition) = Intent.SubresourceRange;
+
+                    Pass->BeginBarrier.AddTransition(Intent.Texture, Transition);
+
+
+                }
                 if (State.LastVisitor && State.LastVisitor != Pass)
                 {
-                    if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
-                    {
-                        RHI::RHITransitionInfo Transition{};
-                        Transition.Type = RHI::RHITransitionInfo::EType::Texture;
-                        Transition.AccessBefore = State.LastAccess;
-                        Transition.AccessAfter = Intent.RequiredAccess;
-
-                        // ✅ RDG层信息
-                        static_cast<RHI::RHISubresourceRange>(Transition) = Intent.SubresourceRange;
-
-                        Pass->BeginBarrier.AddTransition(Intent.Texture, Transition);
-
-                        State.LastVisitor->PassConsumers.push_back(Pass);
-                        Pass->PassProducers.push_back(State.LastVisitor);
-                    }
+                    State.LastVisitor->PassConsumers.push_back(Pass);
+                    Pass->PassProducers.push_back(State.LastVisitor);
                 }
 
                 State.LastVisitor = Pass;
@@ -437,20 +438,19 @@ namespace RenderCore {
                 }
 
                 // ===== Barrier =====
+                if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
+                {
+                    RHI::RHITransitionInfo Transition{};
+                    Transition.Type = RHI::RHITransitionInfo::EType::Buffer;
+                    Transition.AccessBefore = State.LastAccess;
+                    Transition.AccessAfter = Intent.RequiredAccess;
+
+                    Pass->BeginBarrier.AddTransition(Intent.Buffer, Transition);
+                }
                 if (State.LastVisitor && State.LastVisitor != Pass)
                 {
-                    if (NeedBarrier(State.LastAccess, Intent.RequiredAccess))
-                    {
-                        RHI::RHITransitionInfo Transition{};
-                        Transition.Type = RHI::RHITransitionInfo::EType::Buffer;
-                        Transition.AccessBefore = State.LastAccess;
-                        Transition.AccessAfter = Intent.RequiredAccess;
-
-                        Pass->BeginBarrier.AddTransition(Intent.Buffer, Transition);
-
-                        State.LastVisitor->PassConsumers.push_back(Pass);
-                        Pass->PassProducers.push_back(State.LastVisitor);
-                    }
+                    State.LastVisitor->PassConsumers.push_back(Pass);
+                    Pass->PassProducers.push_back(State.LastVisitor);
                 }
 
                 State.LastVisitor = Pass;
@@ -584,7 +584,7 @@ namespace RenderCore {
                 LT.EndPassIndex
             );
             InternalTextureViewCaches[rhiTex->GetRHI()] = &rhiTex->GetViewCache(); // 内部资源创建独立 view cache
-            tex->SetRHITexture(rhiTex->GetRHI());
+            tex->Resource = rhiTex->GetRHI();
 
         }
 
@@ -616,7 +616,7 @@ namespace RenderCore {
                 LT.EndPassIndex
             );
             InternalBufferViewCaches[rhiBuf->GetRHI()] = &rhiBuf->GetViewCache();
-            buf->SetRHIBuffer(rhiBuf->GetRHI());
+            buf->Resource = rhiBuf->GetRHI();
         }
 
         //view
@@ -626,7 +626,7 @@ namespace RenderCore {
         for (auto& [name, srv] : TextureSRVCache)
         {
             if (!srv) continue;
-            if (srv->RHIShaderResourceView) continue;
+            if (srv->Resource) continue;
             RenderGraphTexture* parent = srv->Desc.Texture;
             RHI::RHITexture* parentRHI = parent->GetRHITexture();
             TextureViewCache* viewCache = nullptr;
@@ -638,7 +638,7 @@ namespace RenderCore {
             }
             RHI::RHITexSRVCreateInfo info = static_cast<RHI::RHITexSRVCreateInfo>(srv->Desc);
             auto rhi = viewCache->GetOrCreateSRV(parentRHI, info);
-            srv->RHIShaderResourceView = rhi;
+            srv->Resource = rhi;
         }
 
         // =========================
@@ -647,7 +647,7 @@ namespace RenderCore {
         for (auto& [name, uav] : TextureUAVCache)
         {
             if (!uav) continue;
-            if (uav->RHIUnorderedAccessView) continue;
+            if (uav->Resource) continue;
             RenderGraphTexture* parent = uav->Desc.Texture;
             RHI::RHITexture* parentRHI = parent->GetRHITexture();
             TextureViewCache* viewCache = nullptr;
@@ -659,7 +659,7 @@ namespace RenderCore {
             }
             RHI::RHITexUAVCreateInfo info = static_cast<RHI::RHITexUAVCreateInfo>(uav->Desc);
             auto rhi = viewCache->GetOrCreateUAV(parentRHI, info);
-            uav->RHIUnorderedAccessView = rhi;
+            uav->Resource = rhi;
         }
 
         // =========================
@@ -668,7 +668,7 @@ namespace RenderCore {
         for (auto& [name, srv] : BufferSRVCache)
         {
             if (!srv) continue;
-            if (srv->RHIShaderResourceView) continue;
+            if (srv->Resource) continue;
             RenderGraphBuffer* parent = srv->Desc.Buffer;
             RHI::RHIBuffer* parentRHI = parent->GetRHIBuffer();
             BufferViewCache* viewCache = nullptr;
@@ -680,7 +680,7 @@ namespace RenderCore {
             }
             RHI::RHIBufferSRVCreateInfo info = static_cast<RHI::RHIBufferSRVCreateInfo>(srv->Desc);
             auto rhi = viewCache->GetOrCreateSRV(parentRHI, info);
-            srv->RHIShaderResourceView = rhi;
+            srv->Resource = rhi;
         }
 
         // =========================
@@ -689,7 +689,7 @@ namespace RenderCore {
         for (auto& [name, uav] : BufferUAVCache)
         {
             if (!uav) continue;
-            if (uav->RHIUnorderedAccessView) continue;
+            if (uav->Resource) continue;
             RenderGraphBuffer* parent = uav->Desc.Buffer;
             RHI::RHIBuffer* parentRHI = parent->GetRHIBuffer();
             BufferViewCache* viewCache = nullptr;
@@ -701,7 +701,7 @@ namespace RenderCore {
             }
             RHI::RHIBufferUAVCreateInfo info = static_cast<RHI::RHIBufferUAVCreateInfo>(uav->Desc);
             auto rhi = viewCache->GetOrCreateUAV(parentRHI, info);
-            uav->RHIUnorderedAccessView = rhi;
+            uav->Resource = rhi;
         }
 
     }
@@ -722,7 +722,7 @@ namespace RenderCore {
                 // ============================
                 // Texture SRV
                 // ============================
-                if (Member.BaseType == EShaderUniformBaseType::Texture_SRV)
+                if (Member.BaseType == EShaderParameterBaseType::RDGTexture_SRV)
                 {
                     auto SRV = *reinterpret_cast<RenderGraphTextureSRV* const*>(MemberAddr);
 
@@ -733,10 +733,18 @@ namespace RenderCore {
 
                         RenderGraphPass::RenderGraphTextureIntent Intent;
                         Intent.Texture = Tex;
+                        uint32_t mipSlice = Desc.FirstMipSlice;
+                        if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
+							mipSlice = RHISubresourceRange::kAllSubresources;
+                        }
+						uint32_t arraySlice = Desc.FirstArraySlice;
+						if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
+                            arraySlice = RHISubresourceRange::kAllSubresources;
+                        }
 
                         Intent.SubresourceRange = RHISubresourceRange(
-                            Desc.FirstMipSlice,
-                            Desc.FirstArraySlice,
+                            mipSlice,
+                            arraySlice,
                             RHISubresourceRange::kAllSubresources
                         );
 
@@ -752,7 +760,7 @@ namespace RenderCore {
                 // ============================
                 // Texture UAV
                 // ============================
-                else if (Member.BaseType == EShaderUniformBaseType::Texture_UAV)
+                else if (Member.BaseType == EShaderParameterBaseType::RDGTexture_UAV)
                 {
                     auto UAV = *reinterpret_cast<RenderGraphTextureUAV* const*>(MemberAddr);
 
@@ -763,10 +771,17 @@ namespace RenderCore {
 
                         RenderGraphPass::RenderGraphTextureIntent Intent;
                         Intent.Texture = Tex;
-
+                        uint32_t mipSlice = Desc.FirstMipSlice;
+                        if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
+                            mipSlice = RHISubresourceRange::kAllSubresources;
+                        }
+                        uint32_t arraySlice = Desc.FirstArraySlice;
+                        if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
+                            arraySlice = RHISubresourceRange::kAllSubresources;
+                        }
                         Intent.SubresourceRange = RHISubresourceRange(
-                            Desc.FirstMipSlice,
-                            Desc.FirstArraySlice,
+                            mipSlice,
+                            arraySlice,
                             RHISubresourceRange::kAllSubresources
                         );
 
@@ -782,7 +797,7 @@ namespace RenderCore {
                 // ============================
                 // Texture (裸Texture，极少用)
                 // ============================
-                else if (Member.BaseType == EShaderUniformBaseType::Texture)
+                else if (Member.BaseType == EShaderParameterBaseType::RDGTexture)
                 {
                     auto Tex = *reinterpret_cast<RenderGraphTexture* const*>(MemberAddr);
 
@@ -804,7 +819,7 @@ namespace RenderCore {
                 // ============================
                 // Buffer SRV
                 // ============================
-                else if (Member.BaseType == EShaderUniformBaseType::Buffer_SRV)
+                else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer_SRV)
                 {
                     auto SRV = *reinterpret_cast<RenderGraphBufferSRV* const*>(MemberAddr);
                     auto vDesc = SRV->Desc;
@@ -827,7 +842,7 @@ namespace RenderCore {
                 // ============================
                 // Buffer UAV
                 // ============================
-                else if (Member.BaseType == EShaderUniformBaseType::Buffer_UAV)
+                else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer_UAV)
                 {
                     auto UAV = *reinterpret_cast<RenderGraphBufferUAV* const*>(MemberAddr);
 					auto uavDesc = UAV->Desc;
@@ -850,7 +865,7 @@ namespace RenderCore {
                 // ============================
                 // Buffer（裸）
                 // ============================
-                else if (Member.BaseType == EShaderUniformBaseType::Buffer)
+                else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer)
                 {
                     auto Buf = *reinterpret_cast<RenderGraphBuffer* const*>(MemberAddr);
 
@@ -977,7 +992,7 @@ namespace RenderCore {
                                 cmd = Allocator.Allocate<RHI::RHIGraphicCommandList>(dynamic_cast<RHI::RHIGraphicContex*>(ctx));
                             else if (q == RHI::EQueueType::Compute)
                                 cmd = Allocator.Allocate <RHI::RHIComputeCommandList>(dynamic_cast<RHI::RHIComputeContex*>(ctx));
-
+                            cmd->SetImmediate(true);
                             cmd->Begin();
                             cmdLists[q] = cmd;
                             cmdContexts[q] = ctx;

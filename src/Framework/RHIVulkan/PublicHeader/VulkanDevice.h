@@ -41,6 +41,7 @@ public:
         Framebuffer,
         Sampler,
         ShaderModule,
+        Semaphore,
         MAX_TYPE
     };
 
@@ -87,6 +88,7 @@ private:
         EResourceType::Image,           // Image 不依赖其他延迟删除对象
         EResourceType::Buffer,          // Buffer 不依赖其他延迟删除对象
         EResourceType::Sampler,         // Sampler 不依赖其他延迟删除对象
+        EResourceType::Semaphore,       // Semaphore 不依赖其他延迟删除对象
     };
 };
 
@@ -136,6 +138,7 @@ public:
     void EnqueueFramebufferForDeletion(VkFramebuffer Framebuffer);
     void EnqueueSamplerForDeletion(VkSampler Sampler);
     void EnqueueShaderModuleForDeletion(VkShaderModule ShaderModule);
+    void EnqueueSemaphoreForDeletion(VkSemaphore Semaphore);
 
     // 释放延迟删除的资源
     void ReleaseDeferredResources(uint32_t FrameDelay = 2);

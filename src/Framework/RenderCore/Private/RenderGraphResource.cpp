@@ -7,8 +7,8 @@ namespace RenderCore {
 // -------------------------------------------------------------------------------------------------
 //  Render Graph Resource Base Class Implementation
 // -------------------------------------------------------------------------------------------------
-RenderGraphResource::RenderGraphResource(const std::string& name)
-    : Name(name), bImported(false), bCreated(false), Resource(nullptr)
+RenderGraphResource::RenderGraphResource(const std::string& name, RenderGraphResourceType type)
+    : Name(name), Type(type), Resource(nullptr)
 {
 }
 
@@ -26,7 +26,7 @@ void RenderGraphResource::SetRHIResource(RHI::RHIResource* resource)
 //  Render Graph Texture Implementation
 // -------------------------------------------------------------------------------------------------
 RenderGraphTexture::RenderGraphTexture(const std::string& name, const RenderGraphTextureDesc& desc)
-    : RenderGraphResource(name), desc(desc)
+    : RenderGraphResource(name, RenderGraphResourceType::Texture), desc(desc)
 {
 }
 
@@ -39,7 +39,7 @@ RenderGraphTexture::~RenderGraphTexture()
 //  Render Graph Buffer Implementation
 // -------------------------------------------------------------------------------------------------
 RenderGraphBuffer::RenderGraphBuffer(const std::string& name, const RenderGraphBufferDesc& desc)
-    : RenderGraphResource(name), desc(desc)
+    : RenderGraphResource(name, RenderGraphResourceType::Buffer), desc(desc)
 {
 }
 
@@ -49,21 +49,21 @@ RenderGraphBuffer::~RenderGraphBuffer()
 }
 
 
-RenderGraphUAV::RenderGraphUAV(const std::string& name) : RenderGraphView(name)
+RenderGraphUAV::RenderGraphUAV(const std::string& name, RenderGraphResourceType Type) : RenderGraphView(name, Type)
 {
 }
 RenderGraphUAV::~RenderGraphUAV()
 {
 }
 
-RenderGraphSRV::RenderGraphSRV(const std::string& name) : RenderGraphView(name)
+RenderGraphSRV::RenderGraphSRV(const std::string& name, RenderGraphResourceType Type) : RenderGraphView(name, Type)
 {
 }
 RenderGraphSRV::~RenderGraphSRV()
 {
 }
 
-RenderGraphView::RenderGraphView(const std::string& name)
+RenderGraphView::RenderGraphView(const std::string& name, RenderGraphResourceType Type) : RenderGraphResource(name, Type)
 {
 }
 RenderGraphView::~RenderGraphView()
@@ -73,8 +73,9 @@ RenderGraphView::~RenderGraphView()
 
 
 RenderGraphTextureSRV::RenderGraphTextureSRV(const std::string& name, const RenderGraphTextureSRVDesc& desc)   
-    : RenderGraphSRV(name), Desc(desc)
+    : RenderGraphSRV(name, RenderGraphResourceType::TextureSRV), Desc(desc)
 {   
+
 }
 
 RenderGraphTextureSRV::~RenderGraphTextureSRV()
@@ -83,7 +84,7 @@ RenderGraphTextureSRV::~RenderGraphTextureSRV()
 }
 
 RenderGraphTextureUAV::RenderGraphTextureUAV(const std::string& name, const RenderGraphTextureUAVDesc& desc)
-    : RenderGraphUAV(name), Desc(desc)
+    : RenderGraphUAV(name, RenderGraphResourceType::TextureUAV), Desc(desc)
 {   
     // TODO: Implement
 }
@@ -95,7 +96,7 @@ RenderGraphTextureUAV::~RenderGraphTextureUAV()
 }
 
 RenderGraphBufferSRV::RenderGraphBufferSRV(const std::string& name, const RenderGraphBufferSRVDesc& desc)
-    : RenderGraphSRV(name), Desc(desc)
+    : RenderGraphSRV(name, RenderGraphResourceType::BufferSRV), Desc(desc)
 {   
     // TODO: Implement
 }
@@ -106,7 +107,7 @@ RenderGraphBufferSRV::~RenderGraphBufferSRV()
 }
 
 RenderGraphBufferUAV::RenderGraphBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc)
-    : RenderGraphUAV(name), Desc(desc)
+    : RenderGraphUAV(name, RenderGraphResourceType::BufferSRV), Desc(desc)
 {
     // TODO: Implement
 }

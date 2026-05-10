@@ -15,13 +15,18 @@
 namespace RHIVulkan{
     struct PipelineLayoutInfo
     {
+        struct ShaderUniformBufferLayoutInfo {
+            uint32_t SetIndex;
+            uint32_t BindingIndex;
+            uint32_t Size;
+        };
+
         // 按着色器频率分组管理 descriptor set layouts
         // key: ERHIShaderFrequency cast to uint32_t, value: descriptor set layouts for that stage
 		struct ShaderFrequencyLayoutInfo
 		{
 			std::vector<DescriptorSetLayoutInfo> Layouts;
-			int GlobalUniformBufferBinding = -1; // 全局 uniform buffer 的绑定点，-1 表示没有
-            int GlobalUniformBufferSet = -1; // 全局 uniform buffer 的 set，-1 表示没有
+            std::vector<ShaderUniformBufferLayoutInfo> UniformBufferLayouts;
 		};
 
 
@@ -40,17 +45,16 @@ namespace RHIVulkan{
         }
 
         // 为指定着色器频率添加 descriptor set layout
-        void AddLayoutForFrequency(RHI::ERHIShaderFrequency frequency, const DescriptorSetLayoutInfo& layout, int globalBufferBinding = -1, int globalBufferSet = -1)
+        void AddLayoutForFrequency(RHI::ERHIShaderFrequency frequency, const DescriptorSetLayoutInfo& layout)
         {
             ShaderFrequencyLayoutInfo& freqInfo = setLayoutsByFrequency[static_cast<uint32_t>(frequency)];
             freqInfo.Layouts.push_back(layout);
-            if (globalBufferBinding >= 0) {
-                freqInfo.GlobalUniformBufferBinding = globalBufferBinding;
-            }
-            if (globalBufferSet >= 0) {
-                freqInfo.GlobalUniformBufferSet = globalBufferSet;
-            }
         }
+        void AddUniformBufferLayoutForFrequency(RHI::ERHIShaderFrequency frequency, const ShaderUniformBufferLayoutInfo& layout)
+		{
+			ShaderFrequencyLayoutInfo& freqInfo = setLayoutsByFrequency[static_cast<uint32_t>(frequency)];
+			freqInfo.UniformBufferLayouts.push_back(layout);
+		}
 
         // 获取所有着色器频率的 descriptor set layouts（展平）
         std::vector<DescriptorSetLayoutInfo> GetAllLayouts() const
@@ -80,12 +84,12 @@ namespace RHIVulkan{
                     HashCombine(h, std::hash<uint64_t>()((uint64_t)DescriptorSetLayoutInfo::CalculateHash(layout)));
                 }
 
-                // Hash global uniform buffer binding info
-                if (freqInfo.GlobalUniformBufferBinding >= 0) {
-                    HashCombine(h, std::hash<int>()(freqInfo.GlobalUniformBufferBinding));
-                }
-                if (freqInfo.GlobalUniformBufferSet >= 0) {
-                    HashCombine(h, std::hash<int>()(freqInfo.GlobalUniformBufferSet));
+                // Hash all uniform buffer layouts for this frequency
+                for (const auto& uniformBufferLayout : freqInfo.UniformBufferLayouts)
+                {
+                    HashCombine(h, std::hash<uint32_t>()(uniformBufferLayout.SetIndex));
+                    HashCombine(h, std::hash<uint32_t>()(uniformBufferLayout.BindingIndex));
+                    HashCombine(h, std::hash<uint32_t>()(uniformBufferLayout.Size));
                 }
             }
 

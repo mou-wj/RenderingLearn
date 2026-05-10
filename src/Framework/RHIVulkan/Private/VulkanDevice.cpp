@@ -175,8 +175,11 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
     createInfo.ppEnabledExtensionNames = extensions.data();
     createInfo.enabledLayerCount = static_cast<uint32_t>(layers.size());
     createInfo.ppEnabledLayerNames = layers.data();
+    VkPhysicalDeviceFeatures featuresToEnable = {};
+    featuresToEnable.shaderStorageImageWriteWithoutFormat = VK_TRUE;
+    createInfo.pEnabledFeatures = &featuresToEnable;
 
-	VkPhysicalDeviceFeatures featuresToEnable = {};
+
 	VkPhysicalDeviceFeatures2 features2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
     
     if (timelineSemaphoreFeatures_.timelineSemaphore) {
@@ -299,6 +302,13 @@ void VulkanDevice::Destroy()
         stagingManager_ = nullptr;
     }
 
+
+    if (semaphoreManager_ != nullptr)
+    {
+        delete semaphoreManager_;
+        semaphoreManager_ = nullptr;
+    }
+
     if (deferredDeleteQueue_ != nullptr)
     {
         deferredDeleteQueue_->Clear();
@@ -322,11 +332,6 @@ void VulkanDevice::Destroy()
     }
 
 
-    if (semaphoreManager_ != nullptr)
-    {
-        delete semaphoreManager_;
-        semaphoreManager_ = nullptr;
-    }
 
     if (device_ != VK_NULL_HANDLE)
     {
@@ -402,6 +407,9 @@ void VulkanDeferredDeleteQueue::ReleaseResource(EResourceType Type, const FDefer
     case EResourceType::ShaderModule:
         VKFunc::DestroyShaderModule(VulkanDevice, reinterpret_cast<VkShaderModule>(Entry.Handle));
         break;
+	case EResourceType::Semaphore:
+        VKFunc::DestroySemaphore(VulkanDevice, reinterpret_cast<VkSemaphore>(Entry.Handle));
+		break;
     default:
         break;
     }
@@ -506,6 +514,12 @@ void VulkanDevice::EnqueueShaderModuleForDeletion(VkShaderModule ShaderModule)
 {
     if (deferredDeleteQueue_)
         deferredDeleteQueue_->EnqueueResource(VulkanDeferredDeleteQueue::EResourceType::ShaderModule, ShaderModule);
+}
+
+void VulkanDevice::EnqueueSemaphoreForDeletion(VkSemaphore Semaphore)
+{
+	if (deferredDeleteQueue_)
+		deferredDeleteQueue_->EnqueueResource(VulkanDeferredDeleteQueue::EResourceType::Semaphore, Semaphore);
 }
 
 

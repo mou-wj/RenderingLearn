@@ -73,12 +73,12 @@ namespace RHIVulkan {
             Usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopySrc))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::TransferSrc))
         {
             Usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         }
 
-        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::CopyDest))
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::TransferDest))
         {
             Usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
@@ -298,5 +298,87 @@ namespace RHIVulkan {
             usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
         return usage;
+    }
+
+
+    VkFilter TransformFilter(ERHIFilter filter)
+    {
+        switch (filter)
+        {
+        case ERHIFilter::Nearest:
+            return VK_FILTER_NEAREST;
+
+        case ERHIFilter::Linear:
+            return VK_FILTER_LINEAR;
+
+        default:
+            return VK_FILTER_LINEAR;
+        }
+    }
+
+    VkSamplerMipmapMode GetMipmapMode(ERHIFilter filter)
+    {
+        switch (filter)
+        {
+        case ERHIFilter::Nearest:
+            return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+        case ERHIFilter::Linear:
+            return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+        default:
+            return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        }
+    }
+
+    VkSamplerAddressMode TransformAddressMode(ERHIAddressMode mode)
+    {
+        switch (mode)
+        {
+        case ERHIAddressMode::Repeat:
+            return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+        case ERHIAddressMode::ClampToEdge:
+            return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+        case ERHIAddressMode::MirrorClampToEdge:
+            return VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+
+        default:
+            return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        }
+    }
+
+    VkCompareOp TransformCompareOp(ERHICompareOp op)
+    {
+        switch (op)
+        {
+        case ERHICompareOp::Never:
+            return VK_COMPARE_OP_NEVER;
+
+        case ERHICompareOp::Less:
+            return VK_COMPARE_OP_LESS;
+
+        case ERHICompareOp::Equal:
+            return VK_COMPARE_OP_EQUAL;
+
+        case ERHICompareOp::LessOrEqual:
+            return VK_COMPARE_OP_LESS_OR_EQUAL;
+
+        case ERHICompareOp::Greater:
+            return VK_COMPARE_OP_GREATER;
+
+        case ERHICompareOp::NotEqual:
+            return VK_COMPARE_OP_NOT_EQUAL;
+
+        case ERHICompareOp::GreaterOrEqual:
+            return VK_COMPARE_OP_GREATER_OR_EQUAL;
+
+        case ERHICompareOp::Always:
+            return VK_COMPARE_OP_ALWAYS;
+
+        default:
+            return VK_COMPARE_OP_LESS_OR_EQUAL;
+        }
     }
 }

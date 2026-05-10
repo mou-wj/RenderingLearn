@@ -1,5 +1,6 @@
 #include "ShaderParameter.h"
 #include "Shader.h"
+#include "RenderGraphResource.h"
 namespace RenderCore {
 
 
@@ -68,8 +69,8 @@ namespace RenderCore {
 
             // 组装Uniform参数描述
             RHI::RHIShaderUniformParameter param;
-            param.BufferIndex = 0; // 若有多UBO可扩展
-            param.BaseIndex = Binding.Offset; // 这里用Offset或BindSlot视RHI实现
+            param.BufferIndex = Binding.BufferIndex; // 若有多UBO可扩展
+            param.BaseIndex = Binding.BaseIndex; // 这里用Offset或BindSlot视RHI实现
             param.Offset = uniformDataOffset;
             param.Size = Binding.Size;
             BatchedParams.UniformParameters.push_back(param);
@@ -86,38 +87,41 @@ namespace RenderCore {
             const std::string& Name = Pair.first;
             const auto& Binding = Pair.second;
             const void* ResourcePtrLocation = Reader.GetRawPointer(Binding.Offset);
-            RHI::RHIResource* Resource = *(RHI::RHIResource**)ResourcePtrLocation;
-            if (!Resource) continue;
+            RHI::RHIResource* Resource = nullptr;
 
             RHI::RHIShaderResourceParameter param;
             param.Index = Binding.BindSlot;
-            param.Resource = Resource;
+
 
             // 根据BaseType类型组装参数
             switch (Binding.BaseType)
             {
-            case EShaderUniformBaseType::Texture:
-            case EShaderUniformBaseType::Texture_SRV:
+            case EShaderParameterBaseType::RDGTexture:
                 param.Type = RHI::RHIShaderResourceParameter::EType::Texture;
+                Resource = (*(RenderGraphResource**)ResourcePtrLocation)->GetRHIResource();
                 break;
-            case EShaderUniformBaseType::Texture_UAV:
-            case EShaderUniformBaseType::Buffer_UAV:
+            case EShaderParameterBaseType::RDGTexture_UAV:
+            case EShaderParameterBaseType::RDGBuffer_UAV:
                 param.Type = RHI::RHIShaderResourceParameter::EType::UAV;
+                Resource = (*(RenderGraphResource**)ResourcePtrLocation)->GetRHIResource();
                 break;
-            case EShaderUniformBaseType::Buffer:
-            case EShaderUniformBaseType::Buffer_SRV:
+            case EShaderParameterBaseType::RDGBuffer:
+            case EShaderParameterBaseType::RDGBuffer_SRV:
                 param.Type = RHI::RHIShaderResourceParameter::EType::SRV;
+                Resource = (*(RenderGraphResource**)ResourcePtrLocation)->GetRHIResource();
                 break;
-            case EShaderUniformBaseType::Sampler:
+            case EShaderParameterBaseType::RHISampler:
                 param.Type = RHI::RHIShaderResourceParameter::EType::Sampler;
+                Resource = *(RHIResource**)ResourcePtrLocation;
                 break;
-            case EShaderUniformBaseType::Struct:
+            case EShaderParameterBaseType::Struct:
                 param.Type = RHI::RHIShaderResourceParameter::EType::UniformBuffer;
                 break;
             default:
                 assert(false);
                 break;
             }
+            param.Resource = Resource;
             BatchedParams.ResourceParameters.push_back(param);
         }
 

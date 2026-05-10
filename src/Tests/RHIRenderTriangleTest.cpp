@@ -137,9 +137,7 @@ public:
             return;
         }
         RHI::RHIGraphicCommandList cmdList(graphicContext);
-        constexpr int kMaxFrames = 4000;
-        RHICapture_SetNum(4);
-        RHICapture_SetWindow(Window->GetNativeHandle());
+        constexpr int kMaxFrames = 10;
         for (int frameIndex = 0; frameIndex < kMaxFrames; ++frameIndex) {
             // 设置为即时执行模式
 
@@ -201,9 +199,7 @@ public:
             presentWait.SyncPoint = queue->GetSyncPoint();
 			presentWait.Value = submitResult.Value;
             presentWait.WaitStage = RHI::ERHIPipelineStage::ColorAttachmentOutput;
-            RHICapture_Begin();
             GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentWait);
-            RHICapture_End();
             cmdList.Clear();
         }
 
@@ -290,7 +286,7 @@ private:
         RHI::RHIGraphicCommandList commandList(graphicContext);
         commandList.SetImmediate(true);
         commandContext->Begin();
-        TransitionResource(api, commandList, VertexBuffer.get(), RHI::ERHIResourceAccess::CopyDest);
+        TransitionResource(api, commandList, VertexBuffer.get(), RHI::ERHIResourceAccess::TransferDest);
         api->UpdateBuffer(commandList, VertexBuffer.get(), vertices, { 0, sizeof(vertices) });
         TransitionResource(api, commandList, VertexBuffer.get(), RHI::ERHIResourceAccess::VertexOrIndexBuffer);
         commandList.ExecuteAll();

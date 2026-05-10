@@ -32,7 +32,12 @@ bool RenderResource::IsInitialized() const {
 
 // RenderTexture
 RenderTexture::RenderTexture(const RHI::RHITextureDesc& inDesc) : Desc(inDesc) {}
-RenderTexture::~RenderTexture() = default;
+RenderTexture::~RenderTexture()
+{
+	if (Texture) {
+		ReleaseRHIResource();
+	}
+}
 
 void RenderTexture::InitRHIResource() {
 	Texture = RHI::GRHIApi->CreateTexture(Desc);
@@ -131,6 +136,7 @@ void RenderTargetPool::Clear()
 {
     std::lock_guard<std::mutex> Lock(Mutex);
     FreeList.clear();
+	AllocatedList.clear();
 }
 
 

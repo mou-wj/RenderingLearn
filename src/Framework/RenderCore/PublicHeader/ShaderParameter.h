@@ -4,6 +4,7 @@
 #include "Math.hpp" // For Float2, Float3, Float4, etc.
 #include "RHIDefine.h"
 #include "RHICommandList.h"
+#include "ShaderCore.h"
 #include <string>
 #include <memory>
 #include <vector>
@@ -21,7 +22,7 @@ namespace RenderCore {
     template<typename T>
     struct ShaderParameterTypeInfo
     {
-        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Unknown;
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::Unknown;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 1;
         static constexpr uint32_t NumElements = 0;
@@ -40,7 +41,7 @@ namespace RenderCore {
     template<>
     struct ShaderParameterTypeInfo<RenderGraphTexture>
     {
-        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Texture;
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::RDGTexture;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 1;
         static constexpr uint32_t NumElements = 0;
@@ -55,7 +56,7 @@ namespace RenderCore {
     template<>
     struct ShaderParameterTypeInfo<RenderGraphTextureUAV>
     {
-        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Texture_UAV;
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::RDGTexture_UAV;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 1;
         static constexpr uint32_t NumElements = 0;
@@ -70,7 +71,7 @@ namespace RenderCore {
     template<>
     struct ShaderParameterTypeInfo<RHI::RHISampler>
     {
-        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Sampler;
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::RHISampler;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 1;
         static constexpr uint32_t NumElements = 0;
@@ -85,7 +86,7 @@ namespace RenderCore {
     template<>
     struct ShaderParameterTypeInfo<float>
     {
-        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Float32;
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::Float32;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 1;
         static constexpr uint32_t NumElements = 0;
@@ -99,7 +100,7 @@ namespace RenderCore {
     template<>
     struct ShaderParameterTypeInfo<Core::Float2>
     {
-        static constexpr RHI::EShaderUniformBaseType BaseType = RHI::EShaderUniformBaseType::Float32;
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::Float32;
         static constexpr uint32_t NumRows = 1;
         static constexpr uint32_t NumColumns = 2;
         static constexpr uint32_t NumElements = 0;
@@ -124,7 +125,7 @@ namespace RenderCore {
         {
             const char* Name;
             uint32_t Offset;
-            RHI::EShaderUniformBaseType BaseType;
+            EShaderParameterBaseType BaseType;
             uint32_t NumRows = 1;
             uint32_t NumColumns = 1;
             uint32_t NumElements = 0;
@@ -132,7 +133,7 @@ namespace RenderCore {
             Member(
             const char* InName,
             uint32_t InOffset,
-            RHI::EShaderUniformBaseType InBaseType,
+            EShaderParameterBaseType InBaseType,
             uint32_t InNumRows,
             uint32_t InNumColumns,
             uint32_t InNumElements,
@@ -151,7 +152,7 @@ namespace RenderCore {
             }
 
             bool IsStruct() const { return StructMetadata != nullptr; }
-            bool IsResource() const { return BaseType >= RHI::EShaderUniformBaseType::Texture; }
+            bool IsResource() const { return BaseType >= EShaderParameterBaseType::RDGTexture; }
         };
 		bool InitFlag = false;
     public:

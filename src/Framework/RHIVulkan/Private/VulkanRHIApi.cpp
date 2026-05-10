@@ -50,7 +50,6 @@ bool VulkanRHIApi::Init()
 	if (ValidFlag) {
 		return true;
 	}
-	RHICaptureHelper::GetInstance().Init();
 	VKFunc::InitializeLoader();
 	GShaderPlatform = ERHIShaderPlatform::Vulkan;
     // 创建Vulkan实例
@@ -154,7 +153,6 @@ void VulkanRHIApi::Shutdown()
 	if (!ValidFlag) {
 		return;
 	}
-	RHI::RHICaptureHelper::GetInstance().Shutdown();
 	ValidFlag = false;
 	RHI::RHIPipelineStateCache::ClearAll();
 
@@ -506,8 +504,8 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
 			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::IndirectArgs);
 
 		const bool hasTransfer =
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::CopySrc) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::CopyDest) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::TransferSrc) ||
+			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::TransferDest) ||
 			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveSrc) ||
 			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveDst);
 

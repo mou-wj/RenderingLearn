@@ -27,4 +27,12 @@ namespace RHIVulkan {
 
     VkBufferUsageFlags TransformBufferUsageFlagsFrom(ERHIBufferUsageFlags Flags);
 
+    VkFilter TransformFilter(ERHIFilter filter);
+
+    VkSamplerMipmapMode GetMipmapMode(ERHIFilter filter);
+
+    VkSamplerAddressMode TransformAddressMode(ERHIAddressMode mode);
+
+    VkCompareOp TransformCompareOp(ERHICompareOp op);
+
 }

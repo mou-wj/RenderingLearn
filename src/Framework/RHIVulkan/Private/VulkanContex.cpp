@@ -80,13 +80,9 @@ void VulkanCommandContext::CopyTexture(RHITexture* src, RHITexture* dst, const R
     VkImage srcImage = vkSrc->GetImage();
     VkImage dstImage = vkDst->GetImage();
 
-    auto srcImageLayout = queue->GetImageLayoutManager()
-        ->GetFullLayout(srcImage)
-        ->Get(copyDesc.SrcMipIndex, copyDesc.SrcArraySlice);
+    auto srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
-    auto dstImageLayout = queue->GetImageLayoutManager()
-        ->GetFullLayout(dstImage)
-        ->Get(copyDesc.DstMipIndex, copyDesc.DstArraySlice);
+    auto dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
     VkImageCopy region{};
 
@@ -139,10 +135,10 @@ void VulkanCommandContext::CopyTexture(RHITexture* src, RHITexture* dst, const R
 }
 void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc)
 {
-    if (blitDesc.SrcRegion.Width > 0 &&
+    if (!(blitDesc.SrcRegion.Width > 0 &&
         blitDesc.SrcRegion.Height > 0 &&
         blitDesc.DstRegion.Width > 0 &&
-        blitDesc.DstRegion.Height > 0) {
+        blitDesc.DstRegion.Height > 0)) {
 #ifdef DEBUG_INFO
         LOG_ERROR("%s","BlitTexture: Region size must be > 0");
 #endif // DEBUG_INFO
@@ -158,13 +154,9 @@ void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const R
     // =========================
     // Layout 获取（注意对象别取错）
     // =========================
-    auto srcImageLayout = queue->GetImageLayoutManager()
-        ->GetFullLayout(srcImage)
-        ->Get(blitDesc.SrcMipIndex, blitDesc.SrcArraySlice);
+    auto srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
-    auto dstImageLayout = queue->GetImageLayoutManager()
-        ->GetFullLayout(dstImage)
-        ->Get(blitDesc.DstMipIndex, blitDesc.DstArraySlice);
+    auto dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
     // =========================
     // 基本校验（建议保留）
@@ -180,7 +172,7 @@ void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const R
     region.srcSubresource.aspectMask = vkSrc->GetAspectFlags();
     region.srcSubresource.mipLevel = blitDesc.SrcMipIndex;
     region.srcSubresource.baseArrayLayer = blitDesc.SrcArraySlice;
-    region.srcSubresource.layerCount = 1;
+    region.srcSubresource.layerCount = blitDesc.LayerCount;
 
     region.srcOffsets[0] = {
         blitDesc.SrcRegion.OffsetX,
@@ -198,7 +190,7 @@ void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const R
     region.dstSubresource.aspectMask = vkDst->GetAspectFlags();
     region.dstSubresource.mipLevel = blitDesc.DstMipIndex;
     region.dstSubresource.baseArrayLayer = blitDesc.DstArraySlice;
-    region.dstSubresource.layerCount = 1;
+    region.dstSubresource.layerCount = blitDesc.LayerCount;
 
     region.dstOffsets[0] = {
         blitDesc.DstRegion.OffsetX,
@@ -278,7 +270,7 @@ void VulkanComputeContext::SetBatchedShaderParameters(RHIComputeShader* shader, 
         const uint8_t* valuePtr = parameter.Data.data() + uniformParam.Offset;
         if (shaderType == RHI::ERHIShaderFrequency::Compute)
         {
-            PendingCompute->SetShaderParameter(shaderType, uniformParam.BaseIndex, uniformParam.Size, valuePtr);
+            PendingCompute->SetShaderParameter(shaderType, uniformParam.BufferIndex, uniformParam.BaseIndex, uniformParam.Size, valuePtr);
         }
     }
 
@@ -368,7 +360,7 @@ void VulkanGraphicContext::SetBatchedShaderParameters(RHIGraphicShader* shader, 
         case RHI::ERHIShaderFrequency::Geometry:
         case RHI::ERHIShaderFrequency::Mesh:
         case RHI::ERHIShaderFrequency::Task:
-            PendingGfx->SetShaderParameter(shaderType, uniformParam.BaseIndex, uniformParam.Size, valuePtr);
+            PendingGfx->SetShaderParameter(shaderType, uniformParam.BufferIndex, uniformParam.BaseIndex, uniformParam.Size, valuePtr);
             break;
         default:
             break;

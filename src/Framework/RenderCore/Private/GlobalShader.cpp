@@ -10,13 +10,13 @@ namespace RenderCore{
 
     GlobalShaderMap* GShaderMap = nullptr;
 
-    ShaderSP GlobalShaderMap::GetShader(ShaderType* shaderType, ShaderPermutationId id)
+    Shader* GlobalShaderMap::GetShader(ShaderType* shaderType, ShaderPermutationId id)
     {
         auto it = ShaderMap.find(shaderType);
         if (it != ShaderMap.end()) {
             auto shaderIt = it->second.find(id);
             if (shaderIt != it->second.end()) {
-                return shaderIt->second;
+                return shaderIt->second.get();
             }
         }
         return nullptr;
@@ -107,6 +107,11 @@ namespace RenderCore{
 
         IsInitialized = true;
         return true;
+    }
+
+    void GlobalShaderMap::Clear()
+    {
+        ShaderMap.clear();
     }
 
 } // namespace RenderCore

@@ -65,13 +65,47 @@ namespace RHIVulkan {
         std::vector<uint8_t> Data;
         uint64_t GPUBufferOffset = 0;  // GPU缓冲区中的偏移
         bool bDirty = true;  // 是否有待更新的数据
-        
+        struct PackedUniformBinding
+        {
+            uint32_t SetIndex = 0;
+            uint32_t Binding = 0;
+
+            uint32_t CPUOffset = 0;
+            uint32_t GPUOffset = 0;
+
+            uint32_t Size = 0;
+        };
+        std::vector<PackedUniformBinding> Bindings;
+		int GetBindingInfoIndex(uint32_t BufferIndex) const
+		{
+			for (size_t i = 0; i < Bindings.size(); i++)
+			{
+				if (Bindings[i].Binding == BufferIndex)
+				{
+					return static_cast<int>(i);
+				}
+			}
+			return -1; // 没有找到
+		}
 		PackedUniformBuffer() = default;
         PackedUniformBuffer(size_t InSize)
             : Data(InSize, 0), GPUBufferOffset(0), bDirty(true)
         {
         }
-
+        PackedUniformBuffer(const std::vector<PackedUniformBinding>& BindingInfo)
+            : GPUBufferOffset(0), bDirty(true)
+        {
+			Bindings = BindingInfo;
+			size_t totalSize = 0;
+			for (auto& binding : Bindings)
+			{
+                binding.CPUOffset = totalSize;
+                binding.GPUOffset = totalSize;
+                int result = binding.Size % 64;
+				totalSize += result == 0 ? binding.Size : ((binding.Size / 64 )+ 1)* 64;
+			}
+			Data.resize(totalSize, 0);
+        }
         uint8_t* GetData() { return Data.data(); }
         size_t Num() const { return Data.size(); }
         
@@ -138,7 +172,8 @@ namespace RHIVulkan {
 				binding,
 				VK_DESCRIPTOR_TYPE_SAMPLER,
 				VK_NULL_HANDLE,
-				VK_IMAGE_LAYOUT_UNDEFINED);
+				VK_IMAGE_LAYOUT_UNDEFINED,
+                sampler->GetSampler());
 			set.bDirty = true;
 		}
 
@@ -341,14 +376,18 @@ namespace RHIVulkan {
                 const PipelineLayoutInfo::ShaderFrequencyLayoutInfo& freqInfo = pair.second;
 
                 // 如果该shader阶段有全局uniform buffer，则创建对应的PackedUniformBuffer
-                if (freqInfo.GlobalUniformBufferSet != -1 && freqInfo.GlobalUniformBufferBinding != -1)
-                {
-                    PackedUniformBuffersByFrequency[freq] = PackedUniformBuffer(4096);
-                    // 记录该频率的全局uniform buffer的set和binding
-                    GlobalUniformBufferInfo[freq] = {
-                        static_cast<uint32_t>(freqInfo.GlobalUniformBufferSet),
-                        static_cast<uint32_t>(freqInfo.GlobalUniformBufferBinding)
-                    };
+                if (!freqInfo.UniformBufferLayouts.empty()) {
+					// 计算该频率的PackedUniformBuffer大小
+					std::vector<PackedUniformBuffer::PackedUniformBinding> bindings;
+					for (const auto& ubLayout : freqInfo.UniformBufferLayouts)
+					{
+						PackedUniformBuffer::PackedUniformBinding binding;
+                        binding.SetIndex = ubLayout.SetIndex;
+						binding.Binding = ubLayout.BindingIndex;
+						binding.Size = ubLayout.Size;
+						bindings.push_back(binding);
+					}
+					PackedUniformBuffersByFrequency[freq] = PackedUniformBuffer(bindings);
                 }
 
                 // 构建shader参数的binding映射
@@ -372,7 +411,7 @@ namespace RHIVulkan {
             uint32_t BindingIndex;
         };
         
-        std::unordered_map<ERHIShaderFrequency, GlobalUniformBufferDesc> GlobalUniformBufferInfo;
+        //std::unordered_map<ERHIShaderFrequency, GlobalUniformBufferDesc> GlobalUniformBufferInfo;
         std::unordered_map<
             ShaderParameterKey,
             ShaderParameterBinding,
@@ -401,6 +440,7 @@ namespace RHIVulkan {
         public:
         void SetPackedGlobalParameter(
             ERHIShaderFrequency frequency,
+            uint32_t BufferIndex,
             uint32_t ByteOffset,
             uint32_t NumBytes,
             const void* NewValue)
@@ -410,10 +450,17 @@ namespace RHIVulkan {
                 return;
 
             PackedUniformBuffer& buffer = it->second;
-            assert(ByteOffset + NumBytes <= buffer.Num());
+            //获取bufferIndex的信息
+            int index = buffer.GetBindingInfoIndex(BufferIndex);
+            if (index == -1) 
+            {
+                return;
+            }
+            const PackedUniformBuffer::PackedUniformBinding& binding = buffer.Bindings[index];
+            assert(ByteOffset + NumBytes <= binding.Size);
             assert((NumBytes & 3) == 0 && (ByteOffset & 3) == 0);
 
-            uint32_t* dst = reinterpret_cast<uint32_t*>(buffer.GetData() + ByteOffset);
+            uint32_t* dst = reinterpret_cast<uint32_t*>(buffer.GetData() + ByteOffset + binding.CPUOffset);
             const uint32_t* src = reinterpret_cast<const uint32_t*>(NewValue);
             size_t count = NumBytes / 4;
 
@@ -575,10 +622,10 @@ namespace RHIVulkan {
             }
         }
 
-        void SetShaderParameter(ERHIShaderFrequency frequency, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
+        void SetShaderParameter(ERHIShaderFrequency frequency,uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
 			if (!CurrentState)
 				return;
-            CurrentState->SetPackedGlobalParameter(frequency, BaseIndex, NumBytes, NewValue);
+            CurrentState->SetPackedGlobalParameter(frequency, BufferIndex, BaseIndex, NumBytes, NewValue);
         }
 
         bool HasPipeline() const
@@ -727,10 +774,10 @@ namespace RHIVulkan {
                 CurrentState->SetUniformBuffer(setIndex, binding, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
             }
         }
-        void SetShaderParameter(ERHIShaderFrequency frequency, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
+        void SetShaderParameter(ERHIShaderFrequency frequency,uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
             if (!CurrentState)
                 return;
-            CurrentState->SetPackedGlobalParameter(frequency, BaseIndex, NumBytes, NewValue);
+            CurrentState->SetPackedGlobalParameter(frequency,BufferIndex, BaseIndex, NumBytes, NewValue);
         }
 
         bool HasPipeline() const

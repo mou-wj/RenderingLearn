@@ -416,8 +416,8 @@ private:
 // Vulkan Sampler
 class VulkanSampler : public RHISampler {
 public:
-    VulkanSampler(VulkanDevice* device, const RHISamplerDesc& desc) : RHISampler(desc), Device(device) {}
-    ~VulkanSampler() override = default;
+    VulkanSampler(VulkanDevice* device, const RHISamplerDesc& desc);
+    ~VulkanSampler();
 
     VkSampler GetSampler() const { return Sampler; }
 

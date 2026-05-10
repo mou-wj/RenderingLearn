@@ -152,12 +152,13 @@ namespace RHIVulkan {
             uint32_t binding,
             VkDescriptorType type,
             VkImageView view,
-            VkImageLayout layout)
+            VkImageLayout layout,
+            VkSampler sampler = VK_NULL_HANDLE)
         {
             VkDescriptorImageInfo& info = ImageInfos.emplace_back();
             info.imageView = view;
             info.imageLayout = layout;
-            info.sampler = VK_NULL_HANDLE;
+            info.sampler = sampler;
 
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             write.dstBinding = binding;

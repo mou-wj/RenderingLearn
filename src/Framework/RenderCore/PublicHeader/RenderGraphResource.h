@@ -9,9 +9,14 @@ namespace RenderCore {
 
 enum class RenderGraphResourceType
 {
+    Unknown,
     Texture,
     Buffer,
     // Add other resource types as needed
+	TextureSRV,
+	TextureUAV,
+	BufferSRV,
+	BufferUAV,
 
 };
 
@@ -28,19 +33,13 @@ class RENDERCORE_API RenderGraphResource
 {
 public:
     // Construction/Destruction
-    RenderGraphResource(const std::string& name);
+    RenderGraphResource(const std::string& name, RenderGraphResourceType type);
     virtual ~RenderGraphResource();
 
     RenderGraphResourceType GetType() const { return Type; }
 
     // Accessors
     const std::string& GetName() const { return Name; }
-    bool IsImported() const { return bImported; }
-    bool IsCreated() const { return bCreated; }
-
-    // Flags
-    void SetImported(bool imported) { bImported = imported; }
-    void SetCreated(bool created) { bCreated = created; }
 
     // RHI Resource Management
     virtual RHI::RHIResource* GetRHIResource() const { return Resource; } // Returns the underlying RHI resource
@@ -73,16 +72,12 @@ public:
     ~RenderGraphTexture() override;
 
     const RenderGraphTextureDesc& GetDesc() const { return desc; }
-    RHI::RHITexture* GetRHITexture() const { return innerTexture; } // Returns the underlying RHI texture
-
-    void SetRHITexture(RHI::RHITexture* texture) { innerTexture = texture; } // Allows importing an existing RHI texture
-
+    RHI::RHITexture* GetRHITexture() const { return dynamic_cast<RHI::RHITexture*>(Resource); } // Returns the underlying RHI texture
     RenderTextureTracker& GetTracker() { return tracker; }
 private:
     RenderTextureTracker tracker;
     friend class RenderGraphBuilder;
     RenderGraphTextureDesc desc;
-    RHI::RHITexture* innerTexture; // The underlying RHI texture
     bool IsExternal = false;
 };
 
@@ -99,17 +94,13 @@ class RENDERCORE_API RenderGraphBuffer : public RenderGraphResource
 public:
     RenderGraphBuffer(const std::string& name, const RenderGraphBufferDesc& desc);
     ~RenderGraphBuffer() override;
-
+    RHI::RHIBuffer* GetRHIBuffer() const { return dynamic_cast<RHI::RHIBuffer*>(Resource); }
     const RenderGraphBufferDesc& GetDesc() const { return desc; }
-    RHI::RHIBuffer* GetRHIBuffer() const { return innerBuffer; }
-
-    void SetRHIBuffer(RHI::RHIBuffer* buffer) { innerBuffer = buffer; }
     RenderBufferTracker& GetTracker() { return tracker; }
 private:
     RenderBufferTracker tracker;
     friend class RenderGraphBuilder;
     RenderGraphBufferDesc desc;
-    RHI::RHIBuffer* innerBuffer;
     bool IsExternal = false;
 
 };
@@ -119,10 +110,10 @@ using RenderGraphResourceRef = RenderGraphResource*;
 using RenderGraphTextureRef = RenderGraphTexture*;
 using RenderGraphBufferRef = RenderGraphBuffer*;
 
-class RENDERCORE_API RenderGraphView
+class RENDERCORE_API RenderGraphView : public RenderGraphResource
 {
 public:
-    RenderGraphView(const std::string& name);
+    RenderGraphView(const std::string& name,RenderGraphResourceType Type);
     virtual ~RenderGraphView();
 
 protected:
@@ -132,21 +123,21 @@ protected:
 
 class RENDERCORE_API RenderGraphSRV : public RenderGraphView{
 public:
-    RenderGraphSRV(const std::string& name);
+    RenderGraphSRV(const std::string& name, RenderGraphResourceType Type);
     ~RenderGraphSRV() override;
+    RHI::RHIShaderResourceView* GetRHIShaderResourceView() const { return dynamic_cast<RHI::RHIShaderResourceView*>(Resource); }
 protected:
     friend class RenderGraphBuilder;
-    RHI::RHIShaderResourceView* RHIShaderResourceView = nullptr;
 
 };
 
 class RENDERCORE_API RenderGraphUAV : public RenderGraphView{
 public:
-    RenderGraphUAV(const std::string& name);
+    RenderGraphUAV(const std::string& name, RenderGraphResourceType Type);
     ~RenderGraphUAV() override;
+    RHI::RHIUnorderedAccessView* GetRHIShaderResourceView() const { return dynamic_cast<RHI::RHIUnorderedAccessView*>(Resource); }
 protected:
     friend class RenderGraphBuilder;
-    RHI::RHIUnorderedAccessView* RHIUnorderedAccessView = nullptr;
 
 };
 

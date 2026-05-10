@@ -92,13 +92,22 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
                     binding.Count,
                     stageMask);
             }
-            
-            if (header.GlobalUniformBufferSet != -1) {
-				ensureSet(header.GlobalUniformBufferSet);
-				freqInfo.GlobalUniformBufferSet = header.GlobalUniformBufferSet;
-				freqInfo.GlobalUniformBufferBinding = header.GlobalUniformBufferBinding;
-			
+
+            for (const auto& binding : header.UniformBufferBindings) {
+				ensureSet(binding.Set);
+                DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
+                setLayout.AddBinding(
+                    binding.Binding,
+                    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    1,
+                    stageMask);
+				PipelineLayoutInfo::ShaderUniformBufferLayoutInfo ubLayout;
+				ubLayout.SetIndex = binding.Set;
+				ubLayout.BindingIndex = binding.Binding;
+				ubLayout.Size = binding.Size;
+				freqInfo.UniformBufferLayouts.push_back(ubLayout);
             }
+           
 
             if (header.HasPushConstant)
             {
@@ -278,11 +287,19 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
             stageMask);
     }
 
-    if (header.GlobalUniformBufferSet != -1) {
-        ensureSet(header.GlobalUniformBufferSet);
-        freqInfo.GlobalUniformBufferSet = header.GlobalUniformBufferSet;
-        freqInfo.GlobalUniformBufferBinding = header.GlobalUniformBufferBinding;
-       
+    for (const auto& binding : header.UniformBufferBindings) {
+        ensureSet(binding.Set);
+        DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
+        setLayout.AddBinding(
+            binding.Binding,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ,
+            1,
+            stageMask);
+        PipelineLayoutInfo::ShaderUniformBufferLayoutInfo ubLayout;
+        ubLayout.SetIndex = binding.Set;
+        ubLayout.BindingIndex = binding.Binding;
+        ubLayout.Size = binding.Size;
+        freqInfo.UniformBufferLayouts.push_back(ubLayout);
     }
 
     if (header.HasPushConstant)

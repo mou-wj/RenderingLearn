@@ -7,23 +7,10 @@
 namespace RenderCore {
 
 
-inline bool IsResourceType(EShaderUniformBaseType type)
-{
-    switch (type)
-    {
-    case EShaderUniformBaseType::Texture_SRV:
-    case EShaderUniformBaseType::Texture_UAV:
-    case EShaderUniformBaseType::Buffer_SRV:
-    case EShaderUniformBaseType::Buffer_UAV:
-    case EShaderUniformBaseType::Sampler:
-        return true;
-    default:
-        return false;
-    }
-}
 Shader::Shader(const ShaderCompiledInitializer& initializer)
 {
     Name = initializer.Type->Name;
+    ShaderType = initializer.Type->Frequency;
     auto metadata = initializer.Type->RootParametersMetadata;
     if (metadata) {
 		InitShaderBindings(metadata, initializer.ParameterMap);
@@ -35,6 +22,11 @@ Shader::Shader(const ShaderCompiledInitializer& initializer)
 Shader::~Shader()
 {
     // Cleanup if necessary
+    if (RHIShader)
+	{
+		RHIShader.reset();
+		RHIShader = nullptr;
+	}
 }
 
 // Compilation
@@ -119,6 +111,8 @@ void Shader::ProcessMetadataRecursive(
 
             ShaderParameterBindingInfo::ShaderUniformBinding Binding;
             Binding.BaseType = Member.BaseType;
+            Binding.BufferIndex = Allocation->BufferIndex;
+            Binding.BaseIndex = Allocation->BaseIndex;
             Binding.Offset = Member.Offset;
             Binding.Size = Allocation->Size;
 

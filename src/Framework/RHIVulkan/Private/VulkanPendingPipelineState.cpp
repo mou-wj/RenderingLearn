@@ -80,18 +80,16 @@ namespace RHIVulkan {
             const PackedUniformBuffer& buffer = bufferPair.second;
             
             // 从GlobalUniformBufferInfo中查找该frequency对应的set和binding
-            auto it = GlobalUniformBufferInfo.find(freq);
-            if (it != GlobalUniformBufferInfo.end())
-            {
-                uint32_t setIndex = it->second.SetIndex;
-                uint32_t binding = it->second.BindingIndex;
-                
+            for (const auto& BindingInfos : buffer.Bindings) {
+                uint32_t setIndex = BindingInfos.SetIndex;
+                uint32_t binding = BindingInfos.Binding;
+
                 SetUniformBuffer(
                     setIndex,
                     binding,
                     uploader->GetCPUBufferHandle(),
-                    buffer.GPUBufferOffset,
-                    buffer.Num());
+                    BindingInfos.GPUOffset,
+                    BindingInfos.Size);
             }
         }
 
