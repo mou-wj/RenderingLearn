@@ -147,7 +147,7 @@ public:
             cmdList.SetGraphicPipelineState(TriangleGraphicsPipelineState.get());
 
             // 设置顶点缓冲区流
-            cmdList.SetStreamSource(0, VertexBuffer, 0);
+            cmdList.SetStreamSource(0, VertexBuffer.get(), 0);
 
             // 设置视口
             RHI::RHIRect viewport;
@@ -166,7 +166,7 @@ public:
             }
 
             RHIRenderPassInfo passInfo;
-            passInfo.RenderTargets.Bound(TriangleGraphicsPipelineState->GetDesc().attachmentDesc, backTexture, depthStencilTexture.get());
+            passInfo.RenderTargets.Bound(backTexture,ERenderTargetActions::Clear_Store, depthStencilTexture.get(), ERenderTargetActions::Clear_Store);
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[0] = 1;
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[3] = 1;
 			passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;

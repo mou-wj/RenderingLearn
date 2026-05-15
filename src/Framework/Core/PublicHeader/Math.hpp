@@ -133,5 +133,7 @@ struct CORE_API Float4 {
     Float4& operator=(const Float4& other) { Data = other.Data; return *this; }
 };
 
-
+struct CORE_API Float4x4 {
+    std::array<Float4, 4> Data;
+};
 } // namespace WR::Common

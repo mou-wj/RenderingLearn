@@ -126,7 +126,7 @@ void RHICommandSetGraphicShaderParameters::Execute(RHICommandListBase& cmdList)
     }
 }
 
-RHICommandSetStreamSource::RHICommandSetStreamSource(uint32_t streamIndex, RHIBufferSP vertexBuffer, uint32_t offset)
+RHICommandSetStreamSource::RHICommandSetStreamSource(uint32_t streamIndex, RHIBuffer* vertexBuffer, uint32_t offset)
     : StreamIndex(streamIndex), VertexBuffer(std::move(vertexBuffer)), Offset(offset)
 {
 }
@@ -358,7 +358,7 @@ void RHIGraphicCommandList::SetBatchedShaderParameters(RHIGraphicShader* shader,
     AddCommand<RHICommandSetGraphicShaderParameters>(shader, batchedShaderParameter);
 }
 
-void RHIGraphicCommandList::SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset)
+void RHIGraphicCommandList::SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset)
 {
     AddCommand<RHICommandSetStreamSource>(streamIndex, std::move(VertexBuffer), Offset);
 }

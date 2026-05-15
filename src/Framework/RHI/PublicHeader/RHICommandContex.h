@@ -42,7 +42,7 @@ namespace RHI
         // ========================
         // Graphics �ӿ�
         // ========================
-        virtual void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset) = 0;
+        virtual void SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset) = 0;
         virtual void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState) = 0;
         virtual void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth) = 0;
         virtual void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h) = 0;

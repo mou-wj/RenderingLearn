@@ -109,9 +109,9 @@ namespace RHI {
     struct RHI_API RHICommandSetStreamSource : public RHICommandBase
     {
         uint32_t StreamIndex = 0;
-        RHIBufferSP VertexBuffer;
+        RHIBuffer* VertexBuffer;
         uint32_t Offset = 0;
-        RHICommandSetStreamSource(uint32_t streamIndex, RHIBufferSP vertexBuffer, uint32_t offset);
+        RHICommandSetStreamSource(uint32_t streamIndex, RHIBuffer* vertexBuffer, uint32_t offset);
         void Execute(RHICommandListBase& cmdList) override;
     };
 
@@ -243,7 +243,7 @@ namespace RHI {
         RHIGraphicContex* GetGraphicContext() const;
 
         void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& batchedShaderParameter);
-        void SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset);
+        void SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset);
         void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
         void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth);
         void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h);

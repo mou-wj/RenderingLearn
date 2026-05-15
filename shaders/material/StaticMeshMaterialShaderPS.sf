@@ -1,0 +1,36 @@
+#include "/Generated/VertexFactory.sf"
+
+float4 MainPS(VSOutput Input) : SV_Target0
+{
+    /*
+    ===========================================================================
+        Reconstruct Stable Shading Semantic
+    ===========================================================================
+    */
+
+    ShadingContext Context;
+
+    VertexFactoryFillShadingContext(
+        Input.Interpolants,
+        Context);
+
+    /*
+    ===========================================================================
+        Simple PBR Test
+    ===========================================================================
+    */
+
+    float3 N = normalize(Context.WorldNormal);
+
+    float3 V = normalize(Context.ViewDirection);
+
+    float3 L = normalize(float3(0.5, 0.5, 1.0));
+
+    float NoL = saturate(dot(N, L));
+
+    float3 BaseColor = float3(1.0, 0.7, 0.3);
+
+    float3 Color = BaseColor * NoL;
+
+    return float4(Color, 1.0);
+}

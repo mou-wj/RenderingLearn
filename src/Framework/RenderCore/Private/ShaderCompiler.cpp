@@ -95,8 +95,10 @@ namespace RenderCore {
             // ================================
             // ⭐ 1. 生成 cbuffer（Uniform）
             // ================================
+            //Code << "cbuffer " << root.GetStructName()
+            //    << " : register(b" << BSlot++ << ")\n{\n";
             Code << "cbuffer " << root.GetStructName()
-                << " : register(b" << BSlot++ << ")\n{\n";
+                <<"\n{\n";
 
             EmitUniformMembers(root, "", Code);
 
@@ -200,9 +202,12 @@ namespace RenderCore {
                         ArraySuffix = "[" + std::to_string(Member.NumElements) + "]";
                     }
 
+                    //OutCode << MapResourceType(Member)
+                    //    << " " << Name << ArraySuffix
+                    //    << " : register(" << Reg << ");\n";
                     OutCode << MapResourceType(Member)
                         << " " << Name << ArraySuffix
-                        << " : register(" << Reg << ");\n";
+                        << ";\n";
                 }
                 else if (Member.IsStruct())
                 {

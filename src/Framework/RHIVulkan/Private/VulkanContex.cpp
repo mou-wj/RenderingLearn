@@ -404,9 +404,9 @@ void VulkanGraphicContext::SetBatchedShaderParameters(RHIGraphicShader* shader, 
     }
 }
 
-void VulkanGraphicContext::SetStreamSource(uint32_t streamIndex, RHIBufferSP VertexBuffer, uint32_t Offset)
+void VulkanGraphicContext::SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset)
 {
-    VulkanBuffer* vulkanVertexBuffer = dynamic_cast<VulkanBuffer*>(VertexBuffer.get());
+    VulkanBuffer* vulkanVertexBuffer = dynamic_cast<VulkanBuffer*>(VertexBuffer);
     VkDeviceSize offset = Offset;
     if (PendingGfx && PendingGfx->HasPipeline())
     {

@@ -1,0 +1,344 @@
+/*
+===============================================================================
+
+    LocalVertexFactory.ush
+
+    Modern semantic-oriented Local Vertex Factory
+
+===============================================================================
+*/
+
+
+/*
+===============================================================================
+
+    Vertex Factory Feature Permutations
+
+===============================================================================
+*/
+
+// Position ÓÀÔ¶´æÔÚ
+
+#ifndef VF_SUPPORTS_TEXCOORD
+    #define VF_SUPPORTS_TEXCOORD 1
+#endif
+
+#ifndef VF_SUPPORTS_NORMAL
+    #define VF_SUPPORTS_NORMAL 1
+#endif
+
+#ifndef VF_SUPPORTS_TANGENT
+    #define VF_SUPPORTS_TANGENT 1
+#endif
+
+#ifndef VF_SUPPORTS_VERTEX_COLOR
+    #define VF_SUPPORTS_VERTEX_COLOR 0
+#endif
+
+#ifndef VF_SUPPORTS_INSTANCE_DATA
+    #define VF_SUPPORTS_INSTANCE_DATA 0
+#endif
+
+
+/*
+===============================================================================
+
+    Uniform Buffers
+
+===============================================================================
+*/
+
+#include "/Generated/LocalVertexFactoryParameters.sf"
+
+/*
+===============================================================================
+
+    Vertex Factory Input (VS Only)
+
+===============================================================================
+*/
+
+#if VERTEX_SHADER
+
+struct VertexFactoryInput
+{
+    float4 Position : ATTRIBUTE0;
+
+#if VF_SUPPORTS_TEXCOORD
+    float2 TexCoord : ATTRIBUTE1;
+#endif
+
+#if VF_SUPPORTS_NORMAL
+    float3 Normal : ATTRIBUTE2;
+#endif
+
+#if VF_SUPPORTS_TANGENT
+    float4 Tangent : ATTRIBUTE3;
+#endif
+
+#if VF_SUPPORTS_VERTEX_COLOR
+    float4 Color : ATTRIBUTE4;
+#endif
+};
+
+#endif // VERTEX_SHADER
+
+
+/*
+===============================================================================
+
+    Vertex Factory Intermediates (VS Only)
+
+    Internal VS-only semantic data
+
+===============================================================================
+*/
+
+#if VERTEX_SHADER
+
+struct VertexFactoryIntermediates
+{
+    float3 WorldPosition;
+    float3 WorldNormal;
+    float3x3 TangentToWorld;
+    float2 TexCoord;
+    float4 VertexColor;
+};
+
+#endif // VERTEX_SHADER
+
+
+/*
+===============================================================================
+
+    VS -> PS Interpolants (Both VS and PS need this)
+
+===============================================================================
+*/
+
+struct VertexFactoryVSToPS
+{
+#if VF_SUPPORTS_TEXCOORD
+    float2 TexCoord : TEXCOORD0;
+#endif
+
+#if VF_SUPPORTS_TANGENT
+
+    // Tangent.xyz + Handedness
+    float4 TangentToWorld0 : TEXCOORD1;
+
+    // Normal.xyz
+    float4 TangentToWorld2 : TEXCOORD2;
+
+#elif VF_SUPPORTS_NORMAL
+
+    float3 WorldNormal : TEXCOORD1;
+
+#endif
+
+#if VF_SUPPORTS_VERTEX_COLOR
+    float4 VertexColor : TEXCOORD3;
+#endif
+
+    float3 WorldPosition : TEXCOORD4;
+};
+
+#include "/core/ShadingContext.ush"
+
+
+/*
+===============================================================================
+
+    Vertex Factory Internal Construction (VS Only)
+
+===============================================================================
+*/
+
+#if VERTEX_SHADER
+
+VertexFactoryIntermediates GetVertexFactoryIntermediates(VertexFactoryInput Input)
+{
+    VertexFactoryIntermediates Intermediates;
+
+    /*
+    ---------------------------------------------------------------------------
+        World Position
+    ---------------------------------------------------------------------------
+    */
+    Intermediates.WorldPosition = mul(LocalToWorld, float4(Input.Position.xyz, 1.0)).xyz;
+
+    /*
+    ---------------------------------------------------------------------------
+        UV
+    ---------------------------------------------------------------------------
+    */
+#if VF_SUPPORTS_TEXCOORD
+    Intermediates.TexCoord = Input.TexCoord;
+#else
+    Intermediates.TexCoord = float2(0.0, 0.0);
+#endif
+
+    /*
+    ---------------------------------------------------------------------------
+        Vertex Color
+    ---------------------------------------------------------------------------
+    */
+#if VF_SUPPORTS_VERTEX_COLOR
+    Intermediates.VertexColor = Input.Color;
+#else
+    Intermediates.VertexColor = float4(1,1,1,1);
+#endif
+
+    /*
+    ---------------------------------------------------------------------------
+        Normal/Tangent
+    ---------------------------------------------------------------------------
+    */
+#if VF_SUPPORTS_NORMAL
+    float3 WorldNormal = normalize(mul((float3x3)LocalToWorld, Input.Normal));
+#else
+    float3 WorldNormal = float3(0,0,1);
+#endif
+
+#if VF_SUPPORTS_TANGENT
+    float3 WorldTangent = normalize(mul((float3x3)LocalToWorld, Input.Tangent.xyz));
+    float3 WorldBitangent = normalize(cross(WorldNormal, WorldTangent) * Input.Tangent.w);
+#else
+    float3 WorldTangent = float3(1,0,0);
+    float3 WorldBitangent = float3(0,1,0);
+#endif
+
+    Intermediates.WorldNormal = WorldNormal;
+    Intermediates.TangentToWorld = float3x3(WorldTangent, WorldBitangent, WorldNormal);
+
+    return Intermediates;
+}
+
+/*
+===============================================================================
+
+    Build VS->PS Interpolants (VS Only)
+
+===============================================================================
+*/
+
+VertexFactoryVSToPS VertexFactoryGetVSToPS(
+    VertexFactoryInput Input,
+    VertexFactoryIntermediates Intermediates)
+{
+    VertexFactoryVSToPS Output;
+
+#if VF_SUPPORTS_TEXCOORD
+    Output.TexCoord = Intermediates.TexCoord;
+#endif
+
+#if VF_SUPPORTS_TANGENT
+    Output.TangentToWorld0 = float4(Intermediates.TangentToWorld[0], Input.Tangent.w);
+    Output.TangentToWorld2 = float4(Intermediates.TangentToWorld[2], 0.0);
+#elif VF_SUPPORTS_NORMAL
+    Output.WorldNormal = Intermediates.WorldNormal;
+#endif
+
+#if VF_SUPPORTS_VERTEX_COLOR
+    Output.VertexColor = Intermediates.VertexColor;
+#endif
+
+    Output.WorldPosition = Intermediates.WorldPosition;
+
+    return Output;
+}
+
+/*
+===============================================================================
+
+    Position Access (VS Only)
+
+===============================================================================
+*/
+
+float4 VertexFactoryGetClipPosition(VertexFactoryIntermediates Intermediates)
+{
+    return mul(ViewProjection, float4(Intermediates.WorldPosition, 1.0));
+}
+
+#endif // VERTEX_SHADER
+
+
+/*
+===============================================================================
+
+    Shading Context Reconstruction (PS Only)
+
+===============================================================================
+*/
+
+#if PIXEL_SHADER
+
+void VertexFactoryFillShadingContext(
+    VertexFactoryVSToPS Input,
+    out ShadingContext Context)
+{
+    /*
+    ---------------------------------------------------------------------------
+        World Position
+    ---------------------------------------------------------------------------
+    */
+    Context.WorldPosition = Input.WorldPosition;
+
+    /*
+    ---------------------------------------------------------------------------
+        UV
+    ---------------------------------------------------------------------------
+    */
+#if VF_SUPPORTS_TEXCOORD
+    Context.UV0 = Input.TexCoord;
+#else
+    Context.UV0 = 0.0;
+#endif
+
+    /*
+    ---------------------------------------------------------------------------
+        Vertex Color
+    ---------------------------------------------------------------------------
+    */
+#if VF_SUPPORTS_VERTEX_COLOR
+    Context.VertexColor = Input.VertexColor;
+#else
+    Context.VertexColor = 1.0;
+#endif
+
+    /*
+    ---------------------------------------------------------------------------
+        TBN Reconstruction
+    ---------------------------------------------------------------------------
+    */
+#if VF_SUPPORTS_TANGENT
+    float3 N = normalize(Input.TangentToWorld2.xyz);
+    float3 T = normalize(Input.TangentToWorld0.xyz);
+    float3 B = normalize(cross(N, T) * Input.TangentToWorld0.w);
+
+    Context.WorldNormal = N;
+    Context.TangentToWorld = float3x3(T, B, N);
+#elif VF_SUPPORTS_NORMAL
+    Context.WorldNormal = normalize(Input.WorldNormal);
+    Context.TangentToWorld = float3x3(
+        float3(1,0,0),
+        float3(0,1,0),
+        Context.WorldNormal);
+#else
+    Context.WorldNormal = float3(0,0,1);
+    Context.TangentToWorld = float3x3(
+        float3(1,0,0),
+        float3(0,1,0),
+        float3(0,0,1));
+#endif
+
+    /*
+    ---------------------------------------------------------------------------
+        View Direction
+    ---------------------------------------------------------------------------
+    */
+    Context.ViewDirection = normalize(CameraWorldPosition - Context.WorldPosition);
+}
+
+#endif // PIXEL_SHADER

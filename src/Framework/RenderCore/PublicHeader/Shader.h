@@ -166,6 +166,11 @@ namespace RenderCore {
         }
     };
     struct ShaderType;
+    class Shader;
+    using ModifyCompilationEnvironmentFuncType = std::function< void(const ShaderPermutationParameters&, ShaderCompilerEnvironment&)>;
+    using ShouldCompilePermutationFuncType = std::function< bool(const ShaderPermutationParameters&)>;
+    struct ShaderCompiledInitializer;
+    using ConstructCompiledFuncType = std::function< Shader* (const ShaderCompiledInitializer&)>;
     struct ShaderCompiledInitializer
     {
         const ShaderType* Type;
@@ -186,6 +191,7 @@ public:
     {
         Global = 0,
         Material = 1 << 0, // 是否为全局 Shader（不依赖 VertexFactory）
+        MeshMaterial = 1 << 1, // 是否为 MeshMaterial Shader（依赖 VertexFactory）
         // Future flags can be added here (e.g., for editor-only shaders, mobile shaders, etc.)
     };
 
@@ -193,12 +199,40 @@ public:
     std::string SourceFile;       // USF 源文件路径
     std::string EntryPoint;       // 入口函数名
     RHI::ERHIShaderFrequency Frequency;   // VS / PS / CS
-    std::function< void(const ShaderPermutationParameters&,ShaderCompilerEnvironment&)> ModifyCompilationEnvironment;
-    std::function< bool(const ShaderPermutationParameters&)> ShouldCompilePermutation;
-    std::function<RHIShader* (const ShaderCompiledInitializer&)> ConstructCompiled;
+
+    ModifyCompilationEnvironmentFuncType ModifyCompilationEnvironment;
+    ShouldCompilePermutationFuncType ShouldCompilePermutation;
+    ConstructCompiledFuncType ConstructCompiled;
     int32_t TotalPermutationCount = 1;
     const ShaderParametersMetadata* RootParametersMetadata = nullptr;
     EShaderTypeFlag Flag = EShaderTypeFlag::Global;
+
+    ShaderType(
+        const std::string& InName,
+        const std::string& InSourceFile,
+        const std::string& InEntryPoint,
+        RHI::ERHIShaderFrequency InFrequency,
+        ModifyCompilationEnvironmentFuncType InModifyCompilationEnvironment,
+        ShouldCompilePermutationFuncType InShouldCompilePermutation,
+        ConstructCompiledFuncType InConstructCompiled,
+        int32_t InTotalPermutationCount,
+        const ShaderParametersMetadata* InRootParametersMetadata,
+        EShaderTypeFlag InFlag
+    )
+        :
+        Name(InName),
+        SourceFile(InSourceFile),
+        EntryPoint(InEntryPoint),
+        Frequency(InFrequency),
+        ModifyCompilationEnvironment(InModifyCompilationEnvironment),
+        ShouldCompilePermutation(InShouldCompilePermutation),
+        ConstructCompiled(InConstructCompiled),
+        TotalPermutationCount(InTotalPermutationCount),
+		RootParametersMetadata(InRootParametersMetadata),
+        Flag(InFlag)
+    {
+        Register(this);
+    }
 
     // 全局注册表相关静态方法
     // flag -> (name -> ShaderType*)
@@ -234,6 +268,11 @@ public:
         }
         return result;
     }
+    private:
+        static void Register(ShaderType* Type)
+        {
+            GetRegisterMap()[Type->Flag][Type->Name] = Type;
+        }
 };
 
 
@@ -348,19 +387,36 @@ public:
 };
 
 
-// 注册宏：支持传入 flag，自动注册到对应分组
-#define IMPLEMENT_SHADER_TYPE_FLAG(T, SHADER_NAME, SHADER_PATH, ENTRY, FREQ, FLAG) \
-    static RenderCore::ShaderType G##T##ShaderTypeInstance = { \
-        SHADER_NAME, SHADER_PATH, ENTRY, FREQ, \
-        &T::ModifyShaderCompilerEnvironment, \
-        &T::ShouldCompilePermutation, \
-        nullptr, T::PermutationDomain::TotalCount, T::GetShaderParameterMetadata(), FLAG \
-    }; \
-    struct G##T##ShaderTypeRegister { \
-        G##T##ShaderTypeRegister() { RenderCore::ShaderType::Register(#T, &G##T##ShaderTypeInstance, FLAG); } \
-    } G##T##ShaderTypeRegisterInstance;
-
-
-
 using ShaderSP = std::shared_ptr<Shader>;
 } // namespace RenderCore
+
+
+#define DECLARE_SHADER_TYPE(ShaderClass) \
+public: \
+    static ShaderMetaType StaticType; \
+    static RenderCore::ShaderType* GetStaticType() \
+    { \
+        return &StaticType; \
+    }
+
+
+// 注册宏：支持传入 flag，自动注册到对应分组
+#define IMPLEMENT_SHADER_TYPE( \
+    ShaderClass, \
+    ShaderName, \
+    ShaderPath, \
+    EntryPoint, \
+    Frequency\
+) \
+    ShaderClass::ShaderMetaType ShaderClass::StaticType( \
+        ShaderName, \
+        ShaderPath, \
+        EntryPoint, \
+        Frequency, \
+        &ShaderClass::ModifyShaderCompilerEnvironment, \
+        &ShaderClass::ShouldCompilePermutation, \
+        [](const RenderCore::ShaderCompiledInitializer& initializer){return new ShaderClass(static_cast<const ShaderClass::ShaderMetaType::ShaderCompiledInitializer&>(initializer));}, \
+        ShaderClass::PermutationDomain::TotalCount, \
+        ShaderClass::GetShaderParameterMetadata()\
+    );
+

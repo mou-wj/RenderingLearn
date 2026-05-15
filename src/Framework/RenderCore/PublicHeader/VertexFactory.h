@@ -9,36 +9,23 @@
 #include "RHIResource.h"
 #include "ShaderCore.h"
 #include "RHIDefine.h"
+#include "RHICommandList.h"
 namespace RenderCore {
 	
-
-// 顶点属性描述
-struct RENDERCORE_API VertexElement
-{
-    std::string SemanticName; // 语义名，如POSITION/NORMAL/TEXCOORD
-    uint32_t SemanticIndex = 0;
-    uint32_t Offset = 0;
-    uint32_t Stride = 0;
-    RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown;
-};
-
-// 顶点布局描述
-struct RENDERCORE_API VertexDeclaration
-{
-    std::vector<VertexElement> Elements;
-    uint32_t Stride = 0;
-};
-
 
 // 前向声明
 class VertexFactory;
 class ShaderType;
 class VertexFactoryType;
 class ShaderCompilerEnvironment;
+using VertexFactoryFeatureFlags = uint64_t;
+class ShaderParametersMetadata;
 struct VertexFactoryShaderPermutationParameters
 {
     const VertexFactoryType* VFType;
     const ShaderType* ShaderType;
+    VertexFactoryFeatureFlags VertexFactoryFlags;
+    RHI::ERHIShaderPlatform Platform;
 };
 
 // 顶点工厂类型// 声明函数原型
@@ -56,38 +43,59 @@ public:
     VertexFactoryType(
         std::string InName,
         std::string InShaderPath,
+        uint32_t InPermutationTotalCount,
         VFShouldCompileFunc InShouldCompile,
-        VFModifyEnvFunc InModifyEnv
+        VFModifyEnvFunc InModifyEnv,
+        const ShaderParametersMetadata* InRootParametersMetadata
     )
         : Name(std::move(InName))
         , ShaderPath(std::move(InShaderPath))
+        , PermutationTotalCount (InPermutationTotalCount)
         , ShouldCompileFunc(std::move(InShouldCompile))
         , ModifyEnvFunc(std::move(InModifyEnv))
-    {}
+        , RootParametersMetadata(InRootParametersMetadata)
+    {
+        GetRegisterMap()[Name] = this;
+    }
 
     // 暴露给编译器的接口
     bool ShouldCompile(const VertexFactoryShaderPermutationParameters& Params) const 
     {
-        return ShouldCompileFunc ? ShouldCompileFunc(Params) : true;
+        return ShouldCompileFunc(Params);
     }
 
     void ModifyCompilationEnvironment(const VertexFactoryShaderPermutationParameters& Params, ShaderCompilerEnvironment& OutEnv) const
     {
-        if (ModifyEnvFunc) ModifyEnvFunc(Params, OutEnv);
+
+		std::string virtualIncludePath = "#include " + ShaderPath;
+        OutEnv.VirtualIncludes["/Generated/VertexFactory.sf"] = virtualIncludePath;
+        ModifyEnvFunc(Params, OutEnv);
     }
 
     const std::string& GetName() const { return Name; }
     const std::string& GetShaderPath() const { return ShaderPath; }
 
-private:
     std::string Name;
     std::string ShaderPath;
     VFShouldCompileFunc ShouldCompileFunc;
     VFModifyEnvFunc ModifyEnvFunc;
+    uint32_t PermutationTotalCount;
+    const ShaderParametersMetadata* RootParametersMetadata;
 };
 
 
+struct VertexStreamComponent
+{
+    RHI::RHIBuffer* Buffer = nullptr;
 
+    uint32_t ComponentOffset = 0;
+
+    uint32_t Stride = 0;
+
+    RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown;
+
+    RHI::ERHIInputRate InputRate = RHI::ERHIInputRate::PerVertex;
+};
 
 // 顶点工厂基类
 class RENDERCORE_API VertexFactory
@@ -95,11 +103,7 @@ class RENDERCORE_API VertexFactory
 public:
     VertexFactory() = default;
     virtual ~VertexFactory() = default;
-
-    // 设置顶点声明
-    void SetDeclaration(const VertexDeclaration& decl) { Declaration = decl; }
-    const VertexDeclaration& GetDeclaration() const { return Declaration; }
-    
+    virtual RenderCore::VertexFactoryType* GetType() const { return nullptr; }
     RHI::RHIVertexDescStateSP GetRHIVertexDescState() const;
 
     static bool ShouldCompilePermutation(const VertexFactoryShaderPermutationParameters& Parameters) {
@@ -109,30 +113,82 @@ public:
 
     }
 
-    void SetType(VertexFactoryType* type) { VFType = type; }
-    VertexFactoryType* GetType() const { return VFType; }
+    void Bind(RHI::RHIGraphicCommandList& RHICmdList) const;
+
 
 protected:
-    VertexDeclaration Declaration;
-    VertexFactoryType* VFType = nullptr; // 指向类型信息
+    struct VertexStream
+    {
+        RHI::RHIBuffer* Buffer = nullptr;
+
+        uint32_t Offset = 0;
+        uint32_t Stride = 0;
+
+        uint32_t Binding = 0;
+		RHI::ERHIInputRate InputRate = RHI::ERHIInputRate::PerVertex;
+
+        bool operator==(const VertexStream& rhs) const
+        {
+            return Buffer == rhs.Buffer &&
+                Offset == rhs.Offset &&
+                Binding == rhs.Binding;
+        }
+    };
+
+
+    struct VertexElement
+    {
+        uint32_t Binding = 0;
+
+        uint32_t Location = 0;
+
+        uint32_t ElementOffset = 0;
+
+        RHI::ERHIFormat Format = RHI::ERHIFormat::Unknown;
+    };
+protected:
+
+    //
+    // 自动生成 Binding + Attribute
+    //
+    VertexElement AccessStreamComponent(
+        const VertexStreamComponent& Component,
+        uint32_t AttributeIndex);
+
+    //
+    // 创建最终 VertexInputState
+    //
+    void InitDeclaration(
+        const std::vector<VertexElement>& Elements);
+
+
+    std::vector<VertexStream> Streams;
     RHI::RHIVertexDescStateSP RHIVertexDescState;
 };
 
-/** * 注册宏：用于在 .cpp 文件中声明并注册一个新的顶点工厂类型
- * @param T             具体的顶点工厂类名 (如 LocalVertexFactory)
- * @param ShaderPath    对应的 .ush 文件路径
- */
-#define IMPLEMENT_VERTEX_FACTORY_TYPE(T, ShaderPath) \
-    RenderCore::TVertexFactoryType<T> G##T##Type( \
-        #T, \
-        ShaderPath \
-    ); \
-    struct F##T##Register { \
-        F##T##Register() { \
-            RenderCore::VertexFactoryType::GetRegisterMap()[#T] = &G##T##Type; \
-        } \
-    } G##T##RegisterInstance;
-
 
 } // namespace RenderCore
+#define DECLARE_VERTEX_FACTORY_TYPE(FactoryClass) \
+public: \
+    static RenderCore::VertexFactoryType StaticType; \
+    virtual RenderCore::VertexFactoryType* GetType() const override;\
+    static uint32_t PermutationTotalCount;
 
+#define IMPLEMENT_VERTEX_FACTORY_TYPE(FactoryClass, ShaderFile,TotalCount)\
+RenderCore::VertexFactoryType FactoryClass::StaticType(\
+    #FactoryClass, \
+    ShaderFile, \
+    FactoryClass::PermutationTotalCount,\
+    & FactoryClass::ShouldCompilePermutation, \
+    & FactoryClass::ModifyCompilationEnvironment ,\
+    FactoryClass::GetShaderParameterMetadata() \
+); \
+\
+RenderCore::VertexFactoryType* FactoryClass::GetType() const \
+{ \
+return &StaticType; \
+}\
+uint32_t FactoryClass::PermutationTotalCount = TotalCount;
+
+#define IMPLEMENT_VERTEX_FACTORY_TYPE_DEFAULT(FactoryClass, ShaderFile) \
+    IMPLEMENT_VERTEX_FACTORY_TYPE(FactoryClass, ShaderFile, 1)

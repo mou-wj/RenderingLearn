@@ -54,11 +54,15 @@ namespace std
     };
 }
 
+namespace RenderCore {
+	class Shader;
+}
+
 namespace Engine {
 
     // 前置声明
     class Texture;
-    class Shader;
+
 
     // 枚举
     enum class EShadingModel { DefaultLit, Unlit, Subsurface };
@@ -80,17 +84,11 @@ namespace Engine {
     class ENGINE_API MaterialRenderProxy
     {
     public:
-        Shader* Shader;
+        RenderCore::Shader* Shader;
         MaterialRuntimeParameters Parameters;  // uniform / texture
     };
 
-    // MaterialShaderMap
-    class ENGINE_API MaterialShaderMap
-    {
-    public:
-        std::unordered_map<MaterialShaderKey, Shader*> ShaderPermutations;
-        Shader* FindShader(const MaterialShaderKey& key) const;
-    };
+
     class ENGINE_API MaterialInterface
     {
     public:
@@ -109,7 +107,7 @@ namespace Engine {
         void GatherStaticParameters(MaterialStaticParameters& Out) const override;
         void GatherRuntimeParameters(MaterialRuntimeParameters& Out) const override;
     };
-
+    class MaterialShaderMap;
     class ENGINE_API Material : public MaterialInterface
     {
     public:
@@ -124,7 +122,7 @@ namespace Engine {
         // Shader 规则
         MaterialShaderMap* ShaderMap;
 
-        Shader* GetShader(const MaterialShaderKey&) const;
+        RenderCore::Shader* GetShader(const MaterialShaderKey&) const;
         std::unique_ptr<MaterialRenderProxy> CreateRenderProxy() const;
         void GatherStaticParameters(MaterialStaticParameters& Out) const override;
         void GatherRuntimeParameters(MaterialRuntimeParameters& Out) const override;

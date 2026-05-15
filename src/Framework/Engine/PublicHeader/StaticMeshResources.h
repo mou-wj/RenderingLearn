@@ -11,45 +11,14 @@ namespace Engine {
     // these with concrete types or resource handles managed by the RHI/resource system.
     struct ShaderProgram; // abstract shader program handle (opaque)
     struct Texture;       // abstract texture handle (opaque)
+    class LocalVertexFactory;
 
-
-    // Vertex structure: position, normal, texcoord (UV0)
-    struct StaticVertex {
-        float Px, Py, Pz;    // position
-        float Nx, Ny, Nz;    // normal
-        float U, V;          // uv0
+    struct ENGINE_API VertexBuffer {
+        std::vector<float> vertexs;
+        uint64_t GetNumVertices() const { return vertexs.size(); }
+        
     };
-
-    // Vertex data interface: abstract access to vertex array of arbitrary vertex type.
-    // Implementations must be safe for read-only access on the RenderThread after
-    // construction on the GameThread.
-    struct ENGINE_API VertexDataInterface {
-        virtual ~VertexDataInterface() = default;
-        // Number of vertices
-        virtual size_t GetNumVertices() const = 0;
-        // Pointer to tightly-packed vertex array (type-erased). May be nullptr if empty.
-        virtual const void* GetData() const = 0;
-        // Stride in bytes of a single vertex element
-        virtual size_t GetStride() const = 0;
-    };
-
-    // Templated concrete vertex data container. Stores a vector of vertex-type T.
-    // Example: VertexData<StaticVertex> holds positions/normals/uvs.
-    template<typename T>
-    struct VertexData : public VertexDataInterface {
-        std::vector<T> Vertices;
-
-        VertexData() = default;
-        explicit VertexData(std::vector<T>&& InVertices) : Vertices(std::move(InVertices)) {}
-
-        size_t GetNumVertices() const override { return Vertices.size(); }
-        const void* GetData() const override { return Vertices.empty() ? nullptr : &Vertices[0]; }
-        size_t GetStride() const override { return sizeof(T); }
-
-        // Utility to append or replace
-        void SetVertices(std::vector<T>&& In) { Vertices = std::move(In); }
-        const std::vector<T>& GetVertices() const { return Vertices; }
-    };
+    
 
     // Lightweight index buffer: 32-bit indices
     struct ENGINE_API IndexBuffer {
@@ -72,14 +41,14 @@ namespace Engine {
     struct ENGINE_API LODResource {
         // Vertex data is type-erased via IVertexData. Use VertexData<T> to supply
         // concrete typed vertex arrays (e.g., VertexData<StaticVertex>).
-        std::unique_ptr<VertexDataInterface> VertexDataPtr;
+        std::vector<VertexBuffer> VertexBuffers;
         IndexBuffer Indices;        // per-LOD index data
         std::vector<SectionInfo> Sections; // sub-mesh sections mapped to materials
 
         // Convenience: query number of sections
         size_t GetNumSections() const { return Sections.size(); }
         // Convenience: get vertex count if VertexDataPtr is set
-        size_t GetNumVertices() const { return VertexDataPtr ? VertexDataPtr->GetNumVertices() : 0; }
+        size_t GetNumVertices() const { return VertexBuffers.empty() ? VertexBuffers[0].GetNumVertices() : 0; }
     };
 
 
@@ -93,6 +62,7 @@ namespace Engine {
 
         // LOD resources (LOD0 = highest detail)
         std::vector<LODResource> LODResources;
+		std::vector<LocalVertexFactory*> LODVertexFactories; // one per LOD, created from LODResources
 
         // Bounds (AABB) for frustum culling and coarse occlusion
         Core::AABB Bounds;

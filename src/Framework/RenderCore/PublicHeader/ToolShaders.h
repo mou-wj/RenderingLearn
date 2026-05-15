@@ -59,15 +59,6 @@ namespace RenderCore {
         }
     };
 
-    // --- ע�� Shader ---
-    // ʹ����ĺ꣬���Ϊ Global ����
-    IMPLEMENT_SHADER_TYPE_FLAG(
-        BlitTextureCS,
-        "BlitTextureCS",                     // Shader �Ѻ�����
-        "/tools/BlitTextureCS.sf",   // ����·��
-        "MainCS",                                // ��ڵ�
-        RHI::ERHIShaderFrequency::Compute,       // Ƶ��
-        ShaderType::EShaderTypeFlag::Global      // ע����飺Global
-    );
+
 
 } // namespace RenderCore

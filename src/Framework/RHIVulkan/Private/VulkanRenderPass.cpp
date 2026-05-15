@@ -401,11 +401,105 @@ namespace RHIVulkan {
         return ClearValues;
     }
 
+    RHIGraphicAttachmentDesc GetAttachmentDesc(const RHIBoundRenderTargets& renderTargets) {
+        RHIGraphicAttachmentDesc desc;
+        // ==========================================
+    // 1. 填充 Color Attachments 信息
+    // ==========================================
+        desc.colorAttachmentCount = renderTargets.NumColorAttachments;
+
+        // 用于记录整个 Pass 的全局 MSAA 采样数
+        uint32_t commonSampleCount = 1;
+        bool bSampleCountSet = false;
+
+        for (uint32_t i = 0; i < renderTargets.NumColorAttachments; ++i)
+        {
+            const auto& srcAtt = renderTargets.ColorAttachments[i];
+
+            if (srcAtt.Texture != nullptr)
+            {
+                // 从物理纹理资源中提取静态属性
+                desc.colorAttachments[i].format = srcAtt.Texture->GetDesc().Format;
+                desc.colorAttachments[i].actions = srcAtt.Actions;
+
+                // 记录并追踪第一个有效纹理的采样数
+                if (!bSampleCountSet)
+                {
+                    commonSampleCount = srcAtt.Texture->GetDesc().SampleCount;
+                    bSampleCountSet = true;
+                }
+                else
+                {
+                    // 严谨性校验：同一个 Pass 的多渲染目标采样率必须一致
+                    assert(srcAtt.Texture->GetDesc().SampleCount == commonSampleCount &&
+                        "MRT color textures must have the exact same sample count!");
+                }
+            }
+            else
+            {
+                desc.colorAttachments[i].format = ERHIFormat::Unknown;
+                desc.colorAttachments[i].actions = ERenderTargetActions::Load_Store; // 默认安全回滚
+            }
+        }
+
+        // ==========================================
+        // 2. 填充 Depth / Stencil 信息
+        // ==========================================
+        const auto& srcDepth = renderTargets.DepthStencil;
+
+        if (srcDepth.Texture != nullptr)
+        {
+            desc.enableDepth = true;
+
+            // 根据格式特征自动判断是否包含 Stencil（例如包含 D24S8 或 D32S8 元素）
+            ERHIFormat depthFormat = srcDepth.Texture->GetDesc().Format;
+            desc.depthStencilFormat = depthFormat;
+
+            // 常见的带模板的深度格式检测（请根据你实际的 ERHIFormat 枚举名调整）
+            desc.enableStencil = (depthFormat == ERHIFormat::D24_UNorm_S8_UInt);
+
+            desc.depthActions = srcDepth.Actions;
+            // 如果开启了 Stencil，保持与 Depth 一致的动作，或者默认 Load_Store
+            desc.stencilActions = desc.enableStencil ? srcDepth.Actions : ERenderTargetActions::Load_Store;
+
+            // 采样率处理与对齐
+            if (!bSampleCountSet)
+            {
+                // 纯深度 Pass（如 ShadowMap），由深度纹理决定全局采样率
+                commonSampleCount = srcDepth.Texture->GetDesc().SampleCount;
+                bSampleCountSet = true;
+            }
+            else
+            {
+                // 深度与颜色同时存在时，两者的 MSAA 采样率必须完美对齐
+                assert(srcDepth.Texture->GetDesc().SampleCount == commonSampleCount &&
+                    "Depth stencil sample count must match color attachments!");
+            }
+        }
+        else
+        {
+            // 明确未绑定深度的情况
+            desc.enableDepth = false;
+            desc.enableStencil = false;
+            desc.depthStencilFormat = ERHIFormat::Unknown;
+            desc.depthActions = ERenderTargetActions::Load_Store;
+            desc.stencilActions = ERenderTargetActions::Load_Store;
+        }
+
+        // ==========================================
+        // 3. 全局/管线级状态填充
+        // ==========================================
+        desc.numSamples = commonSampleCount;
+        desc.subpassIndex = 0; // 默认初始子通道索引为 0
+
+
+        return desc;
+    }
 
     void VulkanRenderPassManager::BeginRenderPass(VulkanCommandBuffer* cmdBuffer, const RHIRenderPassInfo& renderPassInfo)
     {
         VkRenderPassBeginInfo renderPassBeginInfo{};
-        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; VulkanRenderTargetLayout renderTargrtInfo(renderPassInfo.RenderTargets.AttachmentDesc);
+        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; VulkanRenderTargetLayout renderTargrtInfo(GetAttachmentDesc(renderPassInfo.RenderTargets));
         auto renderPass = GetOrCreateRenderPass(renderTargrtInfo);
         auto frameBuffer = GetOrCreateFramebuffer(renderPassInfo.RenderTargets, renderPass);
         renderPassBeginInfo.renderPass = renderPass->GetHandle();

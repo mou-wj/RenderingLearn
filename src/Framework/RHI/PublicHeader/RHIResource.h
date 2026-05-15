@@ -532,6 +532,8 @@ struct RHIBoundRenderTargets
         uint8_t  MipIndex = 0;
         int32_t  ArraySlice = 0;
         RHIClearValueBinding ClearBinding;
+        ERenderTargetActions Actions = ERenderTargetActions::Load_Store;
+        uint32_t SampleCount = 1;
     };
 
     struct DepthStencilAttachment
@@ -542,7 +544,8 @@ struct RHIBoundRenderTargets
         uint32_t MipIndex = 0;
         uint32_t ArraySlice = 0;
         RHIClearValueBinding ClearBinding;
-
+        ERenderTargetActions Actions = ERenderTargetActions::Load_Store;
+        uint32_t SampleCount = 1;
     };
 
     // === 核心数据 ===
@@ -551,14 +554,11 @@ struct RHIBoundRenderTargets
 
     uint8_t NumColorAttachments = 0;
     Core::Int2 Dimensions{};
-    RHIGraphicAttachmentDesc AttachmentDesc;
     RHIBoundRenderTargets() = default;
-    void Bound(const RHIGraphicAttachmentDesc& inDesc,RHITexture* colorTexture, RHITexture* depthTexture) {
-        // 保存描述
-        AttachmentDesc = inDesc;
+    void Bound(RHITexture* colorTexture, ERenderTargetActions colorActions,RHITexture* depthTexture, ERenderTargetActions depthActions) {
 
         // reset
-        NumColorAttachments = 0;
+        NumColorAttachments = 1;
         for (uint32_t i = 0; i < MaxColorAttachments; ++i)
         {
             ColorAttachments[i] = {};
@@ -568,74 +568,41 @@ struct RHIBoundRenderTargets
         // =========================
         // Color Attachments
         // =========================
-        if (inDesc.colorAttachmentCount > 0)
-        {
-            assert(colorTexture != nullptr && "Color attachment enabled but colorTexture is null");
 
-            NumColorAttachments = inDesc.colorAttachmentCount;
+        assert(colorTexture != nullptr && "Color attachment enabled but colorTexture is null");
+        
 
-            for (uint32_t i = 0; i < NumColorAttachments; ++i)
-            {
-                const auto& desc = inDesc.colorAttachments[i];
 
-                // -------- format 校验 --------
-                assert(colorTexture->GetDesc().Format == desc.format &&
-                    "Color texture format mismatch with attachment desc");
+       ColorAttachment& att = ColorAttachments[0];
 
-                // -------- MSAA 校验 --------
-                assert(colorTexture->GetDesc().SampleCount == desc.sampleCount &&
-                    "Color texture sample count mismatch");
+       att.Texture = colorTexture;
+       att.ResolveTarget = nullptr;
+       att.MipIndex = 0;
+       att.ArraySlice = 0;
+       att.Actions = colorActions;
+       // Clear binding
+       att.ClearBinding.Binding =
+           RHIClearValueBinding::ClearValueBinding::Color;
 
-                ColorAttachment& att = ColorAttachments[i];
+        
 
-                att.Texture = colorTexture;
-                att.ResolveTarget = nullptr;
-                att.MipIndex = 0;
-                att.ArraySlice = 0;
-
-                // Clear binding
-                att.ClearBinding.Binding =
-                    RHIClearValueBinding::ClearValueBinding::Color;
-
-            }
-        }
-        else
-        {
-            assert(colorTexture == nullptr &&
-                "colorTexture provided but desc.colorAttachmentCount == 0");
-        }
 
         // =========================
         // Depth / Stencil
         // =========================
-        if (inDesc.enableDepth)
-        {
-            assert(depthTexture != nullptr && "Depth enabled but depthTexture is null");
 
-            // format 校验
-            assert(depthTexture->GetDesc().Format == inDesc.depthStencilFormat &&
-                "Depth format mismatch");
+        DepthStencil.Texture = depthTexture;
+        DepthStencil.ResolveTarget = nullptr;
+        DepthStencil.MipIndex = 0;
+        DepthStencil.ArraySlice = 0;
+        DepthStencil.Actions = depthActions;
+        DepthStencil.ClearBinding.Binding =
+            RHIClearValueBinding::ClearValueBinding::DepthStencil;
 
-            // MSAA 校验
-            assert(depthTexture->GetDesc().SampleCount == inDesc.numSamples &&
-                "Depth sample count mismatch");
+        DepthStencil.ClearBinding.Depth = 1.0f;
+        DepthStencil.ClearBinding.Stencil = 0;
+        
 
-            DepthStencil.Texture = depthTexture;
-            DepthStencil.ResolveTarget = nullptr;
-            DepthStencil.MipIndex = 0;
-            DepthStencil.ArraySlice = 0;
-
-            DepthStencil.ClearBinding.Binding =
-                RHIClearValueBinding::ClearValueBinding::DepthStencil;
-
-            DepthStencil.ClearBinding.Depth = 1.0f;
-            DepthStencil.ClearBinding.Stencil = 0;
-        }
-        else
-        {
-            assert(depthTexture == nullptr &&
-                "Depth texture provided but desc.enableDepth == false");
-        }
         CalculateDimensions();
 
     }
@@ -677,17 +644,12 @@ struct RHIBoundRenderTargets
         fnHashBytes(&ds.MipIndex, sizeof(ds.MipIndex));
         fnHashBytes(&ds.ArraySlice, sizeof(ds.ArraySlice));
 
-        // 4. AttachmentDesc
-        size_t descHash = RHIGraphicAttachmentDesc::CalculateHash(renderTargets.AttachmentDesc);
-        fnHashBytes(&descHash, sizeof(descHash));
-
         return static_cast<size_t>(hash);
     }
 
     
 
     bool HasDepth() const { return DepthStencil.Texture != nullptr; }
-protected:
 
     void CalculateDimensions() const { 
 

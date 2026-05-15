@@ -98,7 +98,7 @@ namespace RenderCore{
                 ShaderCompiledInitializer initializer(st,output.PackedBinaryData,output.ParameterMap,permId);
 
                 // 7. 实例化并缓存
-                ShaderSP shaderInstance = std::make_shared<Shader>(initializer);
+                ShaderSP shaderInstance = std::shared_ptr<Shader>(st->ConstructCompiled(initializer));
 
                 // ShaderMap 结构: std::unordered_map<ShaderType*, std::map<ShaderPermutationId, ShaderSP>>
                 ShaderMap[st][permId] = shaderInstance;

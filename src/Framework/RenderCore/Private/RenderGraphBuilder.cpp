@@ -887,6 +887,71 @@ namespace RenderCore {
             {
                 SetupPassInternal(Pass, Member.StructMetadata, MemberAddr);
             }
+            else if (Member.IsRenderTargetSlots()) {
+                auto& RTSlots = **reinterpret_cast<RenderTargetBindingSlots* const*>(MemberAddr);
+                auto checkColorBinding = [this, Pass](const RenderTargetBinding& binding) {
+                    if (binding.IsValid()) {
+                        RenderGraphPass::RenderGraphTextureIntent Intent;
+                        Intent.Texture = binding.Texture;
+                        auto Desc = binding.Texture->GetDesc();
+                        uint32_t mipSlice = binding.MipIndex;
+                        if (Desc.MipLevels == 1 && mipSlice == 0) {
+                            mipSlice = RHISubresourceRange::kAllSubresources;
+                        }
+                        uint32_t arraySlice = binding.ArraySlice;
+                        if (Desc.ArraySize == 1 && arraySlice == 0) {
+                            arraySlice = RHISubresourceRange::kAllSubresources;
+                        }
+                        Intent.SubresourceRange = RHISubresourceRange(
+                            mipSlice,
+                            arraySlice,
+                            RHISubresourceRange::kAllSubresources
+                        );
+
+                        Intent.SubresourceRange = RHISubresourceRange(); // whole
+
+                        Intent.RequiredAccess =
+                            (Pass->GetPassFlag() == EPassFlag::Compute)
+                            ? ERHIResourceAccess::SRVCompute
+                            : ERHIResourceAccess::SRVGraphics;
+
+                        Pass->TextureIntents.push_back(Intent);
+                    }
+                    
+                    };
+                for (int i = 0; i < RTSlots.MaxRenderTargets; ++i) {
+                    checkColorBinding(RTSlots.ColorRenderTargets[i]);
+                }
+                if (RTSlots.DepthStencil.IsValid()) {
+                    RenderGraphPass::RenderGraphTextureIntent Intent;
+                    Intent.Texture = RTSlots.DepthStencil.Texture;
+                    auto Desc = RTSlots.DepthStencil.Texture->GetDesc();
+                    uint32_t mipSlice = RTSlots.DepthStencil.MipIndex;
+                    if (Desc.MipLevels == 1 && mipSlice == 0) {
+                        mipSlice = RHISubresourceRange::kAllSubresources;
+                    }
+                    uint32_t arraySlice = RTSlots.DepthStencil.ArraySlice;
+                    if (Desc.ArraySize == 1 && arraySlice == 0) {
+                        arraySlice = RHISubresourceRange::kAllSubresources;
+                    }
+                    Intent.SubresourceRange = RHISubresourceRange(
+                        mipSlice,
+                        arraySlice,
+                        RHISubresourceRange::kAllSubresources
+                    );
+
+                    Intent.SubresourceRange = RHISubresourceRange(); // whole
+
+                    Intent.RequiredAccess =
+                        (Pass->GetPassFlag() == EPassFlag::Compute)
+                        ? ERHIResourceAccess::SRVCompute
+                        : ERHIResourceAccess::SRVGraphics;
+
+                    Pass->TextureIntents.push_back(Intent);
+                }
+
+            }
+
         }
     }
 

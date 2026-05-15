@@ -111,6 +111,181 @@ namespace RenderCore {
 
         static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
     };
+    template<>
+    struct ShaderParameterTypeInfo<Core::Float3>
+    {
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::Float32;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 3;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+        using TAlignedType = Core::Float3;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    };
+    template<>
+    struct ShaderParameterTypeInfo<Core::Float4x4>
+    {
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::Float32;
+        static constexpr uint32_t NumRows = 4;
+        static constexpr uint32_t NumColumns = 4;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+        using TAlignedType = Core::Float4x4;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    };
+
+
+    struct RenderTargetBinding
+    {
+        RenderGraphTexture* Texture = nullptr;
+
+        RenderGraphTexture* ResolveTexture = nullptr;
+
+        RHI::ERenderTargetActions Action =
+            RHI::ERenderTargetActions::Clear_Store;
+
+        uint8_t MipIndex = 0;
+
+        int16_t ArraySlice = -1;
+
+        uint32_t SampleCount = 1;
+
+        bool IsValid() const
+        {
+            return Texture != nullptr;
+        }
+    };
+
+    struct DepthStencilBinding
+    {
+        RenderGraphTexture* Texture = nullptr;
+
+        RHI::ERenderTargetActions DepthAction =
+            RHI::ERenderTargetActions::Clear_Store;
+
+        RHI::ERenderTargetActions StencilAction =
+            RHI::ERenderTargetActions::Clear_Store;
+
+        bool bWriteDepth = true;
+
+        bool bWriteStencil = false;
+
+        uint8_t MipIndex = 0;
+
+        int16_t ArraySlice = -1;
+
+        uint32_t SampleCount = 1;
+
+        bool IsValid() const
+        {
+            return Texture != nullptr;
+        }
+    };
+
+    struct RenderTargetBindingSlots
+    {
+        static constexpr uint32_t MaxRenderTargets = 8;
+
+        RenderTargetBinding
+            ColorRenderTargets[MaxRenderTargets];
+
+        uint32_t NumColorRenderTargets = 0;
+
+        DepthStencilBinding DepthStencil;
+
+    public:
+
+        RenderTargetBinding&
+            operator[](uint32_t Index)
+        {
+            return ColorRenderTargets[Index];
+        }
+
+        const RenderTargetBinding&
+            operator[](uint32_t Index) const
+        {
+            return ColorRenderTargets[Index];
+        }
+        RHI::RHIBoundRenderTargets GetBoundRenderTarget() const
+        {
+            RHI::RHIBoundRenderTargets BoundRTs;
+
+            // 1. 填充颜色附件
+            // 外部可能没有紧凑地排列 ColorRenderTargets，所以我们通过 NumColorRenderTargets 
+            // 或者显式遍历有效插槽来保证数据的正确性。
+            BoundRTs.NumColorAttachments = static_cast<uint8_t>(NumColorRenderTargets);
+
+            for (uint32_t i = 0; i < NumColorRenderTargets; ++i)
+            {
+                const RenderTargetBinding& SourceSlot = ColorRenderTargets[i];
+                auto& DestSlot = BoundRTs.ColorAttachments[i];
+
+                if (SourceSlot.IsValid())
+                {
+                    // 【核心】从 RDG Texture 提取底层物理 RHI 纹理指针
+                    // 请根据你引擎中 RenderGraphTexture 的实际提取函数名修改（如 ->GetRHITexture() 或 ->RHIResource）
+                    DestSlot.Texture = SourceSlot.Texture->GetRHITexture();
+                    DestSlot.ResolveTarget = SourceSlot.ResolveTexture ? SourceSlot.ResolveTexture->GetRHITexture() : nullptr;
+
+                    DestSlot.MipIndex = SourceSlot.MipIndex;
+                    DestSlot.ArraySlice = static_cast<int32_t>(SourceSlot.ArraySlice);
+                    DestSlot.Actions = SourceSlot.Action;
+                    DestSlot.SampleCount = SourceSlot.SampleCount;
+
+                    // 设置清除标记类型
+                    DestSlot.ClearBinding.Binding = RHI::RHIClearValueBinding::ClearValueBinding::Color;
+                }
+            }
+
+            // 2. 填充深度模板附件
+            if (DepthStencil.IsValid())
+            {
+                auto& DestDepth = BoundRTs.DepthStencil;
+
+                // 【核心】提取底层物理 RHI 深度纹理指针
+                DestDepth.Texture = DepthStencil.Texture->GetRHITexture();
+                DestDepth.ResolveTarget = nullptr; // 深度通常不直接在这做 Resolve
+
+                DestDepth.MipIndex = DepthStencil.MipIndex;
+                DestDepth.ArraySlice = static_cast<uint32_t>(DepthStencil.ArraySlice < 0 ? 0 : DepthStencil.ArraySlice);
+                DestDepth.Actions = DepthStencil.DepthAction; // 默认或者以 DepthAction 为主
+                DestDepth.SampleCount = DepthStencil.SampleCount;
+
+                DestDepth.ClearBinding.Binding = RHI::RHIClearValueBinding::ClearValueBinding::DepthStencil;
+                DestDepth.ClearBinding.Depth = 1.0f;
+                DestDepth.ClearBinding.Stencil = 0;
+            }
+
+            // 3. 触发物理尺寸的重新计算与对齐
+            // 由于 Bound 逻辑移到了这里，我们需要手动调用转换后结构的内部计算
+            // 如果之前把 CalculateDimensions 方法设为了 protected/private，需要把它改成 public
+            BoundRTs.CalculateDimensions();
+
+            return BoundRTs;
+        }
+
+    };
+    template<>
+    struct ShaderParameterTypeInfo<RenderTargetBindingSlots>
+    {
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::RenderTargetSlots;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 1;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+        using TAlignedType = RenderTargetBindingSlots;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    };
+
 
     class ShaderParametersMetadata
     {
@@ -151,8 +326,9 @@ namespace RenderCore {
 
             }
 
-            bool IsStruct() const { return StructMetadata != nullptr; }
+            bool IsStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::Struct; }
             bool IsResource() const { return BaseType >= EShaderParameterBaseType::RDGTexture; }
+            bool IsRenderTargetSlots() const { return BaseType == EShaderParameterBaseType::RenderTargetSlots; }
         };
 		bool InitFlag = false;
     public:
@@ -268,6 +444,13 @@ SHADER_PARAMETER_INTERNAL(ShaderParameterTypeInfo<ClassType>::BaseType,ClassType
         MemberName, \
         ShaderParameterTypeInfo<TextureUAVType>)
 
+#define SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        ShaderParameterTypeInfo<RenderTargetBindingSlots>::BaseType, \
+        ShaderParameterTypeInfo<RenderTargetBindingSlots>::TAlignedType, \
+        MemberName, \
+        ShaderParameterTypeInfo<RenderTargetBindingSlots>)
+
 BEGIN_SHADER_PARAMETER_STRUCT(A)
     SHADER_PARAMETER(Core::Int2,Color)
 END_SHADER_PARAMETER_STRUCT(A)
@@ -278,6 +461,7 @@ RENDERCORE_API void SetShaderParameters(
     const Shader* shader,
     const ShaderParametersMetadata& ParametersMetaData,
     void* ParametersData);
+
 
 /**
  * RenderCore 层函数：将 C++ 结构体参数提交至 RHI 指令流

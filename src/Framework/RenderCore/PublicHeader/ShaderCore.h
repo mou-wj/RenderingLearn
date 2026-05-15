@@ -18,7 +18,6 @@ namespace RenderCore {
 
         std::map<std::string, std::string> VirtualIncludes;
 
-
         std::vector<std::string> IncludePaths;
 
 
@@ -49,6 +48,7 @@ namespace RenderCore {
         void SetDefine(const std::string& name, int32_t value) { Definitions[name] = std::to_string(value); }
         void SetDefine(const std::string& name, bool value) { Definitions[name] = value ? "1" : "0"; }
         void SetDefine(const std::string& name, float value) { Definitions[name] = std::to_string(value); }
+        void SetDefineInCondition(const std::string& name, bool condition) { if (condition) { SetDefine(name, true); } }
     };
 
     // 所有 Shader 通用的最小参数
@@ -183,6 +183,8 @@ namespace RenderCore {
         Int32,
         UInt32,
         Bool,
+        Struct,//结构体类型，内部可以含有其他类型数据
+        RenderTargetSlots,
         // 可根据需要扩展更多类型
         RDGTexture,
         RDGTexture_SRV,
@@ -192,8 +194,9 @@ namespace RenderCore {
         RDGBuffer_UAV,
         RHISampler,
         ColorBindings,
+
         //
-        Struct//结构体类型，内部可以含有其他类型数据
+
     };
     
 }

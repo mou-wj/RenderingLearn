@@ -1,10 +1,7 @@
 #include "Material.h"
 namespace Engine {
 
-    Shader* MaterialShaderMap::FindShader(const MaterialShaderKey& key) const {
-        auto it = ShaderPermutations.find(key);
-        return it != ShaderPermutations.end() ? it->second : nullptr;
-    }
+
 
     void MaterialInstance::GatherStaticParameters(MaterialStaticParameters& Out) const {
         if (Parent) Parent->GatherStaticParameters(Out);
@@ -21,8 +18,8 @@ namespace Engine {
         for (auto& kv : OverrideRuntimeParams.Textures)   Out.Textures[kv.first] = kv.second;
     }
 
-    Shader* Material::GetShader(const MaterialShaderKey& Key) const {
-        if (ShaderMap) return ShaderMap->FindShader(Key);
+    RenderCore::Shader* Material::GetShader(const MaterialShaderKey& Key) const {
+        if (ShaderMap) return nullptr;
         return nullptr;
     }
     std::unique_ptr<MaterialRenderProxy> Material::CreateRenderProxy() const {
