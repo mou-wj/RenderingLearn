@@ -59,7 +59,7 @@ namespace Engine
         static void ModifyCompilationEnvironment(const RenderCore::VertexFactoryShaderPermutationParameters& Parameters, RenderCore::ShaderCompilerEnvironment& OutEnvironment);
         static const ShaderParametersMetadata* GetShaderParameterMetadata()
         {
-            return &LocalVertexFactoryParameters::GetMetaData();
+            return LocalVertexFactoryParameters::GetMetaData();
         }
     private:
 

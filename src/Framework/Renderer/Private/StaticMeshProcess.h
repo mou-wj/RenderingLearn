@@ -3,7 +3,7 @@
 #include "RenderGraphBuilder.h"
 namespace Renderer {
 
-	void StaticMeshDrawBuild(Engine::SceneViewCollection* Views,RenderCore::RenderGraphBuilder& builder);
+	void StaticMeshDrawBuild(Engine::SceneViewFamily* Views,RenderCore::RenderGraphBuilder& builder);
 
 
 

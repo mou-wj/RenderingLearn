@@ -137,7 +137,7 @@ public:
             return;
         }
         RHI::RHIGraphicCommandList cmdList(graphicContext);
-        constexpr int kMaxFrames = 10;
+        constexpr int kMaxFrames = 100;
         for (int frameIndex = 0; frameIndex < kMaxFrames; ++frameIndex) {
             // 设置为即时执行模式
 
@@ -166,7 +166,7 @@ public:
             }
 
             RHIRenderPassInfo passInfo;
-            passInfo.RenderTargets.Bound(backTexture,ERenderTargetActions::Clear_Store, depthStencilTexture.get(), ERenderTargetActions::Clear_Store);
+            passInfo.RenderTargets.Bound(backTexture,ERenderTargetActions::Clear_Store, depthStencilTexture.get(), ERenderTargetActions::Clear_Store, FrameWidth, FrameHeight);
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[0] = 1;
             passInfo.RenderTargets.ColorAttachments[0].ClearBinding.Color[3] = 1;
 			passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;

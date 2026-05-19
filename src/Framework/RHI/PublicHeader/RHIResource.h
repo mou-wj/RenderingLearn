@@ -555,7 +555,7 @@ struct RHIBoundRenderTargets
     uint8_t NumColorAttachments = 0;
     Core::Int2 Dimensions{};
     RHIBoundRenderTargets() = default;
-    void Bound(RHITexture* colorTexture, ERenderTargetActions colorActions,RHITexture* depthTexture, ERenderTargetActions depthActions) {
+    void Bound(RHITexture* colorTexture, ERenderTargetActions colorActions,RHITexture* depthTexture, ERenderTargetActions depthActions,int Width,int Height) {
 
         // reset
         NumColorAttachments = 1;
@@ -602,8 +602,9 @@ struct RHIBoundRenderTargets
         DepthStencil.ClearBinding.Depth = 1.0f;
         DepthStencil.ClearBinding.Stencil = 0;
         
-
-        CalculateDimensions();
+        Dimensions.x = Width;
+        Dimensions.y = Height;
+        
 
     }
 
@@ -651,7 +652,7 @@ struct RHIBoundRenderTargets
 
     bool HasDepth() const { return DepthStencil.Texture != nullptr; }
 
-    void CalculateDimensions() const { 
+    void CalculateDimensions() { 
 
         // 1. 优先用 color attachment
         for (uint8_t i = 0; i < NumColorAttachments; ++i)

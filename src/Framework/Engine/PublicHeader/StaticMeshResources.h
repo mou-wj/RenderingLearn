@@ -6,24 +6,36 @@
 #include <memory>
 #include "BoxSphereBounds.h"
 #include "Material.h"
+#include "RenderResource.h"
+#include "LocalVertexFactory.h"
 namespace Engine {
     // Forward placeholders for shader/texture types. In a real engine, replace
     // these with concrete types or resource handles managed by the RHI/resource system.
-    struct ShaderProgram; // abstract shader program handle (opaque)
-    struct Texture;       // abstract texture handle (opaque)
     class LocalVertexFactory;
 
-    struct ENGINE_API VertexBuffer {
-        std::vector<float> vertexs;
-        uint64_t GetNumVertices() const { return vertexs.size(); }
-        
+    struct VertexBuffer
+    {
+        std::vector<float> Vertices;
+
+        std::unique_ptr<RenderCore::RenderBuffer>
+            Buffer;
+
+        uint32_t NumComponents = 0;
+        bool Valid = false;
+
+        uint64_t GetNumVertices() const
+        {
+            return NumComponents > 0
+                ? Vertices.size() / NumComponents
+                : 0;
+        }
     };
     
 
     // Lightweight index buffer: 32-bit indices
     struct ENGINE_API IndexBuffer {
         std::vector<uint32_t> Indices;
-
+        std::unique_ptr<RenderCore::RenderBuffer> Buffer;
         size_t GetNumIndices() const { return Indices.size(); }
     };
 
@@ -35,34 +47,46 @@ namespace Engine {
         uint32_t NumIndices = 0;
         // material index into the RenderData's Materials array
         int32_t MaterialIndex = -1;
+        int32_t BaseVertexIndex = 0;
     };
+
+    struct StaticMeshVertexBuffers {
+        VertexBuffer PositionBuffer;
+        VertexBuffer UVBuffer;
+        VertexBuffer NormalBuffer;
+        VertexBuffer TangentBuffer;
+        VertexBuffer ColorBuffer;
+
+    };
+
 
     // LOD resource contains one vertex buffer, one index buffer and multiple sections.
     struct ENGINE_API LODResource {
         // Vertex data is type-erased via IVertexData. Use VertexData<T> to supply
         // concrete typed vertex arrays (e.g., VertexData<StaticVertex>).
-        std::vector<VertexBuffer> VertexBuffers;
-        IndexBuffer Indices;        // per-LOD index data
+        StaticMeshVertexBuffers VertexBuffers;
+        IndexBuffer IndexBuffer;        // per-LOD index data
         std::vector<SectionInfo> Sections; // sub-mesh sections mapped to materials
 
         // Convenience: query number of sections
         size_t GetNumSections() const { return Sections.size(); }
         // Convenience: get vertex count if VertexDataPtr is set
-        size_t GetNumVertices() const { return VertexBuffers.empty() ? VertexBuffers[0].GetNumVertices() : 0; }
+        std::unique_ptr<
+            LocalVertexFactory>
+            VertexFactory;
     };
 
 
     // FStaticMeshRenderData: top-level render resource container for a StaticMesh.
     // Contains multiple LODs, a material table, and bounds used for culling.
-    class ENGINE_API FStaticMeshRenderData {
+    class ENGINE_API StaticMeshRenderData {
     public:
 
-        FStaticMeshRenderData() = default;
-        ~FStaticMeshRenderData() = default;
+        StaticMeshRenderData() = default;
+        ~StaticMeshRenderData() = default;
 
         // LOD resources (LOD0 = highest detail)
         std::vector<LODResource> LODResources;
-		std::vector<LocalVertexFactory*> LODVertexFactories; // one per LOD, created from LODResources
 
         // Bounds (AABB) for frustum culling and coarse occlusion
         Core::AABB Bounds;
@@ -87,7 +111,7 @@ namespace Engine {
 
     private:
         // Non-copyable to avoid accidental copies of large buffers; allow move if needed.
-        FStaticMeshRenderData(const FStaticMeshRenderData&) = delete;
-        FStaticMeshRenderData& operator=(const FStaticMeshRenderData&) = delete;
+        StaticMeshRenderData(const StaticMeshRenderData&) = delete;
+        StaticMeshRenderData& operator=(const StaticMeshRenderData&) = delete;
     };
 } // namespace NSRender

@@ -1,32 +1,35 @@
+// SceneView.h
 #pragma once
 
 #include <cstdint>
 #include <array>
 #include <vector>
 #include <functional>
-#include "BoxSphereBounds.h"
 #include "EngineExport.h"
-#include "SceneInterface.h"
-#include "Viewport.h"
+#include "BoxSphereBounds.h"
+
+// 包含你刚才定义的数学基础头文件
+#include "Math.hpp"
+
 namespace Engine {
+    // 前置声明
+    class SceneInterface;
+    class RenderTarget;
 
-    struct Matrix4x4 { float m[16]; };
-    struct Vector3 { float x, y, z; };
-
+    // 结构体对齐定义
     struct ViewRect { int x; int y; int width; int height; };
-
-
-    // Plane: ax + by + cz + d >= 0 is inside
     struct Plane { float a, b, c, d; };
-
     struct Frustum { std::array<Plane, 6> Planes; };
 
-
+    /* ===============================================================================
+        ViewUniforms (16字节严格对齐的 C++ 镜像缓冲区)
+        直接通过你的 Float4x4 和 Float4 拼装，可直接一键 memcpy 发送至 RHI
+    ===============================================================================
+    */
     struct ViewUniforms {
-        Matrix4x4 ViewProj;
-        Matrix4x4 InvViewProj; // optional
-        Vector3 CameraPos;
-        float Padding0;
+        Core::Float4x4 ViewProj;
+        Core::Float4x4 InvViewProj;
+        Core::Float4 CameraPos; // 扩展为 Float4 彻底杜绝内存错位
     };
 
     enum ViewFlags : uint32_t {
@@ -35,80 +38,95 @@ namespace Engine {
         VF_EnablePostFX = 1 << 1
     };
 
+    /*
+    ===============================================================================
+        SceneView (单个视口相机的状态快照)
+    ===============================================================================
+    */
     class ENGINE_API SceneView {
     public:
         SceneView();
         ~SceneView();
 
-        // Core transforms
-        Matrix4x4 ViewMatrix;            // world -> view
-        Matrix4x4 ProjectionMatrix;      // view -> clip
-        Matrix4x4 ViewProjectionMatrix;  // precomputed Projection * View
+        // 核心变换矩阵（完全对齐你的 Matrix 模板类型）
+        Core::Float4x4 ViewMatrix;            // World -> View
+        Core::Float4x4 ProjectionMatrix;      // View -> Clip
+        Core::Float4x4 ViewProjectionMatrix;  // Precomputed Projection * View
+        Core::Float4x4 InvViewProjectionMatrix; // 预留逆矩阵（用于延迟渲染位置重建）
 
-        // Camera
-        Vector3 CameraWorldPos;
-        Vector3 CameraWorldDir;
+        // 相机空间属性
+        Core::Float4 CameraWorldPos; // 升级为对齐的 Float4
+        Core::Float3 CameraWorldDir; // 保持 Float3
 
-        // Clip
+        // 裁剪面
         float NearClip;
         float FarClip;
 
-        // Viewport / target
+        // 视口与画布规格
         ViewRect Viewport;
         float RenderTargetWidth;
         float RenderTargetHeight;
 
-        // Frame/time
         uint64_t FrameIndex;
         double FrameTimeSeconds;
 
-        // Flags
         uint32_t Flags;
 
-        // Cached derived data
-        Frustum CachedFrustum; // optional cached frustum
+        // 视锥体缓存
+        Frustum CachedFrustum;
 
-        // Utilities (thread-safe read-only after construction on RenderThread)
-        void RebuildDerivedMatrices(); // recompute ViewProjectionMatrix
-        void BuildFrustum();           // extract frustum from ViewProjectionMatrix
-        bool IsBoxVisible(const Core::AABB& box) const; // frustum-AABB test
-        void PackViewUniforms(ViewUniforms& out) const; // fill ViewUniforms
+        // 渲染线程专用工具函数 (构建时或构建后执行)
+        void RebuildDerivedMatrices();
+        void BuildFrustum();
+        bool IsBoxVisible(const Core::AABB& Box) const;
+        void PackViewUniforms(ViewUniforms& OutUniforms) const;
     };
 
-    class ENGINE_API SceneViewCollection {
+    /*
+    ===============================================================================
+        SceneViewFamily (视图族：整合单帧渲染的场景、画布与多视角相机队列)
+    ===============================================================================
+    */
+    class ENGINE_API SceneViewFamily {
     public:
-        SceneViewCollection() = default;
-        ~SceneViewCollection() = default;
+        SceneViewFamily() = default;
 
-        // Add a copy of a view. Returns index of the added view.
-        int AddView(const SceneView& view);
+        // 工业级规范：严禁意外拷贝视图族，防止产生每帧 vector 复制带来的无谓开销
+        SceneViewFamily(const SceneViewFamily&) = delete;
+        SceneViewFamily& operator=(const SceneViewFamily&) = delete;
+        SceneViewFamily(SceneViewFamily&&) = default;
 
-        // Add by move.
-        int AddView(SceneView&& view);
+        // 视图管理
+        int AddView(const SceneView& View);
+        int AddView(SceneView&& View);
+        bool RemoveView(int Index);
 
-        // Remove view by index. Returns true if removed.
-        bool RemoveView(int index);
+        SceneView* GetView(int Index);
+        const std::vector<SceneView>& GetViews() const { return Views; }
+        int Size() const { return static_cast<int>(Views.size()); }
 
-        // Accessors
-        SceneView* GetView(int index);
+        SceneInterface* GetScene() const { return Scene; }
+        RenderTarget* GetRenderTarget() const { return RenderTarget; }
 
-        int Size() const;
-
-        // Iterate views with a callable: void(SceneView&)
-        template<typename Fn>
-        void ForEachView(Fn&& fn) {
-            for (auto& v : views) fn(v);
-        }
-
-        // Utilities
+        // 批量更新控制
         void RebuildAllDerivedMatrices();
         void BuildAllFrustums();
 
-        // Return indices of views that consider the box visible.
-        std::vector<int> FindViewsThatSeeBox(const Core::AABB& box) const;
+        // 视锥体批量可见性过滤：返回所有能看到这个 AABB 的 View 索引列表
+        std::vector<int> FindViewsThatSeeBox(const Core::AABB& Box) const;
+
+        // 快捷遍历器
+        template<typename Fn>
+        void ForEachView(Fn&& Callback) {
+            for (auto& View : Views) {
+                Callback(View);
+            }
+        }
         SceneInterface* Scene;
         RenderTarget* RenderTarget;
     private:
-        std::vector<SceneView> views;
+        std::vector<SceneView> Views;
+
     };
-}
+
+} // namespace Engine

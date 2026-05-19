@@ -1,8 +1,7 @@
 #pragma once
 #include "Shader.h"
-#include "Material.h"
 #include "HashHelper.hpp"
-#include "ShaderCore.h"
+#include "EngineExport.h"
 #include <unordered_map>
 namespace RenderCore {
     class VertexFactoryType;
@@ -146,6 +145,7 @@ namespace Engine {
 
     };
 
+    extern ENGINE_API MeshMaterialShaderMap GMeshMaterialShaderMap;
 
 #define DECLARE_MESH_MATERIAL_SHADER_TYPE(ClassType) \
     DECLARE_SHADER_TYPE(ClassType)\
@@ -257,6 +257,8 @@ namespace Engine {
     public:
 
     };
+
+    extern ENGINE_API MaterialShaderMap GMaterialShaderMap;
 
 #define DECLARE_MATERIAL_SHADER_TYPE(ClassType) \
     DECLARE_SHADER_TYPE(ClassType)

@@ -42,6 +42,15 @@ namespace RHI {
         void Execute(RHICommandListBase& cmdList) override;
     };
 
+    struct RHI_API RHICommandDrawIndexed : public RHICommandBase
+    {
+        RHIBuffer* indexBuffer;
+        uint32_t indexCount, firstIndex, instanceCount, firstInstance;
+        int32_t vertexOffset;
+        RHICommandDrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
     struct RHI_API RHICommandTraceRays : public RHICommandBase
     {
         uint32_t Width, Height, Depth;
@@ -249,6 +258,8 @@ namespace RHI {
         void SetScissor(int32_t x, int32_t y, uint32_t w, uint32_t h);
         void Draw(uint32_t vertexCount, uint32_t instanceCount = 1,
             uint32_t firstVertex = 0, uint32_t firstInstance = 0);
+        void DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount = 1, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0);
+
         void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
         void EndRenderPass();
         void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState);

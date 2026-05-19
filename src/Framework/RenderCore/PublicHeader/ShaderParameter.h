@@ -139,7 +139,20 @@ namespace RenderCore {
 
         static const ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
     };
+    template<typename T>
+    struct StructShaderParameterTypeInfo
+    {
+        static constexpr EShaderParameterBaseType BaseType = EShaderParameterBaseType::Struct;
+        static constexpr uint32_t NumRows = 1;
+        static constexpr uint32_t NumColumns = 1;
+        static constexpr uint32_t NumElements = 0;
+        static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+        static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
 
+        using TAlignedType = T*;
+
+        static const ShaderParametersMetadata* GetStructMetadata() { return T::GetMetaData(); }
+    };
 
     struct RenderTargetBinding
     {
@@ -378,7 +391,7 @@ namespace RenderCore {
 #define END_SHADER_PARAMETER_STRUCT(StructClass) \
     LastIdType;\
 public:\
-    static const ShaderParametersMetadata& GetMetaData() \
+    static const ShaderParametersMetadata* GetMetaData() \
     {\
         static ShaderParametersMetadata sMetaData(#StructClass,sizeof(StructClass),{});\
         if(!sMetaData.InitFlag){\
@@ -391,7 +404,7 @@ public:\
 	    } while (func != nullptr); \
         sMetaData.InitFlag = true;\
         }\
-        return sMetaData;\
+        return &sMetaData;\
     }\
 };
 
@@ -451,6 +464,13 @@ SHADER_PARAMETER_INTERNAL(ShaderParameterTypeInfo<ClassType>::BaseType,ClassType
         MemberName, \
         ShaderParameterTypeInfo<RenderTargetBindingSlots>)
 
+#define SHADER_PARAMETER_STRUCT(StructType, MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        StructShaderParameterTypeInfo<StructType>::BaseType, \
+        StructShaderParameterTypeInfo<StructType>::TAlignedType, \
+        MemberName, \
+        StructShaderParameterTypeInfo<StructType>)
+
 BEGIN_SHADER_PARAMETER_STRUCT(A)
     SHADER_PARAMETER(Core::Int2,Color)
 END_SHADER_PARAMETER_STRUCT(A)
@@ -459,7 +479,7 @@ class Shader;
 RENDERCORE_API void SetShaderParameters(
     RHI::RHICommandListBase& cmdList,
     const Shader* shader,
-    const ShaderParametersMetadata& ParametersMetaData,
+    const ShaderParametersMetadata* ParametersMetaData,
     void* ParametersData);
 
 
@@ -473,8 +493,8 @@ template<typename TParameters>
 void SetShaderParameters(
     RHI::RHICommandListBase& cmdList,
     const Shader* shader,
-    const TParameters& ParametersData) {
-    SetShaderParameters(cmdList, shader, ParametersData.GetMetaData(), (void*)&ParametersData);
+    const TParameters* ParametersData) {
+    SetShaderParameters(cmdList, shader, ParametersData->GetMetaData(), (void*)&ParametersData);
 }
 
 

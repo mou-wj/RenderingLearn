@@ -141,7 +141,7 @@ void RenderTargetPool::Clear()
 
 
 
-RenderTexture* GlobalTestTexture = nullptr;
+RenderTextureSP GlobalTestTexture = nullptr;
 
 bool InitGlobalRenderResource() {
     auto rootPath = Core::GetProjectDir();
@@ -152,7 +152,7 @@ void ReleaseGlobalRenderResource() {
 
 }
 
-RenderTexture* CreateTexture(const std::string& Path)
+RenderTextureSP CreateTexture(const std::string& Path)
 {
 	int width, height, channels;
 
@@ -190,14 +190,14 @@ RenderTexture* CreateTexture(const std::string& Path)
 	desc.InitialData = pixels; // 传入 stbi 的内存指针
 	desc.DebugName = Path.c_str();
 
-	RenderCore::RenderTexture* outTexture = nullptr;
+	RenderCore::RenderTextureSP outTexture = nullptr;
 
 	ExecuteSync("Create Texture", [&outTexture, &desc, pixels](RHI::RHICommandListBase& commandList) {
 
 		// 3. 调用 RHI 创建纹理
 		RHITextureSP texture = GRHIApi->CreateTexture(desc);
 		GRHIApi->UpdateTexture(commandList, texture.get(), pixels, RHIUpdateTextureRegion::Create2DRegion(desc.Width,desc.Height));
-		outTexture = new RenderCore::RenderTexture(desc);
+		outTexture = std::make_shared<RenderCore::RenderTexture>(desc);
 		outTexture->InitRHIResource();
 		});
 

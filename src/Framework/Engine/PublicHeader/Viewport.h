@@ -4,13 +4,13 @@
 
 namespace Engine {
     class ViewportClient;
-    class RenderTarget : public RenderCore::RenderResource {
+    class RenderTarget{
 	public:
 		RHI::RHITexture* GetRenderTarget() {
-			return RenderTarget.get();
+			return RenderTarget;
 		}
 
-        RHI::RHITextureSP RenderTarget;
+        RHI::RHITexture* RenderTarget;
 
     };
 

@@ -33,8 +33,8 @@ namespace Renderer {
     class SceneRenderer
     {
     public:
-        Engine::Scene* Scene;
-        Engine::SceneViewCollection* Views;
+        Scene* Scene;
+        Engine::SceneViewFamily* Views;
         SceneTextures SceneTextures;
 
         virtual ~SceneRenderer() = default;

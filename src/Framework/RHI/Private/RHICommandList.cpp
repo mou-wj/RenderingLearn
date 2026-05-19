@@ -28,6 +28,15 @@ void RHICommandDraw::Execute(RHICommandListBase& cmdList)
     }
 }
 
+RHICommandDrawIndexed::RHICommandDrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) : indexBuffer(indexBuffer), indexCount(indexCount), firstIndex(firstIndex), instanceCount(instanceCount), firstInstance(firstInstance), vertexOffset(vertexOffset) {}
+void RHICommandDrawIndexed::Execute(RHICommandListBase& cmdList) {
+	auto* graphicsContext = dynamic_cast<RHIGraphicContex*>(cmdList.GetContext());
+	if (graphicsContext)
+	{
+		graphicsContext->DrawIndexed(indexBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+	}
+}
+
 RHICommandTraceRays::RHICommandTraceRays(uint32_t w, uint32_t h, uint32_t d)
     : Width(w), Height(h), Depth(d) {}
 
@@ -381,6 +390,9 @@ void RHIGraphicCommandList::SetScissor(int32_t x, int32_t y, uint32_t w, uint32_
 void RHIGraphicCommandList::Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 {
     AddCommand<RHICommandDraw>(vertexCount, instanceCount, firstVertex, firstInstance);
+}
+void RHIGraphicCommandList::DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+
 }
 
 void RHIGraphicCommandList::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo)

@@ -22,8 +22,8 @@ namespace Engine {
         void* GetViewportRenderTargetTexture() const override;
         void Draw() override;
 
-        void InitRHIResource() override;
-        void ReleaseRHIResource() override;
+        void InitRHIResource();
+        void ReleaseRHIResource();
     private:
 
     private:

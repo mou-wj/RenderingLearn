@@ -14,7 +14,7 @@ namespace App {
         void Draw(Engine::Viewport* InViewport) override;
 
     private:
-        void BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewCollection& OutViews);
+        void BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewFamily& OutViews);
 
     private:
 

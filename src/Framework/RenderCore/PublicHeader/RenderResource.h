@@ -484,11 +484,11 @@ using RenderResourceSP = std::shared_ptr<RenderResource>;
 using RenderTextureSP = std::shared_ptr<RenderTexture>;
 using RenderBufferSP = std::shared_ptr<RenderBuffer>;
 
-extern RENDERCORE_API RenderTexture* GlobalTestTexture;
+extern RENDERCORE_API RenderTextureSP GlobalTestTexture;
 
 RENDERCORE_API bool InitGlobalRenderResource();
 RENDERCORE_API void ReleaseGlobalRenderResource();
 
-RENDERCORE_API RenderTexture* CreateTexture(const std::string& Path);
+RENDERCORE_API RenderTextureSP CreateTexture(const std::string& Path);
 
 } // namespace RenderCore

@@ -64,8 +64,8 @@ namespace Engine{
         Client->Draw(this);
         // ½»»»
         auto tmp = RenderTarget;
-        RenderTarget = ViewportTexture;
-        ViewportTexture = tmp;
+        //RenderTarget = ViewportTexture;
+        //ViewportTexture = tmp;
     }
 
     void SceneViewport::InitRHIResource()
@@ -79,7 +79,7 @@ namespace Engine{
         desc.MipLevels = 1;
         desc.ArraySize = 1;
         desc.SampleCount = 1;
-        RenderTarget  = GRHIApi->CreateTexture(desc);
+        //RenderTarget  = GRHIApi->CreateTexture(desc);
 
 		ViewportTexture = GRHIApi->CreateTexture(desc);
 

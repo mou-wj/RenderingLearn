@@ -255,7 +255,7 @@ public:
             // -------------------------------------
             builder.AddPass<BlitTextureParameters>(
                 "BlitPass",
-                &BlitTextureParameters::GetMetaData(),
+                BlitTextureParameters::GetMetaData(),
                 params,
                 EPassFlag::Compute,
                 [=](RHI::RHICommandListBase& RHICmdList)
@@ -263,7 +263,7 @@ public:
                     auto& cmd = static_cast<RHI::RHIComputeCommandList&>(RHICmdList);
 
                     cmd.SetComputePipelineState(ComputePipelineState.get());
-                    SetShaderParameters(cmd, blitTextureShader0, *params);
+                    SetShaderParameters(cmd, blitTextureShader0, params);
                     cmd.Dispatch(
                         texDesc.Width / 8,
                         texDesc.Height / 8,

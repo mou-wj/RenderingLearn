@@ -55,7 +55,7 @@ namespace RenderCore {
         // ��ȡ����Ԫ���ݣ����ڷ���
         static const ShaderParametersMetadata* GetShaderParameterMetadata()
         {
-            return &BlitTextureParameters::GetMetaData();
+            return BlitTextureParameters::GetMetaData();
         }
     };
 

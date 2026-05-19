@@ -15,15 +15,15 @@ namespace App {
             return;
 
         // 构建 SceneViewCollection
-        SceneViewCollection views;
-        views.RenderTarget = InViewport;
-        BuildSceneViews(InViewport, views);
+        SceneViewFamily family;
+        family.RenderTarget = InViewport;
+        BuildSceneViews(InViewport, family);
 
         // 调用 RenderInterface 执行渲染
-        Renderer::GetRenderModuleInstance()->BeginRender(&views);
+        Renderer::GetRenderModuleInstance()->BeginRender(&family);
     }
 
-    void AppViewportClient::BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewCollection& OutViews)
+    void AppViewportClient::BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewFamily& OutViews)
     {
         SceneView view;
         OutViews.AddView(view);

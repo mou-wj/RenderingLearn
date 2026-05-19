@@ -11,7 +11,8 @@ class RENDERCORE_API RenderInterface : public Core::Module
 {
 public:
     virtual ~RenderInterface() = default;
-    virtual void BeginRender(Engine::SceneViewCollection* sceneViewCollection) = 0;
+    virtual void BeginRender(Engine::SceneViewFamily* sceneViewCollection) = 0;
+    virtual Engine::SceneInterface* AllocateScene() = 0;
 private:
 
 

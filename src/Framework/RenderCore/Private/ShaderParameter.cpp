@@ -43,7 +43,7 @@ namespace RenderCore {
     void SetShaderParameters(
         RHI::RHICommandListBase& cmdList,
         const Shader* shader,
-        const ShaderParametersMetadata& ParametersMetaData,
+        const ShaderParametersMetadata* ParametersMetaData,
         void* ParametersData) {
         if (!shader || !ParametersData) return;
 
@@ -51,7 +51,7 @@ namespace RenderCore {
 
         // 1. ��ʼ�� Reader (�������ģʽ)
         // ע�⣺����� DataSize ʹ�� Metadata ����Ĵ�С
-        ShaderParameterReader Reader(ParametersData, ParametersMetaData.GetSize());
+        ShaderParameterReader Reader(ParametersData, ParametersMetaData->GetSize());
 
         // 2. ׼�� RHI ����������
         RHI::RHIBatchedShaderParameters BatchedParams;

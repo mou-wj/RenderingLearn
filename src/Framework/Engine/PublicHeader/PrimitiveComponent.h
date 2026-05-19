@@ -18,7 +18,6 @@ namespace Engine {
 
 	enum class EMobility : uint8_t { Static = 0, Stationary = 1, Movable = 2 };
 
-
 	// PrimitiveComponent: a lightweight, GameThread-only description of a renderable
 	// primitive. It does NOT own GPU/RHI resources. To render, it creates a SceneProxy
 	// snapshot which is enqueued to the RenderThread.
@@ -27,12 +26,10 @@ namespace Engine {
 		PrimitiveComponent();
 		virtual ~PrimitiveComponent();
 		// 返回类型信息，用于动态判断
-		virtual const std::type_info& GetType() const = 0;
+		virtual uint32_t GetTypeID() const = 0;
 
 		template<typename T>
-		bool IsA() const {
-			return GetType() == typeid(T);
-		}
+		bool IsA() const { return GetTypeID() == T::StaticTypeID(); }
 		// ------------------ Spatial (GameThread only) ------------------
 	protected:
 		FTransform LocalTransform;          // local transform
@@ -87,6 +84,25 @@ namespace Engine {
 		PrimitiveComponent(const PrimitiveComponent&) = delete;
 		PrimitiveComponent& operator=(const PrimitiveComponent&) = delete;
 	};
+
+	// 1. 编译期 FNV-1a 32位哈希算法
+	constexpr uint32_t HashString(const char* Str) {
+		uint32_t Hash = 2166136261U;
+		while (*Str) {
+			Hash ^= static_cast<uint32_t>(*Str++);
+			Hash *= 16777619U;
+		}
+		return Hash;
+	}
+	// 2. 自动化宏
+#define DEFINE_COMPONENT_TYPE(ClassName) \
+    public: \
+        static constexpr uint32_t StaticTypeID() { \
+            return Engine::HashString(#ClassName); \
+        } \
+        virtual uint32_t GetTypeID() const override { \
+            return StaticTypeID(); \
+        }
 
 	// Notes:
 	// - PrimitiveComponent is GameThread-only. Do not touch its members from RenderThread.

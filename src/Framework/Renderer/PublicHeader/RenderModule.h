@@ -16,7 +16,8 @@ namespace Renderer {
         bool IsLoaded() const override;
 
         // RenderInterface
-        void BeginRender(Engine::SceneViewCollection* Views) override;
+        void BeginRender(Engine::SceneViewFamily* Views) override;
+        Engine::SceneInterface* AllocateScene() override;
 
     private:
 
@@ -27,10 +28,6 @@ namespace Renderer {
 
 
     RENDERER_API RenderModule* GetRenderModuleInstance();
-
-
-
-
 
 
 }

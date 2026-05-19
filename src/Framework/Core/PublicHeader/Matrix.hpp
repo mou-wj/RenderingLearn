@@ -87,22 +87,17 @@ namespace Core
     // ============================================================
 
     // float matrices
-    using mat3 = Matrix<float, 3, 3>;
-    using mat3x4 = Matrix<float, 3, 4>;
-    using mat4 = Matrix<float, 4, 4>;
-
-    // double matrices
-    using dmat3 = Matrix<double, 3, 3>;
-    using dmat3x4 = Matrix<double, 3, 4>;
-    using dmat4 = Matrix<double, 4, 4>;
+    using Mat3 = Matrix<float, 3, 3>;
+    using Mat3x4 = Matrix<float, 3, 4>;
+    using Mat4 = Matrix<float, 4, 4>;
 
     // explicit-sized aliases (engine friendly)
-    using mat3f = Matrix<float, 3, 3>;
-    using mat3x4f = Matrix<float, 3, 4>;
-    using mat4f = Matrix<float, 4, 4>;
+    using Mat3f = Matrix<float, 3, 3>;
+    using Mat3x4f = Matrix<float, 3, 4>;
+    using Mat4f = Matrix<float, 4, 4>;
 
-    using mat3d = Matrix<double, 3, 3>;
-    using mat3x4d = Matrix<double, 3, 4>;
-    using mat4d = Matrix<double, 4, 4>;
+    using Mat3d = Matrix<double, 3, 3>;
+    using Mat3x4d = Matrix<double, 3, 4>;
+    using Mat4d = Matrix<double, 4, 4>;
 
 } // namespace math

@@ -11,7 +11,7 @@ class PrimitiveSceneProxy;
 class ENGINE_API StaticMesh {
 public:
     StaticMesh() = default;
-    explicit StaticMesh(std::shared_ptr<FStaticMeshRenderData> InRenderData) : RenderData(std::move(InRenderData)) {}
+    explicit StaticMesh(std::shared_ptr<StaticMeshRenderData> InRenderData) : RenderData(std::move(InRenderData)) {}
     ~StaticMesh() = default;
 
     // Accessors
@@ -19,13 +19,11 @@ public:
     const LODResource& GetLODResource(size_t Index) const { return RenderData->GetLODResource(Index); }
     const Core::AABB& GetBounds() const { static Core::AABB Empty; return RenderData ? RenderData->GetBounds() : Empty; }
 
-    std::shared_ptr<FStaticMeshRenderData> GetRenderData() const { return RenderData; }
-
-    // Create a SceneProxy for this mesh. Returned pointer is heap-allocated and
-    // ownership is transferred to the caller (Scene/RenderThread).
-    virtual PrimitiveSceneProxy* CreateSceneProxy() const;
+    std::shared_ptr<StaticMeshRenderData> GetRenderData() const { return RenderData; }
 
 private:
-    std::shared_ptr<FStaticMeshRenderData> RenderData; // shared ownership of underlying render data
+    std::shared_ptr<StaticMeshRenderData> RenderData; // shared ownership of underlying render data
 };
+
+using StaticMeshSP = std::shared_ptr<StaticMesh>;
 } // namespace Engine

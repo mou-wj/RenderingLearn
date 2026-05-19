@@ -1,39 +1,78 @@
 // StaticMeshComponent.h
-// Scene instance of a StaticMesh asset. Lives on GameThread and creates a SceneProxy for RenderThread.
 #pragma once
 
 #include "PrimitiveComponent.h"
-#include <memory>
+#include "StaticMesh.h"
 #include "EngineExport.h"
-#include "Material.h"
-namespace Engine {
-class StaticMesh;
+#include <memory>
+#include <vector>
 
-class ENGINE_API StaticMeshComponent : public PrimitiveComponent {
-public:
-    StaticMeshComponent();
-    ~StaticMeshComponent() override;
-    const std::type_info& GetType() const override {
-        return typeid(StaticMeshComponent);
-    }
-    // Set or get the mesh asset
-    void SetStaticMesh(std::shared_ptr<StaticMesh> InMesh) { Mesh = std::move(InMesh); }
-    std::shared_ptr<StaticMesh> GetStaticMesh() const { return Mesh; }
+namespace Engine
+{
+    class MaterialInterface;
+    class StaticMesh;
+    class StaticMeshProxy;
 
-    // Visibility/LOD
-    void SetVisible(bool b) { bVisible = b; MarkRenderStateDirty(); }
-    bool GetVisible() const { return bVisible; }
+    class ENGINE_API StaticMeshComponent : public PrimitiveComponent
+    {
+        DEFINE_COMPONENT_TYPE(StaticMeshComponent)
 
-    void SetForcedLOD(int32_t LOD) { ForcedLOD = LOD; MarkRenderStateDirty(); }
-    int32_t GetForcedLOD() const { return ForcedLOD; }
+    public:
+        StaticMeshComponent();
+        ~StaticMeshComponent() override = default;
 
-    // PrimitiveComponent overrides
-    PrimitiveSceneProxy* CreateSceneProxy() const override;
-    Core::BoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
+        //----------------------------------------
+        // Mesh
+        //----------------------------------------
 
-private:
-    std::shared_ptr<StaticMesh> Mesh; // asset pointer (not owning GPU resources)
-    int32_t ForcedLOD;                // -1 = auto
-    std::vector<MaterialInterfaceSP> Materials; // material interface pointers (not owning GPU resources)
-};
+        void SetStaticMesh(StaticMesh* InMesh);
+        StaticMesh* GetStaticMesh() const { return Mesh; }
+
+        //----------------------------------------
+        // Material Override
+        //----------------------------------------
+
+        void SetMaterial(uint32_t SlotIndex, MaterialInterface* Material);
+        MaterialInterface* GetMaterial(uint32_t SlotIndex) const;
+
+        uint32_t GetNumMaterials() const
+        {
+            return static_cast<uint32_t>(OverrideMaterials.size());
+        }
+
+        //----------------------------------------
+        // LOD
+        //----------------------------------------
+
+        void SetForcedLOD(int32_t InLOD)
+        {
+            ForcedLOD = InLOD;
+            MarkRenderStateDirty();
+        }
+
+        int32_t GetForcedLOD() const
+        {
+            return ForcedLOD;
+        }
+
+        //----------------------------------------
+        // PrimitiveComponent Overrides
+        //----------------------------------------
+
+        PrimitiveSceneProxy* CreateSceneProxy() const override;
+
+        Core::BoxSphereBounds CalcBounds(
+            const FTransform& LocalToWorld) const override;
+
+    private:
+        // CPU-side mesh asset reference
+        StaticMesh* Mesh;
+
+        // Material overrides (same concept as UE OverrideMaterials)
+        std::vector<MaterialInterface*> OverrideMaterials;
+
+        // -1 = auto LOD
+        int32_t ForcedLOD = -1;
+    };
+
 } // namespace Engine

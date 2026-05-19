@@ -10,6 +10,7 @@
 #include <typeindex>
 #include <typeinfo>
 #include "RenderResource.h"
+#include "StaticMesh.h"
 #include "EngineExport.h"
 
 namespace Engine {
@@ -32,84 +33,176 @@ namespace Engine {
 	using AssetSP = std::shared_ptr<IAsset>;
 
 
+   /*
+    ===============================================================================
+        Asset Manager
+    ===============================================================================
+    */
+    class ENGINE_API AssetManager
+    {
+    public:
+        using LoadCallback = std::function<void(AssetSP)>;
 
-	// ---------------------------
-	// Asset Manager
-	// ---------------------------
-	class ENGINE_API AssetManager
-	{
-	public:
-		using LoadCallback = std::function<void(AssetSP)>;
+    public:
+        static AssetManager& Get()
+        {
+            static AssetManager Instance;
+            return Instance;
+        }
 
+    public:
 
-		static AssetManager& Get();
+        /*
+        -------------------------------------------------------------------------------
+            Sync Load
+        -------------------------------------------------------------------------------
+        */
+        template<typename AssetType>
+        std::shared_ptr<AssetType> LoadSync(const std::string& Path)
+        {
+            const std::type_index type = std::type_index(typeid(AssetType));
 
+            {
+                std::lock_guard<std::mutex> lock(Mutex);
 
-		// 同步加载
-		template<typename AssetType>
-		AssetSP LoadSync(const std::string& Path)
-		{
-			{
-				std::lock_guard<std::mutex> lg(Mutex_);
-				auto it = Assets_.find(Path);
-				if (it != Assets_.end())
-					return it->second;
-			}
+                auto typeIt = Assets.find(type);
+                if (typeIt != Assets.end())
+                {
+                    auto assetIt = typeIt->second.find(Path);
+                    if (assetIt != typeIt->second.end())
+                    {
+                        return std::static_pointer_cast<AssetType>(
+                            assetIt->second);
+                    }
+                }
+            }
 
+            auto asset = std::make_shared<AssetType>(Path);
 
-			AssetSP Asset = std::make_shared<AssetType>(Path);
-			if (!Asset->Load())
-			{
-				std::cerr << "Failed to load asset: " << Path << std::endl;
-				return nullptr;
-			}
+            if (!asset->Load())
+            {
+                std::cerr
+                    << "Failed to load asset: "
+                    << Path
+                    << std::endl;
 
+                return nullptr;
+            }
 
-			RegisterAsset(Path, Asset);
-			return Asset;
-		}
+            {
+                std::lock_guard<std::mutex> lock(Mutex);
 
-		// 异步加载
-		template<typename AssetType>
-		void LoadAsync(const std::string& Path, LoadCallback Callback)
-		{
-			{
-				std::lock_guard<std::mutex> lg(Mutex_);
-				auto it = Assets_.find(Path);
-				if (it != Assets_.end())
-				{
-					Callback(it->second);
-					return;
-				}
-			}
+                Assets[type][Path] = asset;
+            }
 
+            return asset;
+        }
 
-			std::async(std::launch::async, [this, Path, Callback]()
-				{
-					AssetSP Asset = LoadSync<AssetType>(Path);
-					Callback(Asset);
-				});
-		}
+        /*
+        -------------------------------------------------------------------------------
+            Async Load
+        -------------------------------------------------------------------------------
+        */
+        template<typename AssetType>
+        void LoadAsync(
+            const std::string& Path,
+            std::function<void(std::shared_ptr<AssetType>)> Callback)
+        {
+            {
+                std::lock_guard<std::mutex> lock(Mutex);
 
+                const std::type_index type =
+                    std::type_index(typeid(AssetType));
 
-		// 查询已加载
-		AssetSP GetAsset(const std::string& Path);
+                auto typeIt = Assets.find(type);
 
+                if (typeIt != Assets.end())
+                {
+                    auto assetIt = typeIt->second.find(Path);
 
-	private:
-		AssetManager() = default;
-		~AssetManager() = default;
-		AssetManager(const AssetManager&) = delete;
-		AssetManager& operator=(const AssetManager&) = delete;
+                    if (assetIt != typeIt->second.end())
+                    {
+                        Callback(
+                            std::static_pointer_cast<AssetType>(
+                                assetIt->second));
 
+                        return;
+                    }
+                }
+            }
 
-		void RegisterAsset(const std::string& Path, AssetSP Asset);
+            std::async(
+                std::launch::async,
+                [this, Path, Callback]()
+                {
+                    auto asset =
+                        LoadSync<AssetType>(Path);
 
+                    Callback(asset);
+                });
+        }
 
-	private:
-		std::unordered_map<std::string, AssetSP> Assets_;
-		mutable std::mutex Mutex_;
-	};
+        /*
+        -------------------------------------------------------------------------------
+            Get Loaded Asset
+        -------------------------------------------------------------------------------
+        */
+        template<typename AssetType>
+        std::shared_ptr<AssetType> GetAsset(
+            const std::string& Path)
+        {
+            std::lock_guard<std::mutex> lock(Mutex);
+
+            const std::type_index type =
+                std::type_index(typeid(AssetType));
+
+            auto typeIt = Assets.find(type);
+            if (typeIt == Assets.end())
+            {
+                return nullptr;
+            }
+
+            auto assetIt =
+                typeIt->second.find(Path);
+
+            if (assetIt == typeIt->second.end())
+            {
+                return nullptr;
+            }
+
+            return std::static_pointer_cast<AssetType>(
+                assetIt->second);
+        }
+
+        /*
+        -------------------------------------------------------------------------------
+            Clear Cache
+        -------------------------------------------------------------------------------
+        */
+        void Clear()
+        {
+            std::lock_guard<std::mutex> lock(Mutex);
+            Assets.clear();
+        }
+
+    private:
+        AssetManager() = default;
+        ~AssetManager() = default;
+
+        AssetManager(const AssetManager&) = delete;
+        AssetManager& operator=(const AssetManager&) = delete;
+
+    private:
+
+        // type -> path -> asset
+        std::unordered_map<
+            std::type_index,
+            std::unordered_map<std::string, AssetSP>
+        > Assets;
+
+        mutable std::mutex Mutex;
+    };
+
 
 
 
@@ -130,8 +223,67 @@ namespace Engine {
 		std::string Name_ = "TextureAsset";
 		std::string Path_;
 		size_t Size_ = 0;
-		RenderCore::RenderTexture* Texture_ = nullptr;
+		std::shared_ptr <RenderCore::RenderTexture> Texture_ = nullptr;
 	};
 
+	class ENGINE_API StaticMeshAsset : public IAsset
+	{
+	public:
+		StaticMeshAsset(const std::string& Path);
 
+
+		const std::string& GetName() const override;
+		const std::string& GetPath() const override;
+
+
+		// Load 实现
+		bool Load() override;
+
+        StaticMesh* GetMesh() const { return Mesh_.get(); }
+
+	private:
+		std::string Name_ = "StaticMeshAsset";
+		std::string Path_;
+		size_t Size_ = 0;
+		std::shared_ptr <StaticMesh> Mesh_ = nullptr;
+	};
+
+	/*
+===============================================================================
+	Material Asset
+===============================================================================
+*/
+	class ENGINE_API MaterialAsset : public IAsset
+	{
+	public:
+		explicit MaterialAsset(const std::string& InPath)
+			: Path(InPath)
+		{
+		}
+
+		~MaterialAsset() override = default;
+
+		const std::string& GetName() const override
+		{
+			return Name;
+		}
+
+		const std::string& GetPath() const override
+		{
+			return Path;
+		}
+
+		bool Load() override;
+
+		MaterialInterface* GetMaterial() const
+		{
+			return MaterialPtr.get();
+		}
+
+	private:
+		std::string Name = "MaterialAsset";
+		std::string Path;
+
+		std::shared_ptr<Material> MaterialPtr;
+	};
 }

@@ -1,89 +1,121 @@
 // PrimitiveSceneProxy.h
-// RenderThread-only read-only representation of a PrimitiveComponent.
 #pragma once
 #include "EngineExport.h"
 #include <cstdint>
 #include <vector>
 #include "BoxSphereBounds.h"
+
+// 前置声明底层及核心层的渲染资源
+namespace RenderCore {
+    class RenderBuffer;
+    class VertexFactory;
+}
+namespace RHI {
+    class RHIBuffer;
+}
+
 namespace Engine {
-    // Forward declarations
     struct SceneView;
+    class MaterialRenderProxy;
 
-    using ResourceId = int32_t; // abstract handle for GPU resources managed elsewhere
+    /*
+    ===============================================================================
+        MeshBatchElement (完全基于指针的原子绘制单元)
+    ===============================================================================
+    */
+    struct MeshBatchElement {
+        // 直接持有当前物体在渲染线程对应的常量缓冲区（Uniform Buffer）指针
+        // 用于给 Shader 传递物体的 LocalToWorld 矩阵、自定义裁剪数据等
+        void* PrimitiveUniformBufferData = nullptr;
 
-    // MeshBatch: describes a single draw submission range (renderer will translate to actual RHI calls)
+        // 几何绘制区间控制
+        uint32_t FirstIndex = 0;
+        uint32_t NumPrimitives = 0;
+        int32_t BaseVertexIndex = 0;
+        uint32_t StartInstance = 0;
+        uint32_t NumInstances = 1;
+
+        // 间接绘制命令缓冲（面向 GPU Driven Pipeline 的预留设计）
+        RenderCore::RenderBuffer* IndirectArgsBuffer = nullptr;
+        uint32_t IndirectArgsOffset = 0;
+
+        const void* UserData = nullptr;
+    };
+
+    using MeshBatchElementList = std::vector<MeshBatchElement>;
+
+    /*
+    ===============================================================================
+        MeshBatch (状态一致的批次集合)
+    ===============================================================================
+    */
     struct MeshBatch {
-        ResourceId VertexBufferId;
-        ResourceId IndexBufferId;
-        uint32_t IndexStart;
-        uint32_t IndexCount;
-        int32_t MaterialId;
-        uint64_t SortKey; // for ordering
+        // 内嵌的元素数组
+        std::vector<MeshBatchElement> Elements;
+
+        // 核心渲染状态（一个批次内必须严格一致，触发同一个 PSO）
+        RenderCore::VertexFactory* VertexFactory = nullptr;
+        const MaterialRenderProxy* MaterialProxy = nullptr;
+
+        // 几何数据源指针挪到了 Batch 状态层，完美适配你的 RenderCore 资源
+        RenderCore::RenderBuffer* IndexBuffer = nullptr;
+
+        // 管线状态标志位
+        uint32_t CastShadow : 1;
+        uint32_t bUseForDepthPass : 1;
+        uint32_t ReverseCulling : 1;
+
+        uint8_t LODIndex = 0;
+        uint16_t MeshIdInPrimitive = 0;
+
+        MeshBatch()
+            : CastShadow(1)
+            , bUseForDepthPass(1)
+            , ReverseCulling(0)
+        {
+            Elements.emplace_back(); // 默认预留一个原子绘制单元
+        }
     };
 
     using MeshBatchList = std::vector<MeshBatch>;
 
+    /*
+    ===============================================================================
+        PrimitiveSceneProxy (基类)
+    ===============================================================================
+    */
     class ENGINE_API PrimitiveSceneProxy {
     public:
-        PrimitiveSceneProxy(int32_t InPrimitiveId);
+        PrimitiveSceneProxy();
         virtual ~PrimitiveSceneProxy();
 
-        // Identification & bounds
         int32_t GetPrimitiveId() const { return PrimitiveId; }
         const Core::AABB& GetBounds() const { return ProxyBounds; }
-
-        // LocalToWorld matrix (row-major 4x4 stored in float[16])
         const float* GetLocalToWorld() const { return LocalToWorld; }
 
-        // Visibility / state
         virtual bool IsVisible() const { return bVisible; }
         virtual bool CastsShadow() const { return bCastShadow; }
         virtual bool IsOpaque() const { return bOpaque; }
-        virtual uint32_t GetRenderFlags() const { return RenderFlags; }
 
-        // Renderer-facing query: fill mesh batches for this view.
-        // Called on RenderThread. Must not touch GameThread data.
+        // 核心裁剪与 Batch 收集接口
         virtual void GetMeshBatches(const SceneView& View, MeshBatchList& OutBatches) const = 0;
 
-        // Hints
         virtual bool HasStaticGeometry() const = 0;
         virtual bool IsDynamic() const = 0;
 
-        // Read-only resource access (IDs only)
-        virtual ResourceId GetVertexBufferId() const { return VertexBufferId; }
-        virtual ResourceId GetIndexBufferId()  const { return IndexBufferId; }
-        virtual int32_t GetMaterialId(int32_t ElementIndex) const;
-
     protected:
-        // Filled at construction time (RenderThread-only after creation)
         int32_t PrimitiveId;
         Core::AABB ProxyBounds;
         float LocalToWorld[16];
-        ResourceId VertexBufferId;
-        ResourceId IndexBufferId;
-        std::vector<int32_t> MaterialIds;
-        bool bVisible;
-        bool bCastShadow;
-        bool bOpaque;
-        uint32_t RenderFlags;
-    };
 
-    // Simple StaticPrimitiveSceneProxy example: represents a single static mesh with one batch
-    class ENGINE_API StaticPrimitiveSceneProxy : public PrimitiveSceneProxy {
-    public:
-        StaticPrimitiveSceneProxy(int32_t InPrimitiveId);
-        ~StaticPrimitiveSceneProxy() override;
+        // 常量数据资源
+        void* PrimitiveUniformBufferData = nullptr;
 
-        void GetMeshBatches(const SceneView& View, MeshBatchList& OutBatches) const override;
-        bool HasStaticGeometry() const override { return true; }
-        bool IsDynamic() const override { return false; }
+        std::vector<const MaterialRenderProxy*> MaterialProxies;
 
-        // Simple setter to populate proxy (used by CreateSceneProxy on GameThread)
-        void SetGeometry(ResourceId VB, ResourceId IB, uint32_t IndexStart, uint32_t IndexCount, int32_t MaterialId);
-
-    private:
-        uint32_t BatchIndexStart;
-        uint32_t BatchIndexCount;
-        int32_t BatchMaterialId;
+        uint32_t bVisible : 1;
+        uint32_t bCastShadow : 1;
+        uint32_t bOpaque : 1;
+        uint32_t RenderFlags : 29;
     };
 } // namespace Engine

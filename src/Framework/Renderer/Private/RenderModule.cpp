@@ -3,6 +3,8 @@
 #include "Scene.h"
 #include "RenderThread.h"
 #include "ScreenPass.h"
+#include "SceneInterface.h"
+#include "Viewport.h"
 namespace Renderer {
 
     SceneRendererSP CreateSceneRenderer() {
@@ -35,7 +37,7 @@ namespace Renderer {
 
 
     void RenderModule::BeginRender(
-        Engine::SceneViewCollection* Views)
+        Engine::SceneViewFamily* Views)
     {
         RenderCore::RenderGraphBuilder builder;
         auto rhiColorTex = Views->RenderTarget->RenderTarget;
@@ -50,6 +52,11 @@ namespace Renderer {
         builder.Execute();
 
     }
+    Engine::SceneInterface* RenderModule::AllocateScene() {
+        return new Scene();
+    }
+
+
 	IMPLEMENT_SIMPLE_MODULE(RenderModule, "Renderer");
 
     RenderModule* GetRenderModuleInstance() {

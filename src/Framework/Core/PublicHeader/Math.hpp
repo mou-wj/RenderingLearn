@@ -1,139 +1,82 @@
+// Vector.hpp
 #pragma once
-
 #include <array>
 #include <cmath>
+#include "Matrix.hpp"
 
 namespace Core {
 
-// -------------------------------------------------------------------------------------------------
-//  Int2: Represents a 2D integer vector or point
-// -------------------------------------------------------------------------------------------------
-struct CORE_API Int2 {
-    std::array<int, 2> Data;
-    int& x; int& y; // convenient aliases to underlying storage
+    struct Int2 {
+        union {
+            std::array<int, 2> Data;
+            struct { int x, y; };
+        };
+        Int2() : Data{ 0,0 } {}
+        Int2(int ix, int iy) : x(ix), y(iy) {}
+        int& operator[](size_t i) { return Data[i]; }
+        const int& operator[](size_t i) const { return Data[i]; }
+    };
 
-    Int2() : Data{0,0}, x(Data[0]), y(Data[1]) {}
-    Int2(int ix, int iy) : Data{ix, iy}, x(Data[0]), y(Data[1]) {}
+    struct Int3 {
+        union {
+            std::array<int, 3> Data;
+            struct { int x, y, z; };
+        };
+        Int3() : Data{ 0,0,0 } {}
+        Int3(int ix, int iy, int iz) : x(ix), y(iy), z(iz) {}
+        int& operator[](size_t i) { return Data[i]; }
+        const int& operator[](size_t i) const { return Data[i]; }
+    };
 
-    int& operator[](size_t index) { return Data[index]; }
-    const int& operator[](size_t index) const { return Data[index]; }
+    struct Int4 {
+        union {
+            std::array<int, 4> Data;
+            struct { int x, y, z, w; };
+        };
+        Int4() : Data{ 0,0,0,0 } {}
+        Int4(int ix, int iy, int iz, int iw) : x(ix), y(iy), z(iz), w(iw) {}
+        int& operator[](size_t i) { return Data[i]; }
+        const int& operator[](size_t i) const { return Data[i]; }
+    };
 
-    Int2 operator+(const Int2& other) const { return Int2(Data[0] + other.Data[0], Data[1] + other.Data[1]); }
-    Int2 operator-(const Int2& other) const { return Int2(Data[0] - other.Data[0], Data[1] - other.Data[1]); }
-    Int2 operator*(int scalar) const { return Int2(Data[0] * scalar, Data[1] * scalar); }
-    // Copy assignment: copy underlying storage
-    Int2& operator=(const Int2& other) { Data = other.Data; return *this; }
-};
+    struct Float2 {
+        union {
+            std::array<float, 2> Data;
+            struct { float x, y; };
+        };
+        Float2() : Data{ 0.0f, 0.0f } {}
+        Float2(float ix, float iy) : x(ix), y(iy) {}
+        float& operator[](size_t i) { return Data[i]; }
+        const float& operator[](size_t i) const { return Data[i]; }
+        float Length() const { return std::sqrt(x * x + y * y); }
+    };
 
-// -------------------------------------------------------------------------------------------------
-//  Int3: Represents a 3D integer vector or point
-// -------------------------------------------------------------------------------------------------
-struct CORE_API Int3 {
-    std::array<int, 3> Data;
-    int& x; int& y; int& z;
+    struct Float3 {
+        union {
+            std::array<float, 3> Data;
+            struct { float x, y, z; };
+        };
+        Float3() : Data{ 0.0f, 0.0f, 0.0f } {}
+        Float3(float ix, float iy, float iz) : x(ix), y(iy), z(iz) {}
+        bool operator<(const Float3& Other) const { return x < Other.x && y < Other.y && z < Other.z; }
+        bool operator>(const Float3& Other) const { return x > Other.x && y > Other.y && z > Other.z; }
+        float& operator[](size_t i) { return Data[i]; }
+        const float& operator[](size_t i) const { return Data[i]; }
+        float Length() const { return std::sqrt(x * x + y * y + z * z); }
+    };
 
-    Int3() : Data{0,0,0}, x(Data[0]), y(Data[1]), z(Data[2]) {}
-    Int3(int ix, int iy, int iz) : Data{ix,iy,iz}, x(Data[0]), y(Data[1]), z(Data[2]) {}
+    // 强力引入 16 字节硬件对齐，完美支撑 SIMD 裁剪与 Uniform Buffer 访存需求
+    struct Float4 {
+        union {
+            alignas(16) std::array<float, 4> Data;
+            struct { float x, y, z, w; };
+        };
+        Float4() : Data{ 0.0f, 0.0f, 0.0f, 0.0f } {}
+        Float4(float ix, float iy, float iz, float iw) : x(ix), y(iy), z(iz), w(iw) {}
+        float& operator[](size_t i) { return Data[i]; }
+        const int& operator[](size_t i) const { return Data[i]; }
+        float Length() const { return std::sqrt(x * x + y * y + z * z + w * w); }
+    };
+    using Float4x4 = Mat4;
 
-    int& operator[](size_t index) { return Data[index]; }
-    const int& operator[](size_t index) const { return Data[index]; }
-
-    Int3 operator+(const Int3& other) const { return Int3(Data[0] + other.Data[0], Data[1] + other.Data[1], Data[2] + other.Data[2]); }
-    Int3 operator-(const Int3& other) const { return Int3(Data[0] - other.Data[0], Data[1] - other.Data[1], Data[2] - other.Data[2]); }
-    Int3 operator*(int scalar) const { return Int3(Data[0] * scalar, Data[1] * scalar, Data[2] * scalar); }
-    // Copy assignment
-    Int3& operator=(const Int3& other) { Data = other.Data; return *this; }
-};
-
-// -------------------------------------------------------------------------------------------------
-//  Int4: Represents a 4D integer vector or point
-// -------------------------------------------------------------------------------------------------
-struct CORE_API Int4 {
-    std::array<int, 4> Data;
-    int& x; int& y; int& z; int& w;
-
-    Int4() : Data{0,0,0,0}, x(Data[0]), y(Data[1]), z(Data[2]), w(Data[3]) {}
-    Int4(int ix, int iy, int iz, int iw) : Data{ix,iy,iz,iw}, x(Data[0]), y(Data[1]), z(Data[2]), w(Data[3]) {}
-
-    int& operator[](size_t index) { return Data[index]; }
-    const int& operator[](size_t index) const { return Data[index]; }
-
-    Int4 operator+(const Int4& other) const { return Int4(Data[0] + other.Data[0], Data[1] + other.Data[1], Data[2] + other.Data[2], Data[3] + other.Data[3]); }
-    Int4 operator-(const Int4& other) const { return Int4(Data[0] - other.Data[0], Data[1] - other.Data[1], Data[2] - other.Data[2], Data[3] - other.Data[3]); }
-    Int4 operator*(int scalar) const { return Int4(Data[0] * scalar, Data[1] * scalar, Data[2] * scalar, Data[3] * scalar); }
-    // Copy assignment
-    Int4& operator=(const Int4& other) { Data = other.Data; return *this; }
-};
-
-
-// -------------------------------------------------------------------------------------------------
-//  Float2: Represents a 2D vector or point
-// -------------------------------------------------------------------------------------------------
-struct CORE_API Float2 {
-    std::array<float, 2> Data;
-    float& x; float& y;
-
-    Float2() : Data{0.0f,0.0f}, x(Data[0]), y(Data[1]) {}
-    Float2(float ix, float iy) : Data{ix,iy}, x(Data[0]), y(Data[1]) {}
-
-    float& operator[](size_t index) { return Data[index]; }
-    const float& operator[](size_t index) const { return Data[index]; }
-
-    Float2 operator+(const Float2& other) const { return Float2(Data[0] + other.Data[0], Data[1] + other.Data[1]); }
-    Float2 operator-(const Float2& other) const { return Float2(Data[0] - other.Data[0], Data[1] - other.Data[1]); }
-    Float2 operator*(float scalar) const { return Float2(Data[0] * scalar, Data[1] * scalar); }
-
-    float Length() const { return std::sqrt(Data[0] * Data[0] + Data[1] * Data[1]); }
-    // Copy assignment
-    Float2& operator=(const Float2& other) { Data = other.Data; return *this; }
-};
-
-
-// -------------------------------------------------------------------------------------------------
-//  Float3: Represents a 3D vector or point
-// -------------------------------------------------------------------------------------------------
-struct CORE_API Float3 {
-    std::array<float, 3> Data;
-    float& x; float& y; float& z;
-
-    Float3() : Data{0.0f,0.0f,0.0f}, x(Data[0]), y(Data[1]), z(Data[2]) {}
-    Float3(float ix, float iy, float iz) : Data{ix,iy,iz}, x(Data[0]), y(Data[1]), z(Data[2]) {}
-
-    float& operator[](size_t index) { return Data[index]; }
-    const float& operator[](size_t index) const { return Data[index]; }
-
-    Float3 operator+(const Float3& other) const { return Float3(Data[0] + other.Data[0], Data[1] + other.Data[1], Data[2] + other.Data[2]); }
-    Float3 operator-(const Float3& other) const { return Float3(Data[0] - other.Data[0], Data[1] - other.Data[1], Data[2] - other.Data[2]); }
-    Float3 operator*(float scalar) const { return Float3(Data[0] * scalar, Data[1] * scalar, Data[2] * scalar); }
-
-    float Length() const { return std::sqrt(Data[0] * Data[0] + Data[1] * Data[1] + Data[2] * Data[2]); }
-    // Copy assignment
-    Float3& operator=(const Float3& other) { Data = other.Data; return *this; }
-};
-
-// -------------------------------------------------------------------------------------------------
-//  Float4: Represents a 4D vector or point
-// -------------------------------------------------------------------------------------------------
-struct CORE_API Float4 {
-    std::array<float, 4> Data;
-    float& x; float& y; float& z; float& w;
-
-    Float4() : Data{0.0f,0.0f,0.0f,0.0f}, x(Data[0]), y(Data[1]), z(Data[2]), w(Data[3]) {}
-    Float4(float ix, float iy, float iz, float iw) : Data{ix,iy,iz,iw}, x(Data[0]), y(Data[1]), z(Data[2]), w(Data[3]) {}
-
-    float& operator[](size_t index) { return Data[index]; }
-    const float& operator[](size_t index) const { return Data[index]; }
-
-    Float4 operator+(const Float4& other) const { return Float4(Data[0] + other.Data[0], Data[1] + other.Data[1], Data[2] + other.Data[2], Data[3] + other.Data[3]); }
-    Float4 operator-(const Float4& other) const { return Float4(Data[0] - other.Data[0], Data[1] - other.Data[1], Data[2] - other.Data[2], Data[3] - other.Data[3]); }
-    Float4 operator*(float scalar) const { return Float4(Data[0] * scalar, Data[1] * scalar, Data[2] * scalar, Data[3] * scalar); }
-
-    float Length() const { return std::sqrt(Data[0] * Data[0] + Data[1] * Data[1] + Data[2] * Data[2] + Data[3] * Data[3]); }
-    // Copy assignment
-    Float4& operator=(const Float4& other) { Data = other.Data; return *this; }
-};
-
-struct CORE_API Float4x4 {
-    std::array<Float4, 4> Data;
-};
-} // namespace WR::Common
+} // namespace Core
