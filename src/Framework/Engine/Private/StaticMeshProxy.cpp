@@ -44,9 +44,8 @@ void StaticMeshProxy::GetMeshBatches(const SceneView& /*View*/, MeshBatchList& O
         LOD.Sections)
     {
         // material index invalid
-        if (Section.MaterialIndex < 0 ||
-            Section.MaterialIndex >=
-            MaterialProxies.size())
+        auto material = MeshComponent->GetStaticMesh()->GetMaterial(Section.MaterialIndex);
+        if (!material)
         {
             continue;
         }
@@ -62,8 +61,7 @@ void StaticMeshProxy::GetMeshBatches(const SceneView& /*View*/, MeshBatchList& O
             LOD.VertexFactory.get();
 
         Batch.MaterialProxy =
-            MaterialProxies[
-                Section.MaterialIndex];
+            material->GetRenderProxy();
 
         Batch.IndexBuffer =
             LOD.IndexBuffer

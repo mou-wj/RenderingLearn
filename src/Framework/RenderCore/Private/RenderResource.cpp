@@ -51,13 +51,56 @@ void RenderTexture::ReleaseRHIResource() {
 	Texture = nullptr;
     RenderResource::ReleaseRHIResource();
 }
+void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arraySlice, uint32_t planeSlice) {
+	auto lastQueueType = GetTracker().GetLastAccessFence().QueueType;
+	auto* queue = GRHIApi->GetQueue(lastQueueType);
+	auto* ctx = queue->AcquireCommandContext();
+	RHICommandListBase cmd(ctx);
+	cmd.SetImmediate(true);
+	cmd.Begin();
+	RHI::RHISubresourceRange range;
+	range.ArraySlice = arraySlice;
+    range.MipIndex = mipIndex;
+	range.PlaneSlice = 0;
+	auto lastAccess = GetTracker().GetSubresourceAccess(range);
+	if (lastAccess != ERHIResourceAccess::TransferDest) {
+		std::vector<RHI::RHITransitionInfo> infos;
+		infos.emplace_back(Texture.get(), lastAccess, ERHIResourceAccess::TransferDest);
+		char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+		auto* transition = new(transitionMem) RHI::RHITransition();
+		GRHIApi->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+
+		cmd.BeginTransitions({ transition });
+		cmd.EndTransitions({ transition });
+
+		GRHIApi->RHIReleaseTransition(transition);
+		delete[] transitionMem;
+	}
+	RHI::RHIUpdateTextureRegion updateRegion;
+	updateRegion.arraySlice = arraySlice;
+	updateRegion.mipLevel = mipIndex;
+	updateRegion.width = Desc.Width >> mipIndex;
+    updateRegion.height = Desc.Height >> mipIndex;
+
+	GRHIApi->UpdateTexture(cmd, Texture.get(), data, updateRegion);
+	cmd.End();
+
+	auto fence = queue->ExecuteContext({ ctx }, {});
+	GetTracker().UpdateSubresourceAccess(range, ERHIResourceAccess::TransferDest);
+	GetTracker().UpdateLastAccessFence(fence);
+	queue->WaitFence(fence);
+}
 
 // RenderBuffer
 RenderBuffer::RenderBuffer(const RHI::RHIBufferDesc& inDesc) : Desc(inDesc) {};
 RenderBuffer::~RenderBuffer() = default;
 
 void RenderBuffer::InitRHIResource() {
-	Buffer = RHI::GRHIApi->CreateBuffer(Desc);	
+	Buffer = RHI::GRHIApi->CreateBuffer(Desc);
+	RHI::RHIFence fence = {};
+	fence.QueueType = Desc.InitialQueueType;
+	fence.Value = 0;
+    GetTracker().UpdateLastAccessFence(fence);
     RenderResource::InitRHIResource();
     // 缓冲区资源初始化逻辑
 }
@@ -68,8 +111,41 @@ void RenderBuffer::ReleaseRHIResource() {
 	Buffer = nullptr;
     RenderResource::ReleaseRHIResource();
 }
+void RenderBuffer::UploadData(const void* data, uint32_t size, uint32_t offset) {
+	auto lastQueueType = GetTracker().GetLastAccessFence().QueueType;
+	auto* queue = GRHIApi->GetQueue(lastQueueType);
+	auto* ctx = queue->AcquireCommandContext();
+	RHICommandListBase cmd(ctx);
+	cmd.SetImmediate(true);
+	cmd.Begin();
+	if (GetTracker().GetLastAccess() != ERHIResourceAccess::TransferDest) {
+		std::vector<RHI::RHITransitionInfo> infos;
+
+		infos.emplace_back(Buffer.get(), GetTracker().GetLastAccess(), ERHIResourceAccess::TransferDest);
 
 
+		char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+		auto* transition = new(transitionMem) RHI::RHITransition();
+		GRHIApi->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+
+		cmd.BeginTransitions({ transition });
+		cmd.EndTransitions({ transition });
+
+		GRHIApi->RHIReleaseTransition(transition);
+		delete[] transitionMem;
+	}
+	RHIUpdateBufferRegion region;
+	region.offset = offset;
+	region.size = size;
+
+	GRHIApi->UpdateBuffer(cmd, Buffer.get(),data, region);
+	cmd.End();
+
+	auto fence = queue->ExecuteContext({ ctx }, {});
+	GetTracker().UpdateAccess(ERHIResourceAccess::TransferDest);
+	GetTracker().UpdateLastAccessFence(fence);
+	queue->WaitFence(fence);
+}
 
 
 RenderTargetPool* GRenderTargetPool = nullptr;

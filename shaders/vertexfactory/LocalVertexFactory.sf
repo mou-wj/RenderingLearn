@@ -1,62 +1,5 @@
-/*
-===============================================================================
 
-    LocalVertexFactory.ush
-
-    Modern semantic-oriented Local Vertex Factory
-
-===============================================================================
-*/
-
-
-/*
-===============================================================================
-
-    Vertex Factory Feature Permutations
-
-===============================================================================
-*/
-
-// Position ÓÀÔ¶´æÔÚ
-
-#ifndef VF_SUPPORTS_TEXCOORD
-    #define VF_SUPPORTS_TEXCOORD 1
-#endif
-
-#ifndef VF_SUPPORTS_NORMAL
-    #define VF_SUPPORTS_NORMAL 1
-#endif
-
-#ifndef VF_SUPPORTS_TANGENT
-    #define VF_SUPPORTS_TANGENT 1
-#endif
-
-#ifndef VF_SUPPORTS_VERTEX_COLOR
-    #define VF_SUPPORTS_VERTEX_COLOR 0
-#endif
-
-#ifndef VF_SUPPORTS_INSTANCE_DATA
-    #define VF_SUPPORTS_INSTANCE_DATA 0
-#endif
-
-
-/*
-===============================================================================
-
-    Uniform Buffers
-
-===============================================================================
-*/
-
-#include "/Generated/LocalVertexFactoryParameters.sf"
-
-/*
-===============================================================================
-
-    Vertex Factory Input (VS Only)
-
-===============================================================================
-*/
+#include "/Generated/ShaderParameters/LocalVertexFactoryParameters.sf"
 
 #if VERTEX_SHADER
 
@@ -84,16 +27,6 @@ struct VertexFactoryInput
 #endif // VERTEX_SHADER
 
 
-/*
-===============================================================================
-
-    Vertex Factory Intermediates (VS Only)
-
-    Internal VS-only semantic data
-
-===============================================================================
-*/
-
 #if VERTEX_SHADER
 
 struct VertexFactoryIntermediates
@@ -107,14 +40,6 @@ struct VertexFactoryIntermediates
 
 #endif // VERTEX_SHADER
 
-
-/*
-===============================================================================
-
-    VS -> PS Interpolants (Both VS and PS need this)
-
-===============================================================================
-*/
 
 struct VertexFactoryVSToPS
 {
@@ -143,16 +68,8 @@ struct VertexFactoryVSToPS
     float3 WorldPosition : TEXCOORD4;
 };
 
-#include "/core/ShadingContext.ush"
+#include "/core/ShadingCommon.sf"
 
-
-/*
-===============================================================================
-
-    Vertex Factory Internal Construction (VS Only)
-
-===============================================================================
-*/
 
 #if VERTEX_SHADER
 
@@ -214,13 +131,6 @@ VertexFactoryIntermediates GetVertexFactoryIntermediates(VertexFactoryInput Inpu
     return Intermediates;
 }
 
-/*
-===============================================================================
-
-    Build VS->PS Interpolants (VS Only)
-
-===============================================================================
-*/
 
 VertexFactoryVSToPS VertexFactoryGetVSToPS(
     VertexFactoryInput Input,
@@ -248,29 +158,12 @@ VertexFactoryVSToPS VertexFactoryGetVSToPS(
     return Output;
 }
 
-/*
-===============================================================================
-
-    Position Access (VS Only)
-
-===============================================================================
-*/
-
 float4 VertexFactoryGetClipPosition(VertexFactoryIntermediates Intermediates)
 {
     return mul(ViewProjection, float4(Intermediates.WorldPosition, 1.0));
 }
 
 #endif // VERTEX_SHADER
-
-
-/*
-===============================================================================
-
-    Shading Context Reconstruction (PS Only)
-
-===============================================================================
-*/
 
 #if PIXEL_SHADER
 

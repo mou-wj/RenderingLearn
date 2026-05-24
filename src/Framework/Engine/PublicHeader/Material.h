@@ -14,121 +14,206 @@ namespace RenderCore {
 namespace Engine {
     class Material;
     class MaterialRenderProxy;
+    class MaterialInterface;
     class TextureAsset; // 使用你定义的资产类
+    // ============================================================================
+// 2. 基础数据类型标签与核心语义定义
+// ============================================================================
+    struct FScalarType { using Type = float; };
+    struct FVectorType { using Type = std::array<float, 4>; };
+    struct FTextureType { using Type = const RenderCore::RenderTexture*; };
+    struct FIntType { using Type = int; };
 
-    enum class EBlendMode : uint8_t {
-        Opaque,
-        Masked,
-        Translucent
+    enum class EMaterialParameterSemantic : uint8_t {
+        BaseColor,
+        Roughness,
+        Metallic,
+        Normal,
+        Custom
     };
 
-    /*
-    ===============================================================================
-        MaterialInterface (游戏线程基类)
-    ===============================================================================
-    */
-    class ENGINE_API MaterialInterface {
+    // ============================================================================
+    // 3. 编译期合法性检查白名单（模板特化限制）
+    // ============================================================================
+    template <EMaterialParameterSemantic Semantic, typename TParamType>
+    struct TIsValidCombination : std::false_type {};
+
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::Roughness, FScalarType> : std::true_type {};
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::Metallic, FScalarType> : std::true_type {};
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::BaseColor, FVectorType> : std::true_type {};
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::BaseColor, FTextureType> : std::true_type {};
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::Normal, FTextureType> : std::true_type {};
+
+    // Custom 语义作为万能后备，全类型支持
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::Custom, FScalarType> : std::true_type {};
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::Custom, FVectorType> : std::true_type {};
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::Custom, FTextureType> : std::true_type {};
+    template <> struct TIsValidCombination<EMaterialParameterSemantic::Custom, FIntType> : std::true_type {};
+
+    // ============================================================================
+    // 4. 材质参数多态核心类
+    // ============================================================================
+    class MaterialParameter {
+    public:
+        MaterialParameter(const std::string& InName, EMaterialParameterSemantic InSemantic);
+        virtual ~MaterialParameter() = default;
+
+        const std::string& GetName() const { return Name; }
+        EMaterialParameterSemantic GetSemantic() const { return Semantic; }
+
+        virtual std::unique_ptr<MaterialParameter> Clone() const = 0;
+
+    private:
+        std::string Name;
+        EMaterialParameterSemantic Semantic;
+    };
+
+    template <EMaterialParameterSemantic InSemantic, typename TParamType>
+    class TMaterialParameter : public MaterialParameter
+    {
+        static_assert(
+            TIsValidCombination<InSemantic, TParamType>::value,
+            "Error: Invalid combination of EMaterialParameterSemantic and ParamType!");
+
+    public:
+        using UnderlyingType = typename TParamType::Type;
+
+        TMaterialParameter(const std::string& InName, const UnderlyingType& InValue)
+            : MaterialParameter(InName, InSemantic), Value(InValue)
+        {
+        }
+
+        const UnderlyingType& GetValue() const
+        {
+            return Value;
+        }
+
+        void SetValue(const UnderlyingType& InValue)
+        {
+            Value = InValue;
+        }
+
+        std::unique_ptr<MaterialParameter> Clone() const override
+        {
+            return std::make_unique<
+                TMaterialParameter<InSemantic, TParamType>>(
+                    GetName(),
+                    Value);
+        }
+
+    private:
+        UnderlyingType Value;
+    };
+    
+    
+    // ============================================================================
+    // 5. MaterialRenderProxy (渲染线程数据快照)
+    // ============================================================================
+    class MaterialRenderProxy {
+    public:
+        MaterialRenderProxy(const MaterialInterface* parent);
+        virtual ~MaterialRenderProxy() = default;
+
+        MaterialRenderProxy(const MaterialRenderProxy&) = delete;
+        MaterialRenderProxy& operator=(const MaterialRenderProxy&) = delete;
+
+		const MaterialInterface* GetParent() const { return Parent; }
+        void AddParameter(std::unique_ptr<MaterialParameter> Param);
+
+        template <EMaterialParameterSemantic Semantic, typename TParamType>
+        bool GetValue(const std::string& Name, typename TParamType::Type& OutValue) const {
+            for (const auto& Param : Parameters) {
+                if (Param->GetSemantic() == Semantic && Param->GetName() == Name) {
+                    using TargetParamClass = TMaterialParameter<Semantic, TParamType>;
+                    auto* TypedParam = dynamic_cast<const TargetParamClass*>(Param.get());
+                    if (TypedParam) {
+                        OutValue = TypedParam->GetValue();
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+    private:
+        std::vector<std::unique_ptr<MaterialParameter>> Parameters;
+        const MaterialInterface* Parent;
+    };
+
+    // ============================================================================
+    // 6. 游戏线程材质框架接口与子类
+    // ============================================================================
+    class Material;
+
+    class MaterialInterface {
     public:
         MaterialInterface() = default;
         virtual ~MaterialInterface() = default;
 
         virtual const Material* GetMaterial() const = 0;
         virtual MaterialRenderProxy* GetRenderProxy() const = 0;
-
-        // 核心变更：参数查询直接返回你封装好的 TextureAsset 的智能指针或裸指针
-        virtual bool GetTextureParameterValue(const std::string& Name, std::shared_ptr<TextureAsset>& OutTexture) const = 0;
-        virtual bool GetScalarParameterValue(const std::string& Name, float& OutValue) const = 0;
-
         virtual EBlendMode GetBlendMode() const = 0;
-        virtual bool IsTwoSided() const = 0;
+        virtual EShadingModel GetShadingModel() const = 0;
 
-        MaterialInterface(const MaterialInterface&) = delete;
-        MaterialInterface& operator=(const MaterialInterface&) = delete;
-        static RHIGraphicsPipelineStateSP GetGraphicPipelineState(const MaterialInterface* Material);
-        static RHIComputePipelineStateSP GetComputePipelineState(const MaterialInterface* Material);
-        static RenderCore::Shader* GetShader(const MaterialInterface* Material,ERHIShaderFrequency frequency);
+        template <EMaterialParameterSemantic Semantic, typename TParamType>
+        void SetParameterValue(const std::string& Name, const typename TParamType::Type& Value) {
+            static_assert(TIsValidCombination<Semantic, TParamType>::value,
+                "Error: Pre-compiler checked invalid Semantic and Type combination!");
+            SetParameterValueImpl(Semantic, Name, std::make_unique<TMaterialParameter<Semantic, TParamType>>(Name, Value));
+        }
+
+    protected:
+        virtual void SetParameterValueImpl(EMaterialParameterSemantic Semantic, const std::string& Name, std::unique_ptr<MaterialParameter> Param) = 0;
     };
 
-    /*
-    ===============================================================================
-        Material (物理材质资产)
-    ===============================================================================
-    */
-    class ENGINE_API Material : public MaterialInterface {
+    class Material : public MaterialInterface {
     public:
-        Material();
-        ~Material() override;
+        Material() = default;
+        ~Material() override = default;
 
         const Material* GetMaterial() const override { return this; }
-        MaterialRenderProxy* GetRenderProxy() const override;
-
-        bool GetTextureParameterValue(const std::string& Name, std::shared_ptr<TextureAsset>& OutTexture) const override;
-        bool GetScalarParameterValue(const std::string& Name, float& OutValue) const override;
         EBlendMode GetBlendMode() const override { return BlendMode; }
-        bool IsTwoSided() const override { return bIsTwoSided; }
+        void SetBlendMode(EBlendMode InMode);
+        EShadingModel GetShadingModel() const { return ShadingModel; }
+        void SetShadingModel(EShadingModel InModel);
 
-        bool CompileShaders();
+        MaterialRenderProxy* GetRenderProxy() const override;
+        const std::unordered_map<std::string, std::unique_ptr<MaterialParameter>>& GetDefaultParameters() const { return DefaultParameters; }
 
-        // 编辑器接口
-        void SetTextureParameter(const std::string& Name, std::shared_ptr<TextureAsset> Texture);
-        void SetScalarParameter(const std::string& Name, float Value);
+    protected:
+        void SetParameterValueImpl(EMaterialParameterSemantic Semantic, const std::string& Name, std::unique_ptr<MaterialParameter> Param) override;
 
     private:
         EBlendMode BlendMode = EBlendMode::Opaque;
-        bool bIsTwoSided = false;
+		EShadingModel ShadingModel = EShadingModel::Unlit;
+        std::unordered_map<std::string, std::unique_ptr<MaterialParameter>> DefaultParameters;
 
-        std::unique_ptr<MaterialRenderProxy> RenderProxy;
-
-        // 对应你资产系统的映射表
-        std::unordered_map<std::string, std::shared_ptr<TextureAsset>> TextureParameters;
-        std::unordered_map<std::string, float> ScalarParameters;
+        mutable std::unique_ptr<MaterialRenderProxy> CachedProxy;
+        mutable bool bProxyDirty = true;
     };
 
-    /*
-    ===============================================================================
-        MaterialInstance (材质实例)
-    ===============================================================================
-    */
-    class ENGINE_API MaterialInstance : public MaterialInterface {
+    class MaterialInstance : public MaterialInterface {
     public:
         MaterialInstance(MaterialInterface* InParent);
-        ~MaterialInstance() override;
+        ~MaterialInstance() override = default;
 
         const Material* GetMaterial() const override;
+        EBlendMode GetBlendMode() const override;
+        EShadingModel GetShadingModel() const override;
+
+
         MaterialRenderProxy* GetRenderProxy() const override;
 
-        bool GetTextureParameterValue(const std::string& Name, std::shared_ptr<TextureAsset>& OutTexture) const override;
-        bool GetScalarParameterValue(const std::string& Name, float& OutValue) const override;
-        EBlendMode GetBlendMode() const override;
-        bool IsTwoSided() const override;
-
-        void SetTextureParameterValue(const std::string& Name, std::shared_ptr<TextureAsset> Texture);
-        void SetScalarParameterValue(const std::string& Name, float Value);
+    protected:
+        void SetParameterValueImpl(EMaterialParameterSemantic Semantic, const std::string& Name, std::unique_ptr<MaterialParameter> Param) override;
 
     private:
-        MaterialInterface* Parent;
-        std::unique_ptr<MaterialRenderProxy> RenderProxy;
+        MaterialInterface* Parent = nullptr;
+        std::unordered_map<std::string, std::unique_ptr<MaterialParameter>> OverriddenParameters;
 
-        std::unordered_map<std::string, std::shared_ptr<TextureAsset>> OverriddenTextures;
-        std::unordered_map<std::string, float> OverriddenScalars;
+        mutable std::unique_ptr<MaterialRenderProxy> CachedProxy;
+        mutable bool bProxyDirty = true;
     };
 
-    /*
-    ===============================================================================
-        MaterialRenderProxy (渲染线程专用只读代理)
-    ===============================================================================
-    */
-    class ENGINE_API MaterialRenderProxy {
-    public:
-        MaterialRenderProxy(const MaterialInterface* InOwnerMaterial);
-        virtual ~MaterialRenderProxy() = default;
 
-        virtual bool GetScalarParam(const std::string& Name, float& OutValue) const = 0;
-
-        // 关键打通：直接向渲染器返回底层的 RenderCore::RenderTexture 指针
-        virtual bool GetTextureParam(const std::string& Name, const RenderCore::RenderTexture*& OutTexture) const = 0;
-        const MaterialInterface* GetOwnerMaterial() const { return OwnerMaterial; }
-    protected:
-        const MaterialInterface* OwnerMaterial;
-    };
 }

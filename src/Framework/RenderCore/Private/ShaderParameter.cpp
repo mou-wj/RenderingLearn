@@ -130,7 +130,7 @@ namespace RenderCore {
         {
             auto& ComputeCmdList = static_cast<RHI::RHIComputeCommandList&>(cmdList);
             ComputeCmdList.SetBatchedShaderParameters(
-                static_cast<RHI::RHIComputeShader*>(shader->GetRHIShader().get()),
+                static_cast<RHI::RHIComputeShader*>(shader->GetRHIShader()),
                 BatchedParams
             );
         }
@@ -138,7 +138,7 @@ namespace RenderCore {
         {
             auto& GraphicCmdList = static_cast<RHI::RHIGraphicCommandList&>(cmdList);
             GraphicCmdList.SetBatchedShaderParameters(
-                static_cast<RHI::RHIGraphicShader*>(shader->GetRHIShader().get()),
+                static_cast<RHI::RHIGraphicShader*>(shader->GetRHIShader()),
                 BatchedParams
             );
         }

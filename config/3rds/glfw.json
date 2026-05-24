@@ -1,5 +1,6 @@
 {
   "name": "glfw",
+  "ignore": false,
   "type": "source",
   "config_type": "cmake_config",
   "source_type": "git",

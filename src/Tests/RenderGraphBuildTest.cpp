@@ -136,14 +136,14 @@ public:
        
         // 创建计算管线状态
         RHI::RHIComputePipelineStateDesc computeDesc;
-        computeDesc.computeShader = dynamic_cast<RHIComputeShader*>(blitTextureShader0->GetRHIShader().get());
+        computeDesc.computeShader = dynamic_cast<RHIComputeShader*>(blitTextureShader0->GetRHIShader());
         ComputePipelineState = RHI::GRHIApi->CreateComputePipelineState(computeDesc);
 	}
 
     void InitSwapchain()
     {
         // 
-        Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIRenderTriangleTest");
+        Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RenderGraphBuildTest");
         Window->Show();
         // 创建交换链
         void* windowHandle = Window->GetNativeHandle(); // 获取窗口句柄的函数
@@ -167,7 +167,7 @@ public:
         using namespace RenderCore;
 
         auto* api = GRHIApi;
-        constexpr int kFrameCount = 10;
+        constexpr int kFrameCount = 1000;
 
         RHI::RHISamplerDesc samplerDesc{};
         samplerSP = api->CreateSampler(samplerDesc);
@@ -240,6 +240,7 @@ public:
 
             // 👉 参数
             auto* params = builder.AllocateParameter<BlitTextureParameters>();
+            BlitTextureParameters* paramsPtr = params;
 
             params->SrcTexture = rdgSrc;
             params->DstTexture = dstUAV;
@@ -337,7 +338,7 @@ public:
         Window.reset();
 		samplerSP.reset();
         randomTex.reset();
-        RHI::GRHIApi->Shutdown();
+        
         delete RHI::GRHIApi;
     }
 

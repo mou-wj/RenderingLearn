@@ -40,7 +40,8 @@ target_include_directories(${TARGET_NAME}
         "${CMAKE_CURRENT_SOURCE_DIR}/Private"
 )
 find_package(tinygltf REQUIRED)
-target_link_libraries(${TARGET_NAME} PUBLIC Core RenderCore Slate tinygltf::tinygltf)
+find_package(nlohmann_json REQUIRED)
+target_link_libraries(${TARGET_NAME} PUBLIC Core RenderCore Slate tinygltf::tinygltf nlohmann_json)
 
 target_compile_definitions(${TARGET_NAME}
   PRIVATE ENGINE_EXPORTS

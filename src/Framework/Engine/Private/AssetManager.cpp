@@ -1,7 +1,8 @@
 #include "AssetManager.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_gltf.h"
-
+#include <fstream>
+#include <nlohmann/json.hpp>
 using namespace RHI;
 using namespace RenderCore;
 namespace Engine {
@@ -29,6 +30,7 @@ namespace Engine {
 	bool TextureAsset::Load()
 	{
 		Texture_ = CreateTexture(Path_);
+        Name_ = Core::GetFileName(Path_);
 		return Texture_ != nullptr;
 	}
 
@@ -135,225 +137,322 @@ namespace Engine {
 
     StaticMeshSP LoadMesh(const std::string& Path)
     {
-        tinygltf::TinyGLTF Loader;
-        tinygltf::Model Model;
+        tinygltf::Model model;
+        tinygltf::TinyGLTF loader;
+        std::string err, warn;
 
-        std::string Error;
-        std::string Warning;
-
-        bool Result = false;
-
-        if (Path.ends_with(".glb"))
-        {
-            Result = Loader.LoadBinaryFromFile(
-                &Model,
-                &Error,
-                &Warning,
-                Path);
+        bool ret = false;
+        if (Path.ends_with(".glb")) {
+            ret = loader.LoadBinaryFromFile(&model, &err, &warn, Path.c_str());
         }
-        else
-        {
-            Result = Loader.LoadASCIIFromFile(
-                &Model,
-                &Error,
-                &Warning,
-                Path);
+        else {
+            ret = loader.LoadASCIIFromFile(&model, &err, &warn, Path.c_str());
         }
 
-        if (!Warning.empty())
-        {
-            std::cout
-                << "[tinygltf warning] "
-                << Warning
-                << std::endl;
-        }
+        if (!warn.empty())
+            std::cout << "GLTF Warning: " << warn << std::endl;
+        if (!err.empty())
+            std::cerr << "GLTF Error: " << err << std::endl;
+        if (!ret) return nullptr;
 
-        if (!Error.empty())
-        {
-            std::cerr
-                << "[tinygltf error] "
-                << Error
-                << std::endl;
-        }
+        auto RenderData = std::make_shared<StaticMeshRenderData>();
+        auto staticMesh = std::make_shared<StaticMesh>(RenderData);
 
-        if (!Result)
-        {
-            return nullptr;
-        }
+        // ------------------- 材质 -------------------
+        std::vector<MaterialInterface*> Materials(model.materials.size());
 
-        auto RenderData =
-            std::make_shared<StaticMeshRenderData>();
+        for (size_t i = 0; i < model.materials.size(); ++i) {
+            
+            const auto& mat = model.materials[i];
+            auto M = new Material();
+            M->SetBlendMode(EBlendMode::Opaque);
+            M->SetShadingModel(EShadingModel::Lit);
 
-        LODResource LOD0;
-
-        for (const auto& Mesh : Model.meshes)
-        {
-            for (const auto& Primitive : Mesh.primitives)
-            {
-                SectionInfo Section;
-
-                uint32_t BaseVertexIndex =
-                    static_cast<uint32_t>(
-                        LOD0.VertexBuffers
-                        .PositionBuffer
-                        .GetNumVertices());
-
-                //-------------------------------------
-                // POSITION
-                //-------------------------------------
-
-                auto PositionIt =
-                    Primitive.attributes.find("POSITION");
-
-                if (PositionIt == Primitive.attributes.end())
-                {
-                    continue;
-                }
-
-                ReadVec3Attribute(
-                    Model,
-                    PositionIt->second,
-                    LOD0.VertexBuffers.PositionBuffer);
-
-                //-------------------------------------
-                // NORMAL
-                //-------------------------------------
-
-                auto NormalIt =
-                    Primitive.attributes.find("NORMAL");
-
-                if (NormalIt != Primitive.attributes.end())
-                {
-                    ReadVec3Attribute(
-                        Model,
-                        NormalIt->second,
-                        LOD0.VertexBuffers.NormalBuffer);
-                }
-
-                //-------------------------------------
-                // UV0
-                //-------------------------------------
-
-                auto UVIt =
-                    Primitive.attributes.find("TEXCOORD_0");
-
-                if (UVIt != Primitive.attributes.end())
-                {
-                    ReadVec2Attribute(
-                        Model,
-                        UVIt->second,
-                        LOD0.VertexBuffers.UVBuffer);
-                }
-
-                //-------------------------------------
-                // Indices
-                //-------------------------------------
-
-                if (Primitive.indices >= 0)
-                {
-                    const auto& Accessor =
-                        Model.accessors[Primitive.indices];
-
-                    Section.FirstIndex =
-                        static_cast<uint32_t>(
-                            LOD0.IndexBuffer.Indices.size());
-
-                    Section.NumIndices =
-                        static_cast<uint32_t>(
-                            Accessor.count);
-
-                    Section.MaterialIndex =
-                        Primitive.material;
-
-                    Section.BaseVertexIndex =
-                        static_cast<int32_t>(
-                            BaseVertexIndex);
-
-                    if (Accessor.componentType ==
-                        TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                    {
-                        const uint16_t* Indices =
-                            GetBufferData<uint16_t>(
-                                Model,
-                                Accessor);
-
-                        for (size_t i = 0;
-                            i < Accessor.count;
-                            ++i)
-                        {
-                            LOD0.IndexBuffer.Indices.push_back(
-                                static_cast<uint32_t>(
-                                    Indices[i])
-                                + BaseVertexIndex);
-                        }
-                    }
-                    else if (
-                        Accessor.componentType ==
-                        TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                    {
-                        const uint32_t* Indices =
-                            GetBufferData<uint32_t>(
-                                Model,
-                                Accessor);
-
-                        for (size_t i = 0;
-                            i < Accessor.count;
-                            ++i)
-                        {
-                            LOD0.IndexBuffer.Indices.push_back(
-                                Indices[i]
-                                + BaseVertexIndex);
-                        }
-                    }
-
-                    LOD0.Sections.push_back(Section);
-                }
-            }
-        }
-
-        //-------------------------------------
-        // Bounds
-        //-------------------------------------
-
-        const auto& Positions =
-            LOD0.VertexBuffers.PositionBuffer.Vertices;
-
-        if (!Positions.empty())
-        {
-            Core::Float3 Min(
-                FLT_MAX,
-                FLT_MAX,
-                FLT_MAX);
-
-            Core::Float3 Max(
-                -FLT_MAX,
-                -FLT_MAX,
-                -FLT_MAX);
-
-            for (size_t i = 0; i < Positions.size(); i += 3)
-            {
-                Core::Float3 P(
-                    Positions[i + 0],
-                    Positions[i + 1],
-                    Positions[i + 2]);
-
-                Min = CORE_MIN(Min, P);
-                Max = CORE_MAX(Max, P);
+            // BaseColor
+            if (!mat.pbrMetallicRoughness.baseColorFactor.empty()) {
+                std::array<float, 4> color = { 1,1,1,1 };
+                for (int c = 0; c < 4; ++c)
+                    color[c] = float(mat.pbrMetallicRoughness.baseColorFactor[c]);
+                M->SetParameterValue<EMaterialParameterSemantic::BaseColor, FVectorType>("BaseColor", color);
             }
 
-            RenderData->Bounds =
-                Core::AABB(Min, Max);
+            // Metallic / Roughness
+            M->SetParameterValue<EMaterialParameterSemantic::Metallic, FScalarType>("Metallic", float(mat.pbrMetallicRoughness.metallicFactor));
+            M->SetParameterValue<EMaterialParameterSemantic::Roughness, FScalarType>("Roughness", float(mat.pbrMetallicRoughness.roughnessFactor));
+
+            // Alpha mode
+            if (mat.alphaMode == "OPAQUE") M->SetBlendMode(EBlendMode::Opaque);
+            else if (mat.alphaMode == "MASK") M->SetBlendMode(EBlendMode::Masked);
+            else if (mat.alphaMode == "BLEND") M->SetBlendMode(EBlendMode::Translucent);
+            Materials[i] = M;
+        }
+        bool useDefalutMaterial = false;
+        if (Materials.empty()) {
+            useDefalutMaterial = true;
+			auto defaultMaterialAsset = AssetManager::Get().GetAsset<MaterialAsset>(Core::GetProjectDir() + "/resources/material/DefaultWhite/material.json");
+            auto mMaterialAsset = defaultMaterialAsset;
+			auto materialInstance = new MaterialInstance(mMaterialAsset->GetMaterial());
+            Materials.push_back(materialInstance);
         }
 
-        RenderData->AddLOD(std::move(LOD0));
 
-        return std::make_shared<StaticMesh>(RenderData);
+        // ------------------- Mesh LODs -------------------
+        for (const auto& mesh : model.meshes) {
+            LODResource LOD;
+            Core::BoxSphereBounds& Bounds = RenderData->Bounds;
+            for (const auto& prim : mesh.primitives) {
+                // 顶点
+                size_t vertexCount = 0;
+                
+                if (prim.attributes.count("POSITION")) {
+                    const auto& accessor = model.accessors[prim.attributes.at("POSITION")];
+                    vertexCount = accessor.count;
+
+                    const auto& view = model.bufferViews[accessor.bufferView];
+                    const auto& buf = model.buffers[view.buffer];
+                    const float* data = reinterpret_cast<const float*>(&buf.data[view.byteOffset + accessor.byteOffset]);
+                    LOD.VertexBuffers.PositionBuffer.Vertices.assign(data, data + vertexCount * 3);
+                    LOD.VertexBuffers.PositionBuffer.NumComponents = 3;
+                    LOD.VertexBuffers.PositionBuffer.Valid = true;
+                    Core::Float3 v = Core::Float3(data[0], data[1], data[2]);
+                    Bounds.Box.Min = CORE_MIN(v, Bounds.Box.Min);
+                    Bounds.Box.Max = CORE_MAX(v, Bounds.Box.Max);
+
+                }
+
+                // Normal
+                if (prim.attributes.count("NORMAL")) {
+                    const auto& accessor = model.accessors[prim.attributes.at("NORMAL")];
+                    const auto& view = model.bufferViews[accessor.bufferView];
+                    const auto& buf = model.buffers[view.buffer];
+                    const float* data = reinterpret_cast<const float*>(&buf.data[view.byteOffset + accessor.byteOffset]);
+                    LOD.VertexBuffers.NormalBuffer.Vertices.assign(data, data + vertexCount * 3);
+                    LOD.VertexBuffers.NormalBuffer.NumComponents = 3;
+                    LOD.VertexBuffers.NormalBuffer.Valid = true;
+                }
+
+                // UV
+                if (prim.attributes.count("TEXCOORD_0")) {
+                    const auto& accessor = model.accessors[prim.attributes.at("TEXCOORD_0")];
+                    const auto& view = model.bufferViews[accessor.bufferView];
+                    const auto& buf = model.buffers[view.buffer];
+                    const float* data = reinterpret_cast<const float*>(&buf.data[view.byteOffset + accessor.byteOffset]);
+                    LOD.VertexBuffers.UVBuffer.Vertices.assign(data, data + vertexCount * 2);
+                    LOD.VertexBuffers.UVBuffer.NumComponents = 2;
+                    LOD.VertexBuffers.UVBuffer.Valid = true;
+                }
+
+                // 索引
+                if (prim.indices >= 0) {
+                    const auto& accessor = model.accessors[prim.indices];
+                    const auto& view = model.bufferViews[accessor.bufferView];
+                    const auto& buf = model.buffers[view.buffer];
+                    const void* ptr = &buf.data[view.byteOffset + accessor.byteOffset];
+                    for (size_t i = 0; i < accessor.count; ++i) {
+                        uint32_t idx = 0;
+                        switch (accessor.componentType) {
+                        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: idx = ((const uint16_t*)ptr)[i]; break;
+                        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: idx = ((const uint32_t*)ptr)[i]; break;
+                        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: idx = ((const uint8_t*)ptr)[i]; break;
+                        }
+                        LOD.IndexBuffer.Indices.push_back(idx);
+                    }
+                }
+
+                // Section
+                SectionInfo section;
+                section.FirstIndex = 0; // TODO: 累加
+                section.NumIndices = LOD.IndexBuffer.Indices.size();
+                section.MaterialIndex = prim.material;
+                if(useDefalutMaterial) section.MaterialIndex = 0;
+                LOD.Sections.push_back(section);
+            }
+            LOD.InitializeResources();
+            RenderData->AddLOD(std::move(LOD));
+        }
+        for (auto materil : Materials) {
+			staticMesh->AddMaterial(materil);
+        }
+        return staticMesh;
     }
 	bool StaticMeshAsset::Load()
 	{
 		Mesh_ = LoadMesh(Path_);
+        Name_ = Core::GetFileName(Path_);
 		return Mesh_ != nullptr;
 	}
 
-    bool MaterialAsset::Load() { return true; }
+
+
+    using json = nlohmann::json;
+    bool MaterialAsset::Load() { 
+        std::ifstream file(Path);
+
+        if (!file.is_open())
+        {
+            return false;
+        }
+
+        json materialJson;
+
+        try
+        {
+            file >> materialJson;
+        }
+        catch (...)
+        {
+            return false;
+        }
+
+        auto NewMaterial =
+            std::make_shared<Material>();
+        if (materialJson.contains("name"))
+        {
+            const std::string materialName =
+                materialJson["name"]
+                .get<std::string>();
+			Name = materialName;
+        }
+
+        /*
+        ===========================================================================
+            Blend Mode
+        ===========================================================================
+        */
+
+        if (materialJson.contains("blendMode"))
+        {
+            const std::string BlendMode =
+                materialJson["blendMode"]
+                .get<std::string>();
+
+            if (BlendMode == "Opaque")
+            {
+                NewMaterial->SetBlendMode(
+                    EBlendMode::Opaque);
+            }
+            else if (BlendMode == "Masked")
+            {
+                NewMaterial->SetBlendMode(
+                    EBlendMode::Masked);
+            }
+            else if (BlendMode == "Translucent")
+            {
+                NewMaterial->SetBlendMode(
+                    EBlendMode::Translucent);
+            }
+        }
+
+        /*
+        ===========================================================================
+            Shading Model
+        ===========================================================================
+        */
+
+        if (materialJson.contains("shadingModel"))
+        {
+            const std::string ShadingModel =
+                materialJson["shadingModel"]
+                .get<std::string>();
+
+            if (ShadingModel == "Lit")
+            {
+                NewMaterial->SetShadingModel(
+                    EShadingModel::Lit);
+            }
+            else if (ShadingModel == "Unlit")
+            {
+                NewMaterial->SetShadingModel(
+                    EShadingModel::Unlit);
+            }
+        }
+
+        /*
+        ===========================================================================
+            Parameters
+        ===========================================================================
+        */
+
+        if (materialJson.contains("parameters"))
+        {
+            const auto& Params =
+                materialJson["parameters"];
+
+            /*
+            -----------------------------------------------------------------------
+                BaseColor
+            -----------------------------------------------------------------------
+            */
+
+            if (Params.contains("BaseColor"))
+            {
+                const auto& Value =
+                    Params["BaseColor"];
+
+                std::array<float, 4>
+                    BaseColor =
+                {
+                    Value[0].get<float>(),
+                    Value[1].get<float>(),
+                    Value[2].get<float>(),
+                    Value[3].get<float>()
+                };
+
+                NewMaterial
+                    ->SetParameterValue<
+                    EMaterialParameterSemantic
+                    ::BaseColor,
+                    FVectorType>(
+                        "BaseColor",
+                        BaseColor);
+            }
+
+            /*
+            -----------------------------------------------------------------------
+                Roughness
+            -----------------------------------------------------------------------
+            */
+
+            if (Params.contains("Roughness"))
+            {
+                const float Roughness =
+                    Params["Roughness"]
+                    .get<float>();
+
+                NewMaterial
+                    ->SetParameterValue<
+                    EMaterialParameterSemantic
+                    ::Roughness,
+                    FScalarType>(
+                        "Roughness",
+                        Roughness);
+            }
+
+            /*
+            -----------------------------------------------------------------------
+                Metallic
+            -----------------------------------------------------------------------
+            */
+
+            if (Params.contains("Metallic"))
+            {
+                const float Metallic =
+                    Params["Metallic"]
+                    .get<float>();
+
+                NewMaterial
+                    ->SetParameterValue<
+                    EMaterialParameterSemantic
+                    ::Metallic,
+                    FScalarType>(
+                        "Metallic",
+                        Metallic);
+            }
+        }
+
+        MaterialPtr =
+            std::move(NewMaterial);
+
+        return true;
+    }
 }

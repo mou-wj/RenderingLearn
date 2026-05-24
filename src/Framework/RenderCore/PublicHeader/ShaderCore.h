@@ -46,9 +46,9 @@ namespace RenderCore {
         }
         void SetDefine(const std::string& name, const std::string& value) { Definitions[name] = value; }
         void SetDefine(const std::string& name, int32_t value) { Definitions[name] = std::to_string(value); }
+        void SetDefine(const std::string& name, uint64_t value) { Definitions[name] = std::to_string(value); }
         void SetDefine(const std::string& name, bool value) { Definitions[name] = value ? "1" : "0"; }
         void SetDefine(const std::string& name, float value) { Definitions[name] = std::to_string(value); }
-        void SetDefineInCondition(const std::string& name, bool condition) { if (condition) { SetDefine(name, true); } }
     };
 
     // 所有 Shader 通用的最小参数

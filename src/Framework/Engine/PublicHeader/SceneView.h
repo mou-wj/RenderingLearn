@@ -55,7 +55,7 @@ namespace Engine {
         Core::Float4x4 InvViewProjectionMatrix; // 预留逆矩阵（用于延迟渲染位置重建）
 
         // 相机空间属性
-        Core::Float4 CameraWorldPos; // 升级为对齐的 Float4
+        Core::Float3 CameraWorldPos; // 保持 Float3
         Core::Float3 CameraWorldDir; // 保持 Float3
 
         // 裁剪面

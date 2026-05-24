@@ -120,7 +120,7 @@ public:
         // ========================
         // 执行计算着色器 (4 次迭代)
         // ========================
-        for (int iteration = 0; iteration < 10; ++iteration)
+        for (int iteration = 0; iteration < 1000; ++iteration)
         {
             cmdList.SetImmediate(true);
             cmdList.Begin();
@@ -572,7 +572,7 @@ private:
     void CreateSwapchain(RHI::RHIApi* api)
     {
         // 
-        Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIRenderTriangleTest");
+        Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIShaderParameterTest");
         Window->Show();
         // 创建交换链
         void* windowHandle = Window->GetNativeHandle(); // 获取窗口句柄的函数

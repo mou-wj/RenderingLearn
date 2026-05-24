@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 #include "BoxSphereBounds.h"
+#include "Math.hpp"
 
 // 前置声明底层及核心层的渲染资源
 namespace RenderCore {
@@ -91,7 +92,10 @@ namespace Engine {
 
         int32_t GetPrimitiveId() const { return PrimitiveId; }
         const Core::AABB& GetBounds() const { return ProxyBounds; }
-        const float* GetLocalToWorld() const { return LocalToWorld; }
+        const Core::Mat4& GetLocalToWorld() const { return LocalToWorld; }
+        const Core::Mat4& GetWorldToLocal() const { return WorldToLocal; }
+
+
 
         virtual bool IsVisible() const { return bVisible; }
         virtual bool CastsShadow() const { return bCastShadow; }
@@ -106,12 +110,11 @@ namespace Engine {
     protected:
         int32_t PrimitiveId;
         Core::AABB ProxyBounds;
-        float LocalToWorld[16];
+        Core::Mat4 LocalToWorld;
+		Core::Mat4 WorldToLocal;
 
         // 常量数据资源
         void* PrimitiveUniformBufferData = nullptr;
-
-        std::vector<const MaterialRenderProxy*> MaterialProxies;
 
         uint32_t bVisible : 1;
         uint32_t bCastShadow : 1;

@@ -105,11 +105,11 @@ enum class EQueueType
 {
     Graphics,
     Compute
-};
+}; 
 
 struct RHIFence {
-    EQueueType QueueType; // 哪根标尺
-    uint64_t Value;      // 哪个刻度
+    EQueueType QueueType = EQueueType::Graphics; // 哪根标尺
+    uint64_t Value = 0;      // 哪个刻度
 };
 
 
@@ -498,7 +498,7 @@ enum class ERHIShaderFrequency
 			return region;
         }
     };
-    struct RHI_API RHIBufferRegion {
+    struct RHI_API RHIUpdateBufferRegion {
         uint32_t offset = 0; // 偏移
         uint32_t size = 0; // 大小
     };

@@ -131,6 +131,7 @@ public:
 
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
+    void UploadData(const void* data, uint32_t mipIndex ,uint32_t arraySlice,uint32_t planeSlice = 0);
     RHI::RHITexture* GetRHI() const { return Texture.get(); }
     RenderTextureTracker& GetTracker() { return Tracker; }
     TextureViewCache& GetViewCache() { return ViewCache; }
@@ -151,6 +152,7 @@ public:
 
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
+	void UploadData(const void* data, uint32_t size, uint32_t offset = 0);
     // 其他缓冲区相关接口
 	RHI::RHIBuffer* GetRHI() const { return Buffer.get(); }
     RenderBufferTracker& GetTracker() { return Tracker; }

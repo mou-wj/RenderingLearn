@@ -1,6 +1,7 @@
 #include "GlobalShader.h"
 #include "ShaderCompiler.h"
 #include "RHIApi.h"
+#include "PathInfo.h"
 #include <functional>
 #include <sstream>
 
@@ -62,6 +63,7 @@ namespace RenderCore{
 
                 // 4. 准备编译环境 (Environment)
                 ShaderCompilerEnvironment env;
+                env.IncludePaths.push_back(Core::GetShaderFilesRootDir());
 
                 // A. 处理 Shader 参数 (VFS 注册)
                 if (st->RootParametersMetadata)

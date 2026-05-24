@@ -72,9 +72,9 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
 
             auto ensureSet = [&](uint32_t set)
                 {
-                    if (freqInfo.Layouts.size() <= set)
+                    if (layoutInfo.Layouts.size() <= set)
                     {
-                        freqInfo.Layouts.resize(set + 1);
+                        layoutInfo.Layouts.resize(set + 1);
                     }
                 };
 
@@ -82,7 +82,7 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
             {
                 ensureSet(binding.Set);
 
-                DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
+                DescriptorSetLayoutInfo& setLayout = layoutInfo.Layouts[binding.Set];
 
                 VkDescriptorType vkType = TransformDescriptorTypeFrom(binding.Type);
 
@@ -91,11 +91,15 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
                     vkType,
                     binding.Count,
                     stageMask);
+                PipelineLayoutInfo::ShaderResourceParameterLayoutInfo rpLayout;
+                rpLayout.SetIndex = binding.Set;
+                rpLayout.BindingIndex = binding.Binding;
+                freqInfo.ResourceParameterLayouts.push_back(rpLayout);
             }
 
             for (const auto& binding : header.UniformBufferBindings) {
 				ensureSet(binding.Set);
-                DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
+                DescriptorSetLayoutInfo& setLayout = layoutInfo.Layouts[binding.Set];
                 setLayout.AddBinding(
                     binding.Binding,
                     VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -266,9 +270,9 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
 
     auto ensureSet = [&](uint32_t set)
         {
-            if (freqInfo.Layouts.size() <= set)
+            if (layoutInfo.Layouts.size() <= set)
             {
-                freqInfo.Layouts.resize(set + 1);
+                layoutInfo.Layouts.resize(set + 1);
             }
         };
 
@@ -276,7 +280,7 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
     {
         ensureSet(binding.Set);
 
-        DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
+        DescriptorSetLayoutInfo& setLayout = layoutInfo.Layouts[binding.Set];
 
         VkDescriptorType vkType = TransformDescriptorTypeFrom(binding.Type);
 
@@ -285,11 +289,15 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
             vkType,
             binding.Count,
             stageMask);
+        PipelineLayoutInfo::ShaderResourceParameterLayoutInfo rpLayout;
+        rpLayout.SetIndex = binding.Set;
+        rpLayout.BindingIndex = binding.Binding;
+        freqInfo.ResourceParameterLayouts.push_back(rpLayout);
     }
 
     for (const auto& binding : header.UniformBufferBindings) {
         ensureSet(binding.Set);
-        DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[binding.Set];
+        DescriptorSetLayoutInfo& setLayout = layoutInfo.Layouts[binding.Set];
         setLayout.AddBinding(
             binding.Binding,
             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ,

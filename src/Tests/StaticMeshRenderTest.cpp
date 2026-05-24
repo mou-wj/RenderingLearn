@@ -21,10 +21,13 @@
 #include "Viewport.h"
 #include "PrimitiveComponent.h"
 #include "PrimitiveSceneProxy.h"
+#include "LocalVertexFactory.h"
+#include "RHIPipelineStateCache.h"
 #include "ShaderParameter.h"
 using namespace RenderCore;
 using namespace Engine;
 using namespace Renderer;
+using namespace RHI;
 namespace Test {
 
     namespace {
@@ -113,25 +116,18 @@ namespace Test {
             {
                 return;
             }
+            GetRenderModuleInstance();
             InitSwapchain();
-
-            InitPipelines();
             InitGlobalResources();
+            InitStaticMesh();
+            InitPipelineState();
+
 
             // 只保存静态描述
             texDesc.Width = FrameWidth;
             texDesc.Height = FrameHeight;
             texDesc.Format = ERHIFormat::R8G8B8A8_UNorm;
             texDesc.Usage = ERHITextureCreateFlag::ShaderResource | ERHITextureCreateFlag::TransferSrc | ERHITextureCreateFlag::TransferDest;
-        }
-
-
-
-        void InitPipelines()
-        {
-            //获取第0好blittextureshader变体
-            
-            
         }
 
         void InitSwapchain()
@@ -154,14 +150,84 @@ namespace Test {
         {
             GRenderTargetPool = new RenderTargetPool();
             GTransientResourceAllocator = new TransientResourceAllocator();
+            GMeshMaterialShaderMap.Initialize();
         }
 
         void InitStaticMesh() {
-            staticMeshAsset = AssetManager::Get().LoadSync<StaticMeshAsset>(Core::GetProjectDir() + "/resources/obj/sphere.obj");
+			AssetManager::Get().LoadSync<MaterialAsset>(Core::GetProjectDir() + "/resources/material/DefaultWhite/material.json");
+
+            staticMeshAsset = AssetManager::Get().LoadSync<StaticMeshAsset>(Core::GetProjectDir() + "/resources/glb/sphere.glb");
             staticMeshComponent = new StaticMeshComponent();
             staticMeshComponent->SetStaticMesh(staticMeshAsset->GetMesh());
             scene = GetRenderModuleInstance()->AllocateScene();
             scene->AddPrimitive(staticMeshComponent);
+        }
+
+        void InitPipelineState() {
+            auto vsfShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::MeshMaterial]["StaticMeshMaterialShaderVS"];
+            auto psfShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::MeshMaterial]["StaticMeshMaterialShaderPS"];
+            auto vfType = VertexFactoryType::GetRegisterMap()["LocalVertexFactory"];
+            auto vfFlags = staticMeshComponent->GetStaticMesh()->GetRenderData()->GetLODResource(0).VertexFactory->GetVertexFactoryFlags();
+            MeshMaterialShaderKey vsKey;
+            vsKey.ShaderType = static_cast<MeshMaterialShaderType*>(vsfShaderType);
+            vsKey.VF = vfType;
+            vsKey.PermutationId = 0;
+            vsKey.VertexFactoryFlags = vfFlags;
+            vsKey.MaterialParameter.ShadingModel = EShadingModel::Unlit;
+
+            vertexShader = GMeshMaterialShaderMap.GetShader(vsKey);
+
+            //设置pixel参数
+            MeshMaterialShaderKey psKey;
+            psKey.ShaderType = static_cast<MeshMaterialShaderType*>(psfShaderType);
+            psKey.VF = vfType;
+            psKey.PermutationId = 0;
+            psKey.VertexFactoryFlags = vfFlags;
+            psKey.MaterialParameter.ShadingModel = EShadingModel::Unlit;
+            pixelShader = GMeshMaterialShaderMap.GetShader(psKey);
+
+
+            // 创建光栅化状态
+            RHI::RHIRasterizerStateDesc rasterizerDesc;
+            rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
+            rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
+            rasterizerDesc.frontFace = RHI::ERHIFrontFace::Clockwise;
+            rasterizerDesc.lineWidth = 1.0f;
+            rasterizerDesc.depthBiasEnable = false;
+
+            auto rasterizerState = RHIPipelineStateCache::GetOrCreateRasterizerState(rasterizerDesc);
+
+
+
+
+
+            // 创建深度模板状态
+            RHI::RHIDepthStencilStateDesc depthStencilDesc;
+            depthStencilDesc.depthTestEnable = true;
+            depthStencilDesc.depthWriteEnable = true;
+            depthStencilDesc.depthCompareOp = RHI::ERHICompareOp::Less;
+
+            auto depthStencilState = RHIPipelineStateCache::GetOrCreateDepthStencilState(depthStencilDesc);
+
+            // 创建图形管线状态
+            pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
+            pipelineDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(pixelShader->GetRHIShader());
+            // 这里可以设置更多管线配置...
+            pipelineDesc.rasterizerState = rasterizerState.get();
+
+            pipelineDesc.depthStencilState = depthStencilState.get();
+            pipelineDesc.vertexDescState = staticMeshAsset->GetMesh()->GetRenderData()->LODResources[0].VertexFactory->GetRHIVertexDescState().get();
+
+            //rendertarget info
+            pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
+            pipelineDesc.attachmentDesc.colorAttachments[0].format = RHI::ERHIFormat::B8G8R8A8_UNorm;
+            pipelineDesc.attachmentDesc.colorAttachments[0].actions = ERenderTargetActions::Clear_Store;
+            pipelineDesc.attachmentDesc.depthActions = ERenderTargetActions::Clear_Store;
+            pipelineDesc.attachmentDesc.enableDepth = true;
+            pipelineDesc.attachmentDesc.depthStencilFormat = RHI::ERHIFormat::D32_Float;
+
+
+
         }
 
         void Run() override {
@@ -188,11 +254,19 @@ namespace Test {
                 rtDesc.Width = texDesc.Width;
                 rtDesc.Height = texDesc.Height;
                 rtDesc.Format = texDesc.Format;
-                rtDesc.Usage = ERHITextureCreateFlag::UAV |
+                rtDesc.Usage = ERHITextureCreateFlag::RenderTarget |
                     ERHITextureCreateFlag::TransferSrc |
                     ERHITextureCreateFlag::TransferDest;
 
                 auto renderTarget = GRenderTargetPool->GetFreeRenderTarget(rtDesc);
+
+                PoolRenderTargetDesc depthTargetDesc{};
+                depthTargetDesc.Width = texDesc.Width;
+                depthTargetDesc.Height = texDesc.Height;
+                depthTargetDesc.Format = RHI::ERHIFormat::D32_Float;
+                depthTargetDesc.Usage = ERHITextureCreateFlag::DepthStencil;
+
+                auto depthRenderTarget = GRenderTargetPool->GetFreeRenderTarget(depthTargetDesc);
 
                 //绘制场景
                 SceneView sceneView;
@@ -212,12 +286,33 @@ namespace Test {
                 RenderGraphBuilder builder;
 
                 for (auto& batch : list) {
-					auto materialOwner = batch.MaterialProxy->GetOwnerMaterial();
-                    auto state = MaterialInterface::GetGraphicPipelineState(materialOwner);
-
-
+					auto materialOwner = batch.MaterialProxy->GetParent();
+                    
+                    //颜色混合
+                    if (materialOwner->GetBlendMode() == EBlendMode::Opaque)
+                    {
+                        RHI::RHIColorBlendStateDesc blendDesc;
+                        // 创建颜色混合状态
+                        RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
+                        blendAttachDesc.blendEnable = false;
+                        std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
+                        blendDesc.attachments = attachments;
+                        auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
+                        pipelineDesc.colorBlendState = colorBlendState.get();
+                    }
+                    else {
+                        RHI::RHIColorBlendStateDesc blendDesc;
+                        // 创建颜色混合状态
+                        RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
+                        blendAttachDesc.blendEnable = true;
+                        std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
+                        blendDesc.attachments = attachments;
+                        auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
+                        pipelineDesc.colorBlendState = colorBlendState.get();
+                    }
+                    auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
+                    auto state = pipeline;
                     // 参数
-                    auto* vfparams = builder.AllocateParameter<LocalVertexFactoryParameters>();
                     
                     BEGIN_SHADER_PARAMETER_STRUCT(PixelMaterialParameters)
                         SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
@@ -228,7 +323,21 @@ namespace Test {
                         SHADER_PARAMETER_STRUCT(PixelMaterialParameters, pixelParameters)
                     END_SHADER_PARAMETER_STRUCT(MaterialParameters)
                     auto* params = builder.AllocateParameter<MaterialParameters>();
-                    params->vertexFactoryParameters = vfparams;
+                    params->vertexFactoryParameters.CameraWorldPosition = sceneView.CameraWorldPos;
+                    params->vertexFactoryParameters.ViewProjection = sceneView.ViewProjectionMatrix;
+                    params->vertexFactoryParameters.ViewProjection = Core::Float4x4::Identity();
+					params->vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
+                    params->vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
+					params->vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
+                    params->vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
+
+                    auto rdgDst = builder.RegisterExternalTexture("DstTex", renderTarget.get());
+                    auto depthRdgDst = builder.RegisterExternalTexture("DstDepthTex", depthRenderTarget.get());
+                    params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
+                    params->pixelParameters.renderTargetSlots[0].Texture = rdgDst;
+                    params->pixelParameters.renderTargetSlots.DepthStencil.Texture = depthRdgDst;
+
+
 
                     // -------------------------------------
                     // 添加 pass
@@ -242,17 +351,18 @@ namespace Test {
                         {
                             auto& cmd = static_cast<RHI::RHIGraphicCommandList&>(RHICmdList);
 							MaterialParameters* materialParams = params;
+
+
+
                             cmd.SetGraphicPipelineState(state.get());
                             //绑定vertexfactory
                             batch.VertexFactory->Bind(cmd);
                             
                             //设置vertex参数
-                            auto vertexShader = MaterialInterface::GetShader(materialOwner,ERHIShaderFrequency::Vertex);
-                            SetShaderParameters(cmd, vertexShader, materialParams->vertexFactoryParameters);
+                            SetShaderParameters(cmd, vertexShader, params);
 
                             //设置pixel参数
-                            auto pixelShader = MaterialInterface::GetShader(materialOwner, ERHIShaderFrequency::Fragment);
-                            SetShaderParameters(cmd, pixelShader, materialParams->pixelParameters);
+                            SetShaderParameters(cmd, pixelShader, params);
 
                             //绘制
                             for (auto element : batch.Elements) {
@@ -335,6 +445,9 @@ namespace Test {
         std::shared_ptr<StaticMeshAsset> staticMeshAsset;
         StaticMeshComponent* staticMeshComponent;
         SceneInterface* scene;
+        RHI::RHIGraphicsPipelineStateDesc pipelineDesc;
+        Shader* vertexShader;
+        Shader* pixelShader;
 
     };
 

@@ -17,7 +17,7 @@ namespace Engine
 
     union LocalVertexFactoryFeatureFlags
     {
-        uint64_t PackedFlags;
+        uint64_t PackedFlags = 0;
 
         struct
         {

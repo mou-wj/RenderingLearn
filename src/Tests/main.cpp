@@ -7,7 +7,7 @@
 int main(int argc, char** argv)
 {
     //RHI::RHICaptureHelper::GetInstance();
-    std::string testName = "RHIRenderTriangleTest"; // 默认
+    std::string testName = "StaticMeshRenderTest"; // 默认
     if (argc > 1)
         testName = argv[1];
 

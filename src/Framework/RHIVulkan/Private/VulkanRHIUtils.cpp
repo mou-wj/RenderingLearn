@@ -88,7 +88,11 @@ namespace RHIVulkan {
             // swapchain images *must* have this
             Usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
-
+        if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::DepthStencil))
+        {
+            // swapchain images *must* have this
+            Usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        }
         return Usage;
     }
     VkSampleCountFlagBits TransformSampleCountFrom(uint32_t sampleCount)

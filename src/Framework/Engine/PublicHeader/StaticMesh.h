@@ -17,12 +17,19 @@ public:
     // Accessors
     size_t GetLODCount() const { return RenderData ? RenderData->GetLODCount() : 0; }
     const LODResource& GetLODResource(size_t Index) const { return RenderData->GetLODResource(Index); }
-    const Core::AABB& GetBounds() const { static Core::AABB Empty; return RenderData ? RenderData->GetBounds() : Empty; }
+    const Core::BoxSphereBounds& GetBounds() const { static Core::BoxSphereBounds Empty; return RenderData ? RenderData->GetBounds() : Empty; }
 
     std::shared_ptr<StaticMeshRenderData> GetRenderData() const { return RenderData; }
 
+    // Materials    
+    void AddMaterial(MaterialInterface* Material) { Materials.push_back(Material); }
+    MaterialInterface* GetMaterial(size_t Index) const { return Materials[Index]; }
+
+
+
 private:
     std::shared_ptr<StaticMeshRenderData> RenderData; // shared ownership of underlying render data
+    std::vector<MaterialInterface*> Materials;
 };
 
 using StaticMeshSP = std::shared_ptr<StaticMesh>;

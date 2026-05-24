@@ -1,38 +1,12 @@
 #include "/Generated/VertexFactory.sf"
 
-VSOutput MainVS(VertexFactoryInput Input)
+VertexFactoryVSToPS MainVS(VertexFactoryInput Input)
 {
-    VSOutput Output;
-
-    /*
-    ===========================================================================
-        Build VF semantic intermediates
-    ===========================================================================
-    */
+    VertexFactoryVSToPS Output;
 
     VertexFactoryIntermediates Intermediates =
         GetVertexFactoryIntermediates(Input);
-
-    /*
-    ===========================================================================
-        Clip Position
-    ===========================================================================
-    */
-
-    Output.PositionCS =
-        VertexFactoryGetClipPosition(Intermediates);
-
-    /*
-    ===========================================================================
-        Build VS->PS semantic interpolants
-    ===========================================================================
-    */
-
-    Output.Interpolants =
-        VertexFactoryGetVSToPS(
-            Input,
-            Intermediates);
-
+    Output = VertexFactoryGetVSToPS(Input,Intermediates);
     return Output;
 }
 

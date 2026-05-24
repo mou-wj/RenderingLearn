@@ -67,7 +67,7 @@ public:
     void ModifyCompilationEnvironment(const VertexFactoryShaderPermutationParameters& Params, ShaderCompilerEnvironment& OutEnv) const
     {
 
-		std::string virtualIncludePath = "#include " + ShaderPath;
+		std::string virtualIncludePath = "#include \"" + ShaderPath + "\"";
         OutEnv.VirtualIncludes["/Generated/VertexFactory.sf"] = virtualIncludePath;
         ModifyEnvFunc(Params, OutEnv);
     }
@@ -105,7 +105,7 @@ public:
     virtual ~VertexFactory() = default;
     virtual RenderCore::VertexFactoryType* GetType() const { return nullptr; }
     RHI::RHIVertexDescStateSP GetRHIVertexDescState() const;
-
+    VertexFactoryFeatureFlags GetVertexFactoryFlags() const { return VertexFactoryFlags; }
     static bool ShouldCompilePermutation(const VertexFactoryShaderPermutationParameters& Parameters) {
         return false;
     }
@@ -164,6 +164,7 @@ protected:
 
     std::vector<VertexStream> Streams;
     RHI::RHIVertexDescStateSP RHIVertexDescState;
+    VertexFactoryFeatureFlags VertexFactoryFlags;
 };
 
 

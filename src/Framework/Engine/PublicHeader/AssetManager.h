@@ -12,6 +12,7 @@
 #include "RenderResource.h"
 #include "StaticMesh.h"
 #include "EngineExport.h"
+#include "Material.h"
 
 namespace Engine {
 
@@ -32,6 +33,65 @@ namespace Engine {
 
 	using AssetSP = std::shared_ptr<IAsset>;
 
+    struct AssetInfo
+    {
+        std::string Name;
+        std::string Path;
+        std::type_index Type;
+        AssetInfo(): Name(""), Path(), Type(typeid(IAsset)){}
+		AssetInfo(const std::string& name,const std::string& path,const std::type_index& type): Name(name), Path(path), Type(type){}
+        AssetInfo(const AssetInfo& other) : AssetInfo(other.Name,other.Path,other.Type){}
+        // 未来可以扩展
+        // std::vector<AssetID> Dependencies;
+    };
+
+    class ENGINE_API AssetRegistry
+    {
+    public:
+        static AssetRegistry& Get()
+        {
+            static AssetRegistry Instance;
+            return Instance;
+        }
+
+    public:
+
+        void Register(const AssetInfo& Info)
+        {
+            std::lock_guard<std::mutex> lock(Mutex);
+			PathToInfo.emplace(Info.Path, Info);
+            //PathToInfo[Info.Path] = Info;
+            NameToPaths[Info.Name].push_back(Info.Path);
+        }
+
+        const AssetInfo* GetByPath(const std::string& Path)
+        {
+            auto it = PathToInfo.find(Path);
+            if (it == PathToInfo.end()) return nullptr;
+            return &it->second;
+        }
+
+        std::vector<const AssetInfo*> GetByName(const std::string& Name)
+        {
+            std::vector<const AssetInfo*> Result;
+
+            auto it = NameToPaths.find(Name);
+            if (it == NameToPaths.end()) return Result;
+
+            for (auto& path : it->second)
+            {
+                Result.push_back(&PathToInfo[path]);
+            }
+
+            return Result;
+        }
+
+    private:
+        std::unordered_map<std::string, AssetInfo> PathToInfo;
+        std::unordered_map<std::string, std::vector<std::string>> NameToPaths;
+
+        std::mutex Mutex;
+    };
 
    /*
     ===============================================================================
@@ -57,23 +117,17 @@ namespace Engine {
             Sync Load
         -------------------------------------------------------------------------------
         */
+
         template<typename AssetType>
         std::shared_ptr<AssetType> LoadSync(const std::string& Path)
         {
-            const std::type_index type = std::type_index(typeid(AssetType));
-
             {
                 std::lock_guard<std::mutex> lock(Mutex);
 
-                auto typeIt = Assets.find(type);
-                if (typeIt != Assets.end())
+                auto it = PathToAsset.find(Path);
+                if (it != PathToAsset.end())
                 {
-                    auto assetIt = typeIt->second.find(Path);
-                    if (assetIt != typeIt->second.end())
-                    {
-                        return std::static_pointer_cast<AssetType>(
-                            assetIt->second);
-                    }
+                    return std::static_pointer_cast<AssetType>(it->second);
                 }
             }
 
@@ -81,62 +135,65 @@ namespace Engine {
 
             if (!asset->Load())
             {
-                std::cerr
-                    << "Failed to load asset: "
-                    << Path
-                    << std::endl;
-
                 return nullptr;
             }
 
+            //
+            AssetInfo info(Path, asset->GetName(), std::type_index(typeid(AssetType)));
+
+            AssetRegistry::Get().Register(info);
+
             {
                 std::lock_guard<std::mutex> lock(Mutex);
-
-                Assets[type][Path] = asset;
+                PathToAsset[Path] = asset;
             }
 
             return asset;
         }
 
-        /*
-        -------------------------------------------------------------------------------
-            Async Load
-        -------------------------------------------------------------------------------
-        */
+
         template<typename AssetType>
         void LoadAsync(
             const std::string& Path,
             std::function<void(std::shared_ptr<AssetType>)> Callback)
         {
+            // -----------------------------
+            // 1. Cache 命中直接返回
+            // -----------------------------
             {
                 std::lock_guard<std::mutex> lock(Mutex);
 
-                const std::type_index type =
-                    std::type_index(typeid(AssetType));
-
-                auto typeIt = Assets.find(type);
-
-                if (typeIt != Assets.end())
+                auto it = PathToAsset.find(Path);
+                if (it != PathToAsset.end())
                 {
-                    auto assetIt = typeIt->second.find(Path);
-
-                    if (assetIt != typeIt->second.end())
-                    {
-                        Callback(
-                            std::static_pointer_cast<AssetType>(
-                                assetIt->second));
-
-                        return;
-                    }
+                    Callback(std::static_pointer_cast<AssetType>(it->second));
+                    return;
                 }
+
+                // -----------------------------
+                // 2. 防止重复加载
+                // -----------------------------
+                if (LoadingSet.contains(Path))
+                {
+                    return; // 或者可以挂等待队列
+                }
+
+                LoadingSet.insert(Path);
             }
 
-            std::async(
-                std::launch::async,
+            // -----------------------------
+            // 3. 异步加载
+            // -----------------------------
+            std::async(std::launch::async,
                 [this, Path, Callback]()
                 {
-                    auto asset =
-                        LoadSync<AssetType>(Path);
+                    // 内部调用 Sync Loader
+                    auto asset = LoadSync<AssetType>(Path);
+
+                    {
+                        std::lock_guard<std::mutex> lock(Mutex);
+                        LoadingSet.erase(Path);
+                    }
 
                     Callback(asset);
                 });
@@ -148,30 +205,29 @@ namespace Engine {
         -------------------------------------------------------------------------------
         */
         template<typename AssetType>
-        std::shared_ptr<AssetType> GetAsset(
-            const std::string& Path)
+        const AssetType* GetAsset(const std::string& Path)
         {
             std::lock_guard<std::mutex> lock(Mutex);
 
-            const std::type_index type =
-                std::type_index(typeid(AssetType));
-
-            auto typeIt = Assets.find(type);
-            if (typeIt == Assets.end())
-            {
+            auto it = PathToAsset.find(Path);
+            if (it == PathToAsset.end())
                 return nullptr;
-            }
 
-            auto assetIt =
-                typeIt->second.find(Path);
+            return dynamic_cast<AssetType*>(it->second.get());
+        }
 
-            if (assetIt == typeIt->second.end())
-            {
+        template<typename AssetType>
+        const AssetType* GetByName(const std::string& Name)
+        {
+            auto infos = AssetRegistry::Get().GetByName(Name);
+
+            if (infos.empty())
                 return nullptr;
-            }
 
-            return std::static_pointer_cast<AssetType>(
-                assetIt->second);
+            // 默认取第一个（也可以返回数组）
+            const auto* info = infos[0];
+
+            return GetAsset<AssetType>(info->Path);
         }
 
         /*
@@ -182,7 +238,7 @@ namespace Engine {
         void Clear()
         {
             std::lock_guard<std::mutex> lock(Mutex);
-            Assets.clear();
+            PathToAsset.clear();
         }
 
     private:
@@ -195,11 +251,8 @@ namespace Engine {
     private:
 
         // type -> path -> asset
-        std::unordered_map<
-            std::type_index,
-            std::unordered_map<std::string, AssetSP>
-        > Assets;
-
+        std::unordered_map<std::string, AssetSP> PathToAsset;
+        std::unordered_set<std::string> LoadingSet;
         mutable std::mutex Mutex;
     };
 

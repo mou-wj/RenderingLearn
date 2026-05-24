@@ -888,7 +888,8 @@ namespace RenderCore {
                 SetupPassInternal(Pass, Member.StructMetadata, MemberAddr);
             }
             else if (Member.IsRenderTargetSlots()) {
-                auto& RTSlots = **reinterpret_cast<RenderTargetBindingSlots* const*>(MemberAddr);
+                const RenderTargetBindingSlots* src = reinterpret_cast<const RenderTargetBindingSlots*>(MemberAddr);
+                auto& RTSlots = *src;
                 auto checkColorBinding = [this, Pass](const RenderTargetBinding& binding) {
                     if (binding.IsValid()) {
                         RenderGraphPass::RenderGraphTextureIntent Intent;
@@ -910,10 +911,7 @@ namespace RenderCore {
 
                         Intent.SubresourceRange = RHISubresourceRange(); // whole
 
-                        Intent.RequiredAccess =
-                            (Pass->GetPassFlag() == EPassFlag::Compute)
-                            ? ERHIResourceAccess::SRVCompute
-                            : ERHIResourceAccess::SRVGraphics;
+                        Intent.RequiredAccess = ERHIResourceAccess::RenderTargetView;
 
                         Pass->TextureIntents.push_back(Intent);
                     }
@@ -942,10 +940,7 @@ namespace RenderCore {
 
                     Intent.SubresourceRange = RHISubresourceRange(); // whole
 
-                    Intent.RequiredAccess =
-                        (Pass->GetPassFlag() == EPassFlag::Compute)
-                        ? ERHIResourceAccess::SRVCompute
-                        : ERHIResourceAccess::SRVGraphics;
+                    Intent.RequiredAccess = RTSlots.DepthStencil.bWriteDepth ? ERHIResourceAccess::DSVWrite : ERHIResourceAccess::DSVRead;
 
                     Pass->TextureIntents.push_back(Intent);
                 }

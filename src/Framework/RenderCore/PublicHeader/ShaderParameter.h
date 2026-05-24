@@ -149,7 +149,7 @@ namespace RenderCore {
         static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
         static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
 
-        using TAlignedType = T*;
+        using TAlignedType = T;
 
         static const ShaderParametersMetadata* GetStructMetadata() { return T::GetMetaData(); }
     };
@@ -165,7 +165,7 @@ namespace RenderCore {
 
         uint8_t MipIndex = 0;
 
-        int16_t ArraySlice = -1;
+        int16_t ArraySlice = 0;
 
         uint32_t SampleCount = 1;
 
@@ -191,7 +191,7 @@ namespace RenderCore {
 
         uint8_t MipIndex = 0;
 
-        int16_t ArraySlice = -1;
+        int16_t ArraySlice = 0;
 
         uint32_t SampleCount = 1;
 
@@ -494,7 +494,7 @@ void SetShaderParameters(
     RHI::RHICommandListBase& cmdList,
     const Shader* shader,
     const TParameters* ParametersData) {
-    SetShaderParameters(cmdList, shader, ParametersData->GetMetaData(), (void*)&ParametersData);
+    SetShaderParameters(cmdList, shader, ParametersData->GetMetaData(), (void*)ParametersData);
 }
 
 

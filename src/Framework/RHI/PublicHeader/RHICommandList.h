@@ -87,8 +87,8 @@ namespace RHI {
     {
         RHIBuffer* buffer;
         const void* data;
-        RHIBufferRegion region;
-        RHICommandUpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region);
+        RHIUpdateBufferRegion region;
+        RHICommandUpdateBuffer(RHIBuffer* buffer, const void* data, const RHIUpdateBufferRegion& region);
         void Execute(RHICommandListBase& cmdList) override;
     };
 

@@ -84,7 +84,7 @@ void RHICommandUpdateTexture::Execute(RHICommandListBase& cmdList)
 {
     GRHIApi->UpdateTexture(cmdList,texture, data, region);
 }
-RHICommandUpdateBuffer::RHICommandUpdateBuffer(RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
+RHICommandUpdateBuffer::RHICommandUpdateBuffer(RHIBuffer* buffer, const void* data, const RHIUpdateBufferRegion& region)
     : buffer(buffer), data(data), region(region)
 {
 }

@@ -10,8 +10,7 @@ namespace Engine {
         , bOpaque(true)
         , RenderFlags(0)
     {
-        std::memset(LocalToWorld, 0, sizeof(LocalToWorld));
-        LocalToWorld[0] = LocalToWorld[5] = LocalToWorld[10] = LocalToWorld[15] = 1.0f;
+
     }
 
     PrimitiveSceneProxy::~PrimitiveSceneProxy() {

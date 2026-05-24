@@ -328,7 +328,6 @@ ShaderCompilationOutput ShaderCompiler::Compile(const ShaderCompileInput& input)
 
     std::string source;
     std::vector<std::string> includedFiles;
-
     if (!PreprocessSource(input, source, includedFiles))
     {
         output.Success = false;
@@ -379,7 +378,7 @@ bool ShaderCompiler::LoadShaderSource(const ShaderCompileInput& input, std::stri
     }
 
     // ���Դ� ShaderSourceDirectory + VirtualSourceFilePath ��ȡ
-    std::string fullPath = Core::GetProjectDir() + "/shaders" + input.VirtualSourceFilePath;
+    std::string fullPath = Core::GetShaderFilesRootDir() + input.VirtualSourceFilePath;
     std::ifstream file(fullPath, std::ios::in | std::ios::binary);
     if (!file.is_open())
         return false;
@@ -466,7 +465,7 @@ bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompi
                 {
                     for (const auto& incDir : env.IncludePaths)
                     {
-                        std::string fullPath = incDir + "/" + includePath;
+                        std::string fullPath = incDir + includePath;
                         std::ifstream file(fullPath, std::ios::in | std::ios::binary);
                         if (file.is_open())
                         {
@@ -479,9 +478,11 @@ bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompi
                     }
                 }
 
+
                 if (!bFound)
                 {
                     // 记录未找到的文件日志...
+                    LOG_ERROR("Include file not found: %s", includePath.c_str());
                     return false;
                 }
 
@@ -579,7 +580,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     const int SRV_SHIFT = 200; // t �Ĵ��� (Texture/Buffer SRV)
     const int SAMPLER_SHIFT = 300; // s �Ĵ��� (Sampler)
     const int UAV_SHIFT = 400; // u �Ĵ��� (RWTexture/RWBuffer UAV)
-
+    shader.setAutoMapBindings(true);
     // --- �����Զ�ӳ��binding ---
     shader.setShiftBindingForSet(glslang::EResUbo, CBV_SHIFT,0);
     shader.setShiftBindingForSet(glslang::EResUbo, CBV_SHIFT,0);
@@ -654,6 +655,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         out.ErrorMessage = shader.getInfoLog();
         out.ErrorMessage += "\n";
         out.ErrorMessage += shader.getInfoDebugLog();
+        LOG_ERROR("%s", out.ErrorMessage);
         // ����
         for (auto p : preprocessorDefines) delete[] p;
         return;

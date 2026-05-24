@@ -369,7 +369,6 @@ namespace RHIVulkan {
     private:
         void ParsePipelineLayout(const VulkanPipelineLayout& layout)
         {
-            uint32_t globalSetIndex = 0;
             for (const auto& pair : layout.GetInfo().setLayoutsByFrequency)
             {
                 ERHIShaderFrequency freq = static_cast<ERHIShaderFrequency>(pair.first);
@@ -389,20 +388,18 @@ namespace RHIVulkan {
 					}
 					PackedUniformBuffersByFrequency[freq] = PackedUniformBuffer(bindings);
                 }
-
                 // 构建shader参数的binding映射
-                for (size_t localSetIndex = 0; localSetIndex < freqInfo.Layouts.size(); ++localSetIndex)
+                for (size_t i = 0; i < freqInfo.ResourceParameterLayouts.size(); ++i)
                 {
-                    const DescriptorSetLayoutInfo& setLayout = freqInfo.Layouts[localSetIndex];
-                    for (const auto& binding : setLayout.bindings)
+                    for (const auto& binding : freqInfo.ResourceParameterLayouts)
                     {
-                        ShaderParameterKey key{freq, binding.Binding};
-                        ShaderParameterBinding value{globalSetIndex, binding.Binding};
+                        ShaderParameterKey key{ freq, binding.BindingIndex };
+                        ShaderParameterBinding value{ binding.SetIndex, binding.BindingIndex };
                         ParameterBindingMap[key] = value;
                     }
-                    globalSetIndex++;
                 }
             }
+
         }
         
         struct GlobalUniformBufferDesc

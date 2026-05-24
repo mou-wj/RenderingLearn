@@ -232,7 +232,7 @@ void VulkanRHIApi::UpdateTexture(RHICommandListBase& cmdList, RHITexture* textur
 	
 
 }
-void VulkanRHIApi::UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const void* data, const RHIBufferRegion& region)
+void VulkanRHIApi::UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const void* data, const RHIUpdateBufferRegion& region)
 {
 	if (!buffer || !data)
 		return;

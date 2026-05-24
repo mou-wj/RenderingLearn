@@ -1,6 +1,9 @@
 #include "/Generated/VertexFactory.sf"
 
-float4 MainPS(VSOutput Input) : SV_Target0
+#define SHADINGMODEL_UNLIT   0
+#define SHADINGMODEL_LIT 1
+
+float4 MainPS(VertexFactoryVSToPS Input) : SV_Target0
 {
     /*
     ===========================================================================
@@ -11,14 +14,18 @@ float4 MainPS(VSOutput Input) : SV_Target0
     ShadingContext Context;
 
     VertexFactoryFillShadingContext(
-        Input.Interpolants,
+        Input,
         Context);
 
     /*
     ===========================================================================
-        Simple PBR Test
+        Material Evaluation
     ===========================================================================
     */
+
+    float3 BaseColor = float3(1.0, 0.7, 0.3);
+
+#if MATERIAL_SHADING_MODEL == SHADINGMODEL_LIT
 
     float3 N = normalize(Context.WorldNormal);
 
@@ -28,9 +35,17 @@ float4 MainPS(VSOutput Input) : SV_Target0
 
     float NoL = saturate(dot(N, L));
 
-    float3 BaseColor = float3(1.0, 0.7, 0.3);
-
     float3 Color = BaseColor * NoL;
 
     return float4(Color, 1.0);
+
+#elif MATERIAL_SHADING_MODEL == SHADINGMODEL_UNLIT
+
+    return float4(BaseColor, 1.0);
+
+#else
+
+    return float4(1, 0, 1, 1); // invalid shading model
+
+#endif
 }

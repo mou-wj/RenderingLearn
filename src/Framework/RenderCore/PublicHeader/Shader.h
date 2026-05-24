@@ -343,8 +343,13 @@ public:
     const std::vector<char>& GetShaderSourceCode() const { return ShaderSourceCode; }
     ERHIShaderFrequency GetShaderFrequency() const { return ShaderType; }
 
+    template<typename T>
+    const T* CastGetRHIShader() const
+    {
+        return static_cast<const T*>(GetRHIShader());
+    }
     // RHI Resource
-    RHIShaderSP GetRHIShader() const { return RHIShader; }
+    RHIShader* GetRHIShader() const { return RHIShader.get(); }
     void SetRHIShader(RHIShaderSP shader) { RHIShader = shader; }
 
     // Compilation (Called by the RenderGraphBuilder)

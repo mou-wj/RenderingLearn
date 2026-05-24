@@ -42,32 +42,34 @@ namespace Engine
 
         };
         AssignComponent(Data.PositionComponent, 0);
-
+        LocalVertexFactoryFeatureFlags flags;
         //
         // UV -> location 1
         //
         AssignComponent(Data.UVComponent, 1);
+        flags.SupportsTexCoord = Data.UVComponent.Buffer != nullptr;
 
 
         //
         // NORMAL -> location 2
         //
         AssignComponent(Data.NormalComponent, 2);
-
+        flags.SupportsNormal = Data.NormalComponent.Buffer != nullptr;
         //
         // TANGENT -> location 3
         //
         AssignComponent(Data.TangentComponent, 3);
-
+        flags.SupportsTangent = Data.TangentComponent.Buffer != nullptr;
         //
         // COLOR -> location 4
         //
         AssignComponent(Data.ColorComponent, 4);
-
+        flags.SupportsVertexColor = Data.ColorComponent.Buffer != nullptr;
         //
         // ´´½¨ Vulkan VertexInputState
         //
         InitDeclaration(Elements);
+        VertexFactoryFlags = flags.PackedFlags;
     }
 
 
@@ -131,19 +133,19 @@ namespace Engine
         ===========================================================================
         */
 
-        OutEnvironment.SetDefineInCondition(
+        OutEnvironment.SetDefine(
             "VF_SUPPORTS_TEXCOORD",
             Flags.SupportsTexCoord);
 
-        OutEnvironment.SetDefineInCondition(
+        OutEnvironment.SetDefine(
             "VF_SUPPORTS_NORMAL",
             Flags.SupportsNormal);
 
-        OutEnvironment.SetDefineInCondition(
+        OutEnvironment.SetDefine(
             "VF_SUPPORTS_TANGENT",
             Flags.SupportsTangent);
 
-        OutEnvironment.SetDefineInCondition(
+        OutEnvironment.SetDefine(
             "VF_SUPPORTS_VERTEX_COLOR",
             Flags.SupportsVertexColor);
 
@@ -153,7 +155,7 @@ namespace Engine
         ===========================================================================
         */
 
-        OutEnvironment.SetDefineInCondition(
+        OutEnvironment.SetDefine(
             "VF_SUPPORTS_INSTANCE_DATA",
             Flags.SupportsInstanceData);
 

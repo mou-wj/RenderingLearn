@@ -7,178 +7,105 @@ namespace Engine {
     MeshMaterialShaderMap GMeshMaterialShaderMap;
     MaterialShaderMap GMaterialShaderMap;
 
-
-    RHIGraphicsPipelineStateSP MaterialInterface::GetGraphicPipelineState(const MaterialInterface* Material) {
-        return nullptr;
-    }
-    RHIComputePipelineStateSP MaterialInterface::GetComputePipelineState(const MaterialInterface* Material) {
-        return nullptr;
-    }
-    RenderCore::Shader* MaterialInterface::GetShader(const MaterialInterface* Material, ERHIShaderFrequency frequency) {
-        return nullptr;
+    // ============================================================================
+// MaterialParameter 实现
+// ============================================================================
+    MaterialParameter::MaterialParameter(const std::string& InName, EMaterialParameterSemantic InSemantic)
+        : Name(InName), Semantic(InSemantic) {
     }
 
-    // 补全你的 TextureAsset 获取底层渲染资源的接口
-    // (如果已经在别处实现了可以忽略，这里确保编译畅通)
-    const RenderCore::RenderTexture* GetRenderTextureFromAsset(const std::shared_ptr<TextureAsset>& Asset) {
-        // 实际开发中可以通过在 TextureAsset 加上类似 GetRenderResource() 的内联函数
-        // 这里采用伪逻辑：假设静态转换或者调用内部成员
-        return Asset ? nullptr : nullptr;
+    MaterialRenderProxy::MaterialRenderProxy(const MaterialInterface* parent) : Parent(parent) {
+
     }
 
-    /*
-    ===============================================================================
-        DefaultMaterialRenderProxy (渲染代理内部实现)
-    ===============================================================================
-    */
-    class DefaultMaterialRenderProxy : public MaterialRenderProxy {
-    public:
-        DefaultMaterialRenderProxy(const Material* InOwnerMaterial, const MaterialInterface* InGameThreadTarget)
-            : MaterialRenderProxy(InOwnerMaterial)
-            , GameThreadTarget(InGameThreadTarget)
-        {
+    // ============================================================================
+    // MaterialRenderProxy 实现
+    // ============================================================================
+    void MaterialRenderProxy::AddParameter(std::unique_ptr<MaterialParameter> Param) {
+        if (Param) {
+            Parameters.push_back(std::move(Param));
         }
-
-        bool GetScalarParam(const std::string& Name, float& OutValue) const override {
-            return GameThreadTarget->GetScalarParameterValue(Name, OutValue);
-        }
-
-        // 核心打通：完美的跨线程数据转换
-        bool GetTextureParam(const std::string& Name, const RenderCore::RenderTexture*& OutTexture) const override {
-            std::shared_ptr<TextureAsset> GameThreadAsset = nullptr;
-            if (GameThreadTarget->GetTextureParameterValue(Name, GameThreadAsset)) {
-                if (GameThreadAsset) {
-                    // 核心链路：从你的 Asset 中取出底层的 RenderTexture 指针
-                    // 提示：你需要在 TextureAsset 类里补一个 public 的 GetRenderResource() 接口返回它的 Texture_ 成员
-                    // OutTexture = GameThreadAsset->GetRenderResource(); 
-                    return true;
-                }
-            }
-            return false;
-        }
-
-    private:
-        const MaterialInterface* GameThreadTarget;
-    };
-
-
-    /*
-    ===============================================================================
-        Material 资产实现
-    ===============================================================================
-    */
-    Material::Material() {
-        RenderProxy = std::make_unique<DefaultMaterialRenderProxy>(this, this);
     }
 
-    Material::~Material() {
-        // 释放逻辑（多线程安全释放）
+    // ============================================================================
+    // Material 实现
+    // ============================================================================
+    void Material::SetBlendMode(EBlendMode InMode) {
+        if (BlendMode != InMode) {
+            BlendMode = InMode;
+            bProxyDirty = true;
+        }
+    }
+    void Material::SetShadingModel(EShadingModel InModel) {
+		if (ShadingModel != InModel) {
+			ShadingModel = InModel;
+			bProxyDirty = true;
+		}
     }
 
     MaterialRenderProxy* Material::GetRenderProxy() const {
-        return RenderProxy.get();
-    }
-
-    bool Material::GetTextureParameterValue(const std::string& Name, std::shared_ptr<TextureAsset>& OutTexture) const {
-        auto it = TextureParameters.find(Name);
-        if (it != TextureParameters.end()) {
-            OutTexture = it->second;
-            return true;
+        if (bProxyDirty || !CachedProxy) {
+            CachedProxy = std::make_unique<MaterialRenderProxy>(this);
+            // 将资产内持有的基础默认数据全部 Clone 进只读代理
+            for (const auto& [Name, Param] : DefaultParameters) {
+                CachedProxy->AddParameter(Param->Clone());
+            }
+            bProxyDirty = false;
         }
-        return false;
+        return CachedProxy.get();
     }
 
-    bool Material::GetScalarParameterValue(const std::string& Name, float& OutValue) const {
-        auto it = ScalarParameters.find(Name);
-        if (it != ScalarParameters.end()) {
-            OutValue = it->second;
-            return true;
-        }
-        return false;
+    void Material::SetParameterValueImpl(EMaterialParameterSemantic Semantic, const std::string& Name, std::unique_ptr<MaterialParameter> Param) {
+        DefaultParameters[Name] = std::move(Param);
+        bProxyDirty = true;
     }
 
-    void Material::SetTextureParameter(const std::string& Name, std::shared_ptr<TextureAsset> Texture) {
-        TextureParameters[Name] = std::move(Texture);
-    }
-
-    void Material::SetScalarParameter(const std::string& Name, float Value) {
-        ScalarParameters[Name] = Value;
-    }
-
-    bool Material::CompileShaders() {
-        //实现材质编译shader
-        
-        return true;
-    }
-
-
-    /*
-    ===============================================================================
-        MaterialInstance 实例实现
-    ===============================================================================
-    */
+    // ============================================================================
+    // MaterialInstance 实现
+    // ============================================================================
     MaterialInstance::MaterialInstance(MaterialInterface* InParent)
-        : Parent(InParent)
-    {
-        const Material* OwnerMat = Parent ? Parent->GetMaterial() : nullptr;
-        RenderProxy = std::make_unique<DefaultMaterialRenderProxy>(OwnerMat, this);
+        : Parent(InParent) {
+        assert(Parent && "MaterialInstance generated with a null parent!");
     }
-
-    MaterialInstance::~MaterialInstance() {}
 
     const Material* MaterialInstance::GetMaterial() const {
-        return Parent ? Parent->GetMaterial() : nullptr;
-    }
-
-    MaterialRenderProxy* MaterialInstance::GetRenderProxy() const {
-        return RenderProxy.get();
-    }
-
-    bool MaterialInstance::GetTextureParameterValue(const std::string& Name, std::shared_ptr<TextureAsset>& OutTexture) const {
-        // 优先查看当前实例是否重写了该资产
-        auto it = OverriddenTextures.find(Name);
-        if (it != OverriddenTextures.end()) {
-            OutTexture = it->second;
-            return true;
-        }
-        // 否则向父级材质回溯
-        return Parent ? Parent->GetTextureParameterValue(Name, OutTexture) : false;
-    }
-
-    bool MaterialInstance::GetScalarParameterValue(const std::string& Name, float& OutValue) const {
-        auto it = OverriddenScalars.find(Name);
-        if (it != OverriddenScalars.end()) {
-            OutValue = it->second;
-            return true;
-        }
-        return Parent ? Parent->GetScalarParameterValue(Name, OutValue) : false;
+        return Parent->GetMaterial();
     }
 
     EBlendMode MaterialInstance::GetBlendMode() const {
-        return Parent ? Parent->GetBlendMode() : EBlendMode::Opaque;
+        return Parent->GetBlendMode();
+    }        
+    EShadingModel MaterialInstance::GetShadingModel() const {
+        return Parent->GetShadingModel();
     }
 
-    bool MaterialInstance::IsTwoSided() const {
-        return Parent ? Parent->IsTwoSided() : false;
+    MaterialRenderProxy* MaterialInstance::GetRenderProxy() const {
+        if (bProxyDirty || !CachedProxy) {
+            CachedProxy = std::make_unique<MaterialRenderProxy>(this);
+
+            const Material* BaseMaterial = GetMaterial();
+            if (BaseMaterial) {
+                // 1. 倒装父材质的默认参数
+                for (const auto& [Name, Param] : BaseMaterial->GetDefaultParameters()) {
+                    if (!OverriddenParameters.contains(Name)) {
+                        CachedProxy->AddParameter(Param->Clone());
+                    }
+                }
+            }
+
+            // 2. 倒装实例自己重写（Override）的参数覆盖默认数据
+            for (const auto& [Name, Param] : OverriddenParameters) {
+                CachedProxy->AddParameter(Param->Clone());
+            }
+
+            bProxyDirty = false;
+        }
+        return CachedProxy.get();
     }
 
-    void MaterialInstance::SetTextureParameterValue(const std::string& Name, std::shared_ptr<TextureAsset> Texture) {
-        OverriddenTextures[Name] = std::move(Texture);
-    }
-
-    void MaterialInstance::SetScalarParameterValue(const std::string& Name, float Value) {
-        OverriddenScalars[Name] = Value;
-    }
-
-
-    /*
-    ===============================================================================
-        MaterialRenderProxy 基类实现
-    ===============================================================================
-    */
-    MaterialRenderProxy::MaterialRenderProxy(const MaterialInterface* InOwnerMaterial)
-        : OwnerMaterial(InOwnerMaterial)
-    {
+    void MaterialInstance::SetParameterValueImpl(EMaterialParameterSemantic Semantic, const std::string& Name, std::unique_ptr<MaterialParameter> Param) {
+        OverriddenParameters[Name] = std::move(Param);
+        bProxyDirty = true;
     }
 
 

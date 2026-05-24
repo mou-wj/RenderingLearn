@@ -1,6 +1,8 @@
 #include "StaticMeshMaterialShader.h"
 #include "VertexFactory.h"
 #include "ShaderCore.h"
+#include "MaterialCore.h"
+#include "LocalVertexFactory.h"
 using namespace Engine;
 namespace Renderer
 {
@@ -36,19 +38,21 @@ namespace Renderer
         // VS define
         OutEnvironment.SetDefine("VERTEX_SHADER", 1);
 
+
+
     }
 
     const RenderCore::ShaderParametersMetadata*
         StaticMeshMaterialShaderVS::GetShaderParameterMetadata()
     {
-        return nullptr;
+        return LocalVertexFactoryParameters::GetMetaData();
     }
 
     IMPLEMENT_MESH_MATERIAL_SHADER_TYPE(
         StaticMeshMaterialShaderVS,
         "StaticMeshMaterialShaderVS",
         "/material/StaticMeshMaterialShaderVS.sf",
-        "MainCS",
+        "MainVS",
         RHI::ERHIShaderFrequency::Vertex
     );
 
@@ -83,19 +87,19 @@ namespace Renderer
             static_cast<const MeshMaterialShaderPermutationParameters&>(Parameters);
 
         OutEnvironment.SetDefine("PIXEL_SHADER", 1);
-
+        Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
     }
 
     const RenderCore::ShaderParametersMetadata*
         StaticMeshMaterialShaderPS::GetShaderParameterMetadata()
     {
-        return nullptr;
+        return LocalVertexFactoryParameters::GetMetaData();
     }
 
     IMPLEMENT_MESH_MATERIAL_SHADER_TYPE(
         StaticMeshMaterialShaderPS,
-        "Shaders/StaticMeshMaterial.usf",
         "StaticMeshMaterialShaderPS",
+        "/material/StaticMeshMaterialShaderPS.sf",
         "MainPS",
         ERHIShaderFrequency::Fragment
     )

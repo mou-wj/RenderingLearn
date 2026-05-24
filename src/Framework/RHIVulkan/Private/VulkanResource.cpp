@@ -101,6 +101,18 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, b
             memoryManager->Free(Allocation);
         }
     }
+#ifdef DEBUG_INFO
+    std::string debugName;
+    if (Desc.DebugName) {
+        debugName = Desc.DebugName;
+    }
+    else {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "VulkanTexture:0x%llx", (unsigned long long)Image);
+        debugName = buf;
+    }
+    VKFunc::SetDebugName(vkDevice, VK_OBJECT_TYPE_IMAGE, (uint64_t)Image, debugName.c_str());
+#endif
 }
 
 VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, VkImage image)
@@ -124,6 +136,18 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, V
         true,                                    // use identity swizzle)
         usage
     );
+#ifdef DEBUG_INFO
+    std::string debugName;
+    if (Desc.DebugName) {
+        debugName = Desc.DebugName;
+    }
+    else {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "VulkanTexture:0x%llx", (unsigned long long)Image);
+        debugName = buf;
+    }
+    VKFunc::SetDebugName(vkDevice, VK_OBJECT_TYPE_IMAGE, (uint64_t)Image, debugName.c_str());
+#endif
 }
 
 VulkanTexture::~VulkanTexture() {
@@ -798,13 +822,15 @@ void VulkanRHISwapchain::CreateSwapchain()
     textureDesc.MipLevels = 1;              // Mip层级数量
     textureDesc.ArraySize = 1;              // 数组大小
     textureDesc.Format = Format; // 像素格式
+
     ERHITextureType Type = ERHITextureType::Texture2D;   // 纹理类型
     uint32_t SampleCount = 1;            // 多重采样数量
     uint32_t SampleQuality = 0;          // 多重采样质量
     textureDesc.Usage = ERHITextureCreateFlag::RenderTarget | ERHITextureCreateFlag::Presentable | ERHITextureCreateFlag::TransferDest | ERHITextureCreateFlag::TransferSrc; // 纹理用途
     auto imageCount = swapchainImages_.size();
     for (int i = 0; i < imageCount; i++) {
-
+        auto name = std::string("BackBuffer") + std::to_string(i);
+        textureDesc.DebugName = name.c_str(); // 调试名称
         auto texture = std::make_shared<VulkanTexture>(Device, textureDesc, swapchainImages_[i]);
         backBufferTextures.push_back(texture);
     }

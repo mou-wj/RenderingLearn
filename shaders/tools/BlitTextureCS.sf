@@ -1,4 +1,3 @@
-// 1. 静态宏定义，由 C++ 根据当前需求动态注入
 // #define COLOR_CONVERSION_MODE  1
 // 0: None, 1: sRGBToLinear, 2: LinearToSRGB
 #include "/Generated/ShaderParameters/BlitTextureParameters.sf"
@@ -29,7 +28,6 @@ void MainCS(uint3 DTid : SV_DispatchThreadID)
     if (DTid.x >= DstDim.x || DTid.y >= DstDim.y)
         return;
 
-    // ⭐ 正确UV（支持不同分辨率）
     float2 UV = (float2(DTid.xy) + 0.5f) / DstSize;
 
     float4 OutColor = SrcTexture.SampleLevel(SrcSampler, UV, SrcMipLevel);

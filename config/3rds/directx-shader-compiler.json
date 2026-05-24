@@ -1,5 +1,6 @@
 {
   "name": "directx-shader-compiler",
+  "ignore": true,
   "type": "source",
   "config_type": "cmake_config",
   "source_type": "git",
@@ -8,7 +9,7 @@
     "git": "https://github.com/microsoft/DirectXShaderCompiler.git",
     "branch": "main",
     "extra_repos": [
-       {
+      {
         "path": "external/DirectX-Headers",
         "git": "https://github.com/microsoft/DirectX-Headers.git",
         "branch": "main"
@@ -18,7 +19,7 @@
         "git": "https://github.com/KhronosGroup/SPIRV-Headers.git",
         "branch": "main"
       },
-    {
+      {
         "path": "external/SPIRV-Tools",
         "git": "https://github.com/KhronosGroup/SPIRV-Tools.git",
         "branch": "main"

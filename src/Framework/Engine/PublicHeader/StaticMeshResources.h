@@ -74,6 +74,9 @@ namespace Engine {
         std::unique_ptr<
             LocalVertexFactory>
             VertexFactory;
+
+        void InitializeResources();
+        void ReleaseResources();
     };
 
 
@@ -89,7 +92,7 @@ namespace Engine {
         std::vector<LODResource> LODResources;
 
         // Bounds (AABB) for frustum culling and coarse occlusion
-        Core::AABB Bounds;
+        Core::BoxSphereBounds Bounds;
 
         // ----------------- Minimal public interfaces -----------------
         // Number of LODs available
@@ -100,7 +103,7 @@ namespace Engine {
         const LODResource& GetLODResource(size_t Index) const { return LODResources[Index]; }
 
         // Get bounds for culling
-        const Core::AABB& GetBounds() const { return Bounds; }
+        const Core::BoxSphereBounds& GetBounds() const { return Bounds; }
 
 
         // Utilities to append resources (used on GameThread during build/load)

@@ -15,6 +15,10 @@
 namespace RHIVulkan{
     struct PipelineLayoutInfo
     {
+        struct ShaderResourceParameterLayoutInfo {
+            uint32_t SetIndex;
+            uint32_t BindingIndex;
+        };
         struct ShaderUniformBufferLayoutInfo {
             uint32_t SetIndex;
             uint32_t BindingIndex;
@@ -25,11 +29,11 @@ namespace RHIVulkan{
         // key: ERHIShaderFrequency cast to uint32_t, value: descriptor set layouts for that stage
 		struct ShaderFrequencyLayoutInfo
 		{
-			std::vector<DescriptorSetLayoutInfo> Layouts;
+            std::vector<ShaderResourceParameterLayoutInfo> ResourceParameterLayouts;
             std::vector<ShaderUniformBufferLayoutInfo> UniformBufferLayouts;
 		};
 
-
+        std::vector<DescriptorSetLayoutInfo> Layouts;//pipeline 全局setlayout
         std::unordered_map<uint32_t, ShaderFrequencyLayoutInfo> setLayoutsByFrequency;
         VkPushConstantRange pushConstant{};
         bool hasPushConstant = false;
@@ -44,12 +48,6 @@ namespace RHIVulkan{
             return nullptr;
         }
 
-        // 为指定着色器频率添加 descriptor set layout
-        void AddLayoutForFrequency(RHI::ERHIShaderFrequency frequency, const DescriptorSetLayoutInfo& layout)
-        {
-            ShaderFrequencyLayoutInfo& freqInfo = setLayoutsByFrequency[static_cast<uint32_t>(frequency)];
-            freqInfo.Layouts.push_back(layout);
-        }
         void AddUniformBufferLayoutForFrequency(RHI::ERHIShaderFrequency frequency, const ShaderUniformBufferLayoutInfo& layout)
 		{
 			ShaderFrequencyLayoutInfo& freqInfo = setLayoutsByFrequency[static_cast<uint32_t>(frequency)];
@@ -59,38 +57,16 @@ namespace RHIVulkan{
         // 获取所有着色器频率的 descriptor set layouts（展平）
         std::vector<DescriptorSetLayoutInfo> GetAllLayouts() const
         {
-            std::vector<DescriptorSetLayoutInfo> result;
-            for (const auto& pair : setLayoutsByFrequency) {
-                result.insert(result.end(), pair.second.Layouts.begin(), pair.second.Layouts.end());
-            }
-            return result;
+            return Layouts;
         }
 
         static uint64_t CalculateHash(const PipelineLayoutInfo& info)
         {
             size_t h = 0;
-
-            // Hash setLayoutsByFrequency - iterate through all frequencies
-            for (const auto& frequencyPair : info.setLayoutsByFrequency)
+            // Hash all layouts for this frequency
+            for (const auto& layout : info.Layouts)
             {
-                // Hash the frequency
-                HashCombine(h, std::hash<uint32_t>()(frequencyPair.first));
-
-                const ShaderFrequencyLayoutInfo& freqInfo = frequencyPair.second;
-
-                // Hash all layouts for this frequency
-                for (const auto& layout : freqInfo.Layouts)
-                {
-                    HashCombine(h, std::hash<uint64_t>()((uint64_t)DescriptorSetLayoutInfo::CalculateHash(layout)));
-                }
-
-                // Hash all uniform buffer layouts for this frequency
-                for (const auto& uniformBufferLayout : freqInfo.UniformBufferLayouts)
-                {
-                    HashCombine(h, std::hash<uint32_t>()(uniformBufferLayout.SetIndex));
-                    HashCombine(h, std::hash<uint32_t>()(uniformBufferLayout.BindingIndex));
-                    HashCombine(h, std::hash<uint32_t>()(uniformBufferLayout.Size));
-                }
+                HashCombine(h, std::hash<uint64_t>()((uint64_t)DescriptorSetLayoutInfo::CalculateHash(layout)));
             }
 
             if (info.hasPushConstant)
