@@ -96,8 +96,8 @@ void StaticMeshProxy::GetMeshBatches(const SceneView& /*View*/, MeshBatchList& O
         Element.BaseVertexIndex =
             Section.BaseVertexIndex;
 
-        Element.NumPrimitives =
-            Section.NumIndices / 3;
+        Element.NumIndices =
+            Section.NumIndices;
 
         Element.NumInstances =
             1;

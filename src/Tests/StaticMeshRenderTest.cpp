@@ -23,7 +23,7 @@
 #include "PrimitiveSceneProxy.h"
 #include "LocalVertexFactory.h"
 #include "RHIPipelineStateCache.h"
-#include "ShaderParameter.h"
+#include "Camera.h"
 using namespace RenderCore;
 using namespace Engine;
 using namespace Renderer;
@@ -190,7 +190,7 @@ namespace Test {
             // 创建光栅化状态
             RHI::RHIRasterizerStateDesc rasterizerDesc;
             rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
-            rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
+            rasterizerDesc.cullMode = RHI::ERHICullMode::None;
             rasterizerDesc.frontFace = RHI::ERHIFrontFace::Clockwise;
             rasterizerDesc.lineWidth = 1.0f;
             rasterizerDesc.depthBiasEnable = false;
@@ -220,7 +220,7 @@ namespace Test {
 
             //rendertarget info
             pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
-            pipelineDesc.attachmentDesc.colorAttachments[0].format = RHI::ERHIFormat::B8G8R8A8_UNorm;
+            pipelineDesc.attachmentDesc.colorAttachments[0].format = RHI::ERHIFormat::R8G8B8A8_UNorm;
             pipelineDesc.attachmentDesc.colorAttachments[0].actions = ERenderTargetActions::Clear_Store;
             pipelineDesc.attachmentDesc.depthActions = ERenderTargetActions::Clear_Store;
             pipelineDesc.attachmentDesc.enableDepth = true;
@@ -235,7 +235,7 @@ namespace Test {
             using namespace RenderCore;
 
             auto* api = GRHIApi;
-            constexpr int kFrameCount = 10;
+            constexpr int kFrameCount = 1000;
 
             RHI::RHISamplerDesc samplerDesc{};
             samplerSP = api->CreateSampler(samplerDesc);
@@ -257,19 +257,33 @@ namespace Test {
                 rtDesc.Usage = ERHITextureCreateFlag::RenderTarget |
                     ERHITextureCreateFlag::TransferSrc |
                     ERHITextureCreateFlag::TransferDest;
+                rtDesc.DebugName = "ColorTarget";
 
                 auto renderTarget = GRenderTargetPool->GetFreeRenderTarget(rtDesc);
-
+                renderTarget->MarkUsed();
                 PoolRenderTargetDesc depthTargetDesc{};
                 depthTargetDesc.Width = texDesc.Width;
                 depthTargetDesc.Height = texDesc.Height;
                 depthTargetDesc.Format = RHI::ERHIFormat::D32_Float;
                 depthTargetDesc.Usage = ERHITextureCreateFlag::DepthStencil;
+                depthTargetDesc.DebugName = "DepthTarget";
 
                 auto depthRenderTarget = GRenderTargetPool->GetFreeRenderTarget(depthTargetDesc);
+                depthRenderTarget->MarkUsed();
 
+                Camera camera;
+                camera.SetPosition({ 0.0f, 0.0f, -5.0f });
+                camera.SetTarget({ 0.0f, 0.0f, 0.0f });
+                camera.SetUp({ 0.0f, 1.0f, 0.0f });
+                camera.SetPerspective(Core::DegToRad(45.0f), texDesc.Width / (float)texDesc.Height, 0.1f, 100.0f);
+                auto view = camera.GetViewMatrix();
+                auto proj = camera.GetProjectionMatrix();
                 //绘制场景
                 SceneView sceneView;
+				sceneView.CameraWorldPos = camera.GetPosition();
+                sceneView.ViewMatrix = view;
+                sceneView.ProjectionMatrix = proj;
+                sceneView.ViewProjectionMatrix = view * proj;
                 SceneViewFamily sceneViewFamily;
                 sceneViewFamily.Scene = scene;
                 sceneViewFamily.AddView(sceneView);
@@ -336,7 +350,7 @@ namespace Test {
                     params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
                     params->pixelParameters.renderTargetSlots[0].Texture = rdgDst;
                     params->pixelParameters.renderTargetSlots.DepthStencil.Texture = depthRdgDst;
-
+                    
 
 
                     // -------------------------------------
@@ -357,17 +371,25 @@ namespace Test {
                             cmd.SetGraphicPipelineState(state.get());
                             //绑定vertexfactory
                             batch.VertexFactory->Bind(cmd);
-                            
+                            cmd.SetViewport(0, 0, FrameWidth, FrameHeight, 0.0f, 1.0f);
+                            cmd.SetScissor(0, 0, FrameWidth, FrameHeight);
                             //设置vertex参数
                             SetShaderParameters(cmd, vertexShader, params);
 
                             //设置pixel参数
                             SetShaderParameters(cmd, pixelShader, params);
-
+                            auto boundRenderTarget = params->pixelParameters.renderTargetSlots.GetBoundRenderTarget();
+                            RHIRenderPassInfo passInfo;
+                            passInfo.RenderTargets = boundRenderTarget;
+							passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;
+                            passInfo.RenderArea.Width = FrameWidth;
+                            passInfo.RenderArea.Height = FrameHeight;
+                            cmd.BeginRenderPass(passInfo);
                             //绘制
                             for (auto element : batch.Elements) {
-                                cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumPrimitives, element.NumInstances, element.FirstIndex, element.BaseVertexIndex, element.StartInstance);
+                                cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumIndices, element.NumInstances, element.FirstIndex, element.BaseVertexIndex, element.StartInstance);
                             }
+                            cmd.EndRenderPass();
                         }
                     );
                 }
@@ -421,6 +443,8 @@ namespace Test {
                 presentWait.QueueType = fence.QueueType;
                 presentWait.Value = fence.Value;
                 api->GetPresentExecutor()->Present(Swapchain.get(), { presentWait });
+                renderTarget->MarkUsed(false);
+                depthRenderTarget->MarkUsed(false);
             }
 
             std::cout << "RenderGraph CopyTexturePass test finished for " << kFrameCount << " frames." << std::endl;
@@ -428,6 +452,8 @@ namespace Test {
 
         void Teardown() override {
             // 资源清理如有需要可补充
+            GMeshMaterialShaderMap.Clear();
+            RHIPipelineStateCache::ClearAll();
             GRenderTargetPool->Clear();
             delete GRenderTargetPool;
             Swapchain.reset();

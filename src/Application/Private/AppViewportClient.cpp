@@ -25,8 +25,24 @@ namespace App {
 
     void AppViewportClient::BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewFamily& OutViews)
     {
-        SceneView view;
-        OutViews.AddView(view);
+        //camera.SetPosition({ 0.0f, 0.0f, -5.0f });
+        //camera.SetTarget({ 0.0f, 0.0f, 0.0f });
+        //camera.SetUp({ 0.0f, 1.0f, 0.0f });
+        //camera.SetPerspective(Core::DegToRad(45.0f), texDesc.Width / (float)texDesc.Height, 0.1f, 100.0f);
+        //auto view = camera.GetViewMatrix();
+        //auto proj = camera.GetProjectionMatrix();
+        ////»æÖÆ³¡¾°
+        //SceneView sceneView;
+        //sceneView.CameraWorldPos = camera.GetPosition();
+        //sceneView.ViewMatrix = view;
+        //sceneView.ProjectionMatrix = proj;
+        //sceneView.ViewProjectionMatrix = view * proj;
+        //SceneViewFamily sceneViewFamily;
+        //sceneViewFamily.Scene = scene;
+        //sceneViewFamily.AddView(sceneView);
+        //RenderTarget target;
+        //target.RenderTarget = renderTarget->GetRHI();
+        //sceneViewFamily.RenderTarget = &target;
     }
 
 

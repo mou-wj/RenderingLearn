@@ -35,6 +35,8 @@ namespace Engine {
             }
         }
     }
+    void MeshMaterialShaderMap::Clear() {
+    }
     RenderCore::Shader* MeshMaterialShaderMap::GetShader(
         const MeshMaterialShaderKey& key
     ) {

@@ -31,6 +31,17 @@ public:
         return *this;
     }
 
+
+    constexpr bool operator==(TFlags rhs) const
+    {
+        return Bits == rhs.Bits;
+    }
+
+    constexpr bool operator!=(TFlags rhs) const
+    {
+        return Bits != rhs.Bits;
+    }
+
 private:
     StorageType Bits = 0;
 };
@@ -67,5 +78,5 @@ inline constexpr bool EnumHasAnyFlags(TFlags<EnumType> Flags, EnumType Contains)
     inline constexpr FlagsType operator|(FlagsType a, Enum b) { return a | FlagsType(b); } \
     inline constexpr FlagsType operator&(FlagsType a, Enum b) { return a & FlagsType(b); } \
     inline constexpr FlagsType operator|(Enum a, FlagsType b) { return FlagsType(a) | b; } \
-    inline constexpr FlagsType operator&(Enum a, FlagsType b) { return FlagsType(a) & b; }
+    inline constexpr FlagsType operator&(Enum a, FlagsType b) { return FlagsType(a) & b; } 
 

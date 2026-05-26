@@ -523,9 +523,10 @@ namespace RHIVulkan {
 
         void SetPipeline(VulkanComputePipelineState* pipeline)
         {
+            bDirtyPipelineState = true;
             if (CurrentPipeline == pipeline)
                 return;
-
+           
             CurrentPipeline = pipeline;
 
             auto it = States.find(pipeline);
@@ -632,13 +633,18 @@ namespace RHIVulkan {
 
         void PrepareForDispatch(VulkanCommandBuffer* cmd)
         {
-            CurrentPipeline->Bind(cmd);
-            CurrentState->FlushAndBind(cmd);
+            if (bDirtyPipelineState) {
+                CurrentPipeline->Bind(cmd);
+                CurrentState->FlushAndBind(cmd);
+                bDirtyPipelineState = false;
+            }
+
         }
 
     private:
         VulkanDevice* Device;
         friend class VulkanCommandContext;
+        bool bDirtyPipelineState = false;
         VulkanComputePipelineState* CurrentPipeline = nullptr;
         VulkanComputePipelineDescriptorState* CurrentState = nullptr;
 		VulkanCommandContext* Context = nullptr;
@@ -662,7 +668,7 @@ namespace RHIVulkan {
         {
             Viewports.clear();
             Scissors.clear();
-            bScissorEnable = false;
+            
             StencilRef = 0;
             PrimitiveType = PT_Num;
             bDirtyVertexStreams = true;
@@ -674,9 +680,10 @@ namespace RHIVulkan {
         // Pipeline
         void SetPipeline(VulkanGraphicsPipelineState* pipeline)
         {
+            bDirtyPipelineState = true;
             if (CurrentPipeline == pipeline)
                 return;
-
+            
             CurrentPipeline = pipeline;
             auto it = States.find(pipeline);
             if (it == States.end())
@@ -787,14 +794,14 @@ namespace RHIVulkan {
         {
             Viewports.clear();
             Viewports.push_back(viewport);
-            bScissorEnable = false;
+            ViewportDiry = true;
         }
 
         void SetScissor(const VkRect2D& scissor)
         {
             Scissors.clear();
             Scissors.push_back(scissor);
-            bScissorEnable = true;
+            ScissorDirty = true;
         }
 
         void SetStencilRef(uint32_t ref)
@@ -812,12 +819,14 @@ namespace RHIVulkan {
         // Drawǰ��
         void PrepareForDraw(VulkanCommandBuffer* cmd)
         {
-            // 1. Bind pipeline
-            CurrentPipeline->Bind(cmd);
+            if (bDirtyPipelineState) {
+                // 1. Bind pipeline
+                CurrentPipeline->Bind(cmd);
 
-            // 2. Bind descriptor sets
-            CurrentState->FlushAndBind(cmd);
-
+                // 2. Bind descriptor sets
+                CurrentState->FlushAndBind(cmd);
+                bDirtyPipelineState = false;
+            }
             // 3. Bind vertex buffers
             if (bDirtyVertexStreams)
             {
@@ -834,11 +843,19 @@ namespace RHIVulkan {
             }
 
             // 4. Set viewport / scissor
-            if (!Viewports.empty())
+            if (!Viewports.empty() && ViewportDiry)
+            {
                 VKFunc::CmdSetViewport(cmd->GetHandle(), 0, (uint32_t)Viewports.size(), Viewports.data());
+				ViewportDiry = false;
+            }
+                
 
-            if (!Scissors.empty())
+            if (!Scissors.empty() && ScissorDirty)
+            {
                 VKFunc::CmdSetScissor(cmd->GetHandle(), 0, (uint32_t)Scissors.size(), Scissors.data());
+				ScissorDirty = false;
+            }
+                
 
             // 5. Set stencil ref
             //vkCmdSetStencilReference(cmd->GetHandle(), VK_STENCIL_FRONT_AND_BACK, StencilRef);
@@ -847,7 +864,7 @@ namespace RHIVulkan {
     private:
         friend class VulkanCommandContext;
         VulkanDevice* Device;
-
+        bool bDirtyPipelineState = false;
         VulkanGraphicsPipelineState* CurrentPipeline = nullptr;
         VulkanGraphicsPipelineDescriptorState* CurrentState = nullptr;
 
@@ -856,7 +873,8 @@ namespace RHIVulkan {
         // Dynamic states
         std::vector<VkViewport> Viewports;
         std::vector<VkRect2D> Scissors;
-        bool bScissorEnable = false;
+        bool ViewportDiry = false;
+        bool ScissorDirty = false;
         uint32_t StencilRef = 0;
 
         enum EPrimitiveType { PT_Num } PrimitiveType;

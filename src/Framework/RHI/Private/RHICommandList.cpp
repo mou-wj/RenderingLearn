@@ -392,7 +392,7 @@ void RHIGraphicCommandList::Draw(uint32_t vertexCount, uint32_t instanceCount, u
     AddCommand<RHICommandDraw>(vertexCount, instanceCount, firstVertex, firstInstance);
 }
 void RHIGraphicCommandList::DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
-
+    AddCommand<RHICommandDrawIndexed>(indexBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 void RHIGraphicCommandList::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo)

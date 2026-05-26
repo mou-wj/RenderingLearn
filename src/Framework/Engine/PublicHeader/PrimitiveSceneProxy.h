@@ -31,7 +31,7 @@ namespace Engine {
 
         // 几何绘制区间控制
         uint32_t FirstIndex = 0;
-        uint32_t NumPrimitives = 0;
+        uint32_t NumIndices = 0;
         int32_t BaseVertexIndex = 0;
         uint32_t StartInstance = 0;
         uint32_t NumInstances = 1;
@@ -74,7 +74,7 @@ namespace Engine {
             , bUseForDepthPass(1)
             , ReverseCulling(0)
         {
-            Elements.emplace_back(); // 默认预留一个原子绘制单元
+            
         }
     };
 

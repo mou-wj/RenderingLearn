@@ -253,7 +253,7 @@ namespace RHIVulkan {
         PendingFreeSetInfos.push_back(std::move(info));
         VKFunc::CmdBindDescriptorSets(
             cmdBuffer->GetHandle(),
-            VK_PIPELINE_BIND_POINT_COMPUTE,
+            pipelineBindingPoint,
             layout,
             0,
             (uint32_t)descriptorSets.size(),

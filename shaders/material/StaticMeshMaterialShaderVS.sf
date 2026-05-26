@@ -1,12 +1,9 @@
 #include "/Generated/VertexFactory.sf"
 
-VertexFactoryVSToPS MainVS(VertexFactoryInput Input)
+VSOutput MainVS(VertexFactoryInput Input)
 {
-    VertexFactoryVSToPS Output;
-
-    VertexFactoryIntermediates Intermediates =
-        GetVertexFactoryIntermediates(Input);
-    Output = VertexFactoryGetVSToPS(Input,Intermediates);
+    VSOutput Output;
+    Output = GetVertexShaderOutput(Input);
     return Output;
 }
 

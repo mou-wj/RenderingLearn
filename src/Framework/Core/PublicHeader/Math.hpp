@@ -65,7 +65,7 @@ namespace Core {
         float Length() const { return std::sqrt(x * x + y * y + z * z); }
     };
 
-    // Ç¿Á¦ÒýÈë 16 ×Ö½ÚÓ²¼þ¶ÔÆë£¬ÍêÃÀÖ§³Å SIMD ²Ã¼ôÓë Uniform Buffer ·Ã´æÐèÇó
+    // Ç¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 16 ï¿½Ö½ï¿½Ó²ï¿½ï¿½ï¿½ï¿½ï¿½ë£¬ï¿½ï¿½ï¿½ï¿½Ö§ï¿½ï¿½ SIMD ï¿½Ã¼ï¿½ï¿½ï¿½ Uniform Buffer ï¿½Ã´ï¿½ï¿½ï¿½ï¿½ï¿½
     struct Float4 {
         union {
             alignas(16) std::array<float, 4> Data;
@@ -78,5 +78,39 @@ namespace Core {
         float Length() const { return std::sqrt(x * x + y * y + z * z + w * w); }
     };
     using Float4x4 = Mat4;
+
+
+    template<typename T>
+    constexpr T Pi()
+    {
+        static_assert(
+            std::is_floating_point_v<T>,
+            "Pi only supports floating point types");
+
+        return static_cast<T>(
+            3.1415926535897932384626433832795);
+    }
+
+    template<typename T>
+    constexpr T DegToRad(T degree)
+    {
+        static_assert(
+            std::is_floating_point_v<T>,
+            "DegToRad only supports floating point types");
+
+        return degree *
+            (Pi<T>() / static_cast<T>(180.0));
+    }
+
+    template<typename T>
+    constexpr T RadToDeg(T radian)
+    {
+        static_assert(
+            std::is_floating_point_v<T>,
+            "RadToDeg only supports floating point types");
+
+        return radian *
+            (static_cast<T>(180.0) / Pi<T>());
+    }
 
 } // namespace Core

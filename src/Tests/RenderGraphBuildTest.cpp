@@ -222,7 +222,7 @@ public:
                 ERHITextureCreateFlag::TransferDest;
 
             auto renderTarget = GRenderTargetPool->GetFreeRenderTarget(rtDesc);
-
+            renderTarget->MarkUsed(true);
             // -------------------------------------
             // RDG 构建
             // -------------------------------------
@@ -322,6 +322,7 @@ public:
             presentWait.QueueType = fence.QueueType;
             presentWait.Value = fence.Value;
             api->GetPresentExecutor()->Present(Swapchain.get(), { presentWait });
+            renderTarget->MarkUsed(false);
         }
 
         std::cout << "RenderGraph CopyTexturePass test finished for " << kFrameCount << " frames." << std::endl;

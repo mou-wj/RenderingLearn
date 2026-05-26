@@ -242,6 +242,7 @@ namespace Engine {
     public:
         using ShaderMetaType = MeshMaterialShaderType;
         void Initialize();
+        void Clear();
     public:
 
         RenderCore::Shader* GetShader(const MeshMaterialShaderKey& Key);

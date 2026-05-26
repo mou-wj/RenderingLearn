@@ -162,10 +162,20 @@ std::shared_ptr<PooledRenderTarget> RenderTargetPool::GetFreeRenderTarget(
 
 	if (!FreeList.empty())
 	{
-		auto RT = FreeList.back();
-		FreeList.pop_back();
-		AllocatedList.push_back(RT);
-		return RT;
+		auto it = FreeList.begin();
+		std::shared_ptr<PooledRenderTarget> p = nullptr;
+		for (it = FreeList.begin(); it != FreeList.end(); ++it) {
+			bool match = (*it)->GetDesc().Matches(Desc);
+			if (match) {
+				break;
+			}
+		}		
+		if (it != FreeList.end()) {
+			p = *it;
+			FreeList.erase(it);
+			AllocatedList.push_back(p);
+			return p;
+		}
 	}
 	auto descRHI = PoolRenderTargetDesc::ConvertToRHITextureDesc(Desc);
 	auto Texture = RHI::GRHIApi->CreateTexture(descRHI);
@@ -198,7 +208,7 @@ void RenderTargetPool::GarbageCollect()
 			default:
 				break;
 		}
-		if (target && targetFrame < currentFrame) {
+		if (target && targetFrame < currentFrame && !(target->IsUsed())) {
 			FreeList.push_back(target);
 			it = AllocatedList.erase(it);
 		} else {

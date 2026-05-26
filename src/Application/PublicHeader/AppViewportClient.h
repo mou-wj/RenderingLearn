@@ -2,6 +2,7 @@
 #include "SceneView.h"
 #include "Viewport.h"
 #include "ViewportClient.h"
+#include "Camera.h"
 namespace App {
 
     class APPLICATION_API AppViewportClient : public Engine::ViewportClient
@@ -17,7 +18,7 @@ namespace App {
         void BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewFamily& OutViews);
 
     private:
-
+        Engine::Camera camera;
     };
 
 

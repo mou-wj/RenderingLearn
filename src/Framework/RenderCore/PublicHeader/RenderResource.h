@@ -256,7 +256,25 @@ struct RENDERCORE_API PoolRenderTargetDesc
 		Desc.DebugName = InDesc.DebugName;
 		return Desc;
     }
+    bool Matches(const PoolRenderTargetDesc& rhs) const
+    {
+        return
+            Type == rhs.Type &&
+            Format == rhs.Format &&
+            SampleCount == rhs.SampleCount &&
 
+            IsDepthStencil() == rhs.IsDepthStencil() &&
+            IsColor() == rhs.IsColor() &&
+
+            (Usage & rhs.Usage) == rhs.Usage &&
+
+            Width >= rhs.Width &&
+            Height >= rhs.Height &&
+            Depth >= rhs.Depth &&
+
+            MipLevels >= rhs.MipLevels &&
+            ArraySize >= rhs.ArraySize;
+    }
 };
 
 struct RENDERCORE_API IPooledRenderTarget
@@ -298,7 +316,10 @@ public:
     }
     RHI::RHITexture* GetRHI() override { return TargetTexture ? TargetTexture.get() : nullptr ; } ;
 
+    void MarkUsed(bool InIsUsed = true) { IsUse = InIsUsed; }
+    bool IsUsed() const { return IsUse; }
 private:
+    bool IsUse = false;
     PoolRenderTargetDesc Desc;
     RHI::RHITextureSP TargetTexture;
 };

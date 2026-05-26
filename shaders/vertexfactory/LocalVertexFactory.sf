@@ -163,6 +163,22 @@ float4 VertexFactoryGetClipPosition(VertexFactoryIntermediates Intermediates)
     return mul(ViewProjection, float4(Intermediates.WorldPosition, 1.0));
 }
 
+struct VSOutput
+{
+    float4 Position : SV_Position;            
+    VertexFactoryVSToPS FactoryInterpolants; 
+};
+
+VSOutput GetVertexShaderOutput(VertexFactoryInput Input)
+{
+    VSOutput Output;
+    VertexFactoryIntermediates Intermediates =
+        GetVertexFactoryIntermediates(Input);
+    Output.FactoryInterpolants = VertexFactoryGetVSToPS(Input, Intermediates);
+    Output.Position = VertexFactoryGetClipPosition(Intermediates);
+    return Output;
+}
+
 #endif // VERTEX_SHADER
 
 #if PIXEL_SHADER

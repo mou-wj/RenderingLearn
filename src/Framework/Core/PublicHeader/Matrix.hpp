@@ -7,6 +7,8 @@
 namespace Core
 {
 
+
+
     // ============================================================
     // Matrix Template
     // Row-major storage (like glm by default)
@@ -100,4 +102,228 @@ namespace Core
     using Mat3x4d = Matrix<double, 3, 4>;
     using Mat4d = Matrix<double, 4, 4>;
 
+    // ================= Matrix Operations =================
+
+// Matrix + Matrix
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr Matrix<T, Rows, Cols> operator+(
+        const Matrix<T, Rows, Cols>& a, const Matrix<T, Rows, Cols>& b) {
+        Matrix<T, Rows, Cols> result;
+        for (std::size_t i = 0; i < Rows * Cols; ++i)
+            result.data[i] = a.data[i] + b.data[i];
+        return result;
+    }
+
+    // Matrix - Matrix
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr Matrix<T, Rows, Cols> operator-(
+        const Matrix<T, Rows, Cols>& a, const Matrix<T, Rows, Cols>& b) {
+        Matrix<T, Rows, Cols> result;
+        for (std::size_t i = 0; i < Rows * Cols; ++i)
+            result.data[i] = a.data[i] - b.data[i];
+        return result;
+    }
+
+    // Matrix * scalar
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr Matrix<T, Rows, Cols> operator*(const Matrix<T, Rows, Cols>& m, T scalar) {
+        Matrix<T, Rows, Cols> result;
+        for (std::size_t i = 0; i < Rows * Cols; ++i)
+            result.data[i] = m.data[i] * scalar;
+        return result;
+    }
+
+    // scalar * Matrix
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr Matrix<T, Rows, Cols> operator*(T scalar, const Matrix<T, Rows, Cols>& m) {
+        return m * scalar;
+    }
+
+    // Matrix / scalar
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr Matrix<T, Rows, Cols> operator/(const Matrix<T, Rows, Cols>& m, T scalar) {
+        Matrix<T, Rows, Cols> result;
+        for (std::size_t i = 0; i < Rows * Cols; ++i)
+            result.data[i] = m.data[i] / scalar;
+        return result;
+    }
+
+    // Matrix * Matrix (general, for compatible sizes)
+    template<typename T, std::size_t Rows, std::size_t K, std::size_t Cols>
+    constexpr Matrix<T, Rows, Cols> operator*(const Matrix<T, Rows, K>& a, const Matrix<T, K, Cols>& b) {
+        Matrix<T, Rows, Cols> result{};
+        for (std::size_t row = 0; row < Rows; ++row) {
+            for (std::size_t col = 0; col < Cols; ++col) {
+                T sum = T{};
+                for (std::size_t k = 0; k < K; ++k)
+                    sum += a(row, k) * b(k, col);
+                result(row, col) = sum;
+            }
+        }
+        return result;
+    }
+
+    // Matrix * Vector (std::array)
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr std::array<T, Rows> operator*(const Matrix<T, Rows, Cols>& m, const std::array<T, Cols>& v) {
+        std::array<T, Rows> result{};
+        for (std::size_t row = 0; row < Rows; ++row) {
+            T sum = T{};
+            for (std::size_t col = 0; col < Cols; ++col)
+                sum += m(row, col) * v[col];
+            result[row] = sum;
+        }
+        return result;
+    }
+
+    // Matrix transpose
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr Matrix<T, Cols, Rows> Transpose(const Matrix<T, Rows, Cols>& m) {
+        Matrix<T, Cols, Rows> result;
+        for (std::size_t row = 0; row < Rows; ++row)
+            for (std::size_t col = 0; col < Cols; ++col)
+                result(col, row) = m(row, col);
+        return result;
+    }
+
+    // Matrix equality
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr bool operator==(const Matrix<T, Rows, Cols>& a, const Matrix<T, Rows, Cols>& b) {
+        for (std::size_t i = 0; i < Rows * Cols; ++i)
+            if (a.data[i] != b.data[i])
+                return false;
+        return true;
+    }
+
+    template<typename T, std::size_t Rows, std::size_t Cols>
+    constexpr bool operator!=(const Matrix<T, Rows, Cols>& a, const Matrix<T, Rows, Cols>& b) {
+        return !(a == b);
+    }
+
 } // namespace math
+
+// =================== General Determinant and Inverse Templates ===================
+namespace Core {
+
+// 3x3 Determinant
+
+// 1x1 Determinant
+template<typename T>
+constexpr T Determinant(const Matrix<T, 1, 1>& m) {
+    return m(0, 0);
+}
+
+// 2x2 Determinant
+template<typename T>
+constexpr T Determinant(const Matrix<T, 2, 2>& m) {
+    return m(0, 0) * m(1, 1) - m(0, 1) * m(1, 0);
+}
+
+// 3x3 Determinant
+template<typename T>
+constexpr T Determinant(const Matrix<T, 3, 3>& m) {
+    return m(0, 0) * (m(1, 1) * m(2, 2) - m(1, 2) * m(2, 1))
+         - m(0, 1) * (m(1, 0) * m(2, 2) - m(1, 2) * m(2, 0))
+         + m(0, 2) * (m(1, 0) * m(2, 1) - m(1, 1) * m(2, 0));
+}
+
+// 4x4 Determinant
+template<typename T>
+constexpr T Determinant(const Matrix<T, 4, 4>& m) {
+    const T* a = m.data.data();
+    T det =
+        a[3] * a[6] * a[9] * a[12] - a[2] * a[7] * a[9] * a[12] - a[3] * a[5] * a[10] * a[12] + a[1] * a[7] * a[10] * a[12]
+      + a[2] * a[5] * a[11] * a[12] - a[1] * a[6] * a[11] * a[12] - a[3] * a[6] * a[8] * a[13] + a[2] * a[7] * a[8] * a[13]
+      + a[3] * a[4] * a[10] * a[13] - a[0] * a[7] * a[10] * a[13] - a[2] * a[4] * a[11] * a[13] + a[0] * a[6] * a[11] * a[13]
+      + a[3] * a[5] * a[8] * a[14] - a[1] * a[7] * a[8] * a[14] - a[3] * a[4] * a[9] * a[14] + a[0] * a[7] * a[9] * a[14]
+      + a[1] * a[4] * a[11] * a[14] - a[0] * a[5] * a[11] * a[14] - a[2] * a[5] * a[8] * a[15] + a[1] * a[6] * a[8] * a[15]
+      + a[2] * a[4] * a[9] * a[15] - a[0] * a[6] * a[9] * a[15] - a[1] * a[4] * a[10] * a[15] + a[0] * a[5] * a[10] * a[15];
+    return det;
+}
+
+
+// =================== Adjugate (伴随矩阵) ===================
+// 1x1 Adjugate
+template<typename T>
+constexpr Matrix<T, 1, 1> Adjugate(const Matrix<T, 1, 1>& m) {
+    return Matrix<T, 1, 1>{1};
+}
+
+// 2x2 Adjugate
+template<typename T>
+constexpr Matrix<T, 2, 2> Adjugate(const Matrix<T, 2, 2>& m) {
+    Matrix<T, 2, 2> adj;
+    adj(0,0) =  m(1,1);
+    adj(0,1) = -m(0,1);
+    adj(1,0) = -m(1,0);
+    adj(1,1) =  m(0,0);
+    return adj;
+}
+
+// 3x3 Adjugate
+template<typename T>
+constexpr Matrix<T, 3, 3> Adjugate(const Matrix<T, 3, 3>& m) {
+    Matrix<T, 3, 3> adj;
+    adj(0,0) =  (m(1,1) * m(2,2) - m(1,2) * m(2,1));
+    adj(0,1) = -(m(1,0) * m(2,2) - m(1,2) * m(2,0));
+    adj(0,2) =  (m(1,0) * m(2,1) - m(1,1) * m(2,0));
+    adj(1,0) = -(m(0,1) * m(2,2) - m(0,2) * m(2,1));
+    adj(1,1) =  (m(0,0) * m(2,2) - m(0,2) * m(2,0));
+    adj(1,2) = -(m(0,0) * m(2,1) - m(0,1) * m(2,0));
+    adj(2,0) =  (m(0,1) * m(1,2) - m(0,2) * m(1,1));
+    adj(2,1) = -(m(0,0) * m(1,2) - m(0,2) * m(1,0));
+    adj(2,2) =  (m(0,0) * m(1,1) - m(0,1) * m(1,0));
+    return Transpose(adj);
+}
+
+// 4x4 Adjugate
+template<typename T>
+constexpr Matrix<T, 4, 4> Adjugate(const Matrix<T, 4, 4>& m) {
+    Matrix<T, 4, 4> adj;
+    // 按照代数余子式展开，直接写出每一项
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            Matrix<T, 3, 3> minor;
+            int mi = 0;
+            for (int row = 0; row < 4; ++row) {
+                if (row == i) continue;
+                int mj = 0;
+                for (int col = 0; col < 4; ++col) {
+                    if (col == j) continue;
+                    minor(mi, mj) = m(row, col);
+                    ++mj;
+                }
+                ++mi;
+            }
+            T cofactor = Determinant(minor);
+            if ((i + j) % 2) cofactor = -cofactor;
+            adj(j, i) = cofactor; // 注意转置
+        }
+    }
+    return adj;
+}
+
+
+
+// 1x1~4x4 Inverse: Inverse = Adjugate / Determinant
+template<typename T>
+constexpr Matrix<T, 1, 1> Inverse(const Matrix<T, 1, 1>& m) {
+    return Adjugate(m) / Determinant(m);
+}
+
+template<typename T>
+constexpr Matrix<T, 2, 2> Inverse(const Matrix<T, 2, 2>& m) {
+    return Adjugate(m) / Determinant(m);
+}
+
+template<typename T>
+constexpr Matrix<T, 3, 3> Inverse(const Matrix<T, 3, 3>& m) {
+    return Adjugate(m) / Determinant(m);
+}
+
+template<typename T>
+constexpr Matrix<T, 4, 4> Inverse(const Matrix<T, 4, 4>& m) {
+    return Adjugate(m) / Determinant(m);
+}
+
+} // namespace Core

@@ -137,7 +137,7 @@ public:
             return;
         }
         RHI::RHIGraphicCommandList cmdList(graphicContext);
-        constexpr int kMaxFrames = 100;
+        constexpr int kMaxFrames = 10000;
         for (int frameIndex = 0; frameIndex < kMaxFrames; ++frameIndex) {
             // 设置为即时执行模式
 
