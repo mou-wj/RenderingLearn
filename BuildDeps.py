@@ -1,0 +1,277 @@
+import os
+import sys
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Dict, Any, List, Set, Tuple
+
+# --- 路径定义 ---
+ROOT = Path(__file__).resolve().parent
+CONFIG_DIR = ROOT / "config" / "3rds"
+DEPS_DIR = ROOT / "deps"
+BUILD_DIR = DEPS_DIR / "build"
+INSTALL_DIR_BASE = DEPS_DIR / "install"
+CMAKE_OUTPUT = ROOT / "cmake"
+CPU_COUNT = max(1, os.cpu_count() or 2)
+
+def run(cmd: List[str], cwd: Path = None, env: Dict[str, str] = None) -> int:
+    print(f"[run] {' '.join(cmd)}  (cwd={cwd})")
+    p = subprocess.run(cmd, cwd=str(cwd) if cwd else None, env=env, shell=(os.name == "nt"))
+    return p.returncode
+
+def load_json(path: Path) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def ensure_dirs():
+    for d in [DEPS_DIR, BUILD_DIR, INSTALL_DIR_BASE, CMAKE_OUTPUT]:
+        d.mkdir(parents=True, exist_ok=True)
+
+def expand_placeholders(s: str, config: str = "Release") -> str:
+    if not s: return ""
+    # 替换内置变量
+    result = s.replace("${INSTALL_DIR}", str(INSTALL_DIR_BASE).replace("\\", "/"))
+    result = result.replace("${CONFIG}", config)
+    
+    # 替换环境变量 ${ENV:VAR}
+    result = re.sub(r"\$\{ENV:([^}]+)\}", lambda m: os.environ.get(m.group(1), "").replace("\\", "/"), result)
+    return result
+
+def get_layout_path(meta: Dict[str, Any], key: str, config: str = "Release") -> Path:
+    """根据 install_layout 获取绝对路径"""
+    layout = meta.get("install_layout", {})
+    root_raw = layout.get("root", "")
+    root_path = Path(expand_placeholders(root_raw, config))
+    
+    if key == "root":
+        return root_path
+    
+    sub_path = layout.get(key, "")
+    # 如果 sub_path 是绝对路径则直接使用，否则拼在 root 后面
+    if os.path.isabs(expand_placeholders(sub_path, config)):
+        return Path(expand_placeholders(sub_path, config))
+    return root_path / expand_placeholders(sub_path, config)
+
+def detect_platform_tag() -> str:
+    if sys.platform.startswith("win"): return "windows"
+    if sys.platform.startswith("linux"): return "linux"
+    if sys.platform.startswith("darwin"): return "macos"
+    return "unknown"
+
+def compute_cmake_args(meta: Dict[str, Any]) -> Tuple[List[str], Dict[str, str]]:
+    platform_tag = detect_platform_tag()
+    comp_conf = meta.get("compiler", {}).get(platform_tag, {})
+    
+    args = []
+    if comp_conf.get("cmake_generator"):
+        args += ["-G", comp_conf["cmake_generator"]]
+    if comp_conf.get("cmake_toolset"):
+        args += ["-T", comp_conf["cmake_toolset"]]
+    
+    env = os.environ.copy()
+    if comp_conf.get("preferred"):
+        env["BUILD_PREFERRED_COMPILER"] = comp_conf["preferred"]
+        
+    return args, env
+
+def cmake_build_and_install(meta: Dict[str, Any]) -> bool:
+    name = meta["name"]
+    src_dir = DEPS_DIR / name
+    build_root = BUILD_DIR / name
+    
+    build_conf = meta.get("build_config", {})
+    # 默认编译 Debug 和 Release
+    configs = ["Debug", "Release"]
+    
+    success = True
+    for cfg in configs:
+        cfg_build_dir = build_root / cfg
+        cfg_build_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 从 layout 获取安装前缀
+        install_prefix = get_layout_path(meta, "root", cfg)
+        
+        gen_args, env = compute_cmake_args(meta)
+        
+        # Configure
+        install_prefix_str = str(install_prefix).replace('\\', '/')
+        configure_cmd = [
+            "cmake", "-S", str(src_dir), "-B", str(cfg_build_dir),
+            f"-DCMAKE_INSTALL_PREFIX={install_prefix_str}",
+            f"-DCMAKE_BUILD_TYPE={cfg}"
+        ]
+        configure_cmd += gen_args
+        
+        # 加入自定义参数
+        user_args = build_conf.get("configure_args", [])
+        for arg in user_args:
+            configure_cmd.append(expand_placeholders(arg, cfg))
+            
+        if run(configure_cmd, cwd=cfg_build_dir, env=env) != 0:
+            success = False; break
+            
+        # Build & Install
+        build_cmd = ["cmake", "--build", str(cfg_build_dir), "--config", cfg, "--target", "install", "-j", str(CPU_COUNT)]
+        if run(build_cmd, cwd=cfg_build_dir, env=env) != 0:
+            success = False; break
+            
+    return success
+
+# ---- 拓扑排序 (保持不变) ----
+def topological_sort(all_meta: List[Dict[str, Any]]) -> List[str]:
+    graph = {m["name"]: set(m.get("dependencies", [])) for m in all_meta}
+    inv_graph = {n: set() for n in graph}
+    for n, deps in graph.items():
+        for d in deps:
+            if d in inv_graph: inv_graph[d].add(n)
+            
+    order = []
+    queue = [n for n, d in graph.items() if not d]
+    while queue:
+        n = queue.pop(0)
+        order.append(n)
+        for m in list(inv_graph[n]):
+            graph[m].remove(n)
+            if not graph[m]: queue.append(m)
+    if len(order) != len(graph):
+        raise RuntimeError("Cycle or missing dependency detected!")
+    return order
+
+# ---- 生成 Find3rdsGenerated.cmake ----
+def generate_cmake_find_file(processed_meta: List[Dict[str, Any]]):
+    lines = [
+        "# Auto-generated by BuildDeps.py",
+        "cmake_minimum_required(VERSION 3.16)\n"
+    ]
+    
+    for meta in processed_meta:
+        name = meta["name"]
+        safe_name = name.replace("-", "_").replace(".", "_").upper()
+        config_type = meta.get("config_type", "cmake_config")
+        
+        lines.append(f"# [{name}]")
+        
+        # 处理不同编译配置下的路径
+        configs = ["Debug", "Release"]
+        for cfg in configs:
+            root_path = str(get_layout_path(meta, "root", cfg)).replace("\\", "/")
+            lines.append(f"if(CMAKE_BUILD_TYPE STREQUAL \"{cfg}\")")
+            
+            if config_type == "cmake_config":
+                # 模式1: 标准 CMake Config 模式
+                lines.append(f"  list(APPEND CMAKE_PREFIX_PATH \"{root_path}\")")
+            
+            elif config_type == "manual":
+                # 模式2: 手动定义 Target 模式
+                manual = meta.get("manual_info", {})
+                for comp_name, info in manual.get("components", {}).items():
+                    target_name = f"Deps::{name}"
+                    lines.append(f"  if(NOT TARGET {target_name})")
+                    lines.append(f"    add_library({target_name} INTERFACE IMPORTED)")
+                    # Include（以root为根）
+                    include_dirs = info.get("include_dirs", [])
+                    if include_dirs:
+                        inc_full = [str(get_layout_path(meta, "root", cfg) / Path(inc)).replace("\\", "/") for inc in include_dirs if inc]
+                        joined = ";".join(inc_full)
+                        lines.append(f"    set_target_properties({target_name} PROPERTIES INTERFACE_INCLUDE_DIRECTORIES \"{joined}\")")
+                    # Libs（以root为根，自动加后缀）
+                    libs = info.get("libs", {}).get(cfg.lower(), [])
+                    if libs:
+                        for lib in libs:
+                            if lib:
+                                # 自动加平台后缀
+                                if sys.platform.startswith("win"):
+                                    lib_name = lib if lib.lower().endswith(".lib") else lib + ".lib"
+                                else:
+                                    lib_name = lib if lib.lower().endswith(".a") else lib + ".a"
+                                lib_path = str(get_layout_path(meta, "root", cfg) / Path(lib_name)).replace("\\", "/")
+                                lines.append(f"    target_link_libraries({target_name} INTERFACE \"{lib_path}\")")
+                    # DLLs（仅收集路径，不生成库目标）
+                    dlls = info.get("dlls", [])
+                    dll_rel_paths = []
+                    dll_dbg_paths = []
+                    if dlls:
+                        for dll_item in dlls:
+                            if isinstance(dll_item, dict):
+                                dll_rel_name = dll_item.get("release") or dll_item.get("name") or ""
+                                dll_dbg_name = dll_item.get("debug") or dll_item.get("release") or dll_item.get("name") or ""
+                            else:
+                                dll_rel_name = dll_dbg_name = dll_item
+                            # 跳过都为空的情况
+                            if not dll_rel_name and not dll_dbg_name:
+                                continue
+                            if sys.platform.startswith("win"):
+                                if dll_rel_name:
+                                    dll_rel_name = dll_rel_name if dll_rel_name.lower().endswith(".dll") else dll_rel_name + ".dll"
+                                if dll_dbg_name:
+                                    dll_dbg_name = dll_dbg_name if dll_dbg_name.lower().endswith(".dll") else dll_dbg_name + ".dll"
+                            else:
+                                if dll_rel_name:
+                                    dll_rel_name = dll_rel_name if dll_rel_name.lower().endswith(".so") else dll_rel_name + ".so"
+                                if dll_dbg_name:
+                                    dll_dbg_name = dll_dbg_name if dll_dbg_name.lower().endswith(".so") else dll_dbg_name + ".so"
+                            if dll_rel_name:
+                                dll_rel_paths.append(str(get_layout_path(meta, "root", "Release") / Path(dll_rel_name)).replace("\\", "/"))
+                            if dll_dbg_name:
+                                dll_dbg_paths.append(str(get_layout_path(meta, "root", "Debug") / Path(dll_dbg_name)).replace("\\", "/"))
+                    # 生成变量，供用户手动处理
+                    # 生成统一变量，自动根据 CMAKE_BUILD_TYPE 选择
+                    if dll_rel_paths or dll_dbg_paths:
+                        joined_rel = ";".join(dll_rel_paths)
+                        joined_dbg = ";".join(dll_dbg_paths)
+                        lines.append(f"    set({safe_name}_DLLS_RELEASE \"{joined_rel}\")")
+                        lines.append(f"    set({safe_name}_DLLS_DEBUG \"{joined_dbg}\")")
+                        lines.append(f"    if(CMAKE_BUILD_TYPE STREQUAL \"Debug\")")
+                        lines.append(f"      set({safe_name}_DLLS \"{joined_dbg}\")")
+                        lines.append(f"    else()")
+                        lines.append(f"      set({safe_name}_DLLS \"{joined_rel}\")")
+                        lines.append(f"    endif()")
+                    lines.append(f"  endif()")
+            
+            lines.append("endif()")
+        lines.append("")
+
+    with open(CMAKE_OUTPUT / "Find3rdsGenerated.cmake", "w") as f:
+        f.write("\n".join(lines))
+
+def main():
+    ensure_dirs()
+    config_files = list(CONFIG_DIR.glob("*.json"))
+    all_meta = [load_json(f) for f in config_files]
+    order = topological_sort(all_meta)
+    name_to_meta = {m["name"]: m for m in all_meta}
+    
+    processed_meta = []
+    
+    for name in order:
+        meta = name_to_meta[name]
+        ignore = meta.get("ignore", False)
+        if ignore: 
+            continue
+        lib_type = meta.get("type", "source")
+        print(f"\n>>> Processing: {name} ({lib_type})")
+        
+        if lib_type == "source":
+            src_dir = DEPS_DIR / name
+            # 1. Clone
+            if not src_dir.exists():
+                src_info = meta.get("source", {})
+                run(["git", "clone", "--depth=1","--single-branch","--branch", src_info.get("branch", "main"), src_info["git"], str(src_dir)])
+                # 2. Extra Repos (SPIRV-Tools)
+                for extra in src_info.get("extra_repos", []):
+                    extra_path = src_dir / extra["path"]
+                    run(["git", "clone", "--depth=1","--single-branch","--branch", extra["branch"], extra["git"], str(extra_path)])
+            
+            # 3. Build (若不存在 install 目录或 build_timing 为 pre_build)
+            if meta.get("build_timing") == "pre_build":
+                cmake_build_and_install(meta)
+                
+        processed_meta.append(meta)
+    
+    generate_cmake_find_file(processed_meta)
+    print("\n[Done] All dependencies processed.")
+
+if __name__ == "__main__":
+    main()

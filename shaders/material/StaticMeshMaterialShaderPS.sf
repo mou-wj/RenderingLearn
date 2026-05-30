@@ -1,0 +1,51 @@
+#include "/Generated/VertexFactory.sf"
+
+#define SHADINGMODEL_UNLIT   0
+#define SHADINGMODEL_LIT 1
+
+float4 MainPS(VertexFactoryVSToPS Input) : SV_Target0
+{
+    /*
+    ===========================================================================
+        Reconstruct Stable Shading Semantic
+    ===========================================================================
+    */
+
+    ShadingContext Context;
+
+    VertexFactoryFillShadingContext(
+        Input,
+        Context);
+
+    /*
+    ===========================================================================
+        Material Evaluation
+    ===========================================================================
+    */
+
+    float3 BaseColor = float3(1.0, 0.7, 0.3);
+
+#if MATERIAL_SHADING_MODEL == SHADINGMODEL_LIT
+
+    float3 N = normalize(Context.WorldNormal);
+
+    float3 V = normalize(Context.ViewDirection);
+
+    float3 L = normalize(float3(0.5, 0.5, 1.0));
+
+    float NoL = saturate(dot(N, L));
+
+    float3 Color = BaseColor * NoL;
+
+    return float4(Color, 1.0);
+
+#elif MATERIAL_SHADING_MODEL == SHADINGMODEL_UNLIT
+
+    return float4(BaseColor, 1.0);
+
+#else
+
+    return float4(1, 0, 1, 1); // invalid shading model
+
+#endif
+}

@@ -1,0 +1,44 @@
+{
+  "name": "tinygltf",
+  "ignore": false,
+  "type": "source",
+  "config_type": "cmake_config",
+  "source_type": "git",
+  "build_timing": "pre_build",
+  "source": {
+    "git": "https://github.com/syoyo/tinygltf.git",
+    "branch": "release"
+  },
+  "compiler": {
+    "windows": {
+      "preferred": "msvc",
+      "cmake_generator": "Visual Studio 17 2022",
+      "cmake_toolset": ""
+    },
+    "linux": {
+      "preferred": "gcc",
+      "cmake_generator": "Unix Makefiles",
+      "cmake_toolset": ""
+    },
+    "macos": {
+      "preferred": "clang",
+      "cmake_generator": "Unix Makefiles",
+      "cmake_toolset": ""
+    }
+  },
+  "build_config": {
+    "configure_args": [
+      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/tinygltf/${CONFIG}",
+      "-DTINYGLTF_BUILD_EXAMPLES=OFF",
+      "-DTINYGLTF_BUILD_LOADER_EXAMPLE=OFF"
+    ],
+    "cmake_options": {}
+  },
+  "install_layout": {
+    "root": "${INSTALL_DIR}/tinygltf/${CONFIG}",
+    "include": "include",
+    "lib": "lib",
+    "bin": "bin"
+  },
+  "dependencies": []
+}

@@ -1,0 +1,14 @@
+struct ShadingContext
+{
+    float3 WorldPosition;
+
+    float3 WorldNormal;
+
+    float3x3 TangentToWorld;
+
+    float2 UV0;
+
+    float4 VertexColor;
+
+    float3 ViewDirection;
+};

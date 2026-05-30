@@ -1,0 +1,46 @@
+{
+  "name": "SPIRV-Cross",
+  "ignore": false,
+  "type": "source",
+  "config_type": "cmake_config",
+  "source_type": "git",
+  "build_timing": "pre_build",
+  "source": {
+    "git": "https://github.com/KhronosGroup/SPIRV-Cross.git",
+    "branch": "main"
+  },
+  "compiler": {
+    "windows": {
+      "preferred": "msvc",
+      "cmake_generator": "Visual Studio 17 2022",
+      "cmake_toolset": ""
+    },
+    "linux": {
+      "preferred": "gcc",
+      "cmake_generator": "Unix Makefiles",
+      "cmake_toolset": ""
+    },
+    "macos": {
+      "preferred": "clang",
+      "cmake_generator": "Unix Makefiles",
+      "cmake_toolset": ""
+    }
+  },
+  "build_config": {
+    "configure_args": [
+      "-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/spirv-cross/${CONFIG}",
+      "-DSPIRV_CROSS_SHARED=ON",
+      "-DSPIRV_CROSS_CLI=OFF"
+    ],
+    "cmake_options": {}
+  },
+  "install_layout": {
+    "root": "${INSTALL_DIR}/spirv-cross/${CONFIG}",
+    "include": "include/spirv_cross",
+    "lib": "lib",
+    "bin": "bin"
+  },
+  "dependencies": [
+    "SPIRV-Tools"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "name": "DefaultWhite",
+
+  "blendMode": "Opaque",
+  "shadingModel": "Lit",
+
+  "staticParameters": {
+    "twoSided": false,
+    "useVertexColor": false,
+    "useNormalMap": false
+  },
+
+  "scalarParameters": {
+    "roughness": 0.5,
+    "metallic": 0.0
+  },
+
+  "vectorParameters": {
+    "baseColor": [ 1.0, 1.0, 1.0, 1.0 ]
+  },
+
+  "textureParameters": {
+  }
+}

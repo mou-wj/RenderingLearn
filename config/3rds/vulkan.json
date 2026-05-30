@@ -1,0 +1,34 @@
+{
+  "name": "Vulkan",
+  "ignore": false,
+  "type": "prebuilt",
+  "config_type": "manual",
+  "install_layout": {
+    "root": "${ENV:VULKAN_SDK}"
+  },
+"manual_info": {
+    "common_defines": [
+      ""
+    ],
+    "components": {
+      "Runtime": {
+        "include_dirs": [
+          "Include"
+        ],
+        "libs": {
+          "debug": [
+            ""
+          ],
+          "release": [
+            ""
+          ]
+        },
+        "dlls": [
+          ""
+        ],
+        "dependencies": []
+      }
+    }
+  },
+  "notes": " Vulkan 为手动配置模式，只需要头文件。脚本应拼接 install_layout.root 与 manual_info 中的相对路径来构建 Target。"
+}
