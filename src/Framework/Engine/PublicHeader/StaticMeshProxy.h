@@ -10,14 +10,15 @@ namespace Engine {
 class StaticMeshComponent;
 class ENGINE_API StaticMeshProxy : public PrimitiveSceneProxy {
 public:
+    DECLARE_TYPE_ID_DERIVED_TYPE(StaticMeshProxy, PrimitiveSceneProxy)
     // Construct from shared render data and component transform.
     StaticMeshProxy(const StaticMeshComponent* InComponent);
     ~StaticMeshProxy() override;
 
-    void GetMeshBatches(const SceneView& View, MeshBatchList& OutBatches) const override;
+    
     bool HasStaticGeometry() const override { return true; }
     bool IsDynamic() const override { return false; }
-
+    const StaticMeshComponent* GetStaticMeshComponent() const { return MeshComponent; }
 private:
     // Keep shared ownership of render data to ensure lifetime while proxy exists on RenderThread.
     const StaticMeshComponent* MeshComponent;

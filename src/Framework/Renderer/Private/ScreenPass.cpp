@@ -8,7 +8,7 @@ namespace Renderer {
 	//END_SHADER_PARAMETER_STRUCT(ScenePassShaderParameter);
 
 	void addScreenPass(RenderGraphBuilder& builder, RenderGraphTexture* inTexture, RenderGraphTexture* outTexture) {
-		auto& GShaderMap = *RenderCore::GShaderMap;
+		auto& GShaderMap = RenderCore::GShaderMap;
 		auto drawTextureShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global]["DrawTexturePS"];
         auto fullScreenQuadShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global]["FullScreenVS"];
 		

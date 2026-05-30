@@ -9,7 +9,7 @@ namespace RenderCore{
 
     // static members
 
-    GlobalShaderMap* GShaderMap = nullptr;
+    GlobalShaderMap GShaderMap;
 
     Shader* GlobalShaderMap::GetShader(ShaderType* shaderType, ShaderPermutationId id)
     {

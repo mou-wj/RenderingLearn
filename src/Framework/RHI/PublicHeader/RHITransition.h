@@ -28,6 +28,8 @@ struct RHI_API RHITransitionInfo : public RHISubresourceRange
 
 	ERHIResourceAccess AccessBefore = ERHIResourceAccess::Unknown;
 	ERHIResourceAccess AccessAfter = ERHIResourceAccess::Unknown;
+	EQueueType QueueTypeBefore = EQueueType::Graphics;
+	EQueueType QueueTypeAfter = EQueueType::Graphics;
 	EResourceTransitionFlags Flags = EResourceTransitionFlags::None;
 
 	RHITransitionInfo() = default;

@@ -58,6 +58,7 @@ namespace RHIVulkan {
 	void GetVulkanBarrierInfo(
 		bool bIsTexture,
 		ERHIResourceAccess InAccess,
+		EQueueType InQueueType,
 		VkImageLayout& OutLayout,
 		VkAccessFlags& OutAccessMask,
 		VkPipelineStageFlags& OutStageMask)
@@ -75,13 +76,13 @@ namespace RHIVulkan {
 		}
 
 		// --- ֻ����֧ ---
-		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::SRVGraphics))
+		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::SRV))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			OutAccessMask |= VK_ACCESS_SHADER_READ_BIT;
 			OutStageMask |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		}
-		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::SRVCompute))
+		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::SRV))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			OutAccessMask |= VK_ACCESS_SHADER_READ_BIT;
@@ -107,12 +108,15 @@ namespace RHIVulkan {
 			OutAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			OutStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		}
-		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::UAVMask))
+		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::UAV))
 		{
 			OutLayout = VK_IMAGE_LAYOUT_GENERAL;
 			OutAccessMask |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-			OutStageMask |= EnumHasAnyFlags(InAccess, ERHIResourceAccess::UAVCompute) ?
-				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			if (InQueueType == EQueueType::Graphics) {
+				OutStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			}else if (InQueueType == EQueueType::Compute) {
+				OutStageMask |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+			}
 		}
 		if (EnumHasAnyFlags(InAccess, ERHIResourceAccess::DSVWrite))
 		{
@@ -570,14 +574,14 @@ namespace RHIVulkan {
 		}
 
 		// 4. 可随机读写状态 (UAV)
-		if (EnumHasAnyFlags(access, ERHIResourceAccess::UAVMask))
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::UAV))
 		{
 			// UAV 在 Vulkan 中最稳健的选择是 GENERAL
 			return VK_IMAGE_LAYOUT_GENERAL;
 		}
 
 		// 5. 只读采样状态 (SRV)
-		if (EnumHasAnyFlags(access, ERHIResourceAccess::SRVMask))
+		if (EnumHasAnyFlags(access, ERHIResourceAccess::SRV))
 		{
 			if (bIsDepthStencil)
 			{

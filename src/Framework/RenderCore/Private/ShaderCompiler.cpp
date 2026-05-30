@@ -238,8 +238,8 @@ namespace RenderCore {
 
             if (member.NumRows == 1)
                 return base + std::to_string(member.NumColumns);
-
-            return base + std::to_string(member.NumRows) + "x" + std::to_string(member.NumColumns);
+            //如果是mat就设置为行主序
+            return std::string("row_major ") + base + std::to_string(member.NumRows) + "x" + std::to_string(member.NumColumns);
         }
 
         // ============================================
@@ -994,7 +994,7 @@ void ShaderCompiler::CompileToOpenGL(const std::string& preprocessedSource, cons
 
 
 
-ShaderCompilationCache* GShaderCompilationCache = nullptr;
+
 void SPIRVCompiledBinaryResultPacker::Depack(const std::vector<char>& packedResult)
 {
     size_t offset = 0;

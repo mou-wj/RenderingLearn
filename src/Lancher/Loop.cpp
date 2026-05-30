@@ -14,6 +14,7 @@ void Loop::Init() {
 	Core::ModuleManager::Get().AddModuleDependency("Engine", "RHIVulkan");
 	Core::ModuleManager::Get().AddModuleDependency("SlateRHIRenderer", "Engine");
 	Core::ModuleManager::Get().AddModuleDependency("Application", "Engine");
+	Core::ModuleManager::Get().AddModuleDependency("Application", "Renderer");
 	Core::ModuleManager::Get().AddModuleDependency("Application", "SlateRHIRenderer");
 
 	Core::ModuleManager::Get().StartupAll();
@@ -30,7 +31,7 @@ void Loop::Run() {
 }
 
 void Loop::Shutdown() {
-
+	Core::ModuleManager::Get().ShutdownAll();
 
 }
 

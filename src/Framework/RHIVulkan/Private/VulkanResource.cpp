@@ -221,7 +221,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     if (EnumHasAnyFlags(Flags, ERHITextureCreateFlag::UAV))
     {
         OutLayout = VK_IMAGE_LAYOUT_GENERAL;
-        OutAccess = ERHIResourceAccess::UAVMask;
+        OutAccess = ERHIResourceAccess::UAV;
         return;
     }
 
@@ -265,7 +265,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
         // 如果是 Dynamic 的，可能意味着它会频繁更新
         // 但初始状态下依然建议进入只读，等待第一次 RHIUpdate 触发转换
         OutLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        OutAccess = ERHIResourceAccess::SRVMask;
+        OutAccess = ERHIResourceAccess::SRV;
         return;
     }
 

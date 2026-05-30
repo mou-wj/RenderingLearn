@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "InputHandler.h"
 #ifdef _WIN32
 #include <windows.h>
 #include <string>
@@ -28,6 +29,15 @@ namespace Slate {
 
         static LRESULT CALLBACK WndProcSetup(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
         LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+    private:
+        bool RouteInputMessage(
+            UINT msg,
+            WPARAM wParam,
+            LPARAM lParam);
+
+        Slate::EKey TranslateKey(
+            WPARAM key) const;
     };
 #endif
 

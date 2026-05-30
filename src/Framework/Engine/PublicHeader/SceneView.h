@@ -51,7 +51,7 @@ namespace Engine {
         // 核心变换矩阵（完全对齐你的 Matrix 模板类型）
         Core::Float4x4 ViewMatrix;            // World -> View
         Core::Float4x4 ProjectionMatrix;      // View -> Clip
-        Core::Float4x4 ViewProjectionMatrix;  // Precomputed View * Projection
+        Core::Float4x4 ViewProjectionMatrix;  // Precomputed Projection * View  
         Core::Float4x4 InvViewProjectionMatrix; // 预留逆矩阵（用于延迟渲染位置重建）
 
         // 相机空间属性
@@ -100,6 +100,7 @@ namespace Engine {
         int AddView(const SceneView& View);
         int AddView(SceneView&& View);
         bool RemoveView(int Index);
+        void ClearViews();
 
         SceneView* GetView(int Index);
         const std::vector<SceneView>& GetViews() const { return Views; }

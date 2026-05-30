@@ -6,6 +6,7 @@
 #include <vector>
 #include <typeinfo>
 #include "BoxSphereBounds.h"
+#include "TypeIDCast.h"
 
 namespace Engine {
 	// Minimal placeholder types. Replace with engine math types in real project.
@@ -25,11 +26,7 @@ namespace Engine {
 	public:
 		PrimitiveComponent();
 		virtual ~PrimitiveComponent();
-		// 返回类型信息，用于动态判断
-		virtual uint32_t GetTypeID() const = 0;
-
-		template<typename T>
-		bool IsA() const { return GetTypeID() == T::StaticTypeID(); }
+		DECLARE_TYPE_ID_BASE_TYPE(PrimitiveComponent)
 		// ------------------ Spatial (GameThread only) ------------------
 	protected:
 		FTransform LocalTransform;          // local transform
@@ -85,24 +82,6 @@ namespace Engine {
 		PrimitiveComponent& operator=(const PrimitiveComponent&) = delete;
 	};
 
-	// 1. 编译期 FNV-1a 32位哈希算法
-	constexpr uint32_t HashString(const char* Str) {
-		uint32_t Hash = 2166136261U;
-		while (*Str) {
-			Hash ^= static_cast<uint32_t>(*Str++);
-			Hash *= 16777619U;
-		}
-		return Hash;
-	}
-	// 2. 自动化宏
-#define DEFINE_COMPONENT_TYPE(ClassName) \
-    public: \
-        static constexpr uint32_t StaticTypeID() { \
-            return Engine::HashString(#ClassName); \
-        } \
-        virtual uint32_t GetTypeID() const override { \
-            return StaticTypeID(); \
-        }
 
 	// Notes:
 	// - PrimitiveComponent is GameThread-only. Do not touch its members from RenderThread.

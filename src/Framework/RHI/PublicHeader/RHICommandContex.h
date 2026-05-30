@@ -158,6 +158,12 @@ public:
 
     virtual EQueueType GetType() const { return Type; };
 
+    template<typename ContextType>
+    ContextType* AcquireCastedCommandContext() {
+		RHIContextBase* baseCtx = AcquireCommandContext();
+		return dynamic_cast<ContextType*>(baseCtx);
+    };
+
     virtual RHIContextBase* AcquireCommandContext() = 0;
     virtual RHIContextBase* ReleaseCommandContext(RHIContextBase* Context) = 0;
 

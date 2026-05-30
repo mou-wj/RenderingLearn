@@ -11,14 +11,6 @@ namespace Slate {
     using WindowCloseCallback = std::function<void()>;
     using WindowResizeCallback = std::function<void(int width, int height)>;
 
-    struct WidgetInfo {
-		int X;
-		int Y;
-		int Width;
-		int Height;
-        SlateViewport* Viewport;
-    };
-
     class SLATE_API Window 
     {
     public:
@@ -44,13 +36,13 @@ namespace Slate {
         virtual Core::Int2 GetFramebufferSize() const = 0;
         const std::string& GetTitle() const { return Title; }
         virtual void* GetNativeHandle() const = 0;
-        void AddWidget(const WidgetInfo& viewport) { Viewports.push_back(viewport); }
-		const std::vector<WidgetInfo>& GetWidgets() const { return Viewports; }
+        void SetRootWidget(Widget* viewport) { RootWidget = viewport; }
+		Widget* GetRootWidgets() const { return RootWidget; }
     protected:
         int Width = 0;
         int Height = 0;
         std::string Title;
-        std::vector<WidgetInfo> Viewports;
+        Widget* RootWidget = nullptr;
         WindowCloseCallback CloseCallback;
         WindowResizeCallback ResizeCallback;
     };

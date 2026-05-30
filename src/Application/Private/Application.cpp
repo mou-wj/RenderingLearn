@@ -19,6 +19,7 @@ bool Application::Initialize()
     ViewportClient = std::make_unique<AppViewportClient>();
 	Renderer = SlateRHIRenderer::GSlateRHIRendererModule->CreateSlateRenderer();
     Window =  CreateWindowSP(800, 600, "My Application");
+	ViewportClient->InitResources();
     return true;
 }
 
@@ -31,6 +32,7 @@ bool Application::RequestExit()
 void Application::Shutdown()
 {
     MainViewport.reset();
+    ViewportClient->ReleaseResources();
     ViewportClient.reset();
     Window = nullptr;
 }
@@ -46,6 +48,9 @@ Slate::WindowSP Application::CreateWindowSP(int Width, int Height, const char* T
         if (MainViewport)
             MainViewport->Resize(W, H);
         });
+    NewWindow->SetCloseCallback([this]() {
+        QuitFlag = true;
+	});
     Renderer->CreateViewport(NewWindow.get());
     auto framebufferSize = NewWindow->GetFramebufferSize();
 
@@ -54,7 +59,7 @@ Slate::WindowSP Application::CreateWindowSP(int Width, int Height, const char* T
     {
         MainViewport = std::make_unique<Engine::SceneViewport>(ViewportClient.get(), framebufferSize);
     }
-	NewWindow->AddWidget({ 0,0,framebufferSize.x,framebufferSize.y, MainViewport.get() });
+	NewWindow->SetRootWidget(MainViewport.get());
 
     return NewWindow;
 }
@@ -72,7 +77,6 @@ void Application::TickFrame()
     if (MainViewport)
         MainViewport->Draw();
     Renderer->Render(Window.get());
-
 }
 
 

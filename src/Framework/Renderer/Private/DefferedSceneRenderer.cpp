@@ -9,7 +9,7 @@ namespace Renderer {
 		auto SceneColorTargetTexture = SceneTextures.SceneColor;
         //±ærendererªÊ÷∆µΩDefferedOutputColor
         {
-            StaticMeshDrawBuild(Views, graphBuilder);
+            
         }
         //addScreenPass(graphBuilder, SceneColorTargetTexture.get(), SceneColorTargetTexture.get());
         

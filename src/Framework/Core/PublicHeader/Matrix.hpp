@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <type_traits>
+#include <iostream>
 
 namespace Core
 {
@@ -33,7 +34,7 @@ namespace Core
         // Constructors
         // ------------------------------------------------------------
 
-        constexpr Matrix() = default;
+        constexpr Matrix() : Matrix(0) {}
 
         constexpr explicit Matrix(T value)
         {
@@ -51,7 +52,38 @@ namespace Core
                     data[i++] = v;
             }
         }
+        void Print(
+            std::ostream& os = std::cout,
+            int precision = 4) const
+        {
+            auto oldFlags = os.flags();
+            auto oldPrecision = os.precision();
 
+            for (std::size_t row = 0;
+                row < Rows;
+                ++row)
+            {
+                os << "[ ";
+
+                for (std::size_t col = 0;
+                    col < Cols;
+                    ++col)
+                {
+                    os << operator()(row, col);
+
+                    if (col < Cols - 1)
+                    {
+                        os << ", ";
+                    }
+                }
+
+                os << " ]\n";
+            }
+
+            os.flags(oldFlags);
+            os.precision(oldPrecision);
+        }
+   
         // ------------------------------------------------------------
         // Element Access
         // ------------------------------------------------------------

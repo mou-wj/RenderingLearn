@@ -350,7 +350,7 @@ private:
     std::vector<std::shared_ptr<PooledRenderTarget>> AllocatedList;
 };
 
-extern RENDERCORE_API RenderTargetPool* GRenderTargetPool;
+extern RENDERCORE_API RenderTargetPool GRenderTargetPool;
 
 struct TransientBufferDesc {
     uint64_t Size = 0;                   // 缓冲区大小（字节）
@@ -500,7 +500,7 @@ private:
     RHI::RHITransientResourceManagerSP TransientResourceManager;
 };
 
-extern RENDERCORE_API TransientResourceAllocator* GTransientResourceAllocator;
+extern RENDERCORE_API TransientResourceAllocator GTransientResourceAllocator;
 
 // 智能指针类型
 using RenderResourceSP = std::shared_ptr<RenderResource>;

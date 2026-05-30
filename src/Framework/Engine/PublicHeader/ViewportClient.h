@@ -1,8 +1,9 @@
 #pragma once
 #include "Viewport.h"
+#include "InputHandler.h"
 namespace Engine {
     // Engine/ViewportClient.h
-    class ENGINE_API ViewportClient
+    class ENGINE_API ViewportClient : public Slate::InputHandler
     {
     public:
         virtual ~ViewportClient() = default;

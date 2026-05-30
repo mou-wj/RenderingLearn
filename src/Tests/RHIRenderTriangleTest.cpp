@@ -81,7 +81,6 @@ public:
     {
         RHI::GRHIApi = new RHIVulkan::VulkanRHIApi();
         RHI::GRHIApi->Init();
-		RenderCore::GShaderCompilationCache = new RenderCore::ShaderCompilationCache();
         auto* api = RHI::GRHIApi;
         if (!api)
         {

@@ -15,7 +15,7 @@ using namespace RHI;
 namespace RenderCore {
 
 
-    RenderGraphBuilder::RenderGraphBuilder() : TransientAllocator(GTransientResourceAllocator)
+    RenderGraphBuilder::RenderGraphBuilder() : TransientAllocator(&GTransientResourceAllocator)
     {
     }
 
@@ -254,7 +254,6 @@ namespace RenderCore {
         AnalyzePasses();
         AllocateResources();
         ExecutaPasses();
-		Allocator.Reset();
         ApplyFinalStates();
     }
 
@@ -279,7 +278,7 @@ namespace RenderCore {
 
         auto IsUAV = [](ERHIResourceAccess A)
             {
-                return EnumHasAnyFlags(A, ERHIResourceAccess::UAVMask);
+                return EnumHasAnyFlags(A, ERHIResourceAccess::UAV);
             };
 
         auto NeedBarrier = [&](ERHIResourceAccess Before, ERHIResourceAccess After)
@@ -749,10 +748,7 @@ namespace RenderCore {
                         );
 
                         // SRV → ReadOnly
-                        Intent.RequiredAccess =
-                            (Pass->GetPassFlag() == EPassFlag::Compute)
-                            ? ERHIResourceAccess::SRVCompute
-                            : ERHIResourceAccess::SRVGraphics;
+                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
                         Pass->TextureIntents.push_back(Intent);
                     }
@@ -786,10 +782,7 @@ namespace RenderCore {
                         );
 
                         // UAV → ReadWrite
-                        Intent.RequiredAccess =
-                            (Pass->GetPassFlag() == EPassFlag::Compute)
-                            ? ERHIResourceAccess::UAVCompute
-                            : ERHIResourceAccess::UAVGraphics;
+                        Intent.RequiredAccess = ERHIResourceAccess::UAV;
 
                         Pass->TextureIntents.push_back(Intent);
                     }
@@ -807,10 +800,7 @@ namespace RenderCore {
                         Intent.Texture = Tex;
                         Intent.SubresourceRange = RHISubresourceRange(); // whole
 
-                        Intent.RequiredAccess =
-                            (Pass->GetPassFlag() == EPassFlag::Compute)
-                            ? ERHIResourceAccess::SRVCompute
-                            : ERHIResourceAccess::SRVGraphics;
+                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
                         Pass->TextureIntents.push_back(Intent);
                     }
@@ -830,10 +820,7 @@ namespace RenderCore {
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
 
-                        Intent.RequiredAccess =
-                            (Pass->GetPassFlag() == EPassFlag::Compute)
-                            ? ERHIResourceAccess::SRVCompute
-                            : ERHIResourceAccess::SRVGraphics;
+                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
                         Pass->BufferStates.push_back(Intent);
                     }
@@ -853,10 +840,7 @@ namespace RenderCore {
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
 
-                        Intent.RequiredAccess =
-                            (Pass->GetPassFlag() == EPassFlag::Compute)
-                            ? ERHIResourceAccess::UAVCompute
-                            : ERHIResourceAccess::UAVGraphics;
+                        Intent.RequiredAccess = ERHIResourceAccess::UAV;
 
                         Pass->BufferStates.push_back(Intent);
                     }
@@ -874,10 +858,7 @@ namespace RenderCore {
                         RenderGraphPass::RenderGraphBufferIntent Intent;
                         Intent.Buffer = Buf;
 
-                        Intent.RequiredAccess =
-                            (Pass->GetPassFlag() == EPassFlag::Compute)
-                            ? ERHIResourceAccess::SRVCompute
-                            : ERHIResourceAccess::SRVGraphics;
+                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
                         Pass->BufferStates.push_back(Intent);
                     }

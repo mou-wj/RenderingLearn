@@ -142,6 +142,10 @@ namespace Engine {
         }
         return false;
     }
+    void SceneViewFamily::ClearViews() 
+    {
+        Views.clear();
+    }
 
     SceneView* SceneViewFamily::GetView(int Index)
     {

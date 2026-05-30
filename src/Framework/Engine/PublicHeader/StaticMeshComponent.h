@@ -15,7 +15,7 @@ namespace Engine
 
     class ENGINE_API StaticMeshComponent : public PrimitiveComponent
     {
-        DEFINE_COMPONENT_TYPE(StaticMeshComponent)
+        DECLARE_TYPE_ID_DERIVED_TYPE(StaticMeshComponent, PrimitiveComponent)
 
     public:
         StaticMeshComponent();

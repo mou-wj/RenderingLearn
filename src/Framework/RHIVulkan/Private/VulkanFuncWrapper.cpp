@@ -345,7 +345,9 @@ namespace VKFunc {
 #endif
         VkResult res = vkQueueSubmit(queue, submitCount, pSubmits, fence);
 #ifdef DEBUG_INFO
-        if (res != VK_SUCCESS) { LOG_ERROR("VK: QueueSubmit failed: %d", res); }
+        if (res != VK_SUCCESS) { 
+            LOG_ERROR("VK: QueueSubmit failed: %d", res); 
+        }
 #endif
         return res == VK_SUCCESS;
     }

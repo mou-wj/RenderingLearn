@@ -62,16 +62,14 @@ enum class ERHIResourceAccess
     Present = 1 << 2,  // 交换链呈现 (Swapchain Read)
     IndirectArgs = 1 << 3,  // 间接命令参数 (Indirect Draw/Dispatch)
     VertexOrIndexBuffer = 1 << 4, // 顶点或索引缓冲区读取
-    SRVGraphics = 1 << 5,  // 图形着色器 (VS/PS/etc.) 采样或读取
-    SRVCompute = 1 << 6,  // 计算着色器读取
+    SRV = 1 << 5,  // 图形着色器 (VS/PS/etc.) 采样或读取
     TransferSrc = 1 << 7,  // 拷贝操作的源 (Transfer Src)
     ResolveSrc = 1 << 8,  // 多重采样 Resolve 的源
     DSVRead = 1 << 9,  // 深度/模板只读测试 (Depth Read Only)
     ShadingRateSource = 1 << 10, // 可变速率着色掩码图
 
     // --- 读写语义 (Read-Write) ---
-    UAVGraphics = 1 << 11, // 图形管线随机读写 (Storage Image/Buffer)
-    UAVCompute = 1 << 12, // 计算管线随机读写
+    UAV = 1 << 11, // 图形管线随机读写 (Storage Image/Buffer)
     RenderTargetView = 1 << 13, // 颜色附件写入
     TransferDest = 1 << 14, // 拷贝操作的目的 (Transfer Dst)
     ResolveDst = 1 << 15, // 多重采样 Resolve 的目的
@@ -81,18 +79,15 @@ enum class ERHIResourceAccess
     BVHRead = 1 << 17, // 加速结构读取 (TraceRay/Build Input)
     BVHWrite = 1 << 18, // 加速结构构建写入
 
-    // --- 掩码与常用组合 ---
-    SRVMask = SRVGraphics | SRVCompute,
-    UAVMask = UAVGraphics | UAVCompute,
 
     // 排他性只读掩码（这些状态通常不与写入状态并存）
-    ReadOnlyExclusiveMask = CPURead | Present | IndirectArgs | VertexOrIndexBuffer | SRVMask | TransferSrc | ResolveSrc | BVHRead,
+    ReadOnlyExclusiveMask = CPURead | Present | IndirectArgs | VertexOrIndexBuffer | SRV | TransferSrc | ResolveSrc | BVHRead,
 
     // 可读状态掩码（包含 UAV）
-    ReadableMask = ReadOnlyExclusiveMask | DSVRead | UAVMask,
+    ReadableMask = ReadOnlyExclusiveMask | DSVRead | UAV,
 
     // 可写状态掩码
-    WritableMask = RenderTargetView | UAVMask | DSVWrite | TransferDest | ResolveDst | BVHWrite
+    WritableMask = RenderTargetView | UAV | DSVWrite | TransferDest | ResolveDst | BVHWrite
 };
 // 使用宏
 ENUM_CLASS_FLAGS(ERHIResourceAccess, ERHIResourceAccessFlags);
@@ -104,7 +99,7 @@ enum class ERHIAddressMode { Repeat, ClampToEdge, MirrorClampToEdge, MirrorRepea
 enum class EQueueType
 {
     Graphics,
-    Compute
+	Compute
 }; 
 
 struct RHIFence {

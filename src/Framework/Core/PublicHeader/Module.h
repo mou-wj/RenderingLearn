@@ -67,14 +67,14 @@ public:
     void RegisterModule(const std::string& name, ModulePtr module)
     {
         if (!module) return;
-        std::lock_guard<std::mutex> lg(Mutex);
+        std::lock_guard<std::recursive_mutex> lg(Mutex);
         Modules[name] = module;
     }
 
     // 注销模块
     void UnregisterModule(const std::string& name)
     {
-        std::lock_guard<std::mutex> lg(Mutex);
+        std::lock_guard<std::recursive_mutex> lg(Mutex);
         Modules.erase(name);
     }
 
@@ -95,7 +95,7 @@ public:
     // 获取已注册模块（未找到返回 nullptr）
     ModulePtr GetModule(const std::string& name)
     {
-        std::lock_guard<std::mutex> lg(Mutex);
+        std::lock_guard<std::recursive_mutex> lg(Mutex);
         auto it = Modules.find(name);
         return it != Modules.end() ? it->second : nullptr;
     }
@@ -103,8 +103,8 @@ public:
     // 启动所有已注册模块
     void StartupAll()
     {
-        std::lock_guard<std::mutex> lg(Mutex);
-        std::vector<std::string> SortedModules;
+        std::lock_guard<std::recursive_mutex> lg(Mutex);
+        
         std::unordered_set<std::string> Visited;
         std::unordered_set<std::string> Visiting;
 
@@ -112,7 +112,7 @@ public:
         {
             if (Visited.find(kv.first) == Visited.end())
             {
-                if (!TopologicalSort(kv.first, Visited, Visiting, SortedModules))
+                if (!TopologicalSort(kv.first, Visited, Visiting, SortedOrderedModules))
                 {
                     printf("Failed to sort modules due to circular dependency.\n");
                     return;
@@ -121,7 +121,7 @@ public:
         }
 
         // 按拓扑排序顺序启动模块
-        for (const auto& Name : SortedModules)
+        for (const auto& Name : SortedOrderedModules)
         {
             auto& Mod = Modules[Name];
             if (Mod && !Mod->IsLoaded())
@@ -133,13 +133,13 @@ public:
     // 关闭所有已注册模块
     void ShutdownAll()
     {
-        std::lock_guard<std::mutex> lg(Mutex);
-        for (auto& kv : Modules)
+        std::lock_guard<std::recursive_mutex> lg(Mutex);
+        for (auto it = SortedOrderedModules.rbegin(); it != SortedOrderedModules.rend(); ++it)
         {
-            if (kv.second && kv.second->IsLoaded())
-                kv.second->ShutdownModule();
-        }
-        
+            auto& Mod = Modules[*it];
+            if (Mod && !Mod->IsLoaded())
+                Mod->ShutdownModule();
+        } 
     }
 
 private:
@@ -178,10 +178,10 @@ private:
         SortedModules.push_back(Name); // 拓扑排序完成后加入
         return true;
     }
-
+    std::vector<std::string> SortedOrderedModules;
     std::unordered_map<std::string, ModulePtr> Modules;
     std::unordered_map<std::string, std::vector<std::string>> ModuleDependencies;
-    std::mutex Mutex;
+    std::recursive_mutex Mutex;
 };
 
 // 方便宏：在模块实现文件中快速注册一个模块实例

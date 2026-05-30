@@ -19,23 +19,27 @@ namespace Test {
 
     namespace {
         std::unordered_map<const RHI::RHIViewableResource*, RHI::ERHIResourceAccess> GTrackedResourceAccess;
+        std::unordered_map<const RHI::RHIViewableResource*, RHI::EQueueType> GTrackedResourceQueueTypes;
 
         void TransitionResource(
             RHI::RHIApi* api,
             RHI::RHICommandListBase& cmdList,
             RHI::RHIViewableResource* resource,
             RHI::ERHIResourceAccess currentAccess,
-            RHI::ERHIResourceAccess targetAccess)
+            RHI::ERHIResourceAccess targetAccess,
+            EQueueType currentQueueType,
+            EQueueType targetQueueType)
         {
             if (!api || !resource)
             {
                 return;
             }
 
-            if (currentAccess == targetAccess)
+            if (currentAccess == targetAccess && currentQueueType == targetQueueType)
             {
                 return;
             }
+
 
             std::vector<RHI::RHITransitionInfo> infos;
             if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
@@ -68,7 +72,8 @@ namespace Test {
             RHI::RHIApi* api,
             RHI::RHICommandListBase& cmdList,
             RHI::RHIViewableResource* resource,
-            RHI::ERHIResourceAccess targetAccess)
+            RHI::ERHIResourceAccess targetAccess,
+            EQueueType targetQueueType)
         {
             if (!api || !resource)
             {
@@ -78,7 +83,11 @@ namespace Test {
             const auto it = GTrackedResourceAccess.find(resource);
             const RHI::ERHIResourceAccess currentAccess =
                 it != GTrackedResourceAccess.end() ? it->second : RHI::ERHIResourceAccess::Unknown;
-			TransitionResource(api, cmdList, resource, currentAccess, targetAccess);
+			const auto queueIt = GTrackedResourceQueueTypes.find(resource);
+			const EQueueType currentQueueType =
+				queueIt != GTrackedResourceQueueTypes.end() ? queueIt->second : EQueueType::Graphics;
+			TransitionResource(api, cmdList, resource, currentAccess, targetAccess, currentQueueType, targetQueueType
+            );
         }
     }
 
@@ -97,7 +106,6 @@ public:
     void Setup() override {
         RHI::GRHIApi = new RHIVulkan::VulkanRHIApi();
         RHI::GRHIApi->Init();
-		RenderCore::GShaderCompilationCache = new RenderCore::ShaderCompilationCache();
         auto* api = RHI::GRHIApi;
         if (!api)
         {
@@ -120,8 +128,7 @@ public:
 
     void InitShaderMap()
     {
-        GShaderMap = new GlobalShaderMap();
-        GShaderMap->Initialize();
+        GShaderMap.Initialize();
 
     }
 
@@ -129,7 +136,7 @@ public:
 	{
 		//获取第0好blittextureshader变体
         auto blitShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global]["BlitTextureCS"];
-        blitTextureShader0 = GShaderMap->GetShader(blitShaderType,0);
+        blitTextureShader0 = GShaderMap.GetShader(blitShaderType,0);
         if (!blitTextureShader0) {
             assert(0);
         }
@@ -158,8 +165,6 @@ public:
 
     void InitGlobalResources() 
     {
-        GRenderTargetPool = new RenderTargetPool();
-        GTransientResourceAllocator = new TransientResourceAllocator();
     }
 
     void Run() override {
@@ -192,17 +197,17 @@ public:
             cmd.SetImmediate(true);
             cmd.Begin();
 
-            TransitionResource(api, cmd, randomTex.get()->GetRHI(), ERHIResourceAccess::TransferDest);
+            TransitionResource(api, cmd, randomTex.get()->GetRHI(), ERHIResourceAccess::TransferDest,EQueueType::Compute);
 
             api->UpdateTexture(cmd, randomTex.get()->GetRHI(), randomData.data(),
                 RHIUpdateTextureRegion::Create2DRegion(randomTexDesc.Width, randomTexDesc.Height));
 
-            TransitionResource(api, cmd, randomTex.get()->GetRHI(), ERHIResourceAccess::SRVCompute);
+            TransitionResource(api, cmd, randomTex.get()->GetRHI(), ERHIResourceAccess::SRV,EQueueType::Compute);
 
             cmd.End();
 
             queue->ExecuteContext({ ctx }, {});
-            randomTex->GetTracker().UpdateSubresourceAccess(RHI::RHISubresourceRange{}, ERHIResourceAccess::SRVCompute);
+            randomTex->GetTracker().UpdateSubresourceAccess(RHI::RHISubresourceRange{}, ERHIResourceAccess::SRV);
         }
 
         // =========================================
@@ -221,7 +226,7 @@ public:
                 ERHITextureCreateFlag::TransferSrc |
                 ERHITextureCreateFlag::TransferDest;
 
-            auto renderTarget = GRenderTargetPool->GetFreeRenderTarget(rtDesc);
+            auto renderTarget = GRenderTargetPool.GetFreeRenderTarget(rtDesc);
             renderTarget->MarkUsed(true);
             // -------------------------------------
             // RDG 构建
@@ -289,10 +294,10 @@ public:
             cmd.SetImmediate(true);
             cmd.Begin();
             
-            TransitionResource(api, cmd, renderTarget->GetRHI(), renderTarget->GetTracker().GetSubresourceAccess(RHI::RHISubresourceRange{}), ERHIResourceAccess::TransferSrc);
+            TransitionResource(api, cmd, renderTarget->GetRHI(), renderTarget->GetTracker().GetSubresourceAccess(RHI::RHISubresourceRange{}), ERHIResourceAccess::TransferSrc,EQueueType::Compute, EQueueType::Compute);
 
 
-            TransitionResource(api, cmd, backTexture, ERHIResourceAccess::TransferDest);
+            TransitionResource(api, cmd, backTexture, ERHIResourceAccess::TransferDest, EQueueType::Compute);
             RHI::RHIBlitTextureDesc blit{};
             blit.SrcRegion.Width = texDesc.Width;
             blit.SrcRegion.Height = texDesc.Height;
@@ -300,7 +305,7 @@ public:
             blit.DstRegion.Height = FrameHeight;
             cmd.BlitTexture(renderTarget->GetRHI(), backTexture, blit);
             
-            TransitionResource(api, cmd, backTexture, ERHIResourceAccess::Present);
+            TransitionResource(api, cmd, backTexture, ERHIResourceAccess::Present, EQueueType::Compute);
             
             cmd.End();
             std::vector<RHI::RHIWaitInfo> waitInfos;
@@ -330,10 +335,8 @@ public:
 
     void Teardown() override {
         // 资源清理如有需要可补充
-        GRenderTargetPool->Clear();
-        GShaderMap->Clear();
-        delete GRenderTargetPool;
-        delete GShaderMap;
+        GRenderTargetPool.Clear();
+        GShaderMap.Clear();
 		ComputePipelineState.reset();
         Swapchain.reset();
         Window.reset();

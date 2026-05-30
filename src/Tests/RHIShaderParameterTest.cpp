@@ -15,53 +15,77 @@ using namespace RenderCore;
 namespace Test {
 
 namespace {
-std::unordered_map<const RHI::RHIViewableResource*, RHI::ERHIResourceAccess> GTrackedResourceAccess;
+    std::unordered_map<const RHI::RHIViewableResource*, RHI::ERHIResourceAccess> GTrackedResourceAccess;
+    std::unordered_map<const RHI::RHIViewableResource*, RHI::EQueueType> GTrackedResourceQueueTypes;
 
-void TransitionResource(
-    RHI::RHIApi* api,
-    RHI::RHICommandListBase& cmdList,
-    RHI::RHIViewableResource* resource,
-    RHI::ERHIResourceAccess targetAccess)
-{
-    if (!api || !resource)
+    void TransitionResource(
+        RHI::RHIApi* api,
+        RHI::RHICommandListBase& cmdList,
+        RHI::RHIViewableResource* resource,
+        RHI::ERHIResourceAccess currentAccess,
+        RHI::ERHIResourceAccess targetAccess,
+        EQueueType currentQueueType,
+        EQueueType targetQueueType)
     {
-        return;
+        if (!api || !resource)
+        {
+            return;
+        }
+
+        if (currentAccess == targetAccess && currentQueueType == targetQueueType)
+        {
+            return;
+        }
+
+
+        std::vector<RHI::RHITransitionInfo> infos;
+        if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
+        {
+            infos.emplace_back(texture, currentAccess, targetAccess);
+        }
+        else if (auto* buffer = dynamic_cast<RHI::RHIBuffer*>(resource))
+        {
+            infos.emplace_back(buffer, currentAccess, targetAccess);
+        }
+        else
+        {
+            return;
+        }
+
+        char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+        auto* transition = new(transitionMem) RHI::RHITransition();
+        api->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+
+        cmdList.BeginTransitions({ transition });
+        cmdList.EndTransitions({ transition });
+
+        GTrackedResourceAccess[resource] = targetAccess;
+        api->RHIReleaseTransition(transition);
+        delete[] transitionMem;
     }
 
-    const auto it = GTrackedResourceAccess.find(resource);
-    const RHI::ERHIResourceAccess currentAccess =
-        it != GTrackedResourceAccess.end() ? it->second : RHI::ERHIResourceAccess::Unknown;
 
-    if (currentAccess == targetAccess)
+    void TransitionResource(
+        RHI::RHIApi* api,
+        RHI::RHICommandListBase& cmdList,
+        RHI::RHIViewableResource* resource,
+        RHI::ERHIResourceAccess targetAccess,
+        EQueueType targetQueueType)
     {
-        return;
-    }
+        if (!api || !resource)
+        {
+            return;
+        }
 
-    std::vector<RHI::RHITransitionInfo> infos;
-    if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
-    {
-        infos.emplace_back(texture, currentAccess, targetAccess);
+        const auto it = GTrackedResourceAccess.find(resource);
+        const RHI::ERHIResourceAccess currentAccess =
+            it != GTrackedResourceAccess.end() ? it->second : RHI::ERHIResourceAccess::Unknown;
+        const auto queueIt = GTrackedResourceQueueTypes.find(resource);
+        const EQueueType currentQueueType =
+            queueIt != GTrackedResourceQueueTypes.end() ? queueIt->second : EQueueType::Graphics;
+        TransitionResource(api, cmdList, resource, currentAccess, targetAccess, currentQueueType, targetQueueType
+        );
     }
-    else if (auto* buffer = dynamic_cast<RHI::RHIBuffer*>(resource))
-    {
-        infos.emplace_back(buffer, currentAccess, targetAccess);
-    }
-    else
-    {
-        return;
-    }
-
-    char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
-    auto* transition = new(transitionMem) RHI::RHITransition();
-    api->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
-
-    cmdList.BeginTransitions({ transition });
-    cmdList.EndTransitions({ transition });
-
-    GTrackedResourceAccess[resource] = targetAccess;
-    api->RHIReleaseTransition(transition);
-    delete[] transitionMem;
-}
 }
 
 // 常量缓冲结构体
@@ -83,7 +107,6 @@ public:
     {
         RHI::GRHIApi = new RHIVulkan::VulkanRHIApi();
         RHI::GRHIApi->Init();
-        RenderCore::GShaderCompilationCache = new RenderCore::ShaderCompilationCache();
         auto* api = RHI::GRHIApi;
         if (!api)
             return;
@@ -143,14 +166,14 @@ public:
                 cbData.bFlipBufferHorizontal = 1;
             }
 
-            TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::TransferDest);
+            TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::TransferDest,EQueueType::Compute);
             api->UpdateBuffer(cmdList, ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
-            TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
+            TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRV, EQueueType::Compute);
 
-            TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
-            TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRVCompute);
-            TransitionResource(api, cmdList, OutputTexture.get(), RHI::ERHIResourceAccess::UAVCompute);
-            TransitionResource(api, cmdList, OutputBuffer.get(), RHI::ERHIResourceAccess::UAVCompute);
+            TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRV, EQueueType::Compute);
+            TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRV, EQueueType::Compute);
+            TransitionResource(api, cmdList, OutputTexture.get(), RHI::ERHIResourceAccess::UAV, EQueueType::Compute);
+            TransitionResource(api, cmdList, OutputBuffer.get(), RHI::ERHIResourceAccess::UAV, EQueueType::Compute);
 
 
             std::optional<ShaderParameterAllocation> alloc;
@@ -255,15 +278,15 @@ public:
             auto* backTexture = swapchainSlot.Texture;
             if (backTexture)
             {
-                TransitionResource(api, cmdList, OutputTexture.get(), RHI::ERHIResourceAccess::TransferSrc);
-                TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::TransferDest);
+                TransitionResource(api, cmdList, OutputTexture.get(), RHI::ERHIResourceAccess::TransferSrc, EQueueType::Compute);
+                TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::TransferDest, EQueueType::Compute);
                 RHI::RHIBlitTextureDesc blit{};
                 blit.SrcRegion.Width = 2;
                 blit.SrcRegion.Height = 2;
                 blit.DstRegion.Width = FrameWidth;
                 blit.DstRegion.Height = FrameHeight;
                 cmdList.BlitTexture(OutputTexture.get(), backTexture, blit);
-                TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::Present);
+                TransitionResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::Present, EQueueType::Graphics);
             }
 
 
@@ -315,9 +338,7 @@ public:
         api->Shutdown();
         //delete api; //delete 会报错
         RHI::GRHIApi = nullptr;
-
-        delete RenderCore::GShaderCompilationCache;
-        RenderCore::GShaderCompilationCache = nullptr;
+        
     }
 
 private:
@@ -453,9 +474,9 @@ private:
         RHI::RHIComputeCommandList cmdList(computeContext);
         cmdList.SetImmediate(true);
         cmdList.Begin();
-        TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::TransferDest);
+        TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::TransferDest, EQueueType::Compute);
         api->UpdateTexture(cmdList, TestTexture.get(), texData, RHI::RHIUpdateTextureRegion::Create2DRegion(2, 2));
-        TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRVCompute);
+        TransitionResource(api, cmdList, TestTexture.get(), RHI::ERHIResourceAccess::SRV, EQueueType::Compute);
         cmdList.End();
         cmdList.ExecuteAll();
         queue->ExecuteContext(computeContext);
@@ -479,9 +500,9 @@ private:
         glm::vec4 bufferData = glm::vec4(0.25f, 0.5f, 0.75f, 1.0f);
         cmdList.SetImmediate(true);
         cmdList.Begin();
-        TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::TransferDest);
+        TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::TransferDest, EQueueType::Compute);
         api->UpdateBuffer(cmdList, TestBuffer.get(), &bufferData, { 0, sizeof(bufferData) });
-        TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
+        TransitionResource(api, cmdList, TestBuffer.get(), RHI::ERHIResourceAccess::SRV, EQueueType::Compute);
         cmdList.End();
         cmdList.ExecuteAll();
         queue->ExecuteContext(computeContext);
@@ -555,9 +576,9 @@ private:
         RHI::RHIComputeCommandList cmdList(computeContext);
         cmdList.SetImmediate(true);
         cmdList.Begin();
-        TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::TransferDest);
+        TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::TransferDest, EQueueType::Compute);
         api->UpdateBuffer(cmdList, ConstantBuffer.get(), &cbData, { 0, sizeof(cbData) });
-        TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRVCompute);
+        TransitionResource(api, cmdList, ConstantBuffer.get(), RHI::ERHIResourceAccess::SRV, EQueueType::Compute);
         cmdList.End();
         cmdList.ExecuteAll();
         queue->ExecuteContext(computeContext);

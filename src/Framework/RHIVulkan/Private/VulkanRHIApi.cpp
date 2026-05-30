@@ -480,42 +480,6 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
 		}
 	};
 
-	auto ResolveQueueTypeFromAccess = [](ERHIResourceAccess access) -> EQueueType
-	{
-		if (access == ERHIResourceAccess::Unknown || access == ERHIResourceAccess::Undefined)
-		{
-			return EQueueType::Graphics;
-		}
-
-		const ERHIResourceAccessFlags accessFlags(access);
-
-		const bool hasCompute =
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::SRVCompute) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::UAVCompute);
-
-		const bool hasGraphics =
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::SRVGraphics) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::UAVGraphics) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::RenderTargetView) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::DSVRead) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::DSVWrite) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::Present) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::VertexOrIndexBuffer) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::IndirectArgs);
-
-		const bool hasTransfer =
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::TransferSrc) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::TransferDest) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveSrc) ||
-			EnumHasAnyFlags(accessFlags, ERHIResourceAccess::ResolveDst);
-
-		if (hasCompute && !hasGraphics)
-		{
-			return EQueueType::Compute;
-		}
-
-		return EQueueType::Graphics;
-	};
 
     for (const auto& transitionInfo : CreateInfo.TransitionInfos)
     {
@@ -535,8 +499,8 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
                 continue;
             }
 
-			const EQueueType srcQueueType = ResolveQueueTypeFromAccess(accessBefore);
-			const EQueueType dstQueueType = ResolveQueueTypeFromAccess(accessAfter);
+			const EQueueType srcQueueType = transitionInfo.QueueTypeBefore;
+			const EQueueType dstQueueType = transitionInfo.QueueTypeAfter;
 			const uint32_t srcQueueFamilyIndex = ResolveQueueFamilyIndex(srcQueueType);
 			const uint32_t dstQueueFamilyIndex = ResolveQueueFamilyIndex(dstQueueType);
 			const bool crossQueueOwnership = srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED
@@ -574,8 +538,8 @@ void VulkanRHIApi::RHICreateTransition(RHITransition* Transition, const RHITrans
 				subresourceRange.baseArrayLayer = vulkanUAV->GetBaseArrayLayer();
 				subresourceRange.layerCount = vulkanUAV->GetLayerCount();
 
-				const EQueueType srcQueueType = ResolveQueueTypeFromAccess(transitionInfo.AccessBefore);
-				const EQueueType dstQueueType = ResolveQueueTypeFromAccess(transitionInfo.AccessAfter);
+				const EQueueType srcQueueType = transitionInfo.QueueTypeBefore;
+				const EQueueType dstQueueType = transitionInfo.QueueTypeAfter;
 				const uint32_t srcQueueFamilyIndex = ResolveQueueFamilyIndex(srcQueueType);
 				const uint32_t dstQueueFamilyIndex = ResolveQueueFamilyIndex(dstQueueType);
 				const bool crossQueueOwnership = srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED
@@ -760,6 +724,9 @@ void VulkanRHIModule::StartupModule()
 
 void VulkanRHIModule::ShutdownModule()
 {
+	
+	delete RHI::GRHIApi;
+	RHI::GRHIApi = nullptr;
 	bLoaded = false;
 }
 

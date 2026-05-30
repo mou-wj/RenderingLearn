@@ -24,6 +24,8 @@
 #include "LocalVertexFactory.h"
 #include "RHIPipelineStateCache.h"
 #include "Camera.h"
+#include "StaticMeshProcess.h"
+#include "StaticMeshProxy.h"
 using namespace RenderCore;
 using namespace Engine;
 using namespace Renderer;
@@ -110,7 +112,6 @@ namespace Test {
         void Setup() override {
             RHI::GRHIApi = new RHIVulkan::VulkanRHIApi();
             RHI::GRHIApi->Init();
-            RenderCore::GShaderCompilationCache = new RenderCore::ShaderCompilationCache();
             auto* api = RHI::GRHIApi;
             if (!api)
             {
@@ -148,8 +149,6 @@ namespace Test {
 
         void InitGlobalResources()
         {
-            GRenderTargetPool = new RenderTargetPool();
-            GTransientResourceAllocator = new TransientResourceAllocator();
             GMeshMaterialShaderMap.Initialize();
         }
 
@@ -259,7 +258,7 @@ namespace Test {
                     ERHITextureCreateFlag::TransferDest;
                 rtDesc.DebugName = "ColorTarget";
 
-                auto renderTarget = GRenderTargetPool->GetFreeRenderTarget(rtDesc);
+                auto renderTarget = GRenderTargetPool.GetFreeRenderTarget(rtDesc);
                 renderTarget->MarkUsed();
                 PoolRenderTargetDesc depthTargetDesc{};
                 depthTargetDesc.Width = texDesc.Width;
@@ -268,7 +267,7 @@ namespace Test {
                 depthTargetDesc.Usage = ERHITextureCreateFlag::DepthStencil;
                 depthTargetDesc.DebugName = "DepthTarget";
 
-                auto depthRenderTarget = GRenderTargetPool->GetFreeRenderTarget(depthTargetDesc);
+                auto depthRenderTarget = GRenderTargetPool.GetFreeRenderTarget(depthTargetDesc);
                 depthRenderTarget->MarkUsed();
 
                 Camera camera;
@@ -287,13 +286,11 @@ namespace Test {
                 SceneViewFamily sceneViewFamily;
                 sceneViewFamily.Scene = scene;
                 sceneViewFamily.AddView(sceneView);
-                RenderTarget target;
-                target.RenderTarget = renderTarget->GetRHI();
-                sceneViewFamily.RenderTarget = &target;
                 auto meshSceneProxy = staticMeshComponent->CreateSceneProxy();
                 MeshBatchList list;
-                meshSceneProxy->GetMeshBatches(sceneView,list);
-
+                std::vector<Engine::StaticMeshProxy*> meshs;
+                meshs.push_back(dynamic_cast<Engine::StaticMeshProxy*>(meshSceneProxy));
+                Renderer::StaticMeshDrawBuild(meshs, list);
                 // -------------------------------------
                 // RDG 构建
                 // -------------------------------------
@@ -454,8 +451,7 @@ namespace Test {
             // 资源清理如有需要可补充
             GMeshMaterialShaderMap.Clear();
             RHIPipelineStateCache::ClearAll();
-            GRenderTargetPool->Clear();
-            delete GRenderTargetPool;
+            GRenderTargetPool.Clear();
             Swapchain.reset();
             Window.reset();
             samplerSP.reset();

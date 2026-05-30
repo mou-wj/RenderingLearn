@@ -213,59 +213,5 @@ namespace RenderCore
         int MaxIncludeDepth = 10;
     };
 
-    // ============================================================
-    // Thread-Safe Shader Compilation Cache
-    // ============================================================
-
-    class RENDERCORE_API ShaderCompilationCache
-    {
-    public:
-        ShaderCompilationCache() = default;
-        ~ShaderCompilationCache() = default;
-
-        ShaderCompilationOutput GetOrCompile(
-            ShaderCompiler& compiler,
-            const ShaderCompileInput& input)
-        {
-            std::lock_guard<std::mutex> lock(CacheMutex);
-
-            auto it = Cache.find(input);
-            if (it != Cache.end())
-            {
-                return it->second;
-            }
-
-            ShaderCompilationOutput output = compiler.Compile(input);
-            Cache.emplace(input, output);
-
-            return output;
-        }
-
-        const ShaderCompilationOutput* Find(
-            const ShaderCompileInput& input) const
-        {
-            std::lock_guard<std::mutex> lock(CacheMutex);
-
-            auto it = Cache.find(input);
-            if (it != Cache.end())
-                return &it->second;
-
-            return nullptr;
-        }
-
-        void Clear()
-        {
-            std::lock_guard<std::mutex> lock(CacheMutex);
-            Cache.clear();
-        }
-
-    private:
-        mutable std::mutex CacheMutex;
-        std::unordered_map<ShaderCompileInput, ShaderCompilationOutput> Cache;
-    };
-
-    extern RENDERCORE_API ShaderCompilationCache* GShaderCompilationCache;
-
-
 
 } // namespace RenderCore

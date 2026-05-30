@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <memory>
 #include "RHIDefine.h"
+#include "RHIApi.h"
 
 namespace std {
     template<>
@@ -124,5 +125,45 @@ private:
     RHI::ERHIResourceAccess BufferAccess = RHI::ERHIResourceAccess::Unknown;
 };
 
+inline void TransitionResource(
+    RHI::RHIApi* api,
+    RHI::RHICommandListBase& cmdList,
+    RHI::RHIViewableResource* resource,
+    RHI::ERHIResourceAccess currentAccess,
+    RHI::ERHIResourceAccess targetAccess)
+{
+    if (!api || !resource)
+    {
+        return;
+    }
 
+    if (currentAccess == targetAccess)
+    {
+        return;
+    }
+
+    std::vector<RHI::RHITransitionInfo> infos;
+    if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
+    {
+        infos.emplace_back(texture, currentAccess, targetAccess);
+    }
+    else if (auto* buffer = dynamic_cast<RHI::RHIBuffer*>(resource))
+    {
+        infos.emplace_back(buffer, currentAccess, targetAccess);
+    }
+    else
+    {
+        return;
+    }
+
+    char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+    auto* transition = new(transitionMem) RHI::RHITransition();
+    api->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+
+    cmdList.BeginTransitions({ transition });
+    cmdList.EndTransitions({ transition });
+
+    api->RHIReleaseTransition(transition);
+    delete[] transitionMem;
+}
 } // namespace RenderCore

@@ -36,6 +36,7 @@ namespace Engine {
         }
     }
     void MeshMaterialShaderMap::Clear() {
+        ShaderMap.clear();
     }
     RenderCore::Shader* MeshMaterialShaderMap::GetShader(
         const MeshMaterialShaderKey& key
@@ -153,6 +154,9 @@ namespace Engine {
             }
             
         }
+    }
+    void MaterialShaderMap::Clear() {
+        ShaderMap.clear();
     }
     RenderCore::Shader* MaterialShaderMap::GetShader(
         const MaterialShaderKey& key

@@ -148,10 +148,10 @@ void RenderBuffer::UploadData(const void* data, uint32_t size, uint32_t offset) 
 }
 
 
-RenderTargetPool* GRenderTargetPool = nullptr;
+RenderTargetPool GRenderTargetPool;
 
 
-TransientResourceAllocator* GTransientResourceAllocator = nullptr;
+TransientResourceAllocator GTransientResourceAllocator;
 
 // 分配或复用 RenderTarget（重命名GetFreeRenderTarget，增加垃圾回收和分配管理）
 std::shared_ptr<PooledRenderTarget> RenderTargetPool::GetFreeRenderTarget(
@@ -235,7 +235,7 @@ bool InitGlobalRenderResource() {
     return true;
 }
 void ReleaseGlobalRenderResource() {
-
+	GlobalTestTexture.reset();
 }
 
 RenderTextureSP CreateTexture(const std::string& Path)
@@ -265,7 +265,7 @@ RenderTextureSP CreateTexture(const std::string& Path)
 
 	desc.Type = ERHITextureType::Texture2D;
 	desc.SampleCount = 1;
-	desc.Usage = ERHITextureCreateFlag::ShaderResource;
+	desc.Usage = ERHITextureCreateFlag::ShaderResource | ERHITextureCreateFlag::TransferSrc | ERHITextureCreateFlag::TransferDest;
 
 	// 如果需要生成 Mips，确保 Usage 包含相应的 Flag (如 RenderTarget 或 UAV，取决于 RHI 实现)
 	desc.bGenerateMips = false;
@@ -278,14 +278,22 @@ RenderTextureSP CreateTexture(const std::string& Path)
 
 	RenderCore::RenderTextureSP outTexture = nullptr;
 
-	ExecuteSync("Create Texture", [&outTexture, &desc, pixels](RHI::RHICommandListBase& commandList) {
+	// 3. 调用 RHI 创建纹理
+	outTexture = std::make_shared<RenderCore::RenderTexture>(desc);
+	outTexture->InitRHIResource();
+	auto graphphicContex = GRHIApi->GetQueue(EQueueType::Graphics)->AcquireCastedCommandContext<RHIGraphicContex>();
 
-		// 3. 调用 RHI 创建纹理
-		RHITextureSP texture = GRHIApi->CreateTexture(desc);
-		GRHIApi->UpdateTexture(commandList, texture.get(), pixels, RHIUpdateTextureRegion::Create2DRegion(desc.Width,desc.Height));
-		outTexture = std::make_shared<RenderCore::RenderTexture>(desc);
-		outTexture->InitRHIResource();
-		});
+	RHIGraphicCommandList cmd(graphphicContex);
+	cmd.SetImmediate(true);
+	cmd.Begin();
+	TransitionResource(GRHIApi, cmd, outTexture->GetRHI(), ERHIResourceAccess::Unknown, ERHIResourceAccess::TransferDest);
+	GRHIApi->UpdateTexture(cmd, outTexture->GetRHI(), pixels, RHIUpdateTextureRegion::Create2DRegion(desc.Width, desc.Height));
+	cmd.End();
+	cmd.ExecuteAll();
+	auto fence = GRHIApi->GetQueue(EQueueType::Graphics)->ExecuteContext({ graphphicContex }, {});
+	outTexture->GetTracker().UpdateLastAccessFence(fence);
+	outTexture->GetTracker().UpdateSubresourceAccess(RHI::RHISubresourceRange{}, ERHIResourceAccess::TransferDest);
+
 
 	// 4. 释放 stb_image 分配的 CPU 内存
 	stbi_image_free(pixels);

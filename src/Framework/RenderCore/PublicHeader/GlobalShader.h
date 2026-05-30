@@ -88,7 +88,7 @@ private:
     // ´æ´¢½á¹¹£ºShaderType -> PermutationID -> ShaderInstance
     std::unordered_map<ShaderType*, std::unordered_map<ShaderPermutationId, ShaderSP>> ShaderMap;
 };
-extern RENDERCORE_API GlobalShaderMap* GShaderMap;
+extern RENDERCORE_API GlobalShaderMap GShaderMap;
 
 
 } // namespace RenderCore

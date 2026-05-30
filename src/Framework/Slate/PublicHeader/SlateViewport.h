@@ -1,8 +1,10 @@
 #pragma once
+#include "Widget.h"
 namespace Slate {
 
-    class SLATE_API SlateViewport
+    class SLATE_API SlateViewport : public Widget
     {
+		DECLARE_TYPE_ID_DERIVED_TYPE(SlateViewport, Widget)
     public:
         virtual ~SlateViewport() = default;
 
