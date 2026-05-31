@@ -5,6 +5,8 @@
 #include "VulkanResource.h"
 #include "VulkanSwapchain.h"
 #include "VulkanFuncWrapper.h"
+#include "Log.h"
+#include "Timer.h"
 #include <stdexcept>
 #include <cassert>
 #include <algorithm>
@@ -116,6 +118,12 @@ void VulkanQueue::GarbageCollect()
             for (auto cmd : front.Cmds) {
                 cmd->MarkState(VulkanCommandBuffer::NeedRecycle);
             }
+            for (auto contex : front.Contexts) {
+				ReleaseCommandContext(contex);
+            }
+            for (auto sem : front.PendingBinarySemaphores) {
+                device_->GetSemaphoreManager()->Release(sem);
+            }
             PendingInfos.pop();
             continue;
         }
@@ -142,13 +150,17 @@ RHI::EQueueType VulkanQueue::GetType() const
 RHI::RHIContextBase* VulkanQueue::AcquireCommandContext()
 {
     std::lock_guard<std::mutex> lock(ContextPoolMutex_);
+    //LOG_INFO("duration time %f s", Core::Timer::GetGlobalInstance().GetDelta());
     if (!FreeContexts_.empty())
     {
         VulkanCommandContext* ctx = FreeContexts_.back();
         FreeContexts_.pop_back();
         return ctx;
     }
-
+    if (QueueType_ == EQueueType::Graphics) {
+        LOG_INFO("%s", "create context");
+    }
+   
     VulkanCommandContext* ctx = CreateQueueContext(device_, this, QueueType_);
     AllContexts_.push_back(ctx);
     return ctx;
@@ -180,6 +192,7 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     std::vector<VkSemaphore> waitHandles;
     std::vector<uint64_t> waitValues;
     std::vector<VkPipelineStageFlags> waitStages;
+    std::vector<VulkanSemaphore*> pendingSeamphores;
 
     for (const auto& waitInfo : WaitInfos)
     {
@@ -215,6 +228,7 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
             // Binary Semaphore 直接等待即可，无需 Value
             waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
             waitValues.push_back(0);
+            pendingSeamphores.push_back(vkSyncPoint->GetSemaphore());
         }
         else {
             waitHandles.push_back(vkSyncPoint->GetSemaphore()->GetHandle());
@@ -230,9 +244,12 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     // 3. 收集所有的 Command Buffers
     std::vector<VkCommandBuffer> cmdHandles;
     std::vector<VulkanCommandBuffer*> cmdBuffers;
+    std::vector<VulkanCommandContext*> vkcontexts;
     for (auto* context : Contexts)
     {
+		
         VulkanCommandContext* vkCtx = dynamic_cast<VulkanCommandContext*>(context);
+        vkcontexts.push_back(vkCtx);
         auto recorededCmdBuffer = vkCtx->GetRecordedCommandBuffer();
         if (recorededCmdBuffer) {
             cmdHandles.push_back(recorededCmdBuffer->GetHandle());
@@ -274,7 +291,12 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     // 5. 资源回收与状态更新
     device_->ReleaseDeferredResources();
     GarbageCollect();
-    PendingInfos.push({ cmdBuffers ,signalValue});
+    PendingInfo pendingInfo{};
+    pendingInfo.Cmds = cmdBuffers;
+    pendingInfo.FinishedTimelineValue = signalValue;
+    pendingInfo.Contexts = vkcontexts;
+    pendingInfo.PendingBinarySemaphores = pendingSeamphores;
+    PendingInfos.push(pendingInfo);
     // 6. 返回 Fence：它本质上是同步点和数值的组合
     RHI::RHIFence result{};
     result.QueueType = SubmitSyncPoint_->GetQueueType();

@@ -793,7 +793,13 @@ namespace RHIVulkan {
         void SetViewport(const VkViewport& viewport)
         {
             Viewports.clear();
-            Viewports.push_back(viewport);
+            auto revertViewport = viewport;
+            revertViewport.y =
+                revertViewport.y + revertViewport.height;
+
+            revertViewport.height =
+                -revertViewport.height;
+            Viewports.push_back(revertViewport);
             ViewportDiry = true;
         }
 

@@ -286,7 +286,7 @@ RenderTextureSP CreateTexture(const std::string& Path)
 	RHIGraphicCommandList cmd(graphphicContex);
 	cmd.SetImmediate(true);
 	cmd.Begin();
-	TransitionResource(GRHIApi, cmd, outTexture->GetRHI(), ERHIResourceAccess::Unknown, ERHIResourceAccess::TransferDest);
+	TransitionResource(GRHIApi, cmd, outTexture->GetRHI(), ERHIResourceAccess::Unknown, ERHIResourceAccess::TransferDest,EQueueType::Graphics,EQueueType::Graphics);
 	GRHIApi->UpdateTexture(cmd, outTexture->GetRHI(), pixels, RHIUpdateTextureRegion::Create2DRegion(desc.Width, desc.Height));
 	cmd.End();
 	cmd.ExecuteAll();

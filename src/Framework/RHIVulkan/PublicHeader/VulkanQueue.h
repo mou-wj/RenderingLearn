@@ -58,6 +58,8 @@ private:
     struct PendingInfo {
         std::vector<VulkanCommandBuffer*> Cmds;
         uint64_t FinishedTimelineValue;
+        std::vector<VulkanCommandContext*> Contexts;
+        std::vector<VulkanSemaphore*> PendingBinarySemaphores;
     };
     std::queue<PendingInfo> PendingInfos;
 

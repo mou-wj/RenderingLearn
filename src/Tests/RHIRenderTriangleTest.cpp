@@ -225,7 +225,7 @@ public:
             return;
         }
 		api->Shutdown();
-        delete api;
+        //delete api;
     }
 
 private:

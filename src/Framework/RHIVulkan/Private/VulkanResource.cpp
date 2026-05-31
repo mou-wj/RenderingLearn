@@ -681,7 +681,8 @@ VulkanRHISwapchain::VulkanRHISwapchain(VulkanDevice* device, uint32_t width, uin
     CreateSwapchain();
     acquireSemaphores.resize(swapchainImages_.size());
     for (int i = 0; i < swapchainImages_.size(); i++) {
-        acquireSemaphores[i] = new VulkanRHISyncPoint(device,device->GetPresentQueue()->GetType(),0,true);
+        auto semaphore = Device->GetSemaphoreManager()->Acquire();
+        acquireSemaphores[i] = new VulkanRHISyncPoint(device,device->GetPresentQueue()->GetType(), semaphore);
     }
 }
 
@@ -731,12 +732,12 @@ void VulkanRHISwapchain::Present(VulkanQueue* presentQueue, const RHI::RHIWaitIn
 
         // 从对象池或 Swapchain 预留的信号量中获取一个临时的 Binary Semaphore
         VulkanSemaphore* bridgeSemaphore = Device->GetSemaphoreManager()->Acquire(true);
-        presentSemaphores.push(bridgeSemaphore);
-        if (presentSemaphores.size() > backBufferTextures.size()) {
-            auto finishedSemaphore = presentSemaphores.front();
-            presentSemaphores.pop();
-            Device->GetSemaphoreManager()->Release(finishedSemaphore);
-        }
+        //presentSemaphores.push(bridgeSemaphore);
+        //if (presentSemaphores.size() > backBufferTextures.size()) {
+        //    auto finishedSemaphore = presentSemaphores.front();
+        //    presentSemaphores.pop();
+        //    Device->GetSemaphoreManager()->Release(finishedSemaphore);
+        //}
 
         // 执行桥接提交
         presentQueue->SubmitEmptyWithDependency(
@@ -787,6 +788,7 @@ void VulkanRHISwapchain::Resize(uint32_t inWidth, uint32_t inHeight)
     Height = inHeight;
     DestroySwapchain();
     CreateSwapchain();
+
 }
 
 VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
@@ -794,7 +796,8 @@ VulkanTextureSP VulkanRHISwapchain::GetBackTexture()
     if (currentBackBufferIndex != -1) {
         return backBufferTextures[currentBackBufferIndex];
     }
-
+    auto seamphore = Device->GetSemaphoreManager()->Acquire();
+    acquireSemaphores[currentIndex]->SetSemaphore(seamphore);
     Swapchain->AcquireNextImage(acquireSemaphores[currentIndex]->GetSemaphore(), &currentBackBufferIndex);
     if (currentBackBufferIndex == -1) {
         return nullptr;
@@ -834,7 +837,11 @@ void VulkanRHISwapchain::CreateSwapchain()
         auto texture = std::make_shared<VulkanTexture>(Device, textureDesc, swapchainImages_[i]);
         backBufferTextures.push_back(texture);
     }
-
+    acquireSemaphores.resize(swapchainImages_.size());
+    for (int i = 0; i < swapchainImages_.size(); i++) {
+        auto semaphore = Device->GetSemaphoreManager()->Acquire();
+        acquireSemaphores[i] = new VulkanRHISyncPoint(Device, Device->GetPresentQueue()->GetType(), semaphore);
+    }
 
 }
 

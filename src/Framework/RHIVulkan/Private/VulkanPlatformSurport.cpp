@@ -126,6 +126,8 @@ namespace RHIVulkan{
 #else
         
 #endif
+        //
+        res.push_back("VK_KHR_maintenance1");
         return res;
     }
 

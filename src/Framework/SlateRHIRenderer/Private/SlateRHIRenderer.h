@@ -17,6 +17,8 @@ namespace SlateRHIRenderer {
 
 	struct WindowViewportInfo {
 		RHI::RHISwapchainSP SwapchainRHI;
+		int Width, Height;
+
 	};
 
 	class SlateRHIRenderer : public Slate::SlateRenderer {
