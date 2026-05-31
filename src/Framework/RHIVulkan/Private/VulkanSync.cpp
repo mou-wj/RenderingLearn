@@ -148,7 +148,7 @@ namespace RHIVulkan{
             return sem;
         }
 
-        VulkanSemaphore* sem = new VulkanSemaphore(device_);
+        VulkanSemaphore* sem = new VulkanSemaphore(device_,true);
         managedObjects_.push_back(sem);
         return sem;
     }
@@ -280,11 +280,22 @@ VulkanRHISyncPoint::VulkanRHISyncPoint(VulkanDevice* device, RHI::EQueueType que
 	: device_(device)
 {
     semaphore_ = new VulkanSemaphore(device_, isBinary,initialValue);
+    ownSemaphore_ = true;
+    Type = queueType;
+}
+
+VulkanRHISyncPoint::VulkanRHISyncPoint(VulkanDevice* device, RHI::EQueueType queueType, VulkanSemaphore* semaphore)
+{
+    ownSemaphore_ = false;
+    semaphore_ = semaphore;
     Type = queueType;
 }
 
 VulkanRHISyncPoint::~VulkanRHISyncPoint() {
-    delete semaphore_;
+    if (ownSemaphore_) {
+        delete semaphore_;
+    }
+    
 }
 
 uint64_t VulkanRHISyncPoint::GetCurrentValue() {

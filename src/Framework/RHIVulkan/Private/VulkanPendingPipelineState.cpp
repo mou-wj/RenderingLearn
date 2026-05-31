@@ -55,6 +55,10 @@ namespace RHIVulkan {
                 
                 lastAllocationOffset = newOffset;
                 buffer.GPUBufferOffset = newOffset;
+                //更新GPUoffset
+                for (auto& bufferBinding : buffer.Bindings) {
+                    bufferBinding.GPUOffset = bufferBinding.CPUOffset + newOffset;
+                }
                 
                 // 复制数据到GPU缓冲区
                 uint8_t* gpuPtr = uploader->GetCPUMappedPointer() + newOffset;

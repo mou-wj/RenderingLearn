@@ -72,7 +72,7 @@ class VulkanSemaphoreManager {
 public:
     VulkanSemaphoreManager(VulkanDevice* device);
     ~VulkanSemaphoreManager();
-
+    // binary semaphore manager
     // requireUnsignaled=true: always create a new unsignaled semaphore.
     // requireUnsignaled=false: reuse from pool when available.
     VulkanSemaphore* Acquire(bool requireUnsignaled = false);
@@ -127,7 +127,13 @@ private:
 class RHIVULKAN_API VulkanRHISyncPoint final : public RHI::RHISyncPoint {
 public:
     VulkanRHISyncPoint(VulkanDevice* device, RHI::EQueueType queueType, uint64_t initialValue = 0,bool isBinary = false);
+    VulkanRHISyncPoint(VulkanDevice* device, RHI::EQueueType queueType, VulkanSemaphore* semaphore);
     ~VulkanRHISyncPoint();
+    void SetSemaphore(VulkanSemaphore* semaphore) { 
+        if (!ownSemaphore_) {
+            semaphore_ = semaphore;
+            }
+        }
 
     // 获取当前 GPU 已经执行到的数值
     uint64_t GetCurrentValue() override;
@@ -141,6 +147,7 @@ public:
 
 
 private:
+    bool ownSemaphore_ = true;
     VulkanDevice* device_ = nullptr;
     VulkanSemaphore* semaphore_ = nullptr;
 };

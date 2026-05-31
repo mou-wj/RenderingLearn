@@ -130,14 +130,16 @@ inline void TransitionResource(
     RHI::RHICommandListBase& cmdList,
     RHI::RHIViewableResource* resource,
     RHI::ERHIResourceAccess currentAccess,
-    RHI::ERHIResourceAccess targetAccess)
+    RHI::ERHIResourceAccess targetAccess,
+    RHI::EQueueType currentQueueType,
+    RHI::EQueueType targetQueueType)
 {
     if (!api || !resource)
     {
         return;
     }
 
-    if (currentAccess == targetAccess)
+    if (currentAccess == targetAccess && currentQueueType == targetQueueType)
     {
         return;
     }
