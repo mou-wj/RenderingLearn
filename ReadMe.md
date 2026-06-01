@@ -1,4 +1,4 @@
-﻿RenderingLearn
+﻿WREngine
 
 A personal Vulkan-based rendering framework for graphics learning, rendering architecture exploration, and modern rendering system experimentation.
 
@@ -31,8 +31,8 @@ python --version
 cmake --version
 Build
 Step 1: Clone Repository
-git clone https://github.com/mou-wj/RenderingLearn.git
-cd RenderingLearn
+git clone https://github.com/mou-wj/WREngine.git
+cd WREngine
 Step 2: Run Setup Script
 
 Before configuring with CMake, run the Python setup script.
@@ -54,19 +54,19 @@ Step 4: Build
 
 Debug:
 
-cmake --build build --config Debug
+cmake --build out --config Debug
 
 Release:
 
-cmake --build build --config Release
+cmake --build out --config Release
 
 Run
 
 Notes
 The Python setup step is mandatory.
 If dependencies are updated, rerun:
-python scripts/setup.py
-Delete the build/ folder if CMake cache becomes invalid.
+python BuildDeps.py
+Delete the out/ folder if CMake cache becomes invalid.
 License
 
 This project is licensed under the PLSL v1.0
