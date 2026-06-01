@@ -320,12 +320,6 @@ void RHICommandListBase::BlitTexture(RHITexture* src, RHITexture* dst, const RHI
 }
 
 
-void RHICommandListBase::Merge(const RHICommandListBase& other)
-{
-    commands.insert(commands.end(), other.commands.begin(), other.commands.end());
-}
-
-
 
 RHIComputeCommandList::RHIComputeCommandList(RHIComputeContex* context)
     : RHICommandListBase(context)

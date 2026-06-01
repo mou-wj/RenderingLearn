@@ -224,7 +224,6 @@ namespace RHI {
         void EndTransitions(std::vector<const RHITransition*> Transitions);
         void CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc);
         void BlitTexture(RHITexture* src, RHITexture* dst, const RHIBlitTextureDesc& blitDesc);
-        void Merge(const RHICommandListBase& other);
 
     protected:
         bool immediate = false;
