@@ -176,6 +176,18 @@ namespace RenderCore {
         }
     };
 
+    enum class EShaderParameterContainerType : uint8_t
+    {
+        None,
+
+        Array,
+
+        StructuredBuffer,
+        RWStructuredBuffer,
+
+        ByteAddressBuffer,
+        RWByteAddressBuffer
+    };
 
     enum class EShaderParameterBaseType {
         Unknown = 0,
@@ -183,7 +195,10 @@ namespace RenderCore {
         Int32,
         UInt32,
         Bool,
-        Struct,//结构体类型，内部可以含有其他类型数据
+        StructNested,//结构体类型，内部可以含有其他类型数据
+        StructInclude,
+        StructReference,//结构体引用，在metadata中不展开
+
         RenderTargetSlots,
         // 可根据需要扩展更多类型
         RDGTexture,

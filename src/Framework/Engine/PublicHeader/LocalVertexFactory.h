@@ -5,8 +5,6 @@
 
 namespace Engine
 {
-    using RenderCore::ShaderParametersMetadata;
-    using RenderCore::ShaderParameterTypeInfo;
 
     BEGIN_SHADER_PARAMETER_STRUCT(LocalVertexFactoryParameters)
         SHADER_PARAMETER(Core::Float4x4, LocalToWorld)
@@ -57,7 +55,7 @@ namespace Engine
 
         static bool ShouldCompilePermutation(const RenderCore::VertexFactoryShaderPermutationParameters& Parameters);
         static void ModifyCompilationEnvironment(const RenderCore::VertexFactoryShaderPermutationParameters& Parameters, RenderCore::ShaderCompilerEnvironment& OutEnvironment);
-        static const ShaderParametersMetadata* GetShaderParameterMetadata()
+        static const RenderCore::ShaderParametersMetadata* GetShaderParameterMetadata()
         {
             return LocalVertexFactoryParameters::GetMetaData();
         }

@@ -4,6 +4,7 @@
 #include "StaticMeshProxy.h"
 #include "LocalVertexFactory.h"
 #include "RHIPipelineStateCache.h"
+#include "StaticMeshMaterialShader.h"
 #include <iostream>
 using namespace RenderCore;
 using namespace Engine;
@@ -116,21 +117,17 @@ namespace Renderer {
                     auto state = pipeline;
                     // 参数
 
-                    BEGIN_SHADER_PARAMETER_STRUCT(PixelMaterialParameters)
-                        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
-                    END_SHADER_PARAMETER_STRUCT(PixelMaterialParameters)
-
-                    BEGIN_SHADER_PARAMETER_STRUCT(MaterialParameters)
-                        SHADER_PARAMETER_STRUCT(LocalVertexFactoryParameters, vertexFactoryParameters)
-                        SHADER_PARAMETER_STRUCT(PixelMaterialParameters, pixelParameters)
-                    END_SHADER_PARAMETER_STRUCT(MaterialParameters)
-                    auto* params = builder.AllocateParameter<MaterialParameters>();
-                    params->vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
-                    params->vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
+                    BEGIN_SHADER_PARAMETER_STRUCT(PassParameters)
+                        SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialShaderVSParameters, vertexParameters)
+                        SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialShaderPSParameters, pixelParameters)
+                    END_SHADER_PARAMETER_STRUCT(PassParameters)
+                    auto* params = builder.AllocateParameter<PassParameters>();
+                    params->vertexParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
+                    params->vertexParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
                     //params->vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
-                    params->vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
+                    params->vertexParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
                     //params->vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
-                    params->vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
+                    params->vertexParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
 
                     params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
                     params->pixelParameters.renderTargetSlots[0].Texture = SceneTextures.SceneColor;
@@ -141,17 +138,15 @@ namespace Renderer {
                     // -------------------------------------
                     // 添加 pass
                     // -------------------------------------
-                    builder.AddPass<MaterialParameters>(
+                    builder.AddPass<PassParameters>(
                         "StaticMeshDrawPass",
-                        MaterialParameters::GetMetaData(),
+                        PassParameters::GetMetaData(),
                         params,
                         EPassFlag::Graphic,
                         [=](RHI::RHICommandListBase& RHICmdList)
                         {
                             auto& cmd = static_cast<RHI::RHIGraphicCommandList&>(RHICmdList);
-                            MaterialParameters* materialParams = params;
-
-
+                            PassParameters* materialParams = params;
 
                             cmd.SetGraphicPipelineState(state.get());
                             //绑定vertexfactory
@@ -159,10 +154,10 @@ namespace Renderer {
                             cmd.SetViewport(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height, 0.0f, 1.0f);
                             cmd.SetScissor(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height);
                             //设置vertex参数
-                            SetShaderParameters(cmd, vertexShader, params);
+                            SetShaderParameters(cmd, vertexShader, &params->vertexParameters);
 
                             //设置pixel参数
-                            SetShaderParameters(cmd, pixelShader, params);
+                            SetShaderParameters(cmd, pixelShader, &params->pixelParameters);
                             auto boundRenderTarget = params->pixelParameters.renderTargetSlots.GetBoundRenderTarget();
                             RHIRenderPassInfo passInfo;
                             passInfo.RenderTargets = boundRenderTarget;

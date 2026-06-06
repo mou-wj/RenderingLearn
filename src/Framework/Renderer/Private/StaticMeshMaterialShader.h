@@ -2,9 +2,18 @@
 #pragma once
 
 #include "MeshMaterialShader.h"
+#include "ShaderParameter.h"
+#include "LocalVertexFactory.h"
+#include "SceneShaderParameters.h"
+#include "MaterialShaderParameter.h"
+#include "LocalVertexFactory.h"
 
 namespace Renderer
 {
+    BEGIN_SHADER_PARAMETER_STRUCT(StaticMeshMaterialShaderVSParameters)
+        SHADER_PARAMETER_STRUCT_REFERENCE(Engine::LocalVertexFactoryParameters, vertexFactoryParameters)
+    END_SHADER_PARAMETER_STRUCT(StaticMeshMaterialShaderVSParameters)
+
     /*
     ===============================================================================
         StaticMeshMaterialShaderVS
@@ -27,7 +36,12 @@ namespace Renderer
             GetShaderParameterMetadata();
     };
 
-
+    BEGIN_SHADER_PARAMETER_STRUCT(StaticMeshMaterialShaderPSParameters)
+        SHADER_PARAMETER_STRUCT_REFERENCE(Engine::LocalVertexFactoryParameters, vertexFactoryParameters)
+        SHADER_PARAMETER_STRUCT_REFERENCE(Engine::SceneShaderParameters, Scene)
+        SHADER_PARAMETER_STRUCT_REFERENCE(Engine::MaterialShaderParameters, Material)
+        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
+    END_SHADER_PARAMETER_STRUCT(StaticMeshMaterialShaderPSParameters)
     /*
     ===============================================================================
         StaticMeshMaterialShaderPS

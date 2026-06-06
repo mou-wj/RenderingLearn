@@ -13,7 +13,6 @@
 #include <glslang/Public/ShaderLang.h>
 #include "spirv_glsl.hpp"
 #include "spirv_cross.hpp"
-#include "glslang/Public/ShaderLang.h"
 #include "glslang/SPIRV/GlslangToSpv.h"
 #include "spirv_hlsl.hpp"
 #include "PathInfo.h"
@@ -92,22 +91,35 @@ namespace RenderCore {
 
             Code << "// Generated for " << root.GetStructName() << "\n\n";
 
+            EmitIncludes(
+                root,
+                Code);
+
+            EmitNesteds(
+                root,
+                Code);
+
+
             // ================================
             // ⭐ 1. 生成 cbuffer（Uniform）
             // ================================
             //Code << "cbuffer " << root.GetStructName()
             //    << " : register(b" << BSlot++ << ")\n{\n";
-            Code << "cbuffer " << root.GetStructName()
-                <<"\n{\n";
+            
 
-            EmitUniformMembers(root, "", Code);
-
-            Code << "};\n\n";
-
+            std::stringstream cbufferCode;
+            EmitUniformMembers(root, "", cbufferCode);
+            std::string cbufferMemberResult = cbufferCode.str();
+            if (!cbufferMemberResult.empty()) {
+                Code << "cbuffer " << root.GetStructName()
+                    << "\n{\n";
+                Code << cbufferMemberResult;
+                Code << "};\n\n";
+            }
             // ================================
             // ⭐ 2. 生成 Resource（SRV/UAV/Sampler）
             // ================================
-            EmitResources(root, "", Code, TSlot, SSlot, USlot);
+            EmitResources(root, "", Code);
 
             std::string Result = Code.str();
 
@@ -119,7 +131,131 @@ namespace RenderCore {
 
 
     private:
+        void EmitIncludes(
+            const ShaderParametersMetadata& Root,
+            std::stringstream& OutCode)
+        {
+            std::unordered_set<std::string>
+                IncludedFiles;
+            for (auto& Member : Root.Members)
+            {
+                auto* StructMeta =
+                    Member.StructMetadata;
+                if (!StructMeta)
+                    continue;
+                if (Member.IsIncludeStruct()) {
+                    EmitIncludes(*StructMeta, OutCode);
+                }
+                if (!Member.IsReferenceStruct())
+                    continue;
 
+                std::string Path =
+                    GetVirtualPath(
+                        *StructMeta);
+
+                if (IncludedFiles.contains(
+                    Path))
+                {
+                    return;
+                }
+
+                IncludedFiles.insert(
+                    Path);
+
+                GenerateOrGetShaderParameterMetaDataSF(
+                    *StructMeta);
+
+                //OutCode
+                //    << "#include \""
+                //    << Path
+                //    << "\"\n";
+            }
+            //OutCode << "\n";
+        }
+        void EmitNesteds(
+            const ShaderParametersMetadata& Root,
+            std::stringstream& OutCode)
+        {
+            std::unordered_set<std::string>
+                EmittedStructs;
+
+            EmitNestedRecursive(
+                Root,
+                OutCode,
+                EmittedStructs);
+
+            OutCode << "\n";
+        }
+
+        void EmitNestedRecursive(
+            const ShaderParametersMetadata& Root,
+            std::stringstream& OutCode,
+            std::unordered_set<std::string>&
+            Emitted)
+        {
+            for (const auto& Member :
+                Root.Members)
+            {
+                auto* StructMeta =
+                    Member.StructMetadata;
+
+                if (!StructMeta || Member.IsReferenceStruct())
+                {
+                    continue;
+                }
+
+                // include 只递归
+                if (Member.IsIncludeStruct())
+                {
+                    EmitNestedRecursive(
+                        *StructMeta,
+                        OutCode,
+                        Emitted);
+
+                    continue;
+                }
+
+                // 这里只剩 nested
+                if (!Member.IsNestedStruct())
+                {
+                    continue;
+                }
+
+                const std::string
+                    StructName =
+                    StructMeta
+                    ->GetStructName();
+
+                if (Emitted.contains(
+                    StructName))
+                {
+                    continue;
+                }
+
+                // ==================
+                // 1. 先展开依赖
+                // ==================
+                EmitNestedRecursive(
+                    *StructMeta,
+                    OutCode,
+                    Emitted);
+
+                // ==================
+                // 2. 再输出自己
+                // ==================
+                Emitted.insert(
+                    StructName);
+                OutCode
+                    << "struct "
+                    << StructName
+                    << "\n{\n";
+                EmitUniformMembers(
+                    *StructMeta,"",
+                    OutCode);
+                OutCode << "};\n\n";
+            }
+        }
+       
         // ============================================
    // ⭐ Uniform flatten（核心）
    // ============================================
@@ -133,16 +269,14 @@ namespace RenderCore {
                 if (Member.IsResource())
                     continue;
 
-                std::string Name = Prefix.empty()
-                    ? Member.Name
-                    : Prefix + "_" + Member.Name;
+                std::string Name = Member.Name;
 
-                if (Member.IsStruct())
+                if (Member.IsIncludeStruct())
                 {
                     // ⭐递归展开 struct
                     EmitUniformMembers(*Member.StructMetadata, Name, OutCode);
                 }
-                else
+                else if(Member.IsUniformDataMember())
                 {
                     std::string TypeName = MapNumericType(Member);
 
@@ -163,10 +297,7 @@ namespace RenderCore {
         void EmitResources(
             const ShaderParametersMetadata& Metadata,
             const std::string& Prefix,
-            std::stringstream& OutCode,
-            uint32_t& TSlot,
-            uint32_t& SSlot,
-            uint32_t& USlot)
+            std::stringstream& OutCode)
         {
             for (const auto& Member : Metadata.GetMembers())
             {
@@ -176,43 +307,20 @@ namespace RenderCore {
 
                 if (Member.IsResource())
                 {
-                    std::string Reg;
-
-                    switch (GetResourceClass(Member.BaseType))
-                    {
-                    case EResourceBindClass::SRV:
-                        Reg = "t" + std::to_string(TSlot++);
-                        break;
-
-                    case EResourceBindClass::UAV:
-                        Reg = "u" + std::to_string(USlot++);
-                        break;
-
-                    case EResourceBindClass::Sampler:
-                        Reg = "s" + std::to_string(SSlot++);
-                        break;
-
-                    default:
-                        continue;
-                    }
 
                     std::string ArraySuffix;
                     if (Member.NumElements > 0)
                     {
                         ArraySuffix = "[" + std::to_string(Member.NumElements) + "]";
                     }
-
-                    //OutCode << MapResourceType(Member)
-                    //    << " " << Name << ArraySuffix
-                    //    << " : register(" << Reg << ");\n";
                     OutCode << MapResourceType(Member)
                         << " " << Name << ArraySuffix
                         << ";\n";
                 }
-                else if (Member.IsStruct())
+                else if (Member.IsIncludeStruct())
                 {
                     // ⭐递归展开资源
-                    EmitResources(*Member.StructMetadata, Name, OutCode, TSlot, SSlot, USlot);
+                    EmitResources(*Member.StructMetadata, Name, OutCode);
                 }
             }
         }
@@ -230,6 +338,7 @@ namespace RenderCore {
             case EShaderParameterBaseType::Int32:   base = "int";   break;
             case EShaderParameterBaseType::UInt32:  base = "uint";  break;
             case EShaderParameterBaseType::Bool:    base = "bool";  break;
+            case EShaderParameterBaseType::StructNested: base = member.StructMetadata->GetStructName(); return base;
             default: return "float";
             }
 
@@ -242,57 +351,74 @@ namespace RenderCore {
             return std::string("row_major ") + base + std::to_string(member.NumRows) + "x" + std::to_string(member.NumColumns);
         }
 
-        // ============================================
-        // ⭐ Resource分类
-        // ============================================
-        enum class EResourceBindClass
+        std::string MapResourceType(const ShaderParametersMetadata::Member& Member)
         {
-            SRV,
-            UAV,
-            Sampler,
-            None
-        };
 
-        EResourceBindClass GetResourceClass(EShaderParameterBaseType type)
-        {
-            switch (type)
+            switch (Member.ContainerType)
             {
-            case EShaderParameterBaseType::RDGTexture:
-            case EShaderParameterBaseType::RDGTexture_SRV:
-            case EShaderParameterBaseType::RDGBuffer_SRV:
-                return EResourceBindClass::SRV;
+            case EShaderParameterContainerType
+                ::StructuredBuffer:
+                return
+                    "StructuredBuffer<" +
+                    MapNumericType(Member)
+                    + ">";
 
-            case EShaderParameterBaseType::RDGTexture_UAV:
-            case EShaderParameterBaseType::RDGBuffer_UAV:
-                return EResourceBindClass::UAV;
+            case EShaderParameterContainerType
+                ::RWStructuredBuffer:
+                return
+                    "RWStructuredBuffer<" +
+                    MapNumericType(Member)
+                    + ">";
 
-            case EShaderParameterBaseType::RHISampler:
-                return EResourceBindClass::Sampler;
+            case EShaderParameterContainerType
+                ::ByteAddressBuffer:
+
+                return
+                    "ByteAddressBuffer";
+
+            case EShaderParameterContainerType
+                ::RWByteAddressBuffer:
+
+                return
+                    "RWByteAddressBuffer";
 
             default:
-                return EResourceBindClass::None;
+                break;
             }
-        }
 
-        std::string MapResourceType(const ShaderParametersMetadata::Member& member)
-        {
-            switch (member.BaseType)
+            switch (Member.BaseType)
             {
-            case EShaderParameterBaseType::RDGTexture:
-            case EShaderParameterBaseType::RDGTexture_SRV:
+            case EShaderParameterBaseType
+                ::RDGTexture:
+
+            case EShaderParameterBaseType
+                ::RDGTexture_SRV:
+
                 return "Texture2D";
 
-            case EShaderParameterBaseType::RDGTexture_UAV:
-                return "RWTexture2D<float4>";
+            case EShaderParameterBaseType
+                ::RDGTexture_UAV:
 
-            case EShaderParameterBaseType::RHISampler:
-                return "SamplerState";
+                return
+                    "RWTexture2D<float4>";
 
-            case EShaderParameterBaseType::RDGBuffer_SRV:
-                return "Buffer<float4>";
+            case EShaderParameterBaseType
+                ::RHISampler:
 
-            case EShaderParameterBaseType::RDGBuffer_UAV:
-                return "RWBuffer<float4>";
+                return
+                    "SamplerState";
+
+            case EShaderParameterBaseType
+                ::RDGBuffer_SRV:
+
+                return
+                    "Buffer<float4>";
+
+            case EShaderParameterBaseType
+                ::RDGBuffer_UAV:
+
+                return
+                    "RWBuffer<float4>";
 
             default:
                 return "Texture2D";

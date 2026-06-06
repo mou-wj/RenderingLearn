@@ -61,5 +61,219 @@ namespace Core{
 
 
 
+    template<typename T>
+    constexpr Matrix<T, 4, 4> MakeTranslationMatrix(
+        const Vec3<T>& translation)
+    {
+        Matrix<T, 4, 4> result =
+            Matrix<T, 4, 4>::Identity();
+
+        result(0, 3) = translation.x;
+        result(1, 3) = translation.y;
+        result(2, 3) = translation.z;
+
+        return result;
+    }
+
+    template<typename T>
+    constexpr Matrix<T, 4, 4> MakeScaleMatrix(
+        const Vec3<T>& scale)
+    {
+        Matrix<T, 4, 4> result =
+            Matrix<T, 4, 4>::Identity();
+
+        result(0, 0) = scale.x;
+        result(1, 1) = scale.y;
+        result(2, 2) = scale.z;
+
+        return result;
+    }
+
+    template<typename T>
+    Matrix<T, 4, 4> MakeRotationMatrix(
+        const Vec3<T>& rotation)
+    {
+        constexpr T DegToRad =
+            static_cast<T>(
+                0.017453292519943295769f);
+
+        T pitch =
+            rotation.x * DegToRad;
+
+        T yaw =
+            rotation.z * DegToRad;
+
+        T roll =
+            rotation.y * DegToRad;
+
+        T cp = std::cos(pitch);
+        T sp = std::sin(pitch);
+
+        T cy = std::cos(yaw);
+        T sy = std::sin(yaw);
+
+        T cr = std::cos(roll);
+        T sr = std::sin(roll);
+
+        Matrix<T, 4, 4> rx =
+            Matrix<T, 4, 4>::Identity();
+
+        rx(1, 1) = cp;
+        rx(1, 2) = -sp;
+        rx(2, 1) = sp;
+        rx(2, 2) = cp;
+
+        Matrix<T, 4, 4> ry =
+            Matrix<T, 4, 4>::Identity();
+
+        ry(0, 0) = cr;
+        ry(0, 2) = sr;
+        ry(2, 0) = -sr;
+        ry(2, 2) = cr;
+
+        Matrix<T, 4, 4> rz =
+            Matrix<T, 4, 4>::Identity();
+
+        rz(0, 0) = cy;
+        rz(0, 1) = -sy;
+        rz(1, 0) = sy;
+        rz(1, 1) = cy;
+
+        return rz * ry * rx;
+    }
+
+    template<typename T>
+    Matrix<T, 4, 4> MakeTransformMatrix(
+        const Vec3<T>& location,
+        const Vec3<T>& rotation,
+        const Vec3<T>& scale)
+    {
+        return
+            MakeTranslationMatrix(location)
+            * MakeRotationMatrix(rotation)
+            * MakeScaleMatrix(scale);
+    }
+
+    template<typename T>
+    constexpr Vec3<T> GetTranslation(
+        const Matrix<T, 4, 4>& matrix)
+    {
+        return Vec3<T>(
+            matrix(0, 3),
+            matrix(1, 3),
+            matrix(2, 3));
+    }
+
+    template<typename T>
+    Vec3<T> GetScale(
+        const Matrix<T, 4, 4>& matrix)
+    {
+        Vec3<T> x(
+            matrix(0, 0),
+            matrix(1, 0),
+            matrix(2, 0));
+
+        Vec3<T> y(
+            matrix(0, 1),
+            matrix(1, 1),
+            matrix(2, 1));
+
+        Vec3<T> z(
+            matrix(0, 2),
+            matrix(1, 2),
+            matrix(2, 2));
+
+        return Vec3<T>(
+            x.Length(),
+            y.Length(),
+            z.Length());
+    }
+
+    template<typename T>
+    Vec3<T> GetEulerRotation(
+        const Matrix<T, 4, 4>& matrix)
+    {
+        Vec3<T> scale =
+            GetScale(matrix);
+
+        T m00 =
+            matrix(0, 0) / scale.x;
+
+        T m10 =
+            matrix(1, 0) / scale.x;
+
+        T m20 =
+            matrix(2, 0) / scale.x;
+
+        T m21 =
+            matrix(2, 1) / scale.y;
+
+        T m22 =
+            matrix(2, 2) / scale.z;
+
+        T pitch =
+            std::atan2(m21, m22);
+
+        T yaw =
+            std::atan2(
+                -m20,
+                std::sqrt(
+                    m21 * m21 +
+                    m22 * m22));
+
+        T roll =
+            std::atan2(m10, m00);
+
+        constexpr T RadToDeg =
+            static_cast<T>(
+                57.295779513082320876f);
+
+        return Vec3<T>(
+            pitch * RadToDeg,
+            roll * RadToDeg,
+            yaw * RadToDeg);
+    }
+
+    template<typename T>
+    constexpr Vec3<T> TransformPoint(
+        const Matrix<T, 4, 4>& matrix,
+        const Vec3<T>& point)
+    {
+        return Vec3<T>(
+            matrix(0, 0) * point.x +
+            matrix(0, 1) * point.y +
+            matrix(0, 2) * point.z +
+            matrix(0, 3),
+
+            matrix(1, 0) * point.x +
+            matrix(1, 1) * point.y +
+            matrix(1, 2) * point.z +
+            matrix(1, 3),
+
+            matrix(2, 0) * point.x +
+            matrix(2, 1) * point.y +
+            matrix(2, 2) * point.z +
+            matrix(2, 3));
+    }
+
+    template<typename T>
+    constexpr Vec3<T> TransformVector(
+        const Matrix<T, 4, 4>& matrix,
+        const Vec3<T>& vector)
+    {
+        return Vec3<T>(
+            matrix(0, 0) * vector.x +
+            matrix(0, 1) * vector.y +
+            matrix(0, 2) * vector.z,
+
+            matrix(1, 0) * vector.x +
+            matrix(1, 1) * vector.y +
+            matrix(1, 2) * vector.z,
+
+            matrix(2, 0) * vector.x +
+            matrix(2, 1) * vector.y +
+            matrix(2, 2) * vector.z);
+    }
+
 
 }

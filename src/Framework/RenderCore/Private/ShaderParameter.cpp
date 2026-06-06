@@ -114,7 +114,7 @@ namespace RenderCore {
                 param.Type = RHI::RHIShaderResourceParameter::EType::Sampler;
                 Resource = *(RHIResource**)ResourcePtrLocation;
                 break;
-            case EShaderParameterBaseType::Struct:
+            case EShaderParameterBaseType::StructNested:
                 param.Type = RHI::RHIShaderResourceParameter::EType::UniformBuffer;
                 break;
             default:

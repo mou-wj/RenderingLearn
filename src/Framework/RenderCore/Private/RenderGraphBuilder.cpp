@@ -864,7 +864,7 @@ namespace RenderCore {
                     }
                 }
             }
-            else if (Member.IsStruct())
+            else if (Member.IsReferenceStruct() || Member.IsIncludeStruct())
             {
                 SetupPassInternal(Pass, Member.StructMetadata, MemberAddr);
             }

@@ -7,6 +7,7 @@
 #include <typeinfo>
 #include "BoxSphereBounds.h"
 #include "TypeIDCast.h"
+#include "SceneComponent.h"
 
 namespace Engine {
 	// Minimal placeholder types. Replace with engine math types in real project.
@@ -22,11 +23,11 @@ namespace Engine {
 	// PrimitiveComponent: a lightweight, GameThread-only description of a renderable
 	// primitive. It does NOT own GPU/RHI resources. To render, it creates a SceneProxy
 	// snapshot which is enqueued to the RenderThread.
-	class ENGINE_API PrimitiveComponent {
+	class ENGINE_API PrimitiveComponent : public SceneComponent {
 	public:
 		PrimitiveComponent();
 		virtual ~PrimitiveComponent();
-		DECLARE_TYPE_ID_BASE_TYPE(PrimitiveComponent)
+		
 		// ------------------ Spatial (GameThread only) ------------------
 	protected:
 		FTransform LocalTransform;          // local transform

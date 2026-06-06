@@ -83,7 +83,15 @@ void Shader::ProcessMetadataRecursive(
         // =========================
         // 2. Struct£¨µÝ¹éÕ¹¿ª£©
         // =========================
-        else if (Member.IsStruct())
+        else if (Member.IsIncludeStruct() || Member.IsReferenceStruct())
+        {
+            ProcessMetadataRecursive(
+                *Member.StructMetadata,
+                "",
+                ParameterMap,
+                OutBindings);
+        }
+        else if (Member.IsNestedStruct())
         {
             ProcessMetadataRecursive(
                 *Member.StructMetadata,
