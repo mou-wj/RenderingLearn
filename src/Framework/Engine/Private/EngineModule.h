@@ -15,7 +15,7 @@ namespace Engine {
         bool IsLoaded() const override;
 
     private:
-        
+        bool isLoaded = false;
     };
 
 

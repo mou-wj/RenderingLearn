@@ -1,0 +1,214 @@
+#include "/core/ShadingCommon.sf"
+
+// ============================================================================
+// IBL 预计算：环境光贴图与 BRDF LUT
+// ============================================================================
+
+#define PI 3.14159265359
+#include "/Generated/ShaderParameters/IBLPrecomputeParameters.sf"
+#if IBL_PRECOMPUTE_MODE == 0
+#include "/Generated/ShaderParameters/IBLPrecomputeEvnParameters.sf"
+#elif IBL_PRECOMPUTE_MODE == 1
+#include "/Generated/ShaderParameters/IBLPrecomputeBRDFParameters.sf"
+#endif
+
+
+// ============================================================================
+// 常用数学辅助
+// ============================================================================
+
+float RadicalInverse_VdC(uint bits)
+{
+    bits = (bits << 16) | (bits >> 16);
+    bits = ((bits & 0x55555555u) << 1) | ((bits & 0xAAAAAAAAu) >> 1);
+    bits = ((bits & 0x33333333u) << 2) | ((bits & 0xCCCCCCCCu) >> 2);
+    bits = ((bits & 0x0F0F0F0Fu) << 4) | ((bits & 0xF0F0F0F0u) >> 4);
+    bits = ((bits & 0x00FF00FFu) << 8) | ((bits & 0xFF00FF00u) >> 8);
+    return float(bits) * 2.3283064365386963e-10; // 1/2^32
+}
+
+float2 Hammersley(uint i, uint N)
+{
+    return float2(float(i) / float(N), RadicalInverse_VdC(i));
+}
+
+float3 ImportanceSampleGGX(float2 Xi, float roughness, float3 N)
+{
+    float a = roughness * roughness;
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt(max(0.0, (1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y)));
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+
+    float3 H;
+    H.x = sinTheta * cos(phi);
+    H.y = sinTheta * sin(phi);
+    H.z = cosTheta;
+
+    float3 up = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+
+    return normalize(tangent * H.x + bitangent * H.y + N * H.z);
+}
+
+float3 SampleEquirectangularEnvMap(Texture2D<float4> env, SamplerState samp, float3 dir)
+{
+    float2 uv;
+    uv.x = atan2(dir.z, dir.x) / (2.0 * PI) + 0.5;
+    uv.y = acos(saturate(dir.y)) / PI;
+    return env.SampleLevel(samp, uv, 0.0).rgb;
+}
+
+float3 EquirectangularUVToDirection(float2 uv)
+{
+    float phi = uv.x * 2.0 * PI;
+    float theta = uv.y * PI;
+    float sinTheta = sin(theta);
+    return normalize(float3(sinTheta * cos(phi), cos(theta), sinTheta * sin(phi)));
+}
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    float ggxV = NdotV / (NdotV * (1.0 - k) + k);
+    float ggxL = NdotL / (NdotL * (1.0 - k) + k);
+    return ggxV * ggxL;
+}
+
+float2 IntegrateBRDF(float NdotV, float roughness)
+{
+    float3 V = float3(sqrt(1.0 - NdotV * NdotV), 0.0, NdotV);
+    float A = 0.0;
+    float B = 0.0;
+    const uint SAMPLE_COUNT = 128u;
+
+    for (uint i = 0u; i < SAMPLE_COUNT; ++i)
+    {
+        float2 Xi = Hammersley(i, SAMPLE_COUNT);
+        float3 H = ImportanceSampleGGX(Xi, roughness, float3(0.0, 0.0, 1.0));
+        float3 L = normalize(2.0 * dot(V, H) * H - V);
+
+        float NdotL = saturate(L.z);
+        float NdotH = saturate(H.z);
+        float VdotH = saturate(dot(V, H));
+
+        if (NdotL > 0.0)
+        {
+            float G = GeometrySmith(NdotV, NdotL, roughness);
+            float G_Vis = (G * VdotH) / (NdotH * NdotV);
+            float Fc = pow(1.0 - VdotH, 5.0);
+            A += (1.0 - Fc) * G_Vis;
+            B += Fc * G_Vis;
+        }
+    }
+
+    return float2(A / float(SAMPLE_COUNT), B / float(SAMPLE_COUNT));
+}
+
+#ifdef IBL_PRECOMPUTE_ENVIRONMENT_MAP
+float3 PrefilterEnvironment(float3 R, float roughness, int sampleCount)
+{
+    float3 N = float3(0.0, 0.0, 1.0);
+    float3 prefilteredColor = float3(0.0, 0.0, 0.0);
+    float totalWeight = 0.0;
+
+    for (int i = 0; i < sampleCount; ++i)
+    {
+        float2 Xi = Hammersley(uint(i), uint(sampleCount));
+        float3 H = ImportanceSampleGGX(Xi, roughness, N);
+        float3 L = normalize(2.0 * dot(R, H) * H - R);
+
+        float NdotL = saturate(L.z);
+        if (NdotL > 0.0)
+        {
+            float3 sampleColor = SampleEquirectangularEnvMap(EnvironmentMap, EnvSampler, L);
+            prefilteredColor += sampleColor * NdotL;
+            totalWeight += NdotL;
+        }
+    }
+
+    return prefilteredColor / max(totalWeight, 1e-5);
+}
+
+float3 ImportanceSampleCosineHemisphere(float2 Xi, float3 N)
+{
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt(max(0.0, 1.0 - Xi.y));
+    float sinTheta = sqrt(max(0.0, Xi.y));
+
+    float3 H;
+    H.x = sinTheta * cos(phi);
+    H.y = sinTheta * sin(phi);
+    H.z = cosTheta;
+
+    float3 up = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+
+    return normalize(tangent * H.x + bitangent * H.y + N * H.z);
+}
+
+float3 PrefilterDiffuseEnvironment(float3 N, int sampleCount)
+{
+    float3 irradiance = float3(0.0, 0.0, 0.0);
+
+    for (int i = 0; i < sampleCount; ++i)
+    {
+        float2 Xi = Hammersley(uint(i), uint(sampleCount));
+        float3 L = ImportanceSampleCosineHemisphere(Xi, N);
+        float NdotL = saturate(dot(N, L));
+        if (NdotL > 0.0)
+        {
+            float3 sampleColor = SampleEquirectangularEnvMap(EnvironmentMap, EnvSampler, L);
+            irradiance += sampleColor * NdotL;
+        }
+    }
+
+    return irradiance * (PI / float(sampleCount));
+}
+#endif
+
+// ============================================================================
+// 计算入口
+// ============================================================================
+
+[numthreads(16, 16, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+#if IBL_PRECOMPUTE_MODE == 0
+    uint2 pix = DispatchThreadID.xy;
+    int totalHeight = OutputSize.y * max(RoughnessCount, 1);
+    if (pix.x >= uint(OutputSize.x) || pix.y >= uint(totalHeight))
+        return;
+
+    int roughnessLayer = int(pix.y) / OutputSize.y;
+    int row = int(pix.y) % OutputSize.y;
+    float2 uv = (float2(pix.x, row) + 0.5) / float2(OutputSize);
+    float3 R = EquirectangularUVToDirection(uv);
+
+    float roughness = 0.0;
+    if (RoughnessCount > 1)
+    {
+        roughness = float(roughnessLayer) / float(RoughnessCount - 1);
+    }
+
+    float3 specularColor = PrefilterEnvironment(R, roughness, SampleCount);
+    OutputSpecularTexture[uint3(pix.x, row, uint(roughnessLayer))] = float4(specularColor, 1.0);
+
+    if (roughnessLayer == 0)
+    {
+        float3 diffuseColor = PrefilterDiffuseEnvironment(R, SampleCount);
+        OutputDiffuseTexture[pix] = float4(diffuseColor, 1.0);
+    }
+#elif IBL_PRECOMPUTE_MODE == 1
+    uint2 pix = DispatchThreadID.xy;
+    if (pix.x >= uint(OutputSize.x) || pix.y >= uint(OutputSize.y))
+        return;
+
+    float2 uv = (float2(pix) + 0.5) / float2(OutputSize);
+    float NdotV = uv.x;
+    float roughness = uv.y;
+    OutputBRDFLUT[pix] = IntegrateBRDF(NdotV, roughness);
+#endif
+}

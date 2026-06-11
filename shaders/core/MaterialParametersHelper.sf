@@ -1,0 +1,185 @@
+
+#define MATERIAL_TEXTURE_BASECOLOR  (1 << 0)
+#define MATERIAL_TEXTURE_OPACITY    (1 << 1)
+#define MATERIAL_TEXTURE_NORMAL     (1 << 2)
+#define MATERIAL_TEXTURE_ORM        (1 << 3)
+#define MATERIAL_TEXTURE_EMISSIVE   (1 << 4)
+
+#include "/Generated/ShaderParameters/MaterialShaderParameters.sf"
+
+//=============================================================================
+// Material Result Data
+//=============================================================================
+
+
+#include "/core/ShadingContext.sf"
+
+//=============================================================================
+// Helper
+//=============================================================================
+
+bool HasMaterialTexture(uint Flag)
+{
+    return
+        (TextureMask & Flag)
+        != 0;
+}
+
+float2 GetMaterialUV(float2 UV)
+{
+    return
+        UV * UVTiling
+        + UVOffset;
+}
+
+
+//=============================================================================
+// Sampling
+//=============================================================================
+
+float3 SampleBaseColor(float2 UV)
+{
+    float3 Result =
+        BaseColor.rgb;
+
+    if (HasMaterialTexture(
+        MATERIAL_TEXTURE_BASECOLOR))
+    {
+        Result *=
+            BaseColorTexture.Sample(
+                LinearWrapSampler,
+                UV).rgb;
+    }
+
+    return Result;
+}
+
+float SampleOpacity(float2 UV)
+{
+    float Result =
+        Opacity;
+
+    if (HasMaterialTexture(
+        MATERIAL_TEXTURE_OPACITY))
+    {
+        Result *=
+            OpacityTexture.Sample(
+                LinearWrapSampler,
+                UV).r;
+    }
+
+    return Result;
+}
+
+float3 SampleEmissive(float2 UV)
+{
+    float3 Result =
+        EmissiveColor;
+
+    if (HasMaterialTexture(
+        MATERIAL_TEXTURE_EMISSIVE))
+    {
+        Result *=
+            EmissiveTexture.Sample(
+                LinearWrapSampler,
+                UV).rgb;
+    }
+
+    return Result;
+}
+
+void SampleORM(
+    float2 UV,
+    out float AO,
+    out float RoughnessValue,
+    out float MetallicValue)
+{
+    AO =
+        AmbientOcclusion;
+
+    RoughnessValue =
+        Roughness;
+
+    MetallicValue =
+        Metallic;
+
+    if (HasMaterialTexture(
+        MATERIAL_TEXTURE_ORM))
+    {
+        float3 ORM =
+            ORMTexture.Sample(
+                LinearWrapSampler,
+                UV).rgb;
+
+        AO *= ORM.r;
+        RoughnessValue *= ORM.g;
+        MetallicValue *= ORM.b;
+    }
+}
+
+float3 SampleNormalTS(
+    float2 UV)
+{
+    float3 Result =
+        float3(0, 0, 1);
+
+    if (HasMaterialTexture(
+        MATERIAL_TEXTURE_NORMAL))
+    {
+        Result =
+            NormalTexture.Sample(
+                LinearWrapSampler,
+                UV).xyz;
+
+        Result =
+            Result * 2.0 - 1.0;
+
+        Result.xy *=
+            NormalIntensity;
+
+        Result =
+            normalize(Result);
+    }
+
+    return Result;
+}
+
+
+//=============================================================================
+// Build Material
+//=============================================================================
+
+MaterialData BuildMaterialData(
+    float2 UV)
+{
+    MaterialData M;
+
+    UV =
+        GetMaterialUV(UV);
+
+    M.BaseColor =
+        SampleBaseColor(UV);
+
+    M.EmissiveColor =
+        SampleEmissive(UV);
+
+    M.Opacity =
+        SampleOpacity(UV);
+
+    M.OpacityMask =
+        OpacityMask;
+
+    M.Specular =
+        Specular;
+
+    SampleORM(
+        UV,
+        M.AmbientOcclusion,
+        M.Roughness,
+        M.Metallic);
+
+    M.NormalTS =
+        SampleNormalTS(UV);
+
+    return M;
+}

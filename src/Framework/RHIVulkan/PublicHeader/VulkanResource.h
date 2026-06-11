@@ -189,7 +189,7 @@ public:
         TransientAllocation = transientAllocation;
     }
     VulkanTransientAllocation GetTransientAllocation() const { return TransientAllocation; }
-
+    void CreateDefaultView();
 
     // View management
     void AttachView(VulkanViewBase* view);

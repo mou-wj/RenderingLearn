@@ -213,10 +213,10 @@ namespace Test {
             pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
             pipelineDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(pixelShader->GetRHIShader());
             // 这里可以设置更多管线配置...
-            pipelineDesc.rasterizerState = rasterizerState.get();
+            pipelineDesc.rasterizerState = rasterizerState;
 
-            pipelineDesc.depthStencilState = depthStencilState.get();
-            pipelineDesc.vertexDescState = staticMeshAsset->GetMesh()->GetRenderData()->LODResources[0].VertexFactory->GetRHIVertexDescState().get();
+            pipelineDesc.depthStencilState = depthStencilState;
+            pipelineDesc.vertexDescState = staticMeshAsset->GetMesh()->GetRenderData()->LODResources[0].VertexFactory->GetRHIVertexDescState();
 
             //rendertarget info
             pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
@@ -310,7 +310,7 @@ namespace Test {
                         std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
                         blendDesc.attachments = attachments;
                         auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState.get();
+                        pipelineDesc.colorBlendState = colorBlendState;
                     }
                     else {
                         RHI::RHIColorBlendStateDesc blendDesc;
@@ -320,7 +320,7 @@ namespace Test {
                         std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
                         blendDesc.attachments = attachments;
                         auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState.get();
+                        pipelineDesc.colorBlendState = colorBlendState;
                     }
                     auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
                     auto state = pipeline;
@@ -369,7 +369,7 @@ namespace Test {
 
 
 
-                            cmd.SetGraphicPipelineState(state.get());
+                            cmd.SetGraphicPipelineState(state);
                             //绑定vertexfactory
                             batch.VertexFactory->Bind(cmd);
                             cmd.SetViewport(0, 0, FrameWidth, FrameHeight, 0.0f, 1.0f);
@@ -470,7 +470,7 @@ namespace Test {
         RenderCore::Shader* blitTextureShader0;
         std::shared_ptr<StaticMeshAsset> staticMeshAsset;
         StaticMeshComponent* staticMeshComponent;
-        SceneInterface* scene;
+        Engine::SceneInterface* scene;
         RHI::RHIGraphicsPipelineStateDesc pipelineDesc;
         Shader* vertexShader;
         Shader* pixelShader;

@@ -1,32 +1,167 @@
 // Scene.h
 #pragma once
 #include "SceneInterface.h"
+#include "RenderResource.h"
+#include "Flags.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
 #include <vector>
 #include <mutex>
+namespace Engine
+{
+    class PrimitiveComponent;
+    class PrimitiveSceneProxy;
 
+    class LightComponent;
+    class LightSceneProxy;
+
+    class SceneView;
+}
 namespace Renderer {
-    // 跨线程渲染命令类型
-    enum class ESceneCommandType {
-        Add,
-        Remove
+    //====================================================
+    // Primitive Scene Info
+    //====================================================
+
+    class PrimitiveSceneInfo
+    {
+    public:
+
+        explicit PrimitiveSceneInfo(
+            std::unique_ptr<
+            Engine::PrimitiveSceneProxy>
+            InProxy);
+
+        Engine::PrimitiveSceneProxy*
+            GetProxy() const
+        {
+            return Proxy.get();
+        }
+
+    public:
+
+        bool bVisible = true;
+        bool bCastShadow = true;
+        bool bDynamic = true;
+
+        uint32_t VisibilityFrame = 0;
+
+    private:
+
+        std::unique_ptr<
+            Engine::PrimitiveSceneProxy>
+            Proxy;
     };
 
-    // 跨线程封装的命令结构
-    struct SceneCommand {
-        ESceneCommandType Type;
-        int32_t ProxyId;
-        Engine::PrimitiveSceneProxy * Proxy; // 仅在 Add 时有效
+    //====================================================
+    // Light Scene Info
+    //====================================================
+
+    class LightSceneInfo
+    {
+    public:
+
+        explicit LightSceneInfo(
+            std::unique_ptr<
+            Engine::LightSceneProxy>
+            InProxy);
+
+        Engine::LightSceneProxy*
+            GetProxy() const
+        {
+            return Proxy.get();
+        }
+
+    public:
+
+        bool bVisible = true;
+
+    private:
+
+        std::unique_ptr<
+            Engine::LightSceneProxy>
+            Proxy;
     };
+
+    //====================================================
+    // Scene Commands
+    //====================================================
+
+    enum class ESceneCommandType
+    {
+        AddPrimitive,
+        RemovePrimitive,
+
+        AddLight,
+        RemoveLight
+    };
+
+    struct SceneCommand
+    {
+        ESceneCommandType Type;
+
+        union
+        {
+            Engine::PrimitiveComponent*
+                PrimitiveComponent;
+
+            Engine::LightComponent*
+                LightComponent;
+        };
+
+        
+        std::unique_ptr<Engine::PrimitiveSceneProxy>
+            PrimitiveProxy;
+
+        
+        std::unique_ptr<Engine::LightSceneProxy>
+            LightProxy;
+    };
+
+
+    enum class ESceneGPUResourceDirty : uint32_t
+    {
+        None = 0,
+
+        DirectionalLight = 1 << 0,
+        PointLight = 1 << 1,
+        SpotLight = 1 << 2,
+        RectLight = 1 << 3,
+
+        Primitive = 1 << 4,
+
+        AllLight =
+        DirectionalLight |
+        PointLight |
+        SpotLight |
+        RectLight,
+
+        All = 0xFFFFFFFF
+    };
+    ENUM_CLASS_FLAGS(ESceneGPUResourceDirty, ESceneGPUResourceDirtys);
+
+    struct SceneGPULightResourceInfo {
+        uint32_t PointLightCount = 0;
+        uint32_t SpotLightCount = 0;
+        uint32_t DirectionalLightCount = 0;
+        uint32_t RectLightCount = 0;
+        RenderCore::RenderBufferSP PointLightBuffer = nullptr;
+        RenderCore::RenderBufferSP SpotLightBuffer = nullptr;
+        RenderCore::RenderBufferSP DirectionalLightBuffer = nullptr;
+        RenderCore::RenderBufferSP RectLightBuffer = nullptr;
+    };
+    struct SceneGPUResourceInfo {
+        SceneGPULightResourceInfo LightResourceInfo;
+        ESceneGPUResourceDirtys DirtyFlags = ESceneGPUResourceDirty::None;
+    };
+
 
     /*
     ===============================================================================
         Scene (SceneInterface 的完全体工业级实现)
     ===============================================================================
     */
-    class Scene : public Engine::SceneInterface {
+    class RENDERER_API Scene : public Engine::SceneInterface {
     public:
         Scene();
         ~Scene() override;
@@ -36,62 +171,49 @@ namespace Renderer {
         // -------------------------------------------------------------------------
         void AddPrimitive(Engine::PrimitiveComponent* Component) override;
         void RemovePrimitive(Engine::PrimitiveComponent* Component) override;
-
+        void AddLight(Engine::LightComponent* Component) override;
+        void RemoveLight(Engine::LightComponent* Component) override;
         // -------------------------------------------------------------------------
         // 渲染线程专属查询接口 (RenderThread Only)
         // -------------------------------------------------------------------------
-        Engine::PrimitiveSceneProxy* GetSceneProxyById(int32_t ProxyId) override;
-        void ForEachProxyInView(const Engine::SceneView& View, std::function<void(Engine::PrimitiveSceneProxy*)> Visitor) override;
-
-        // -------------------------------------------------------------------------
-        // 渲染器全局状态查询 (Renderer Queries)
-        // -------------------------------------------------------------------------
-        Engine::FrameIndex GetCurrentFrameIndex() const override { return CurrentFrame; }
-        double GetCurrentTimeSeconds() const override { return CurrentTimeSeconds; }
-        Engine::EFeatureLevel GetFeatureLevel() const override { return FeatureLevel; }
-        bool IsFeatureEnabled(const char* FeatureName) const override;
-
-        // -------------------------------------------------------------------------
-        // 视图与空间裁剪支撑
-        // -------------------------------------------------------------------------
-        int32_t GetCullingStructureHandle() const override { return CullingStructureHandle; }
-
-        // -------------------------------------------------------------------------
-        // 多线程生命周期与同步控制 (Lifecycle / Synchronization)
-        // -------------------------------------------------------------------------
         void FlushPendingUpdates() override;
-        void BeginFrameRender() override;
-        void EndFrameRender() override;
+        void NotifyComponentChanged(Engine::SceneComponent* Component) override;
+        
+        
+        void ForEachPrimitiveInView(const Engine::SceneView& View, std::function<void(Engine::PrimitiveSceneProxy*)> Visitor);
 
-        // -------------------------------------------------------------------------
-        // 状态设置接口 (通常由 Engine 或 Application 层在游戏轮询中更新，传递给渲染)
-        // -------------------------------------------------------------------------
-        void UpdateSceneTime(double InTimeSeconds) { NewTimeSeconds = InTimeSeconds; }
-        void EnableFeature(const std::string& FeatureName) { EnabledFeatures.insert(FeatureName); }
+        void ForEachLight(std::function<void(Engine::LightSceneProxy*)> Visitor);
 
+        const SceneGPUResourceInfo& GetGPUResourceInfo() const;
     private:
-        // 1. 【RenderThread 独占】场景中所有活跃的代理映射表
-        std::unordered_map<int32_t, Engine::PrimitiveSceneProxy*> PrimitiveProxies;
+        void UpdateGPUResourceIfNeeded();
 
-        // 2. 【GameThread 独占】跟踪组件到 ID 的映射，保证安全发出销毁请求
-        std::unordered_map<Engine::PrimitiveComponent*, int32_t> ComponentToProxyId;
+        //=========================================
+        // Render Thread Storage
+        //=========================================
 
-        // 3. 【线程安全安全缓冲区】拼命快照挂起队列与互斥锁
-        std::vector<SceneCommand> PendingCommands;
-        std::mutex CommandQueueMutex;
+        std::unordered_map<
+            Engine::PrimitiveComponent*,
+            std::unique_ptr<
+            PrimitiveSceneInfo>>
+            PrimitiveInfos;
 
-        // 4. 场景核心上下文状态
-        int32_t NextProxyId;
-        Engine::FrameIndex CurrentFrame;
+        std::unordered_map<
+            Engine::LightComponent*,
+            std::unique_ptr<
+            LightSceneInfo>>
+            LightInfos;
 
-        // 采用双缓冲时间戳，防止游戏线程写入时渲染线程正在读取导致数据撕裂（Tearing）
-        double CurrentTimeSeconds;
-        double NewTimeSeconds;
+        //=========================================
+        // GT -> RT command queue
+        //=========================================
 
-        Engine::EFeatureLevel FeatureLevel;
-        std::unordered_set<std::string> EnabledFeatures;
+        std::vector<
+            SceneCommand>
+            PendingCommands;
 
-        // 空间加速结构句柄 (如 Octree / BVH 句柄，初始化为无效值 -1)
-        int32_t CullingStructureHandle = -1;
+        std::mutex
+            PendingCommandMutex;
+        SceneGPUResourceInfo GPUResourceInfo;
     };
 } // namespace Renderer

@@ -1,7 +1,12 @@
 #pragma once
 #include "ShaderParameter.h"
 #include "Math.hpp"
-namespace Engine {
+#include "EngineExport.h"
+namespace RenderCore {
+	class RenderGraphBuilder;
+}
+
+namespace Renderer {
 
     BEGIN_SHADER_PARAMETER_STRUCT(LightCommonData)
         SHADER_PARAMETER(Core::Float3,Color)
@@ -13,8 +18,6 @@ namespace Engine {
         SHADER_PARAMETER_STRUCT_INCLUDE( LightCommonData, Common )
 
         SHADER_PARAMETER(Core::Float3,Direction)
-
-        SHADER_PARAMETER(float,ShadowIndex)
 
     END_SHADER_PARAMETER_STRUCT(DirectionalLightData)
 
@@ -48,5 +51,11 @@ namespace Engine {
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightParameters, LightParameters)
     END_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
 
-
+    class Scene;
+    ENGINE_API void BuildShaderParameters(
+        const Scene*
+        Scene,
+        RenderCore::RenderGraphBuilder& Builder,
+        SceneShaderParameters&
+        Out);
 }

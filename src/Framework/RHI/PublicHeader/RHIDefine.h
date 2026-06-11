@@ -55,7 +55,6 @@ extern RHI_API const std::unordered_map<ERHIFormat, FormatInfo> GFormatInfoMap;
 enum class ERHIResourceAccess
 {
     Unknown = 0,
-    Undefined = 1 << 0,  // 初始状态，不保留旧内容 (Discard)
 
     // --- 只读语义 (Read-only) ---
     CPURead = 1 << 1,  // CPU 读回

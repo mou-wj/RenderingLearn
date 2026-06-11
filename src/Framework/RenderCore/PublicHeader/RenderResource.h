@@ -143,6 +143,14 @@ private:
     RHI::RHITextureSP Texture;
 };
 
+
+RENDERCORE_API void TransitionTextureImmediate(
+    RHI::RHIApi* api,
+    RenderTexture* resource,
+    const RHI::RHISubresourceRange& range,
+    RHI::ERHIResourceAccess targetAccess,
+    RHI::EQueueType targetQueueType);
+
 // 通用缓冲区资源
 class RENDERCORE_API RenderBuffer : public RenderResource
 {
@@ -388,12 +396,18 @@ public:
 		, TransientBuffer(std::move(InTransientBuffer))
 	{
 	}
-
+    ~PooledTransientBuffer()
+    {
+        ViewCache.Clear();
+        TransientBuffer.reset();
+    }
     const TransientBufferDesc& GetDesc() const { return Desc; }
     RHI::RHIBuffer* GetRHI() const { return TransientBuffer->GetBuffer().get(); }
+    RHI::RHITransientBuffer* GetTransientRHI() const { return TransientBuffer.get(); }
     RenderBufferTracker& GetTracker() { return Tracker; }
     BufferViewCache& GetViewCache() { return ViewCache; }
 private:
+    friend class TransientResourceAllocator;
     BufferViewCache ViewCache;
     RenderBufferTracker Tracker;
     TransientBufferDesc Desc;
@@ -413,7 +427,11 @@ public:
         , TransientTexture(std::move(InTransientTexture))
     {
     }
-
+    ~PooledTransientRenderTarget()
+    {
+        ViewCache.Clear();
+        TransientTexture.reset();
+    }
     virtual const PoolRenderTargetDesc& GetDesc() const override
     {
         return Desc;
@@ -433,6 +451,7 @@ public:
 
 
 private:
+    friend class TransientResourceAllocator;
     PoolRenderTargetDesc Desc;
     // ✅ 改成 shared_ptr（核心）
     RHI::RHITransientTextureSP TransientTexture;
@@ -449,6 +468,7 @@ class RENDERCORE_API TransientResourceAllocator
 {
 public:
     TransientResourceAllocator() = default;
+    ~TransientResourceAllocator() = default;
     void InitRHI();
     void ReleaseRHI();
 
@@ -492,9 +512,9 @@ public:
         return buf;
     }
 
-
-private:
     void GarbageCollect();
+private:
+    
     std::vector<std::shared_ptr<PooledTransientRenderTarget>> AllocatedTextures;
     std::vector<std::shared_ptr<PooledTransientBuffer>>      AllocatedBuffers;
     RHI::RHITransientResourceManagerSP TransientResourceManager;
@@ -508,7 +528,7 @@ using RenderTextureSP = std::shared_ptr<RenderTexture>;
 using RenderBufferSP = std::shared_ptr<RenderBuffer>;
 
 extern RENDERCORE_API RenderTextureSP GlobalTestTexture;
-
+extern RENDERCORE_API RHI::RHISamplerSP GlobalSampler;
 RENDERCORE_API bool InitGlobalRenderResource();
 RENDERCORE_API void ReleaseGlobalRenderResource();
 

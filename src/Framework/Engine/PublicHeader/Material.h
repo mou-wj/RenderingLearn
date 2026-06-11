@@ -9,6 +9,7 @@
 namespace RenderCore {
     class RenderTexture;
     class Shader;
+    class RenderGraphBuilder;
 }
 
 namespace Engine {
@@ -21,7 +22,7 @@ namespace Engine {
 // ============================================================================
     struct FScalarType { using Type = float; };
     struct FVectorType { using Type = std::array<float, 4>; };
-    struct FTextureType { using Type = const RenderCore::RenderTexture*; };
+    struct FTextureType { using Type = RenderCore::RenderTexture*; };
     struct FIntType { using Type = int; };
 
     enum class EMaterialParameterSemantic : uint8_t {
@@ -214,6 +215,6 @@ namespace Engine {
         mutable std::unique_ptr<MaterialRenderProxy> CachedProxy;
         mutable bool bProxyDirty = true;
     };
-
+    class MaterialShaderParameters;
 
 }

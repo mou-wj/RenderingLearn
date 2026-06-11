@@ -1,13 +1,14 @@
 #pragma once
 
 #include <vector>
-
+#include <set>
 #include "Math.hpp"
 #include "EngineExport.h"
 #include "TypeIDCast.h"
 
 namespace Engine
 {
+	class SceneInterface;
     class ENGINE_API SceneComponent
     {
     public:
@@ -26,6 +27,9 @@ namespace Engine
 
         const std::vector<SceneComponent*>&
             GetAttachChildren() const;
+
+		void AddSceneListener(SceneInterface* listener);
+        void RemoveSceneListener(SceneInterface* listener);
 
     public:
         void SetLocalLocation(
@@ -102,5 +106,6 @@ namespace Engine
 
         std::vector<SceneComponent*>
             Children;
+        std::set<SceneInterface*> SceneListeners;
     };
 }

@@ -1,0 +1,30 @@
+struct ShadingContext
+{
+    float3 WorldPosition;
+
+    float3 WorldNormal;
+
+    float3x3 TangentToWorld;
+
+    float2 UV0;
+
+    float4 VertexColor;
+
+    float3 ViewDirection;
+};
+
+struct MaterialData
+{
+    float3 BaseColor;
+    float3 EmissiveColor;
+
+    float Metallic;
+    float Roughness;
+    float Specular;
+    float AmbientOcclusion;
+
+    float Opacity;
+    float OpacityMask;
+
+    float3 NormalTS;
+};

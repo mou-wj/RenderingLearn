@@ -1,6 +1,7 @@
 #include "SceneComponent.h"
 #include "Transform.hpp"
 #include <algorithm>
+#include "SceneInterface.h"
 
 namespace Engine
 {
@@ -120,7 +121,14 @@ namespace Engine
     {
         return Children;
     }
-
+    void SceneComponent::AddSceneListener(SceneInterface* listener)
+    {
+		SceneListeners.insert(listener);
+    }
+    void SceneComponent::RemoveSceneListener(SceneInterface* listener)
+    {
+        SceneListeners.erase(listener);
+    }
     void SceneComponent::SetLocalLocation(
         const Core::Float3& location)
     {
@@ -274,7 +282,11 @@ namespace Engine
     }
 
     void SceneComponent::MarkRenderStateDirty()
-    {
+	{
+		for (SceneInterface* listener : SceneListeners)
+		{
+            listener->NotifyComponentChanged(this);
+		}
     }
 
     void SceneComponent::OnTransformChanged()

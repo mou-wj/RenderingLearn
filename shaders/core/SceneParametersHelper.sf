@@ -1,0 +1,177 @@
+#include "/core/ShadingCommon.sf"
+#include "/Generated/ShaderParameters/SceneLightParameters.sf"
+
+
+
+
+// ============================================================================
+// Conversion Helpers
+// Scene -> Generic Light
+// ============================================================================
+
+DirectionalLight
+MakeDirectionalLight(
+    DirectionalLightData Data)
+{
+    DirectionalLight Light;
+
+    Light.Color =
+        Data.Color;
+
+    Light.Intensity =
+        Data.Intensity;
+
+    Light.Direction =
+        normalize(
+            Data.Direction);
+
+    return Light;
+}
+
+
+PointLight
+MakePointLight(
+    PointLightData Data)
+{
+    PointLight Light;
+
+    Light.Color =
+        Data.Color;
+
+    Light.Intensity =
+        Data.Intensity;
+
+    Light.Position =
+        Data.Position;
+
+    Light.Radius =
+        Data.Radius;
+
+    return Light;
+}
+
+
+SpotLight
+MakeSpotLight(
+    SpotLightData Data)
+{
+    SpotLight Light;
+
+    Light.Color =
+        Data.Color;
+
+    Light.Intensity =
+        Data.Intensity;
+
+    Light.Position =
+        Data.Position;
+
+    Light.Radius =
+        Data.Radius;
+
+    Light.Direction =
+        normalize(
+            Data.Direction);
+
+    Light.InnerConeCos =
+        Data.InnerConeCos;
+
+    Light.OuterConeCos =
+        Data.OuterConeCos;
+
+    return Light;
+}
+
+
+
+// ============================================================================
+// Scene Lighting Evaluation
+// ============================================================================
+
+float3 EvaluateSceneLighting(
+    ShadingContext Context,
+    MaterialData Material)
+{
+    float3 Result = 0.0;
+
+    // =====================================================
+    // Directional
+    // =====================================================
+
+    [loop]
+    for (uint i = 0;
+         i < DirectionalLightCount;
+         ++i)
+    {
+        DirectionalLightData Raw =
+            DirectionalLights[i];
+
+        DirectionalLight Light =
+            MakeDirectionalLight(
+                Raw);
+
+        Result +=
+            ShadeDirectionalLight(
+                Context,
+                Material,
+                Light);
+    }
+
+
+    // =====================================================
+    // Point
+    // =====================================================
+
+    [loop]
+    for (uint i = 0;
+         i < PointLightCount;
+         ++i)
+    {
+        PointLightData Raw =
+            PointLights[i];
+
+        PointLight Light =
+            MakePointLight(
+                Raw);
+
+        Result +=
+            ShadePointLight(
+                Context,
+                Material,
+                Light);
+    }
+
+
+    // =====================================================
+    // Spot
+    // =====================================================
+
+    [loop]
+    for (uint i = 0;
+         i < SpotLightCount;
+         ++i)
+    {
+        SpotLightData Raw =
+            SpotLights[i];
+
+        SpotLight Light =
+            MakeSpotLight(
+                Raw);
+
+        Result +=
+            ShadeSpotLight(
+                Context,
+                Material,
+                Light);
+    }
+
+    // AO
+    Result *=
+        Material.AmbientOcclusion;
+
+    // Emissive
+    Result +=
+        Material.EmissiveColor;
+
+    return Result;
+}

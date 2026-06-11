@@ -19,6 +19,35 @@ namespace App {
         staticMeshComponent->SetStaticMesh(staticMeshAsset->GetMesh());
         scene = Renderer::GetRenderModuleInstance()->AllocateScene();
         scene->AddPrimitive(staticMeshComponent);
+
+        // Create Directional Light
+        directionalLight = new DirectionalLightComponent();
+        directionalLight->SetWorldLocation({ 5.0f, 5.0f, 5.0f });
+        directionalLight->SetDirection({ -1.0f, -1.0f, -1.0f });
+        directionalLight->SetColor({ 1.0f, 1.0f, 1.0f });
+        directionalLight->SetIntensity(1.0f);
+        directionalLight->SetCastShadow(true);
+        scene->AddLight(directionalLight);
+
+        // Create Point Light
+        pointLight = new PointLightComponent();
+        pointLight->SetWorldLocation({ -3.0f, 2.0f, 0.0f });
+        pointLight->SetColor({ 1.0f, 0.5f, 0.2f });
+        pointLight->SetIntensity(1.0f);
+        pointLight->SetAttenuationRadius(10.0f);
+        scene->AddLight(pointLight);
+
+        // Create Spot Light
+        spotLight = new SpotLightComponent();
+        spotLight->SetWorldLocation({ 3.0f, 2.0f, 0.0f });
+        spotLight->SetDirection({ -1.0f, -0.5f, 0.0f });
+        spotLight->SetColor({ 0.2f, 0.5f, 1.0f });
+        spotLight->SetIntensity(1.0f);
+        spotLight->SetAttenuationRadius(15.0f);
+        spotLight->SetInnerConeAngle(20.0f);
+        spotLight->SetOuterConeAngle(45.0f);
+        scene->AddLight(spotLight);
+
         scene->FlushPendingUpdates();
 
         camera.SetPosition({ 0.0f, 0.0f, -5.0f });
@@ -31,10 +60,31 @@ namespace App {
     {
 		if (scene) {
 			scene->RemovePrimitive(staticMeshComponent);
+            
+            // Remove lights from scene
+            if (directionalLight) {
+                scene->RemoveLight(directionalLight);
+            }
+            if (pointLight) {
+                scene->RemoveLight(pointLight);
+            }
+            if (spotLight) {
+                scene->RemoveLight(spotLight);
+            }
+
             scene->FlushPendingUpdates();
 		}
 		delete staticMeshComponent;
 		staticMeshComponent = nullptr;
+        
+        // Delete lights
+        delete directionalLight;
+        directionalLight = nullptr;
+        delete pointLight;
+        pointLight = nullptr;
+        delete spotLight;
+        spotLight = nullptr;
+
 		staticMeshAsset.reset();
         delete scene;
 		scene = nullptr;
@@ -46,12 +96,12 @@ namespace App {
         if (!InViewport)
             return;
 
-        // ¹¹½¨ SceneViewCollection
+        // ï¿½ï¿½ï¿½ï¿½ SceneViewCollection
         ;
         family.RenderTarget = InViewport;
         BuildSceneViews(InViewport, family);
 
-        // µ÷ÓÃ RenderInterface Ö´ÐÐäÖÈ¾
+        // ï¿½ï¿½ï¿½ï¿½ RenderInterface Ö´ï¿½ï¿½ï¿½ï¿½È¾
         Renderer::GetRenderModuleInstance()->BeginRender(&family);
     }
 
@@ -62,7 +112,7 @@ namespace App {
         auto proj = camera.GetProjectionMatrix();
 		auto vp = view * proj;
         ;
-        //»æÖÆ³¡¾°
+        //ï¿½ï¿½ï¿½Æ³ï¿½ï¿½ï¿½
         SceneView sceneView;
         sceneView.CameraWorldPos = camera.GetPosition();
         sceneView.ViewMatrix = view;

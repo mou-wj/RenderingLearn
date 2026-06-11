@@ -1,11 +1,11 @@
 #pragma once
 
 #include "LightComponent.h"
-
+#include "EngineExport.h"
 namespace Engine
 {
 
-    class LightSceneProxy
+    class ENGINE_API LightSceneProxy
     {
     public:
         explicit LightSceneProxy(
@@ -62,7 +62,7 @@ namespace Engine
             true;
     };
 
-    class DirectionalLightSceneProxy
+    class ENGINE_API DirectionalLightSceneProxy
         : public LightSceneProxy
     {
     public:
@@ -75,7 +75,7 @@ namespace Engine
             const override;
     };
 
-    class LocalLightSceneProxy
+    class ENGINE_API LocalLightSceneProxy
         : public LightSceneProxy
     {
     public:
@@ -98,7 +98,7 @@ namespace Engine
             1000.0f;
     };
 
-    class PointLightSceneProxy
+    class ENGINE_API PointLightSceneProxy
         : public LocalLightSceneProxy
     {
     public:
@@ -111,7 +111,7 @@ namespace Engine
             const override;
     };
 
-    class SpotLightSceneProxy
+    class ENGINE_API SpotLightSceneProxy
         : public LocalLightSceneProxy
     {
     public:
@@ -143,17 +143,32 @@ namespace Engine
             45.0f;
     };
 
-    class SkyLightSceneProxy
+    class ENGINE_API SkyLightSceneProxy
         : public LightSceneProxy
     {
     public:
         explicit SkyLightSceneProxy(
             const SkyLightComponent*
             component);
+    public:
+        void UpdateFromComponent(const LightComponent* component) override;
+
+        // Environment texture and precompute dirty flag (copied from component)
+        RenderCore::RenderTexture* GetEnvironmentMap() const { return EnvironmentMap; }
+        RenderCore::RenderTexture* GetDiffuseIrradiance() const { return DiffuseIrradianceMap; }
+        RenderCore::RenderTexture* GetSpecularPrefilter() const { return SpecularPrefilterMap; }
+        bool IsPrecomputeDirty() const { return bPrecomputeDirty; }
+        void ClearPrecomputeDirty() { bPrecomputeDirty = false; }
 
     public:
         ELightType GetLightType()
             const override;
+
+    protected:
+        RenderCore::RenderTexture* EnvironmentMap;
+        RenderCore::RenderTexture* DiffuseIrradianceMap;
+        RenderCore::RenderTexture* SpecularPrefilterMap;
+        bool bPrecomputeDirty = true;
     };
 
 }

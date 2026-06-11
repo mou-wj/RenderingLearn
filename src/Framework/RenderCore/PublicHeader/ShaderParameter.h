@@ -166,28 +166,28 @@ namespace RenderCore {
 
         struct Member
         {
+            const char* TypeName;
             const char* Name;
             uint32_t Offset;
             EShaderParameterBaseType BaseType;
-            EShaderParameterContainerType ContainerType;
             uint32_t NumRows = 1;
             uint32_t NumColumns = 1;
             uint32_t NumElements = 0;
             const ShaderParametersMetadata* StructMetadata = nullptr;
             Member(
+            const char* InTypeName,
             const char* InName,
             uint32_t InOffset,
             EShaderParameterBaseType InBaseType,
-            EShaderParameterContainerType InContainerType,
             uint32_t InNumRows,
             uint32_t InNumColumns,
             uint32_t InNumElements,
             const ShaderParametersMetadata* InStructMetadata
             ):
+				TypeName(InTypeName),
 				Name(InName), 
                 Offset(InOffset), 
-                BaseType(InBaseType), 
-				ContainerType(InContainerType),
+                BaseType(InBaseType),
                 NumRows(InNumRows), 
                 NumColumns(InNumColumns), 
                 NumElements(InNumElements), 
@@ -196,11 +196,11 @@ namespace RenderCore {
             {
 
             }
-            bool IsUniformDataMember() const { return StructMetadata == nullptr && BaseType <= EShaderParameterBaseType::StructNested && ContainerType == EShaderParameterContainerType::None; }
-            bool IsIncludeStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::StructInclude && ContainerType == EShaderParameterContainerType::None; }
-            bool IsReferenceStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::StructReference && ContainerType == EShaderParameterContainerType::None; }
+            bool IsUniformDataMember() const { return StructMetadata == nullptr && BaseType <= EShaderParameterBaseType::StructNested; }
+            bool IsIncludeStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::StructInclude; }
+            bool IsReferenceStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::StructReference; }
             bool IsNestedStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::StructNested; }
-            bool IsResource() const { return (BaseType >= EShaderParameterBaseType::RDGTexture) || (BaseType <= EShaderParameterBaseType::StructNested && ContainerType > EShaderParameterContainerType::Array); }
+            bool IsResource() const { return (BaseType >= EShaderParameterBaseType::RDGTexture); }
             bool IsRenderTargetSlots() const { return BaseType == EShaderParameterBaseType::RenderTargetSlots; }
         };
 		bool InitFlag = false;
@@ -306,7 +306,6 @@ template<typename T>
 struct ShaderParameterTypeInfo
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Unknown;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -326,7 +325,6 @@ template<>
 struct ShaderParameterTypeInfo<RenderCore::RenderGraphTexture>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RDGTexture;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -342,7 +340,6 @@ template<>
 struct ShaderParameterTypeInfo<RenderCore::RenderGraphTextureUAV>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RDGTexture_UAV;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -358,7 +355,6 @@ template<>
 struct ShaderParameterTypeInfo<RHI::RHISampler>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RHISampler;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -369,11 +365,56 @@ struct ShaderParameterTypeInfo<RHI::RHISampler>
 
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
 };
+
+template<>
+struct ShaderParameterTypeInfo<RHI::RHITexture>
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RHITexture;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 1;
+    static constexpr uint32_t NumElements = 0;
+    static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+    static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+    using TAlignedType = RHI::RHITexture*;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+};
+
+template<>
+struct ShaderParameterTypeInfo<RHI::RHIShaderResourceView>
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RHI_SRV;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 1;
+    static constexpr uint32_t NumElements = 0;
+    static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+    static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+    using TAlignedType = RHI::RHIShaderResourceView*;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+};
+template<>
+struct ShaderParameterTypeInfo<RHI::RHIUnorderedAccessView>
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RHI_UAV;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 1;
+    static constexpr uint32_t NumElements = 0;
+    static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+    static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+    using TAlignedType = RHI::RHIUnorderedAccessView*;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+};
+
+
 template<>
 struct ShaderParameterTypeInfo<uint32_t>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::UInt32;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -388,7 +429,6 @@ template<>
 struct ShaderParameterTypeInfo<float>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Float32;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -403,7 +443,6 @@ template<>
 struct ShaderParameterTypeInfo<Core::Float2>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Float32;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 2;
     static constexpr uint32_t NumElements = 0;
@@ -418,7 +457,6 @@ template<>
 struct ShaderParameterTypeInfo<Core::Float3>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Float32;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 3;
     static constexpr uint32_t NumElements = 0;
@@ -430,10 +468,23 @@ struct ShaderParameterTypeInfo<Core::Float3>
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
 };
 template<>
+struct ShaderParameterTypeInfo<Core::Float4>
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Float32;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 4;
+    static constexpr uint32_t NumElements = 0;
+    static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+    static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+    using TAlignedType = Core::Float4;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+};
+template<>
 struct ShaderParameterTypeInfo<Core::Float4x4>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Float32;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 4;
     static constexpr uint32_t NumColumns = 4;
     static constexpr uint32_t NumElements = 0;
@@ -449,7 +500,6 @@ template<>
 struct ShaderParameterTypeInfo<RenderCore::RenderTargetBindingSlots>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RenderTargetSlots;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -465,7 +515,6 @@ template<typename T>
 struct StructNestedShaderParameterTypeInfo
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::StructNested;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -480,7 +529,6 @@ template<typename T>
 struct StructReferenceShaderParameterTypeInfo
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::StructReference;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -496,7 +544,6 @@ template<typename T>
 struct StructIncludeShaderParameterTypeInfo
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::StructInclude;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::None;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -508,98 +555,23 @@ struct StructIncludeShaderParameterTypeInfo
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return T::GetMetaData(); }
 };
 
-
-template<typename T, uint32_t Count, RenderCore::EShaderParameterBaseType ParameterBaseType>
-struct ShaderParameterArrayTypeInfo
+template<typename ElementType,typename T>
+struct StructNestedBufferShaderParameterTypeInfo
 {
-    static constexpr RenderCore::EShaderParameterBaseType BaseType = ParameterBaseType;
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = RenderCore::EShaderParameterContainerType::Array;
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RDGBuffer_SRV;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
-    static constexpr uint32_t NumElements = Count;
+    static constexpr uint32_t NumElements = 0;
     static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
     static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
 
-    using TAlignedType = std::array<typename ShaderParameterTypeInfo<T>
-        ::TAlignedType, Count>;
+    using TAlignedType = T;
 
-    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return ElementType::GetMetaData(); }
 };
 
 
-template<typename T, typename = void>
-struct ShaderParameterBufferElementInfo
-{
-    using ShaderElementInfo =
-        ShaderParameterTypeInfo<T>;
-
-    static constexpr
-        RenderCore::EShaderParameterBaseType
-        BaseType =
-        ShaderElementInfo::BaseType;
-    static constexpr uint32_t NumRows = ShaderElementInfo::NumRows;
-    static constexpr uint32_t NumColumns = ShaderElementInfo::NumColumns;
-
-    static const
-        RenderCore::ShaderParametersMetadata*
-        GetStructMetadata()
-    {
-        return nullptr;
-    }
-};
-template<typename T>
-struct ShaderParameterBufferElementInfo<
-    T,
-    std::void_t<
-    decltype(
-        T::GetMetaData())>>
-{
-    static constexpr
-        RenderCore::EShaderParameterBaseType
-        BaseType =
-        RenderCore::EShaderParameterBaseType
-        ::StructNested;
-    static constexpr uint32_t NumRows = 0;
-    static constexpr uint32_t NumColumns = 0;
-    static const
-        RenderCore::ShaderParametersMetadata*
-        GetStructMetadata()
-    {
-        return
-            T::GetMetaData();
-    }
-};
-
-
-template<typename AlignType, typename ElementTypeInfp, RenderCore::EShaderParameterContainerType InContainerType>
-struct ShaderParameterBufferTypeInfo
-{
-    using ElementTypeInfo = ElementTypeInfp;
-
-    static constexpr RenderCore::EShaderParameterBaseType BaseType =
-        ElementTypeInfo::BaseType;
-
-    static constexpr RenderCore::EShaderParameterContainerType ContainerType = InContainerType;
-
-    static constexpr uint32_t NumRows = ElementTypeInfo::NumRows;
-
-    static constexpr uint32_t NumColumns = ElementTypeInfo::NumColumns;
-
-    static constexpr uint32_t NumElements = 0;
-
-    static constexpr uint32_t Alignment = 0;
-
-    static constexpr bool bIsStoredInConstantBuffer = false;
-
-    using TAlignedType = AlignType;
-
-    static const RenderCore::ShaderParametersMetadata* GetStructMetadata()
-    {
-        return ElementTypeInfo::GetStructMetadata();
-    }
-};
-
-
+#define TEXT(T) #T
 
 
 #define STRUCT_OFFSET(StructType, Member) offsetof(StructType, Member)
@@ -637,7 +609,7 @@ public:\
     }\
 };
 
-#define SHADER_PARAMETER_INTERNAL(MemberName,TypeInfo)\
+#define SHADER_PARAMETER_INTERNAL(MemberTypeName,MemberName,TypeInfo)\
     PrevType##MemberName;\
     struct CurMember##MemberName : PrevType##MemberName{};\
     using CurMemberIdType##MemberName = CurMember##MemberName;\
@@ -647,10 +619,10 @@ private:\
     static FuncPtr sAppendMemberGetPrev(CurMemberIdType##MemberName, std::vector<RenderCore::ShaderParametersMetadata::Member>* Members) \
 		{ \
             Members->push_back(RenderCore::ShaderParametersMetadata::Member(\
+            MemberTypeName,\
             #MemberName,\
             STRUCT_OFFSET(ThisStructType, MemberName),\
             TypeInfo::BaseType,\
-            TypeInfo::ContainerType,\
             TypeInfo::NumRows,\
             TypeInfo::NumColumns,\
             TypeInfo::NumElements,\
@@ -663,63 +635,77 @@ private:\
 
 // Define a texture parameter
 #define SHADER_PARAMETER(ClassType,Name) \
-SHADER_PARAMETER_INTERNAL(Name,ShaderParameterTypeInfo<ClassType>)
+SHADER_PARAMETER_INTERNAL("",Name,ShaderParameterTypeInfo<ClassType>)
 
     // 定义纹理参数宏
-#define SHADER_PARAMETER_RDG_TEXTURE(MemberName) \
+#define SHADER_PARAMETER_RDG_TEXTURE(MemberTypeName,MemberName) \
     SHADER_PARAMETER_INTERNAL( \
+        TEXT(MemberTypeName),\
         MemberName, \
         ShaderParameterTypeInfo<RenderCore::RenderGraphTexture>)
 
 #define SHADER_PARAMETER_SAMPLER(MemberName) \
     SHADER_PARAMETER_INTERNAL( \
+        "SamplerState",\
         MemberName, \
         ShaderParameterTypeInfo<RHI::RHISampler>)
 
-#define SHADER_PARAMETER_RDG_TEXTURE_UAV(MemberName) \
+#define SHADER_PARAMETER_RDG_TEXTURE_UAV(MemberTypeName,MemberName) \
     SHADER_PARAMETER_INTERNAL( \
+        TEXT(MemberTypeName),\
         MemberName, \
         ShaderParameterTypeInfo<RenderCore::RenderGraphTextureUAV>)
 
 #define SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(MemberName) \
     SHADER_PARAMETER_INTERNAL( \
+        "",\
         MemberName, \
         ShaderParameterTypeInfo<RenderCore::RenderTargetBindingSlots>)
 
 #define SHADER_PARAMETER_STRUCT_NESTED(StructType, MemberName) \
     SHADER_PARAMETER_INTERNAL( \
+        TEXT(StructType),\
         MemberName, \
         StructNestedShaderParameterTypeInfo<StructType>)
 
 #define SHADER_PARAMETER_STRUCT_REFERENCE(StructType, MemberName) \
     SHADER_PARAMETER_INTERNAL( \
+        "",\
         MemberName, \
         StructReferenceShaderParameterTypeInfo<StructType>)
 
 #define SHADER_PARAMETER_STRUCT_INCLUDE(StructType, MemberName) \
     SHADER_PARAMETER_INTERNAL( \
+        "",\
         MemberName, \
         StructIncludeShaderParameterTypeInfo<StructType>)
+template<typename ElementType>
+using RDGStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RenderCore::RenderGraphBufferSRVRef>;
 
-#define SHADER_PARAMETER_ARRAY(Type, Name, Count) \
-SHADER_PARAMETER_INTERNAL( \
-    Name, \
-    ShaderParameterArrayTypeInfo<Type, Count>)
-
-template<typename T>
-using RDGStructuredBufferTemplate =
-ShaderParameterBufferTypeInfo<
-    RenderCore::RenderGraphBuffer*,
-    ShaderParameterBufferElementInfo<T>,
-    RenderCore::EShaderParameterContainerType::StructuredBuffer>;
 #define SHADER_PARAMETER_RDG_STRUCTURED_BUFFER( \
     ElementType, Name) \
 SHADER_PARAMETER_INTERNAL( \
+    "StructuredBuffer<"##TEXT(ElementType)##">",\
     Name, \
     RDGStructuredBufferTemplate<ElementType>)
-//#define SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(ElementType, Name) \
-//SHADER_PARAMETER(Name,(RenderCore::ShaderParameterBufferTypeInfo<RenderCore::RenderGraphBuffer*,ShaderParameterBufferElementInfo<ElementType>,RenderCore::EShaderParameterContainerType::StructuredBuffer>))
 
+#define SHADER_PARAMETER_RHI_TEXTURE(MemberTypeName,MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        TEXT(MemberTypeName),\
+        MemberName, \
+        ShaderParameterTypeInfo<RHI::RHITexture>)
+
+#define SHADER_PARAMETER_RHI_SRV(MemberTypeName,MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        TEXT(MemberTypeName),\
+        MemberName, \
+        ShaderParameterTypeInfo<RHI::RHIShaderResourceView>)
+
+#define SHADER_PARAMETER_RHI_UAV(MemberTypeName,MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        TEXT(MemberTypeName),\
+        MemberName, \
+        ShaderParameterTypeInfo<RHI::RHIUnorderedAccessView>)
 
 BEGIN_SHADER_PARAMETER_STRUCT(A)
     SHADER_PARAMETER(Core::Int2, Int2Parameter)

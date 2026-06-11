@@ -30,6 +30,8 @@ namespace Engine {
 		virtual bool Load() = 0;
 	};
 
+    
+
 
 	using AssetSP = std::shared_ptr<IAsset>;
 
@@ -41,7 +43,7 @@ namespace Engine {
         AssetInfo(): Name(""), Path(), Type(typeid(IAsset)){}
 		AssetInfo(const std::string& name,const std::string& path,const std::type_index& type): Name(name), Path(path), Type(type){}
         AssetInfo(const AssetInfo& other) : AssetInfo(other.Name,other.Path,other.Type){}
-        // Î´À´¿ÉÒÔÀ©Õ¹
+        // Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¹
         // std::vector<AssetID> Dependencies;
     };
 
@@ -158,7 +160,7 @@ namespace Engine {
             std::function<void(std::shared_ptr<AssetType>)> Callback)
         {
             // -----------------------------
-            // 1. Cache ÃüÖÐÖ±½Ó·µ»Ø
+            // 1. Cache ï¿½ï¿½ï¿½ï¿½Ö±ï¿½Ó·ï¿½ï¿½ï¿½
             // -----------------------------
             {
                 std::lock_guard<std::mutex> lock(Mutex);
@@ -171,23 +173,23 @@ namespace Engine {
                 }
 
                 // -----------------------------
-                // 2. ·ÀÖ¹ÖØ¸´¼ÓÔØ
+                // 2. ï¿½ï¿½Ö¹ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½
                 // -----------------------------
                 if (LoadingSet.contains(Path))
                 {
-                    return; // »òÕß¿ÉÒÔ¹ÒµÈ´ý¶ÓÁÐ
+                    return; // ï¿½ï¿½ï¿½ß¿ï¿½ï¿½Ô¹ÒµÈ´ï¿½ï¿½ï¿½ï¿½ï¿½
                 }
 
                 LoadingSet.insert(Path);
             }
 
             // -----------------------------
-            // 3. Òì²½¼ÓÔØ
+            // 3. ï¿½ì²½ï¿½ï¿½ï¿½ï¿½
             // -----------------------------
             std::async(std::launch::async,
                 [this, Path, Callback]()
                 {
-                    // ÄÚ²¿µ÷ÓÃ Sync Loader
+                    // ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½ Sync Loader
                     auto asset = LoadSync<AssetType>(Path);
 
                     {
@@ -224,7 +226,7 @@ namespace Engine {
             if (infos.empty())
                 return nullptr;
 
-            // Ä¬ÈÏÈ¡µÚÒ»¸ö£¨Ò²¿ÉÒÔ·µ»ØÊý×é£©
+            // Ä¬ï¿½ï¿½È¡ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ò²ï¿½ï¿½ï¿½Ô·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é£©
             const auto* info = infos[0];
 
             return GetAsset<AssetType>(info->Path);
@@ -269,7 +271,7 @@ namespace Engine {
 		const std::string& GetPath() const override;
 
 
-		// Load ÊµÏÖ
+		// Load Êµï¿½ï¿½
 		bool Load() override;
 
 	private:
@@ -289,7 +291,7 @@ namespace Engine {
 		const std::string& GetPath() const override;
 
 
-		// Load ÊµÏÖ
+		// Load Êµï¿½ï¿½
 		bool Load() override;
 
         StaticMesh* GetMesh() const { return Mesh_.get(); }
@@ -339,4 +341,39 @@ namespace Engine {
 
 		std::shared_ptr<Material> MaterialPtr;
 	};
+
+
+class ENGINE_API SkyLightAsset : public IAsset
+    {
+    public:
+        explicit SkyLightAsset(const std::string& InPath)
+            : Path(InPath)
+        {
+        }
+
+        ~SkyLightAsset() override = default;
+
+        const std::string& GetName() const override { return Name; }
+        const std::string& GetPath() const override { return Path; }
+
+        bool Load() override;
+
+        // HDR environment map (2D)
+        RenderCore::RenderTexture* GetHDRTexture() const { return HDRTexture.get(); }
+
+        // Diffuse irradiance (2D)
+        RenderCore::RenderTexture* GetDiffuseIrradiance() const { return DiffuseIrradiance.get(); }
+
+        // Specular prefiltered environment (texture array)
+        RenderCore::RenderTexture* GetSpecularPrefilter() const { return SpecularPrefilter.get(); }
+
+    private:
+        std::string Name = "SkyLightAsset";
+        std::string Path;
+
+        RenderCore::RenderTextureSP HDRTexture = nullptr;
+        RenderCore::RenderTextureSP DiffuseIrradiance = nullptr;
+        RenderCore::RenderTextureSP SpecularPrefilter = nullptr;
+    };
+
 }

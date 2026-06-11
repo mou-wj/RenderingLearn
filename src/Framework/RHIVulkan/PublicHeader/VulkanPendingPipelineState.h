@@ -521,6 +521,18 @@ namespace RHIVulkan {
         {
         }
 
+        void Reset()
+        {
+            CurrentPipeline = nullptr;
+            CurrentState = nullptr;
+            bDirtyPipelineState = false;
+            CurrentPipeline = nullptr;
+            CurrentState = nullptr;
+            for (auto& state : States) {
+                state.second->Reset();
+            }
+        }
+
         void SetPipeline(VulkanComputePipelineState* pipeline)
         {
             bDirtyPipelineState = true;
@@ -675,6 +687,12 @@ namespace RHIVulkan {
 
             CurrentPipeline = nullptr;
             CurrentState = nullptr;
+            bDirtyPipelineState = false;
+            CurrentPipeline = nullptr;
+            CurrentState = nullptr;
+            for (auto& state : States) {
+                state.second->Reset();
+            }
         }
 
         // Pipeline

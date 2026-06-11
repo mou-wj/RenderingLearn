@@ -214,6 +214,7 @@ namespace RenderCore {
         entry.RDGBuffer = rdgBuf;
         entry.Tracker = &buffer->GetTracker();
         entry.RHIBuffer = rhiBuf;
+        entry.ViewCache = &buffer->GetViewCache();
 
         ExternalBuffers[rhiBuf] = entry;
 
@@ -255,6 +256,7 @@ namespace RenderCore {
         AllocateResources();
         ExecutaPasses();
         ApplyFinalStates();
+        TransientAllocator->GarbageCollect();
     }
 
     void RenderGraphBuilder::AnalyzePasses()
@@ -283,6 +285,9 @@ namespace RenderCore {
 
         auto NeedBarrier = [&](ERHIResourceAccess Before, ERHIResourceAccess After)
             {
+                if (Before == ERHIResourceAccess::Unknown && After != ERHIResourceAccess::Unknown) {
+                    return true;
+                }
                 const bool BeforeWrite = IsWrite(Before);
                 const bool AfterWrite = IsWrite(After);
 
@@ -335,7 +340,7 @@ namespace RenderCore {
                 if (it != ExternalTextures.end())
                     return it->second.Tracker->GetSubresourceAccess(range);
 
-                return ERHIResourceAccess::Undefined;
+                return ERHIResourceAccess::Unknown;
             };
 
         auto GetInitialBufferAccess = [&](RHI::RHIBuffer* buffer)
@@ -343,7 +348,7 @@ namespace RenderCore {
                 auto it = ExternalBuffers.find(buffer);
                 if (it != ExternalBuffers.end())
                     return it->second.Tracker->GetLastAccess();
-                return ERHIResourceAccess::Undefined;
+                return ERHIResourceAccess::Unknown;
             };
 
         // =========================================
@@ -584,7 +589,7 @@ namespace RenderCore {
             );
             InternalTextureViewCaches[rhiTex->GetRHI()] = &rhiTex->GetViewCache(); // 内部资源创建独立 view cache
             tex->Resource = rhiTex->GetRHI();
-
+            RHITextureToTransientTarget[tex->GetRHITexture()] = rhiTex.get();
         }
 
         // =========================
@@ -616,6 +621,7 @@ namespace RenderCore {
             );
             InternalBufferViewCaches[rhiBuf->GetRHI()] = &rhiBuf->GetViewCache();
             buf->Resource = rhiBuf->GetRHI();
+            RHIBufferTransientBuffer[buf->GetRHIBuffer()] = rhiBuf.get();
         }
 
         //view
@@ -750,7 +756,7 @@ namespace RenderCore {
                         // SRV → ReadOnly
                         Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
-                        Pass->TextureIntents.push_back(Intent);
+                        Pass->AddTextureIntent(Intent);
                     }
                 }
                 // ============================
@@ -784,7 +790,7 @@ namespace RenderCore {
                         // UAV → ReadWrite
                         Intent.RequiredAccess = ERHIResourceAccess::UAV;
 
-                        Pass->TextureIntents.push_back(Intent);
+                        Pass->AddTextureIntent(Intent);
                     }
                 }
                 // ============================
@@ -802,7 +808,7 @@ namespace RenderCore {
 
                         Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
-                        Pass->TextureIntents.push_back(Intent);
+                        Pass->AddTextureIntent(Intent);
                     }
                 }
 
@@ -822,7 +828,7 @@ namespace RenderCore {
 
                         Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
-                        Pass->BufferStates.push_back(Intent);
+                        Pass->AddBufferIntent(Intent);
                     }
                 }
 
@@ -842,7 +848,7 @@ namespace RenderCore {
 
                         Intent.RequiredAccess = ERHIResourceAccess::UAV;
 
-                        Pass->BufferStates.push_back(Intent);
+                        Pass->AddBufferIntent(Intent);
                     }
                 }
 
@@ -860,7 +866,7 @@ namespace RenderCore {
 
                         Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
-                        Pass->BufferStates.push_back(Intent);
+                        Pass->AddBufferIntent(Intent);
                     }
                 }
             }
@@ -894,7 +900,7 @@ namespace RenderCore {
 
                         Intent.RequiredAccess = ERHIResourceAccess::RenderTargetView;
 
-                        Pass->TextureIntents.push_back(Intent);
+                        Pass->AddTextureIntent(Intent);
                     }
                     
                     };
@@ -923,7 +929,7 @@ namespace RenderCore {
 
                     Intent.RequiredAccess = RTSlots.DepthStencil.bWriteDepth ? ERHIResourceAccess::DSVWrite : ERHIResourceAccess::DSVRead;
 
-                    Pass->TextureIntents.push_back(Intent);
+                    Pass->AddTextureIntent(Intent);
                 }
 
             }
@@ -1129,14 +1135,29 @@ namespace RenderCore {
                         {
                             if (tex->GetRHITexture())
                             {
-                                tex->GetTracker().UpdateLastAccessFence(fence);
+                                if (!tex->IsExternal) {
+                                    auto transientTarget = RHITextureToTransientTarget[tex->GetRHITexture()];
+                                    transientTarget->GetTracker().UpdateLastAccessFence(fence);
+                                }
+                                else {
+                                    tex->GetTracker().UpdateLastAccessFence(fence);
+                                }
+                                
                             }
                         }
                         else if (auto* buf = dynamic_cast<RenderGraphBuffer*>(res))
                         {
+                            
                             if (buf->GetRHIBuffer())
                             {
-                                buf->GetTracker().UpdateLastAccessFence(fence);
+                                if (!buf->IsExternal) {
+                                    auto transientBuffer = RHIBufferTransientBuffer[buf->GetRHIBuffer()];
+                                    transientBuffer->GetTracker().UpdateLastAccessFence(fence);
+                                }
+                                else {
+                                    buf->GetTracker().UpdateLastAccessFence(fence);
+                                }
+                                
                             }
                         }
                     }

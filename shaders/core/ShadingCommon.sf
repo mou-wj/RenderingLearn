@@ -1,14 +1,347 @@
-struct ShadingContext
+#include "/core/ShadingContext.sf"
+
+
+// ============================================================================
+// Light Data
+// Standalone definitions
+// ============================================================================
+
+struct DirectionalLight
 {
-    float3 WorldPosition;
+    float3 Color;
+    float  Intensity;
 
-    float3 WorldNormal;
-
-    float3x3 TangentToWorld;
-
-    float2 UV0;
-
-    float4 VertexColor;
-
-    float3 ViewDirection;
+    float3 Direction;
 };
+
+struct PointLight
+{
+    float3 Color;
+    float  Intensity;
+
+    float3 Position;
+    float  Radius;
+};
+
+struct SpotLight
+{
+    float3 Color;
+    float  Intensity;
+
+    float3 Position;
+    float  Radius;
+
+    float3 Direction;
+    float  InnerConeCos;
+
+    float  OuterConeCos;
+};
+
+
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+static const float PI = 3.14159265359;
+
+
+
+// ============================================================================
+// PBR Helpers
+// ============================================================================
+
+float DistributionGGX(
+    float3 N,
+    float3 H,
+    float Roughness)
+{
+    float a = Roughness * Roughness;
+    float a2 = a * a;
+
+    float NdotH = saturate(dot(N, H));
+    float NdotH2 = NdotH * NdotH;
+
+    float denom =
+        NdotH2 * (a2 - 1.0) + 1.0;
+
+    return a2 /
+        max(
+            PI * denom * denom,
+            1e-5);
+}
+
+float GeometrySchlickGGX(
+    float NdotV,
+    float Roughness)
+{
+    float r =
+        Roughness + 1.0;
+
+    float k =
+        (r * r) / 8.0;
+
+    return NdotV /
+        lerp(
+            NdotV,
+            1.0,
+            k);
+}
+
+float GeometrySmith(
+    float3 N,
+    float3 V,
+    float3 L,
+    float Roughness)
+{
+    float NdotV =
+        saturate(dot(N, V));
+
+    float NdotL =
+        saturate(dot(N, L));
+
+    float ggxV =
+        GeometrySchlickGGX(
+            NdotV,
+            Roughness);
+
+    float ggxL =
+        GeometrySchlickGGX(
+            NdotL,
+            Roughness);
+
+    return ggxV * ggxL;
+}
+
+float3 FresnelSchlick(
+    float CosTheta,
+    float3 F0)
+{
+    return
+        F0 +
+        (1.0 - F0) *
+        pow(
+            1.0 - CosTheta,
+            5.0);
+}
+
+
+
+// ============================================================================
+// BRDF
+// ============================================================================
+
+float3 EvaluatePBRLighting(
+    MaterialData Material,
+    float3 N,
+    float3 V,
+    float3 L,
+    float3 LightColor,
+    float LightIntensity)
+{
+    float3 H =
+        normalize(V + L);
+
+    float NdotL =
+        saturate(dot(N, L));
+
+    float NdotV =
+        saturate(dot(N, V));
+
+    float HdotV =
+        saturate(dot(H, V));
+
+    if (NdotL <= 0.0)
+    {
+        return 0.0;
+    }
+
+    // Base reflectivity
+    float3 F0 =
+        lerp(
+            0.04.xxx,
+            Material.BaseColor,
+            Material.Metallic);
+
+    // BRDF terms
+    float D =
+        DistributionGGX(
+            N,
+            H,
+            Material.Roughness);
+
+    float G =
+        GeometrySmith(
+            N,
+            V,
+            L,
+            Material.Roughness);
+
+    float3 F =
+        FresnelSchlick(
+            HdotV,
+            F0);
+
+    // Specular
+    float3 Numerator =
+        D * G * F;
+
+    float Denominator =
+        max(
+            4.0 * NdotV * NdotL,
+            1e-5);
+
+    float3 Specular =
+        Numerator / Denominator;
+
+    // Diffuse
+    float3 KD =
+        (1.0 - F) *
+        (1.0 - Material.Metallic);
+
+    float3 Diffuse =
+        KD *
+        Material.BaseColor /
+        PI;
+
+    float3 Radiance =
+        LightColor *
+        LightIntensity;
+
+    return
+        (Diffuse + Specular) *
+        Radiance *
+        NdotL;
+}
+
+
+
+// ============================================================================
+// Directional Light
+// ============================================================================
+
+float3 ShadeDirectionalLight(
+    ShadingContext Context,
+    MaterialData Material,
+    DirectionalLight Light)
+{
+    float3 N =
+        normalize(Material.NormalTS);
+
+    float3 V =
+        normalize(Context.ViewDirection);
+
+    float3 L =
+        normalize(-Light.Direction);
+
+    return
+        EvaluatePBRLighting(
+            Material,
+            N,
+            V,
+            L,
+            Light.Color,
+            Light.Intensity);
+}
+
+
+
+// ============================================================================
+// Point Light
+// ============================================================================
+
+float3 ShadePointLight(
+    ShadingContext Context,
+    MaterialData Material,
+    PointLight Light)
+{
+    float3 ToLight =
+        Light.Position -
+        Context.WorldPosition;
+
+    float Distance =
+        length(ToLight);
+
+    if (Distance > Light.Radius)
+    {
+        return 0.0;
+    }
+
+    float3 L =
+        ToLight / Distance;
+
+    float Attenuation =
+        saturate(
+            1.0 -
+            Distance /
+            Light.Radius);
+
+    Attenuation *= Attenuation;
+
+    return
+        EvaluatePBRLighting(
+            Material,
+            normalize(Material.NormalTS),
+            normalize(Context.ViewDirection),
+            L,
+            Light.Color,
+            Light.Intensity *
+            Attenuation);
+}
+
+
+
+// ============================================================================
+// Spot Light
+// ============================================================================
+
+float3 ShadeSpotLight(
+    ShadingContext Context,
+    MaterialData Material,
+    SpotLight Light)
+{
+    float3 ToLight =
+        Light.Position -
+        Context.WorldPosition;
+
+    float Distance =
+        length(ToLight);
+
+    if (Distance > Light.Radius)
+    {
+        return 0.0;
+    }
+
+    float3 L =
+        normalize(ToLight);
+
+    float Cone =
+        dot(
+            normalize(-Light.Direction),
+            L);
+
+    float SpotFactor =
+        smoothstep(
+            Light.OuterConeCos,
+            Light.InnerConeCos,
+            Cone);
+
+    float Attenuation =
+        saturate(
+            1.0 -
+            Distance /
+            Light.Radius);
+
+    Attenuation *= Attenuation;
+    Attenuation *= SpotFactor;
+
+    return
+        EvaluatePBRLighting(
+            Material,
+            normalize(Material.NormalTS),
+            normalize(Context.ViewDirection),
+            L,
+            Light.Color,
+            Light.Intensity *
+            Attenuation);
+}

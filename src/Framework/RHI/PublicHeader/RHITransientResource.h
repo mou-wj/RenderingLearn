@@ -26,9 +26,6 @@ namespace RHI {
     public:
         virtual ~RHITransientResource();
 
-        // 生命周期控制
-        virtual void Acquire(const std::string& name, uint32_t beginIndex);
-        virtual void Release(uint32_t endIndex);
 
         bool IsAcquired() const;
         const std::string& GetName() const;
@@ -84,8 +81,8 @@ namespace RHI {
             uint32_t endIndex) = 0;
 
         // 回收资源
-        virtual void ReleaseTransientTexture(const RHITransientTexture* texture, uint32_t endIndex) = 0;
-        virtual void ReleaseTransientBuffer(const RHITransientBuffer* buffer, uint32_t endIndex) = 0;
+        virtual void ReleaseTransientTexture(const RHITransientTexture* texture) = 0;
+        virtual void ReleaseTransientBuffer(const RHITransientBuffer* buffer) = 0;
     };
 
     using RHITransientResourceManagerSP = std::shared_ptr<RHITransientResourceManager>;

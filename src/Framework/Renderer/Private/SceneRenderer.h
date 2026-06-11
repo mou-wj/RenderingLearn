@@ -2,21 +2,22 @@
 #include "SceneView.h"
 #include "Scene.h"
 #include "RenderGraphBuilder.h"
+#include "IBLPrecomputeShader.h"
 namespace Renderer {
 
     struct SceneTextures
     {
        
-        // Ö÷Êä³ö
+        // ï¿½ï¿½ï¿½ï¿½ï¿½
         RenderCore::RenderGraphTextureRef SceneColor;
         RenderCore::RenderGraphTextureRef SceneDepth;
 
-        // GBuffer£¨¿ÉÑ¡£¬ºóÐøÀ©Õ¹£©
+        // GBufferï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½
         RenderCore::RenderGraphTextureRef GBufferA;
         RenderCore::RenderGraphTextureRef GBufferB;
         RenderCore::RenderGraphTextureRef GBufferC;
 
-        // ¿ÉÑ¡£ººó´¦Àí / À©Õ¹Êä³ö
+        // ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ / ï¿½ï¿½Õ¹ï¿½ï¿½ï¿½
         RenderCore::RenderGraphTextureRef Velocity;
         RenderCore::RenderGraphTextureRef CustomDepth;
 
@@ -39,9 +40,8 @@ namespace Renderer {
 
         virtual ~SceneRenderer() = default;
 
-        // Ò»Ö¡äÖÈ¾Èë¿Ú
+        // Ò»Ö¡ï¿½ï¿½È¾ï¿½ï¿½ï¿½
         virtual void Build(RenderCore::RenderGraphBuilder& graphBuilder) = 0;
-
 
     protected:
         

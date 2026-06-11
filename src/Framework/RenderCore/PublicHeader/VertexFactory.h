@@ -104,7 +104,7 @@ public:
     VertexFactory() = default;
     virtual ~VertexFactory() = default;
     virtual RenderCore::VertexFactoryType* GetType() const { return nullptr; }
-    RHI::RHIVertexDescStateSP GetRHIVertexDescState() const;
+    RHI::RHIVertexDescState* GetRHIVertexDescState() const;
     VertexFactoryFeatureFlags GetVertexFactoryFlags() const { return VertexFactoryFlags; }
     static bool ShouldCompilePermutation(const VertexFactoryShaderPermutationParameters& Parameters) {
         return false;
@@ -163,7 +163,7 @@ protected:
 
 
     std::vector<VertexStream> Streams;
-    RHI::RHIVertexDescStateSP RHIVertexDescState;
+    RHI::RHIVertexDescState* RHIVertexDescState;
     VertexFactoryFeatureFlags VertexFactoryFlags;
 };
 

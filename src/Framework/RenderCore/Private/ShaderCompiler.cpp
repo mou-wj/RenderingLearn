@@ -216,7 +216,7 @@ namespace RenderCore {
                 }
 
                 // 这里只剩 nested
-                if (!Member.IsNestedStruct())
+                if (!(Member.IsNestedStruct() || Member.BaseType == EShaderParameterBaseType::RDGBuffer_SRV))
                 {
                     continue;
                 }
@@ -301,9 +301,7 @@ namespace RenderCore {
         {
             for (const auto& Member : Metadata.GetMembers())
             {
-                std::string Name = Prefix.empty()
-                    ? Member.Name
-                    : Prefix + "_" + Member.Name;
+                std::string Name = Member.Name;
 
                 if (Member.IsResource())
                 {
@@ -353,76 +351,7 @@ namespace RenderCore {
 
         std::string MapResourceType(const ShaderParametersMetadata::Member& Member)
         {
-
-            switch (Member.ContainerType)
-            {
-            case EShaderParameterContainerType
-                ::StructuredBuffer:
-                return
-                    "StructuredBuffer<" +
-                    MapNumericType(Member)
-                    + ">";
-
-            case EShaderParameterContainerType
-                ::RWStructuredBuffer:
-                return
-                    "RWStructuredBuffer<" +
-                    MapNumericType(Member)
-                    + ">";
-
-            case EShaderParameterContainerType
-                ::ByteAddressBuffer:
-
-                return
-                    "ByteAddressBuffer";
-
-            case EShaderParameterContainerType
-                ::RWByteAddressBuffer:
-
-                return
-                    "RWByteAddressBuffer";
-
-            default:
-                break;
-            }
-
-            switch (Member.BaseType)
-            {
-            case EShaderParameterBaseType
-                ::RDGTexture:
-
-            case EShaderParameterBaseType
-                ::RDGTexture_SRV:
-
-                return "Texture2D";
-
-            case EShaderParameterBaseType
-                ::RDGTexture_UAV:
-
-                return
-                    "RWTexture2D<float4>";
-
-            case EShaderParameterBaseType
-                ::RHISampler:
-
-                return
-                    "SamplerState";
-
-            case EShaderParameterBaseType
-                ::RDGBuffer_SRV:
-
-                return
-                    "Buffer<float4>";
-
-            case EShaderParameterBaseType
-                ::RDGBuffer_UAV:
-
-                return
-                    "RWBuffer<float4>";
-
-            default:
-                return "Texture2D";
-            }
+            return Member.TypeName;
         }
 
     };
@@ -524,7 +453,8 @@ bool ShaderCompiler::PreprocessSource(const ShaderCompileInput& input, std::stri
 
     // 2. ʹ�� ExpandIncludes չ������ include
     std::set<std::string> includeStack; // ����ѭ�� include ���
-    if (!ExpandIncludes(src, input.Environment, outSource, outIncludedFiles, 16, &includeStack))
+    std::set<std::string> includeFiles;
+    if (!ExpandIncludes(src, input.Environment, outSource, outIncludedFiles, 16, &includeStack,&includeFiles))
         return false;
 
     // 3. Ӧ�ú궨��
@@ -533,14 +463,18 @@ bool ShaderCompiler::PreprocessSource(const ShaderCompileInput& input, std::stri
     return true;
 }
 
-bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompilerEnvironment& env, std::string& outExpanded, std::vector<std::string>& outIncludedFiles, int depth, std::set<std::string>* includeStack)
+bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompilerEnvironment& env, std::string& outExpanded, std::vector<std::string>& outIncludedFiles, int depth, std::set<std::string>* includeStack, std::set<std::string>* includedFiles)
 {
     // 1. 深度限制，防止恶意递归
     if (depth > 32) return false;
 
     bool bIsRoot = (includeStack == nullptr);
     std::set<std::string> localStack;
-    if (bIsRoot) includeStack = &localStack;
+    std::set<std::string> localIncludedFiles;
+    if (bIsRoot) {
+        includeStack = &localStack;
+        includedFiles = &localIncludedFiles;
+    }
 
     std::istringstream stream(source);
     std::ostringstream result;
@@ -562,7 +496,7 @@ bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompi
 
                 // 防止循环引用
                 if (includeStack->count(includePath)) continue;
-
+                if (includedFiles->contains(includePath)) continue;
                 std::string includedSource;
                 bool bFound = false;
 
@@ -614,8 +548,9 @@ bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompi
 
                 // 递归展开
                 includeStack->insert(includePath);
+                includedFiles->insert(includePath);
                 std::string expandedInclude;
-                if (!ExpandIncludes(includedSource, env, expandedInclude, outIncludedFiles, depth + 1, includeStack))
+                if (!ExpandIncludes(includedSource, env, expandedInclude, outIncludedFiles, depth + 1, includeStack, includedFiles))
                 {
                     return false;
                 }
@@ -623,7 +558,6 @@ bool ShaderCompiler::ExpandIncludes(const std::string& source, const ShaderCompi
                 result << "// Start Include: " << includePath << "\n";
                 result << expandedInclude << "\n";
                 result << "// End Include: " << includePath << "\n";
-
                 outIncludedFiles.push_back(includePath);
                 includeStack->erase(includePath);
                 continue;
@@ -697,7 +631,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     const char* sourceCStr = preprocessedSource.c_str();
     shader.setStrings(&sourceCStr, 1);
     shader.setEntryPoint(input.EntryPoint.c_str());
-    EShMessages messages = (EShMessages)(EShMsgDefault | EShMsgReadHlsl | EShMsgVulkanRules | EShMsgSpvRules);
+    EShMessages messages = (EShMessages)(EShMsgDefault | EShMsgReadHlsl | EShMsgVulkanRules | EShMsgSpvRules  | EShMsgDebugInfo/**/);
     shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, 100);
     shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_2);
     shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_2);
@@ -781,7 +715,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         out.ErrorMessage = shader.getInfoLog();
         out.ErrorMessage += "\n";
         out.ErrorMessage += shader.getInfoDebugLog();
-        LOG_ERROR("%s", out.ErrorMessage);
+        LOG_ERROR("parse error %s", out.ErrorMessage);
         // ����
         for (auto p : preprocessorDefines) delete[] p;
         return;
@@ -802,7 +736,23 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     program.mapIO();
     // 5. ���� SPIR-V
     std::vector<uint32_t> spirv;
-    glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
+
+    spv::SpvBuildLogger logger;
+    glslang::SpvOptions spvOptions;
+
+    // 开启 RenderDoc Source Debug
+    spvOptions.generateDebugInfo = true;
+
+    // 禁止优化（非常重要）
+    spvOptions.disableOptimizer = true;
+
+    // 不做 size optimization
+    spvOptions.optimizeSize = false;
+
+    // 可选：开启验证
+    spvOptions.validate = true;
+
+    glslang::GlslangToSpv(*program.getIntermediate(stage), spirv,&logger,&spvOptions/**/ );
     
     const uint32_t OpTypeImage = 25;
     auto StripImageFormat = [](std::vector<uint32_t>& spirv)

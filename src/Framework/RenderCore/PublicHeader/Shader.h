@@ -370,6 +370,7 @@ protected:
         const ShaderParametersMetadata& Metadata,
         const std::string& Prefix,
         const ShaderParameterAllocationMap& ParameterMap,
+        const uint64_t MetadataOffset,
         ShaderParameterBindingInfo& OutBindings);
 
     void InitShaderRHI(ERHIShaderFrequency frequency, const std::vector<char>& shaderSourceCode);

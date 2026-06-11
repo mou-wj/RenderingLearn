@@ -1,5 +1,6 @@
 #include "LightComponent.h"
-
+#include "LightSceneProxy.h"
+#include "RenderResource.h"
 namespace Engine
 {
 
@@ -52,11 +53,32 @@ namespace Engine
     {
     }
 
+    LightSceneProxy* DirectionalLightComponent::CreateSceneProxy()
+    {
+        return new DirectionalLightSceneProxy(this);
+    }
+
     ELightType
         DirectionalLightComponent::
         GetLightType() const
     {
         return ELightType::Directional;
+    }
+
+    void DirectionalLightComponent::
+        SetDirection(
+            const Core::Float3& direction)
+    {
+        Direction = direction;
+
+        MarkRenderStateDirty();
+    }
+
+    const Core::Float3&
+        DirectionalLightComponent::
+        GetDirection() const
+    {
+        return Direction;
     }
 
     void LocalLightComponent::
@@ -74,9 +96,15 @@ namespace Engine
         return AttenuationRadius;
     }
 
+
     PointLightComponent::
         PointLightComponent()
     {
+    }
+
+    LightSceneProxy* PointLightComponent::CreateSceneProxy()
+    {
+        return new PointLightSceneProxy(this);
     }
 
     ELightType
@@ -89,6 +117,11 @@ namespace Engine
     SpotLightComponent::
         SpotLightComponent()
     {
+    }
+
+    LightSceneProxy* SpotLightComponent::CreateSceneProxy()
+    {
+        return new SpotLightSceneProxy(this);
     }
 
     ELightType
@@ -128,9 +161,40 @@ namespace Engine
         return OuterConeAngle;
     }
 
+    void SpotLightComponent::
+        SetDirection(
+            const Core::Float3& direction)
+    {
+        Direction = direction;
+
+        MarkRenderStateDirty();
+    }
+
+    const Core::Float3&
+        SpotLightComponent::
+        GetDirection() const
+    {
+        return Direction;
+    }
+
     SkyLightComponent::
         SkyLightComponent()
     {
+    }
+
+    void SkyLightComponent::SetEnvironmentMap(RenderCore::RenderTexture* InEnvMap)
+    {
+        EnvironmentMap = InEnvMap;
+        // 标记需要重新预计算
+        bPrecomputeDirty = true;
+
+        // 通知渲染线程需要更新
+        MarkRenderStateDirty();
+    }
+
+    LightSceneProxy* SkyLightComponent::CreateSceneProxy()
+    {
+        return new SkyLightSceneProxy(this);
     }
 
     ELightType

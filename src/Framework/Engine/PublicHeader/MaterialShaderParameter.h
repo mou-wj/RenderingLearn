@@ -1,6 +1,11 @@
 #pragma once
 #include "ShaderParameter.h"
 #include "RenderGraphResource.h"
+#include "EngineExport.h"
+namespace RenderCore {
+	class RenderGraphBuilder;
+}
+
 namespace Engine
 {
 
@@ -90,29 +95,24 @@ namespace Engine
 
         // ---------- Surface ----------
 
-        SHADER_PARAMETER_RDG_TEXTURE(
-            BaseColorTexture)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, BaseColorTexture)
 
-        SHADER_PARAMETER_RDG_TEXTURE(
-            OpacityTexture)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, OpacityTexture)
 
         // ---------- Normal ----------
 
-        SHADER_PARAMETER_RDG_TEXTURE(
-            NormalTexture)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, NormalTexture)
 
         // ---------- Packed PBR ----------
 
         // R = AO
         // G = Roughness
         // B = Metallic
-        SHADER_PARAMETER_RDG_TEXTURE(
-            ORMTexture)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, ORMTexture)
 
         // ---------- Emissive ----------
 
-        SHADER_PARAMETER_RDG_TEXTURE(
-            EmissiveTexture)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, EmissiveTexture)
 
     END_SHADER_PARAMETER_STRUCT(
     MaterialTextureParameters)
@@ -128,9 +128,6 @@ namespace Engine
 
         SHADER_PARAMETER_SAMPLER(
             LinearWrapSampler)
-
-        SHADER_PARAMETER_SAMPLER(
-            LinearClampSampler)
 
     END_SHADER_PARAMETER_STRUCT(
     MaterialSamplerParameters)
@@ -160,4 +157,12 @@ namespace Engine
     END_SHADER_PARAMETER_STRUCT(
     MaterialShaderParameters)
 
+   class MaterialRenderProxy;
+    
+   ENGINE_API void BuildShaderParameters(
+            const MaterialRenderProxy*
+            Proxy,
+            RenderCore::RenderGraphBuilder& Builder,
+            MaterialShaderParameters&
+            OutParams);
 }

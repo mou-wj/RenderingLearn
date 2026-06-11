@@ -23,6 +23,7 @@ VulkanCommandContext::~VulkanCommandContext()
 void VulkanCommandContext::Begin()
 {
     commandBufferManager->GetActiveCommandBuffer();
+    InnerBegin();
 }
 
 void VulkanCommandContext::End()
@@ -248,6 +249,7 @@ VulkanComputeContext::VulkanComputeContext(VulkanDevice* device, VulkanQueue* qu
 {
     PendingCompute = new VulkanPendingComputeState(device, this);
     LooseUniformDataUploader = new VulkanLooseUniformDataUploader(device);
+
 }
 
 VulkanComputeContext::~VulkanComputeContext()
@@ -320,6 +322,13 @@ void VulkanComputeContext::Dispatch(uint32_t groupCountX, uint32_t groupCountY, 
     {
         PendingCompute->PrepareForDispatch(commandBuffer);
         VKFunc::CmdDispatch(commandBuffer->GetHandle(), groupCountX, groupCountY, groupCountZ);
+    }
+}
+
+void VulkanComputeContext::InnerBegin()
+{
+    if (PendingCompute) {
+        PendingCompute->Reset();
     }
 }
 
@@ -488,6 +497,13 @@ void VulkanGraphicContext::TraceRays(uint32_t width, uint32_t height, uint32_t d
     VkStridedDeviceAddressRegionKHR missShaderBindingTable = {};
     VkStridedDeviceAddressRegionKHR hitShaderBindingTable = {};
     VkStridedDeviceAddressRegionKHR callableShaderBindingTable = {};
+}
+
+void VulkanGraphicContext::InnerBegin()
+{
+    if (PendingGfx) {
+        PendingGfx->Reset();
+    }
 }
 
 void VulkanGraphicContext::BeginRenderPass(const RHIRenderPassInfo& renderPassInfo)

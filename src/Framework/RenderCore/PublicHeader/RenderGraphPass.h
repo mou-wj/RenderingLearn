@@ -107,6 +107,7 @@ public:
     // Pass Info
     const RenderGraphParameterStruct& GetParameterStruct() const { return ParameterStruct; }
 
+
 protected:
     // Pass Name (for debugging and identification)
     std::string Name;
@@ -131,6 +132,10 @@ protected:
         // 访问的子资源范围（重要：解决你之前担心的 Subresource 问题）
         // 如果是全资源访问，可以使用之前定义的 kAllSubresources
         RHI::RHISubresourceRange SubresourceRange;
+
+        bool operator==(const RenderGraphTextureIntent& other) const {
+            return Texture == other.Texture && RequiredAccess == other.RequiredAccess && SubresourceRange == other.SubresourceRange;
+        }
         
     };
 
@@ -144,7 +149,29 @@ protected:
         // 该 Pass 需要的访问权限 (如：ShaderResource, UnorderedAccess, VertexBuffer 等)
         RHI::ERHIResourceAccess RequiredAccess = RHI::ERHIResourceAccess::Unknown;
 
+		bool operator==(const RenderGraphBufferIntent& other) const {
+			return Buffer == other.Buffer && RequiredAccess == other.RequiredAccess;
+		}
+
     };
+    void AddTextureIntent(const RenderGraphTextureIntent& intent) {
+        for (auto i = 0; i < TextureIntents.size(); i++) {
+            if (intent == TextureIntents[i]) {
+                return;
+            }
+        }
+
+        TextureIntents.push_back(intent);
+    }
+    void AddBufferIntent(const RenderGraphBufferIntent& intent) {   
+		for (auto i = 0; i < BufferStates.size(); i++) {
+			if (intent == BufferStates[i]) {
+				return;
+			}
+		}
+		BufferStates.push_back(intent);
+	}
+
 
     std::vector<RenderGraphTextureIntent> TextureIntents;
     std::vector<RenderGraphBufferIntent>  BufferStates;

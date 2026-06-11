@@ -204,6 +204,20 @@ namespace Engine
     {
     }
 
+    void SkyLightSceneProxy::UpdateFromComponent(const LightComponent* component)
+    {
+        LightSceneProxy::UpdateFromComponent(component);
+
+        auto sky = static_cast<const SkyLightComponent*>(component);
+        if (sky)
+        {
+            EnvironmentMap = sky->GetEnvironmentMap();
+            DiffuseIrradianceMap = sky->GetDiffuseIrradiance();
+            SpecularPrefilterMap = sky->GetSpecularPrefilter();
+            bPrecomputeDirty = sky->IsPrecomputeDirty();
+        }
+    }
+
     ELightType
         SkyLightSceneProxy::
         GetLightType() const

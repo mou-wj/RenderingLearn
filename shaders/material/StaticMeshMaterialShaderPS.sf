@@ -4,7 +4,8 @@
 #define SHADINGMODEL_LIT 1
 #include "/Generated/ShaderParameters/StaticMeshMaterialShaderPSParameters.sf"
 #if MATERIAL_SHADING_MODEL == SHADINGMODEL_LIT
-#include "/Generated/ShaderParameters/SceneLightParameters.sf"
+#include "/core/MaterialParametersHelper.sf"
+#include "/core/SceneParametersHelper.sf""
 #endif 
 
 float4 MainPS(VertexFactoryVSToPS Input) : SV_Target0
@@ -31,17 +32,10 @@ float4 MainPS(VertexFactoryVSToPS Input) : SV_Target0
 
 #if MATERIAL_SHADING_MODEL == SHADINGMODEL_LIT
 
-    float3 N = normalize(Context.WorldNormal);
-
-    float3 V = normalize(Context.ViewDirection);
-
-    float3 L = normalize(float3(0.5, 0.5, 1.0));
-
-    float NoL = saturate(dot(N, L));
-
-    float3 Color = BaseColor * NoL;
-
-    return float4(Color, 1.0);
+    MaterialData Material = BuildMaterialData(Context.UV0);
+    float3 Lighting = EvaluateSceneLighting(Context,Material);
+    Lighting = Lighting + float3(0.2,0.1,0.0);
+    return float4(Lighting, 1.0);
 
 #elif MATERIAL_SHADING_MODEL == SHADINGMODEL_UNLIT
 

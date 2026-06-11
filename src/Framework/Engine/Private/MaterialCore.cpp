@@ -67,6 +67,7 @@ namespace Engine {
 
         // 3. 检查当前变体是否需要编译
         MeshMaterialShaderPermutationParameters permParams;
+        permParams.MaterialParams.ShadingModel = key.MaterialParameter.ShadingModel;
         permParams.Platform = static_cast<uint32_t>(platform);
         permParams.PermutationId = static_cast<uint32_t>(key.PermutationId);
         permParams.VFType = vfType;

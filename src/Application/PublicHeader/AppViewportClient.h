@@ -7,6 +7,7 @@
 #include "AssetManager.h"
 #include "StaticMeshComponent.h"
 #include "SceneView.h"
+#include "LightComponent.h"
 namespace App {
 
     class APPLICATION_API AppViewportClient : public Engine::ViewportClient
@@ -17,7 +18,7 @@ namespace App {
         void InitResources();
         void ReleaseResources();
 
-        // ViewportClient ºËÐÄ½Ó¿Ú
+        // ViewportClient ï¿½ï¿½ï¿½Ä½Ó¿ï¿½
         void Draw(Engine::Viewport* InViewport) override;
     public:
         bool OnMouseButton(
@@ -56,6 +57,10 @@ namespace App {
         std::shared_ptr<Engine::StaticMeshAsset> staticMeshAsset;
         Engine::StaticMeshComponent* staticMeshComponent;
         Engine::SceneViewFamily family;
+
+        Engine::DirectionalLightComponent* directionalLight;
+        Engine::PointLightComponent* pointLight;
+        Engine::SpotLightComponent* spotLight;
     };
 
 

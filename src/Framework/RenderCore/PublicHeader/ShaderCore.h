@@ -176,18 +176,6 @@ namespace RenderCore {
         }
     };
 
-    enum class EShaderParameterContainerType : uint8_t
-    {
-        None,
-
-        Array,
-
-        StructuredBuffer,
-        RWStructuredBuffer,
-
-        ByteAddressBuffer,
-        RWByteAddressBuffer
-    };
 
     enum class EShaderParameterBaseType {
         Unknown = 0,
@@ -204,10 +192,15 @@ namespace RenderCore {
         RDGTexture,
         RDGTexture_SRV,
         RDGTexture_UAV,
+        RDGTexture_SRV_ARRAY,
+        RDGTexture_UAV_ARRAY,
         RDGBuffer,
         RDGBuffer_SRV,
         RDGBuffer_UAV,
         RHISampler,
+        RHITexture,
+        RHI_SRV,
+        RHI_UAV,
         ColorBindings,
 
         //

@@ -137,8 +137,12 @@ public:
         for (auto it = SortedOrderedModules.rbegin(); it != SortedOrderedModules.rend(); ++it)
         {
             auto& Mod = Modules[*it];
-            if (Mod && !Mod->IsLoaded())
+            if (Mod && Mod->IsLoaded())
+            {
                 Mod->ShutdownModule();
+
+            }
+                
         } 
     }
 
