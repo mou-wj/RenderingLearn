@@ -1,8 +1,11 @@
 #include "AssetManager.h"
+#include "EngineGlobal.h"
+#include "RenderInterface.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_gltf.h"
 #include <fstream>
 #include <nlohmann/json.hpp>
+
 using namespace RHI;
 using namespace RenderCore;
 namespace Engine {
@@ -158,7 +161,7 @@ namespace Engine {
         auto RenderData = std::make_shared<StaticMeshRenderData>();
         auto staticMesh = std::make_shared<StaticMesh>(RenderData);
 
-        // ------------------- ²ÄÖÊ -------------------
+        // ------------------- ï¿½ï¿½ï¿½ï¿½ -------------------
         std::vector<MaterialInterface*> Materials(model.materials.size());
 
         for (size_t i = 0; i < model.materials.size(); ++i) {
@@ -201,7 +204,7 @@ namespace Engine {
             LODResource LOD;
             Core::BoxSphereBounds& Bounds = RenderData->Bounds;
             for (const auto& prim : mesh.primitives) {
-                // ¶¥µã
+                // ï¿½ï¿½ï¿½ï¿½
                 size_t vertexCount = 0;
                 
                 if (prim.attributes.count("POSITION")) {
@@ -242,7 +245,7 @@ namespace Engine {
                     LOD.VertexBuffers.UVBuffer.Valid = true;
                 }
 
-                // Ë÷Òý
+                // ï¿½ï¿½ï¿½ï¿½
                 if (prim.indices >= 0) {
                     const auto& accessor = model.accessors[prim.indices];
                     const auto& view = model.bufferViews[accessor.bufferView];
@@ -261,7 +264,7 @@ namespace Engine {
 
                 // Section
                 SectionInfo section;
-                section.FirstIndex = 0; // TODO: ÀÛ¼Ó
+                section.FirstIndex = 0; // TODO: ï¿½Û¼ï¿½
                 section.NumIndices = LOD.IndexBuffer.Indices.size();
                 section.MaterialIndex = prim.material;
                 if(useDefalutMaterial) section.MaterialIndex = 0;
@@ -453,6 +456,30 @@ namespace Engine {
         MaterialPtr =
             std::move(NewMaterial);
 
+        return true;
+    }
+
+
+    bool SkyLightAsset::Load(){
+		uint32_t cubeWidth = 512;
+        uint32_t cubeHeight = 512;
+        uint32_t roughnessCount = 8;
+        HDRTexture = CreateTexture(Path);
+        Name = Core::GetFileName(Path);
+        RHI::RHITextureDesc Desc;
+        Desc.Format = RHI::ERHIFormat::B8G8R8A8_UNorm;
+        Desc.Width = cubeWidth;
+        Desc.Height = cubeHeight;
+		Desc.ArraySize = 6;
+        Desc.MipLevels = 1;
+        Desc.Usage = RHI::ERHITextureCreateFlag::ShaderResource;
+		Desc.Type = RHI::ERHITextureType::TextureCube;
+        DiffuseIrradiance = std::make_shared<RenderCore::RenderTexture>(Desc);
+        DiffuseIrradiance->InitRHIResource();
+        Desc.MipLevels = 6;
+        SpecularPrefilter = std::make_shared<RenderCore::RenderTexture>(Desc);
+        SpecularPrefilter->InitRHIResource();
+        GetRenderModuleInstance()->PreComputeIBL(HDRTexture.get(), DiffuseIrradiance.get(), SpecularPrefilter.get());
         return true;
     }
 }

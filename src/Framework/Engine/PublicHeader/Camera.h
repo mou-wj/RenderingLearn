@@ -2,6 +2,7 @@
 
 #include "Math.hpp"
 #include "EngineExport.h"
+#include "SceneComponent.h"
 
 namespace Engine
 {
@@ -12,7 +13,7 @@ enum class ProjectionType
     Orthographic
 };
 
-class ENGINE_API Camera
+class ENGINE_API Camera : public SceneComponent
 {
 public:
 

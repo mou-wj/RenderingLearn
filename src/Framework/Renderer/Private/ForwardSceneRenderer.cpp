@@ -4,6 +4,8 @@
 #include "StaticMeshProxy.h"
 #include "LocalVertexFactory.h"
 #include "RHIPipelineStateCache.h"
+#include "StaticMeshMaterialShader.h"
+#include "Scene.h"
 #include <iostream>
 using namespace RenderCore;
 using namespace Engine;
@@ -18,7 +20,7 @@ namespace Renderer {
         for (auto view : views) {
             MeshBatchList DrawMeshBatches;
             std::vector<Engine::StaticMeshProxy*> proxys;
-            Scene->ForEachProxyInView(view, [this, &builder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
+            Scene->ForEachPrimitiveInView(view, [this, &builder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
                 if (proxy->IsA<Engine::StaticMeshProxy>()) {
 				proxys.push_back(static_cast<Engine::StaticMeshProxy*>(proxy));
 			    }
@@ -29,12 +31,15 @@ namespace Renderer {
                 auto psfShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::MeshMaterial]["StaticMeshMaterialShaderPS"];
                 auto vfType = VertexFactoryType::GetRegisterMap()["LocalVertexFactory"];
                 auto vfFlags = MeshBatch.VertexFactory->GetVertexFactoryFlags();
+                auto shdingMode = MeshBatch.MaterialProxy->GetParent()->GetShadingModel();
+                shdingMode = EShadingModel::Lit;
+
                 MeshMaterialShaderKey vsKey;
                 vsKey.ShaderType = static_cast<MeshMaterialShaderType*>(vsfShaderType);
                 vsKey.VF = vfType;
                 vsKey.PermutationId = 0;
                 vsKey.VertexFactoryFlags = vfFlags;
-                vsKey.MaterialParameter.ShadingModel = EShadingModel::Unlit;
+                vsKey.MaterialParameter.ShadingModel = shdingMode;
 
                 auto vertexShader = GMeshMaterialShaderMap.GetShader(vsKey);
 
@@ -44,7 +49,7 @@ namespace Renderer {
                 psKey.VF = vfType;
                 psKey.PermutationId = 0;
                 psKey.VertexFactoryFlags = vfFlags;
-                psKey.MaterialParameter.ShadingModel = EShadingModel::Unlit;
+                psKey.MaterialParameter.ShadingModel = shdingMode;
                 auto pixelShader = GMeshMaterialShaderMap.GetShader(psKey);
 
 
@@ -74,10 +79,10 @@ namespace Renderer {
                 pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
                 pipelineDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(pixelShader->GetRHIShader());
                 // 这里可以设置更多管线配置...
-                pipelineDesc.rasterizerState = rasterizerState.get();
+                pipelineDesc.rasterizerState = rasterizerState;
 
-                pipelineDesc.depthStencilState = depthStencilState.get();
-                pipelineDesc.vertexDescState = MeshBatch.VertexFactory->GetRHIVertexDescState().get();
+                pipelineDesc.depthStencilState = depthStencilState;
+                pipelineDesc.vertexDescState = MeshBatch.VertexFactory->GetRHIVertexDescState();
 
                 //rendertarget info
                 pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
@@ -86,6 +91,17 @@ namespace Renderer {
                 pipelineDesc.attachmentDesc.depthActions = ERenderTargetActions::Clear_Store;
                 pipelineDesc.attachmentDesc.enableDepth = true;
                 pipelineDesc.attachmentDesc.depthStencilFormat = RHI::ERHIFormat::D32_Float;
+
+                BEGIN_SHADER_PARAMETER_STRUCT(PassParameters)
+                    SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialShaderVSParameters, vertexParameters)
+                    SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialShaderPSParameters, pixelParameters)
+                END_SHADER_PARAMETER_STRUCT(PassParameters)
+                auto* params = builder.AllocateParameter<PassParameters>();
+                if (shdingMode == EShadingModel::Lit) {
+                    //填充材质以及场景信息
+                    BuildShaderParameters(Scene, builder, params->pixelParameters.Scene);
+                    BuildShaderParameters(MeshBatch.MaterialProxy, builder, params->pixelParameters.Material);
+                }
 
                 for (auto& batch : DrawMeshBatches) {
                     auto materialOwner = batch.MaterialProxy->GetParent();
@@ -100,7 +116,7 @@ namespace Renderer {
                         std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
                         blendDesc.attachments = attachments;
                         auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState.get();
+                        pipelineDesc.colorBlendState = colorBlendState;
                     }
                     else {
                         RHI::RHIColorBlendStateDesc blendDesc;
@@ -110,59 +126,53 @@ namespace Renderer {
                         std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
                         blendDesc.attachments = attachments;
                         auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState.get();
+                        pipelineDesc.colorBlendState = colorBlendState;
                     }
                     auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
-                    auto state = pipeline;
+                    
                     // 参数
 
-                    BEGIN_SHADER_PARAMETER_STRUCT(PixelMaterialParameters)
-                        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
-                    END_SHADER_PARAMETER_STRUCT(PixelMaterialParameters)
 
-                    BEGIN_SHADER_PARAMETER_STRUCT(MaterialParameters)
-                        SHADER_PARAMETER_STRUCT(LocalVertexFactoryParameters, vertexFactoryParameters)
-                        SHADER_PARAMETER_STRUCT(PixelMaterialParameters, pixelParameters)
-                    END_SHADER_PARAMETER_STRUCT(MaterialParameters)
-                    auto* params = builder.AllocateParameter<MaterialParameters>();
-                    params->vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
-                    params->vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
+                    params->vertexParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
+                    params->vertexParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
                     //params->vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
-                    params->vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
+                    params->vertexParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
                     //params->vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
-                    params->vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
-
+                    params->vertexParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
+                    params->pixelParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
+                    params->pixelParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
+                    //params->pixelParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
+                    params->pixelParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
+                    //params->pixelParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
+                    params->pixelParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
                     params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
                     params->pixelParameters.renderTargetSlots[0].Texture = SceneTextures.SceneColor;
                     params->pixelParameters.renderTargetSlots.DepthStencil.Texture = SceneTextures.SceneDepth;
 
 
-
                     // -------------------------------------
                     // 添加 pass
                     // -------------------------------------
-                    builder.AddPass<MaterialParameters>(
+                    builder.AddPass<PassParameters>(
                         "StaticMeshDrawPass",
-                        MaterialParameters::GetMetaData(),
+                        PassParameters::GetMetaData(),
                         params,
                         EPassFlag::Graphic,
                         [=](RHI::RHICommandListBase& RHICmdList)
                         {
                             auto& cmd = static_cast<RHI::RHIGraphicCommandList&>(RHICmdList);
-                            MaterialParameters* materialParams = params;
+                            PassParameters* materialParams = params;
 
-
-
-                            cmd.SetGraphicPipelineState(state.get());
+                            cmd.SetGraphicPipelineState(pipeline);
                             //绑定vertexfactory
                             batch.VertexFactory->Bind(cmd);
                             cmd.SetViewport(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height, 0.0f, 1.0f);
                             cmd.SetScissor(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height);
                             //设置vertex参数
-                            SetShaderParameters(cmd, vertexShader, params);
+                            SetShaderParameters(cmd, vertexShader, &params->vertexParameters);
 
                             //设置pixel参数
-                            SetShaderParameters(cmd, pixelShader, params);
+                            SetShaderParameters(cmd, pixelShader, &params->pixelParameters);
                             auto boundRenderTarget = params->pixelParameters.renderTargetSlots.GetBoundRenderTarget();
                             RHIRenderPassInfo passInfo;
                             passInfo.RenderTargets = boundRenderTarget;

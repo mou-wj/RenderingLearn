@@ -2,7 +2,9 @@
 #include "RenderResource.h" // 包含你的基类以及 RenderTexture 的定义
 #include "AssetManager.h"
 #include "Shader.h"
-
+#include "MaterialShaderParameter.h"
+#include "RenderGraphBuilder.h"
+using namespace RenderCore;
 namespace Engine {
     MeshMaterialShaderMap GMeshMaterialShaderMap;
     MaterialShaderMap GMaterialShaderMap;
@@ -108,5 +110,6 @@ namespace Engine {
         bProxyDirty = true;
     }
 
+    
 
 } // namespace Engine

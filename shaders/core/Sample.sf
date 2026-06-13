@@ -1,0 +1,167 @@
+#include "/core/ShadingCommon.sf"
+
+// ============================================================================
+// Random sequence generation
+// ============================================================================
+
+static const float2 RANDOM_HASH_CONSTANTS = float2(12.9898, 78.233);
+static const float  RANDOM_HASH_SCALE = 43758.5453;
+
+float Hash11(float x)
+{
+    return frac(sin(x) * RANDOM_HASH_SCALE);
+}
+
+float Hash12(float2 p)
+{
+    return frac(sin(dot(p, RANDOM_HASH_CONSTANTS)) * RANDOM_HASH_SCALE);
+}
+
+float2 Hash22(float2 p)
+{
+    float h = dot(p, float2(127.1, 311.7));
+    return frac(sin(float2(h, h + 1.0)) * float2(269.5, 183.3));
+}
+
+float GenerateRandomFloat(inout float2 seed)
+{
+    float2 rnd = Hash22(seed);
+    seed = rnd + float2(0.358, 0.618);
+    return rnd.x;
+}
+
+float2 GenerateRandom2D(inout float2 seed)
+{
+    float2 rnd = Hash22(seed);
+    seed = rnd + float2(0.41421356, 0.70710678);
+    return rnd;
+}
+
+float3 GenerateRandom3D(inout float2 seed)
+{
+    float2 r0 = GenerateRandom2D(seed);
+    float2 r1 = GenerateRandom2D(seed);
+    return float3(r0.xy, r1.x);
+}
+
+// ============================================================================
+// 采样基础函数
+// ============================================================================
+
+float2 UniformSampleDisk(float2 xi)
+{
+    float r = sqrt(max(0.0, xi.x));
+    float theta = 2.0 * PI * xi.y;
+    return float2(r * cos(theta), r * sin(theta));
+}
+
+float3 UniformSampleSphere(float2 xi)
+{
+    float z = 1.0 - 2.0 * xi.x;
+    float r = sqrt(max(0.0, 1.0 - z * z));
+    float phi = 2.0 * PI * xi.y;
+    return float3(r * cos(phi), r * sin(phi), z);
+}
+
+float3 UniformSampleHemisphere(float2 xi)
+{
+    float z = xi.x;
+    float r = sqrt(max(0.0, 1.0 - z * z));
+    float phi = 2.0 * PI * xi.y;
+    return float3(r * cos(phi), r * sin(phi), z);
+}
+
+float3 CosineSampleHemisphere(float2 xi)
+{
+    float2 d = UniformSampleDisk(xi);
+    float z = sqrt(max(0.0, 1.0 - dot(d, d)));
+    return float3(d.x, d.y, z);
+}
+
+float3 GGXSampleHemisphere(float2 xi, float roughness)
+{
+    float a = max(roughness, 1e-4);
+    float a2 = a * a;
+
+    float phi = 2.0 * PI * xi.x;
+    float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a2 - 1.0) * xi.y));
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+
+    return float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+}
+
+float3 BeckmannSampleHemisphere(float2 xi, float roughness)
+{
+    float a = max(roughness, 1e-4);
+    float phi = 2.0 * PI * xi.x;
+    float tan2Theta = -a * a * log(max(1e-6, 1.0 - xi.y));
+    float cosTheta = 1.0 / sqrt(1.0 + tan2Theta);
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+
+    return float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+}
+
+float3 PhongSampleHemisphere(float2 xi, float exponent)
+{
+    float phi = 2.0 * PI * xi.x;
+    float cosTheta = pow(1.0 - xi.y, 1.0 / (exponent + 1.0));
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+    return float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+}
+
+// ============================================================================
+// 世界空间方向构造
+// ============================================================================
+
+float3 BuildBasisTangent(float3 normal)
+{
+    float3 up = abs(normal.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent = normalize(cross(up, normal));
+    return tangent;
+}
+
+float3 TransformToWorld(float3 localDir, float3 normal)
+{
+    float3 tangent = BuildBasisTangent(normal);
+    float3 bitangent = cross(normal, tangent);
+    return normalize(localDir.x * tangent + localDir.y * bitangent + localDir.z * normal);
+}
+
+// ============================================================================
+// 方便调用的分布采样接口
+// ============================================================================
+
+float3 SampleUniformHemisphereWorld(float2 xi, float3 normal)
+{
+    float3 local = UniformSampleHemisphere(xi);
+    return TransformToWorld(local, normal);
+}
+
+float3 SampleCosineHemisphereWorld(float2 xi, float3 normal)
+{
+    float3 local = CosineSampleHemisphere(xi);
+    return TransformToWorld(local, normal);
+}
+
+float3 SampleGGXHemisphereWorld(float2 xi, float3 normal, float roughness)
+{
+    float3 local = GGXSampleHemisphere(xi, roughness);
+    return TransformToWorld(local, normal);
+}
+
+float3 SampleBeckmannHemisphereWorld(float2 xi, float3 normal, float roughness)
+{
+    float3 local = BeckmannSampleHemisphere(xi, roughness);
+    return TransformToWorld(local, normal);
+}
+
+float3 SamplePhongHemisphereWorld(float2 xi, float3 normal, float exponent)
+{
+    float3 local = PhongSampleHemisphere(xi, exponent);
+    return TransformToWorld(local, normal);
+}
+
+float3 SampleUniformSphereWorld(float2 xi)
+{
+    return UniformSampleSphere(xi);
+}

@@ -3,6 +3,8 @@
 #include "AssetManager.h"
 #include "stb_image.h"
 #include "RenderThread.h"
+#include "RHICommandContex.h"
+#include "RHICommandList.h"
 using namespace RHI;
 namespace RenderCore {
 
@@ -89,6 +91,74 @@ void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arr
 	GetTracker().UpdateSubresourceAccess(range, ERHIResourceAccess::TransferDest);
 	GetTracker().UpdateLastAccessFence(fence);
 	queue->WaitFence(fence);
+}
+void RenderTexture::GenerateMipMaps() {
+
+}
+
+void TransitionTextureImmediate(
+	RHI::RHIApi* api,
+	RenderTexture* resource,
+	const RHI::RHISubresourceRange& range,
+	RHI::ERHIResourceAccess targetAccess,
+	RHI::EQueueType targetQueueType)
+{
+	if (!api || !resource)
+	{
+		return;
+	}
+	auto currentQueueType = resource->GetTracker().GetLastAccessFence().QueueType; // 获取当前访问的 Fence
+	auto currentAccess = resource->GetTracker().GetSubresourceAccess(range); // 获取当前访问的 Access
+	if (currentAccess == targetAccess && currentQueueType == targetQueueType)
+	{
+		return;
+	}
+
+	std::vector<RHI::RHITransitionInfo> infos;
+	if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
+	{
+		RHI::RHITransitionInfo info;
+		static_cast<RHI::RHISubresourceRange>(info) = range;
+		info.AccessBefore = currentAccess;
+		info.AccessAfter = targetAccess;
+		info.Texture = texture;
+		info.QueueTypeBefore = currentQueueType;
+		info.QueueTypeAfter = targetQueueType;
+	}
+	char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+	auto* transition = new(transitionMem) RHI::RHITransition();
+	api->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+	RHI::RHIContextBase* contex = nullptr;
+	if (currentQueueType == RHI::EQueueType::Graphics) {
+		contex = RHI::GRHIApi->GetQueue(currentQueueType)->AcquireCommandContext();
+		auto graphicContex = dynamic_cast<RHI::RHIGraphicContex*>(contex);
+		RHIGraphicCommandList cmdList(graphicContex);
+		cmdList.SetImmediate(true);
+		cmdList.Begin();
+		cmdList.BeginTransitions({ transition });
+		cmdList.EndTransitions({ transition });
+		cmdList.End();
+
+	}
+	else if (currentQueueType == RHI::EQueueType::Compute) {
+		contex = RHI::GRHIApi->GetQueue(currentQueueType)->AcquireCommandContext();
+		auto computeContex = dynamic_cast<RHI::RHIComputeContex*>(contex);
+		RHIComputeCommandList cmdList(computeContex);
+		cmdList.SetImmediate(true);
+		cmdList.Begin();
+		cmdList.BeginTransitions({ transition });
+		cmdList.EndTransitions({ transition });
+		cmdList.End();
+
+
+	}
+	auto fence = RHI::GRHIApi->GetQueue(currentQueueType)->ExecuteContext(contex);
+	RHI::GRHIApi->GetQueue(currentQueueType)->WaitFence(fence);
+	//更新 Tracker 状态
+	resource->GetTracker().UpdateSubresourceAccess(range, targetAccess);
+	resource->GetTracker().UpdateLastAccessFence(fence);
+	api->RHIReleaseTransition(transition);
+	delete[] transitionMem;
 }
 
 // RenderBuffer
@@ -228,14 +298,18 @@ void RenderTargetPool::Clear()
 
 
 RenderTextureSP GlobalTestTexture = nullptr;
-
+RHI::RHISamplerSP GlobalSampler = nullptr;
 bool InitGlobalRenderResource() {
     auto rootPath = Core::GetProjectDir();
 	GlobalTestTexture = CreateTexture(rootPath + "/resources/pic/OIP.jpg");
+	RHI::RHISamplerDesc samplerDesc{};
+	GlobalSampler = RHI::GRHIApi->CreateSampler(samplerDesc);
+
     return true;
 }
 void ReleaseGlobalRenderResource() {
 	GlobalTestTexture.reset();
+	GlobalSampler.reset();
 }
 
 RenderTextureSP CreateTexture(const std::string& Path)
@@ -308,7 +382,10 @@ void TransientResourceAllocator::InitRHI()
 
 void TransientResourceAllocator::ReleaseRHI()
 {
+	AllocatedBuffers.clear();
+	AllocatedTextures.clear();
 	TransientResourceManager.reset();
+	TransientResourceManager = nullptr;
 }
 
 void TransientResourceAllocator::GarbageCollect() 
@@ -352,8 +429,7 @@ void TransientResourceAllocator::GarbageCollect()
 		if (IsFenceDone(fence))
 		{
 			// 👉 这里才真正释放 RHI 资源
-			delete tex->GetRHI();
-
+			TransientResourceManager->ReleaseTransientTexture(tex->GetTransientRHI());
 			itTex = AllocatedTextures.erase(itTex);
 		}
 		else
@@ -380,8 +456,7 @@ void TransientResourceAllocator::GarbageCollect()
 
 		if (IsFenceDone(fence))
 		{
-			delete buf->GetRHI();
-
+			TransientResourceManager->ReleaseTransientBuffer(buf->GetTransientRHI());
 			itBuf = AllocatedBuffers.erase(itBuf);
 		}
 		else
@@ -390,6 +465,5 @@ void TransientResourceAllocator::GarbageCollect()
 		}
 	}
 }
-
 
 } // namespace RenderCore

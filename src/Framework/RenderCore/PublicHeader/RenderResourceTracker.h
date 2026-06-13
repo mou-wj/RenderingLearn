@@ -168,4 +168,6 @@ inline void TransitionResource(
     api->RHIReleaseTransition(transition);
     delete[] transitionMem;
 }
+
+
 } // namespace RenderCore

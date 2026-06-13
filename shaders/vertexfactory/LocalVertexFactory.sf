@@ -68,7 +68,7 @@ struct VertexFactoryVSToPS
     float3 WorldPosition : TEXCOORD4;
 };
 
-#include "/core/ShadingCommon.sf"
+#include "/core/ShadingContext.sf"
 
 
 #if VERTEX_SHADER

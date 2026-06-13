@@ -14,6 +14,7 @@ namespace Engine {
     {
         EngineObj = std::make_unique<IEngine>();
         EngineObj->Init();
+        isLoaded = true;
     }
 
     void EngineModule::ShutdownModule()
@@ -23,10 +24,11 @@ namespace Engine {
             EngineObj->Shutdown();
             EngineObj.reset();
         }
+        isLoaded = false;
     }
 
     bool EngineModule::IsLoaded() const {
-        return false;
+        return isLoaded;
     }
 
 

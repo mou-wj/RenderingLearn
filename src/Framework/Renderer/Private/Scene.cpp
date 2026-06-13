@@ -1,143 +1,552 @@
 #include "Scene.h"
 #include "PrimitiveSceneProxy.h"
 #include "PrimitiveComponent.h"
+#include "LightComponent.h"
+#include "LightSceneProxy.h"
+#include "SceneShaderParameters.h"
 #include <cstring>
 using namespace Engine;
 
 
 namespace Renderer {
 
-    Scene::Scene()
-        : NextProxyId(1)
-        , CurrentFrame(0)
-        , CurrentTimeSeconds(0.0)
-        , NewTimeSeconds(0.0)
-        , FeatureLevel(EFeatureLevel::High) // 默认开启高质量特征级别
-        , CullingStructureHandle(0)         // 假设 0 代表根空间裁剪加速节点
+
+    //====================================================
+    // PrimitiveSceneInfo
+    //====================================================
+
+    PrimitiveSceneInfo::
+        PrimitiveSceneInfo(
+            std::unique_ptr<
+            Engine::PrimitiveSceneProxy>
+            InProxy)
+        :
+        Proxy(std::move(InProxy))
     {
     }
 
-    Scene::~Scene() {
-        // 彻底清空所有遗留的渲染代理，防止内存泄漏
-        for (auto& Pair : PrimitiveProxies) {
-            delete Pair.second;
-        }
-        PrimitiveProxies.clear();
+    //====================================================
+    // LightSceneInfo
+    //====================================================
 
-        // 销毁未录制的命令中的代理
-        for (auto& Cmd : PendingCommands) {
-            if (Cmd.Type == ESceneCommandType::Add && Cmd.Proxy) {
-                delete Cmd.Proxy;
-            }
-        }
+    LightSceneInfo::
+        LightSceneInfo(
+            std::unique_ptr<
+            Engine::LightSceneProxy>
+            InProxy)
+        :
+        Proxy(std::move(InProxy))
+    {
     }
 
-    /*
-    ===============================================================================
-        游戏线程接口 (GameThread)
-    ===============================================================================
-    */
-    void Scene::AddPrimitive(PrimitiveComponent* Component) {
-        if (!Component) return;
 
-        int32_t ProxyId = NextProxyId++;
-        ComponentToProxyId[Component] = ProxyId;
+    //====================================================
+    // Scene
+    //====================================================
 
-        // 在游戏线程上下文，一次性将当前组件的所有物理状态快照打包进 Proxy
-        PrimitiveSceneProxy* NewProxy = Component->CreateSceneProxy();
+    Scene::Scene()
+    {
+    }
 
-        // 锁定时长极短：仅入队命令，随后立刻释放锁，绝不阻塞游戏逻辑
+    Scene::~Scene()
+    {
+    }
+
+    void Scene::AddPrimitive(
+        Engine::PrimitiveComponent*
+        Component)
+    {
+        if (!Component)
         {
-            std::lock_guard<std::mutex> Lock(CommandQueueMutex);
-            PendingCommands.push_back({ ESceneCommandType::Add, ProxyId, NewProxy });
+            return;
         }
+        if (PrimitiveInfos.find(Component) != PrimitiveInfos.end()) {
+            return;
+        }
+        Component->SetSceneOwner(this);
+        auto Proxy =
+            std::unique_ptr<Engine::PrimitiveSceneProxy>(Component
+            ->CreateSceneProxy());
+
+        if (!Proxy)
+        {
+            return;
+        }
+
+        SceneCommand Command;
+
+        Command.Type =
+            ESceneCommandType
+            ::AddPrimitive;
+
+        Command.PrimitiveComponent =
+            Component;
+
+        Command.PrimitiveProxy =
+            std::move(Proxy);
+
+        std::scoped_lock Lock(
+            PendingCommandMutex);
+
+        PendingCommands.push_back(
+            std::move(Command));
     }
 
-    void Scene::RemovePrimitive(PrimitiveComponent* Component) {
-        auto It = ComponentToProxyId.find(Component);
-        if (It != ComponentToProxyId.end()) {
-            int32_t ProxyId = It->second;
-            ComponentToProxyId.erase(It);
+    void Scene::RemovePrimitive(
+        Engine::PrimitiveComponent*
+        Component)
+    {
+        if (PrimitiveInfos.find(Component) == PrimitiveInfos.end()) {
+            return;
+        }
+        Component->SetSceneOwner(nullptr);
+        SceneCommand Command;
 
-            // 发送销毁命令，绝对不要在此处 delete 指针！
+        Command.Type =
+            ESceneCommandType
+            ::RemovePrimitive;
+
+        Command.PrimitiveComponent =
+            Component;
+
+        std::scoped_lock Lock(
+            PendingCommandMutex);
+
+        PendingCommands.push_back(
+            std::move(Command));
+    }
+
+    void Scene::AddLight(
+        Engine::LightComponent*
+        Component)
+    {
+        if (!Component)
+        {
+            return;
+        }
+        if (LightInfos.find(Component) != LightInfos.end()) {
+            return;
+        }
+        Component->SetSceneOwner(this);
+        auto Proxy =
+            std::unique_ptr<Engine::LightSceneProxy>(Component
+            ->CreateSceneProxy());
+
+        if (!Proxy)
+        {
+            return;
+        }
+
+        SceneCommand Command;
+
+        Command.Type =
+            ESceneCommandType
+            ::AddLight;
+
+        Command.LightComponent =
+            Component;
+
+        Command.LightProxy =
+            std::move(Proxy);
+
+        std::scoped_lock Lock(
+            PendingCommandMutex);
+
+        PendingCommands.push_back(
+            std::move(Command));
+    }
+
+    void Scene::RemoveLight(
+        Engine::LightComponent*
+        Component)
+    {
+        if (LightInfos.find(Component) == LightInfos.end()) {
+            return;
+        }
+        Component->SetSceneOwner(nullptr);
+        SceneCommand Command;
+
+        Command.Type =
+            ESceneCommandType
+            ::RemoveLight;
+
+        Command.LightComponent =
+            Component;
+
+        std::scoped_lock Lock(
+            PendingCommandMutex);
+
+        PendingCommands.push_back(
+            std::move(Command));
+    }
+
+    void Scene::FlushPendingUpdates()
+    {
+        std::vector<
+            SceneCommand>
+            Commands;
+
+        {
+            std::scoped_lock Lock(
+                PendingCommandMutex);
+
+            Commands.swap(
+                PendingCommands);
+        }
+        Engine::LightSceneProxy* LightProxy = nullptr;
+        auto markLightDiry = [this](Engine::LightSceneProxy* LightProxy) {
+            if (!LightProxy) return;
+            auto lightType = LightProxy->GetLightType();
+            switch (lightType)
             {
-                std::lock_guard<std::mutex> Lock(CommandQueueMutex);
-                PendingCommands.push_back({ ESceneCommandType::Remove, ProxyId, nullptr });
+                case Engine::ELightType::Directional:
+                    GPUResourceInfo.DirtyFlags |= ESceneGPUResourceDirty::DirectionalLight;
+                    break;
+                case Engine::ELightType::Point:
+                    GPUResourceInfo.DirtyFlags |= ESceneGPUResourceDirty::PointLight;
+                    break;
+                case Engine::ELightType::Spot:
+                    GPUResourceInfo.DirtyFlags |= ESceneGPUResourceDirty::SpotLight;
+                    break;
+                default:
+                    break;
             }
-        }
-    }
 
-    /*
-    ===============================================================================
-        渲染线程查询与生命周期接口 (RenderThread Only)
-    ===============================================================================
-    */
-    PrimitiveSceneProxy* Scene::GetSceneProxyById(int32_t ProxyId) {
-        auto It = PrimitiveProxies.find(ProxyId);
-        return (It != PrimitiveProxies.end()) ? It->second : nullptr;
-    }
 
-    void Scene::ForEachProxyInView(const SceneView& View, std::function<void(PrimitiveSceneProxy*)> Visitor) {
-        // 现代图形引擎核心关卡：此处对接你的八叉树或 BVH 空间裁剪
-        // 在这里，我们先使用全场景遍历作为最稳健的 fallback 实现：
-        for (const auto& Pair : PrimitiveProxies) {
-            PrimitiveSceneProxy* Proxy = Pair.second;
-
-            // 工业级框架在此处会执行：if (View.Frustum.Intersect(Proxy->GetBounds()))
-            // 裁剪通过后，将可见代理回调投递给渲染器
-            Visitor(Proxy);
-        }
-    }
-
-    bool Scene::IsFeatureEnabled(const char* FeatureName) const {
-        if (!FeatureName) return false;
-        return EnabledFeatures.find(FeatureName) != EnabledFeatures.end();
-    }
-
-    void Scene::FlushPendingUpdates() {
-        // 1. 采用 swap 极其优雅地将暂存队列置换到本地，瞬间解锁，不卡死游戏线程
-        std::vector<SceneCommand> CommandsToExecute;
+         };
+        for (auto& Command
+            : Commands)
         {
-            std::lock_guard<std::mutex> Lock(CommandQueueMutex);
-            CommandsToExecute.swap(PendingCommands);
-        }
-
-        // 2. 处于绝对安全的渲染上下文中，批量执行代理的增删
-        for (const auto& Cmd : CommandsToExecute) {
-            if (Cmd.Type == ESceneCommandType::Add) {
-
-                PrimitiveProxies[Cmd.ProxyId] = Cmd.Proxy;
-                // 工业级框架预留：在此处将 Proxy 的 AABB 塞入加速结构 (如 Octree->Insert(Cmd.Proxy))
-
-            }
-            else if (Cmd.Type == ESceneCommandType::Remove) {
-
-                auto It = PrimitiveProxies.find(Cmd.ProxyId);
-                if (It != PrimitiveProxies.end()) {
-                    PrimitiveSceneProxy* ProxyToDelete = It->second;
-                    PrimitiveProxies.erase(It);
-
-                    // 工业级框架预留：在此处从加速结构移除 (如 Octree->Remove(ProxyToDelete))
-
-                    // 安全释放只读镜像
-                    delete ProxyToDelete;
+            switch (Command.Type)
+            {
+                case ESceneCommandType::
+                AddPrimitive:
+                {
+                    PrimitiveInfos[
+                        Command
+                            .PrimitiveComponent]
+                        =
+                        std::make_unique<
+                        PrimitiveSceneInfo>(
+                            std::move(
+                                Command
+                                .PrimitiveProxy));
+                    break;
                 }
+
+                case ESceneCommandType::
+                RemovePrimitive:
+                {
+                    PrimitiveInfos.erase(
+                        Command
+                        .PrimitiveComponent);
+
+                    break;
+                }
+
+                case ESceneCommandType::
+                AddLight:
+                {
+                    markLightDiry(Command.LightProxy.get());
+                    LightInfos[
+                        Command
+                            .LightComponent]
+                        =
+                        std::make_unique<
+                        LightSceneInfo>(
+                            std::move(
+                                Command
+                                .LightProxy));
+                    
+                    break;
+                }
+
+                case ESceneCommandType::
+                RemoveLight:
+                {
+                    markLightDiry(Command.LightProxy.get());
+                    LightInfos.erase(
+                        Command
+                        .LightComponent);
+                    
+                    break;
+                }
+
+                default:
+                    break;
+            }
+        }
+
+		//build GPU resource info
+        UpdateGPUResourceIfNeeded();
+
+    }
+
+    void Scene::NotifyComponentChanged(SceneComponent* Component)
+    {
+        if (Component->IsA<Engine::LightComponent>())
+        {
+            auto* Light = static_cast<Engine::LightComponent*>(Component);
+            switch (Light->GetLightType())
+            {
+            case ELightType::Directional:
+                GPUResourceInfo.DirtyFlags |=
+                    ESceneGPUResourceDirty
+                    ::DirectionalLight;
+                break;
+
+            case ELightType::Point:
+                GPUResourceInfo.DirtyFlags |=
+                    ESceneGPUResourceDirty
+                    ::PointLight;
+                break;
+
+            case ELightType::Spot:
+                GPUResourceInfo.DirtyFlags |=
+                    ESceneGPUResourceDirty
+                    ::SpotLight;
+                break;
+
             }
         }
     }
 
-    void Scene::BeginFrameRender() {
-        // 1. 自增渲染帧率计数
-        CurrentFrame++;
+    void Scene::ForEachPrimitiveInView(
+        const Engine::SceneView&,
+        std::function<void(
+            Engine::PrimitiveSceneProxy*)>
+        Visitor)
+    {
+        for (auto& Pair
+            : PrimitiveInfos)
+        {
+            auto* Info =
+                Pair.second.get();
 
-        // 2. 将安全缓冲区的游戏时间戳拉取到当前渲染帧，彻底杜绝多线程时间读写撕裂
-        CurrentTimeSeconds = NewTimeSeconds;
+            if (!Info->bVisible)
+            {
+                continue;
+            }
 
-        // 3. 工业级框架在此处会重构或打包当前帧的场景全局 Uniform Buffer (如 ViewFamily / SceneGlobals)
+            Visitor(
+                Info->GetProxy());
+        }
     }
 
-    void Scene::EndFrameRender() {
-        // 每一帧结束后的后置清理（如清理当前帧的临时分配器、统计渲染帧数据等）
+    void Scene::ForEachLight(
+        std::function<void(
+            Engine::LightSceneProxy*)>
+        Visitor)
+    {
+        for (auto& Pair
+            : LightInfos)
+        {
+            auto* Info =
+                Pair.second.get();
+
+            if (!Info->bVisible)
+            {
+                continue;
+            }
+
+            Visitor(
+                Info->GetProxy());
+        }
     }
 
-} // namespace Engine
+    const SceneGPUResourceInfo& Scene::GetGPUResourceInfo() const
+    {
+        return GPUResourceInfo;
+    }
+
+    void Scene::UpdateGPUResourceIfNeeded()
+    {
+        auto Dirty = GPUResourceInfo.DirtyFlags;
+
+        if (Dirty ==
+            ESceneGPUResourceDirty
+            ::None)
+        {
+            return;
+        }
+
+        auto& LightRes =
+            GPUResourceInfo
+            .LightResourceInfo;
+
+        //------------------------------------------------
+        // Directional
+        //------------------------------------------------
+
+        if (EnumHasAnyFlags(
+            Dirty,
+            ESceneGPUResourceDirty
+            ::DirectionalLight))
+        {
+            std::vector<
+                DirectionalLightData>
+                GPUData;
+
+            for (auto& Pair :
+                LightInfos)
+            {
+                auto* Proxy =
+                    Pair.second
+                    ->GetProxy();
+
+                if (!Proxy)
+                    continue;
+
+                if (Proxy
+                    ->GetLightType()
+                    != ELightType
+                    ::Directional)
+                {
+                    continue;
+                }
+
+                DirectionalLightData
+                    Data;
+                Data.Common.Color = Proxy->GetColor();
+                Data.Common.Intensity = Proxy->GetIntensity();
+                auto DirProxy = dynamic_cast<DirectionalLightSceneProxy*>(Proxy);
+                Data.Direction = DirProxy ? DirProxy->GetDirection() : Core::Float3(0.0f, -1.0f, 0.0f);
+                GPUData.emplace_back(
+                    Data);
+            }
+
+            LightRes.DirectionalLightCount = static_cast<uint32_t>(GPUData.size());
+            RHI::RHIBufferDesc Desc;
+            Desc.Size = GPUData.size() * sizeof(DirectionalLightData);
+            if (Desc.Size == 0) {
+                Desc.Size = 1;
+            }
+            Desc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
+            LightRes.DirectionalLightBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
+            LightRes.DirectionalLightBuffer->InitRHIResource();
+            LightRes.DirectionalLightBuffer->UploadData(GPUData.data(), Desc.Size);
+        }
+
+        //------------------------------------------------
+        // Point
+        //------------------------------------------------
+
+        if (EnumHasAnyFlags(
+            Dirty,
+            ESceneGPUResourceDirty
+            ::PointLight))
+        {
+            std::vector<
+                PointLightData>
+                GPUData;
+
+            for (auto& Pair :
+                LightInfos)
+            {
+                auto* Proxy =
+                    Pair.second
+                    ->GetProxy();
+
+                if (!Proxy)
+                    continue;
+
+                if (Proxy
+                    ->GetLightType()
+                    != ELightType
+                    ::Point)
+                {
+                    continue;
+                }
+
+                PointLightData
+                    Data;
+                Data.Common.Color = Proxy->GetColor();
+                Data.Common.Intensity = Proxy->GetIntensity();
+                Data.Position = Proxy->GetPosition();
+                auto PointLightProxy = dynamic_cast<PointLightSceneProxy*>(Proxy);
+                Data.Radius = PointLightProxy->GetAttenuationRadius();
+
+                GPUData.emplace_back(
+                    Data);
+            }
+
+            LightRes.PointLightCount =
+                static_cast<uint32_t>(
+                    GPUData.size());
+            RHI::RHIBufferDesc Desc;
+            Desc.Size = GPUData.size() * sizeof(PointLightData);
+            if (Desc.Size == 0) {
+                Desc.Size = 1;
+            }
+            Desc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
+            LightRes.PointLightBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
+            LightRes.PointLightBuffer->InitRHIResource();
+            LightRes.PointLightBuffer->UploadData(GPUData.data(), Desc.Size);
+        }
+
+        //------------------------------------------------
+        // Spot
+        //------------------------------------------------
+
+        if (EnumHasAnyFlags(
+            Dirty,
+            ESceneGPUResourceDirty
+            ::SpotLight))
+        {
+            std::vector<
+                SpotLightData>
+                GPUData;
+
+            for (auto& Pair :
+                LightInfos)
+            {
+                auto* Proxy =
+                    Pair.second
+                    ->GetProxy();
+
+                if (!Proxy)
+                    continue;
+
+                if (Proxy
+                    ->GetLightType()
+                    != ELightType
+                    ::Spot)
+                {
+                    continue;
+                }
+
+                SpotLightData
+                    Data;
+                Data.Common.Color = Proxy->GetColor();
+                Data.Common.Intensity = Proxy->GetIntensity();
+                Data.Position = Proxy->GetPosition();
+                auto SpotLightProxy = dynamic_cast<SpotLightSceneProxy*>(Proxy);
+                Data.Radius = SpotLightProxy->GetAttenuationRadius();
+                Data.Direction = SpotLightProxy->GetDirection();
+                Data.InnerConeCos = SpotLightProxy->GetInnerConeAngle();
+                Data.OuterConeCos = SpotLightProxy->GetOuterConeAngle();
+
+                GPUData.emplace_back(
+                    Data);
+            }
+
+            LightRes.SpotLightCount =
+                static_cast<uint32_t>(
+                    GPUData.size());
+            RHI::RHIBufferDesc Desc;
+            Desc.Size = GPUData.size() * sizeof(SpotLightData);
+            if (Desc.Size == 0) {
+                Desc.Size = 1;
+            }
+            Desc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
+            LightRes.SpotLightBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
+            LightRes.SpotLightBuffer->InitRHIResource();
+            LightRes.SpotLightBuffer->UploadData(GPUData.data(), Desc.Size);
+        }
+
+
+    }
+
+    
+
+} // namespace Renderer

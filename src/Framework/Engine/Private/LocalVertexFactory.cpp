@@ -81,6 +81,9 @@ namespace Engine
     {
         LocalVertexFactoryFeatureFlags Flags = {};
         Flags.PackedFlags = Parameters.VertexFactoryFlags;
+        
+        return Flags.PackedFlags == 3;
+        
         /*
            ===========================================================================
                Tangent requires Normal

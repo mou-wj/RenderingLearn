@@ -182,7 +182,8 @@ namespace RenderCore
             std::string& outExpanded,
             std::vector<std::string>& outIncludedFiles,
             int depth = 0,
-            std::set<std::string>* includeStack = nullptr);
+            std::set<std::string>* includeStack = nullptr,
+            std::set<std::string>* includeFiles = nullptr);
 
         static void ApplyMacros(
             std::string& source,

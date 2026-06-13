@@ -36,10 +36,13 @@ public:
     VulkanDevice* GetDevice() const { return device; }
     VulkanCommandBuffer* GetRecordedCommandBuffer() const { return RecordedCommandBuffer; }
 protected:
+    virtual void InnerBegin() {}
     VulkanDevice* device = nullptr;
     VulkanQueue* queue = nullptr;
     VulkanCommandBufferManager* commandBufferManager = nullptr;
     VulkanCommandBuffer* RecordedCommandBuffer = nullptr;
+       
+
 
 };
 
@@ -58,6 +61,7 @@ public:
     void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
 
 private:
+    void InnerBegin() override;
     friend class VulkanCommandContext;
     VulkanPendingComputeState* PendingCompute = nullptr;
     VulkanLooseUniformDataUploader* LooseUniformDataUploader = nullptr;
@@ -88,6 +92,7 @@ public:
 
 protected:
 private:
+    void InnerBegin() override;
     friend class VulkanCommandContext;
     VulkanPendingGfxState* PendingGfx = nullptr;
     VulkanLooseUniformDataUploader* LooseUniformDataUploader = nullptr;

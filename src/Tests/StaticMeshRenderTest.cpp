@@ -26,6 +26,8 @@
 #include "Camera.h"
 #include "StaticMeshProcess.h"
 #include "StaticMeshProxy.h"
+#include "../Private/StaticMeshMaterialShader.h"
+#include "EngineGlobal.h"
 using namespace RenderCore;
 using namespace Engine;
 using namespace Renderer;
@@ -212,10 +214,10 @@ namespace Test {
             pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
             pipelineDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(pixelShader->GetRHIShader());
             // 这里可以设置更多管线配置...
-            pipelineDesc.rasterizerState = rasterizerState.get();
+            pipelineDesc.rasterizerState = rasterizerState;
 
-            pipelineDesc.depthStencilState = depthStencilState.get();
-            pipelineDesc.vertexDescState = staticMeshAsset->GetMesh()->GetRenderData()->LODResources[0].VertexFactory->GetRHIVertexDescState().get();
+            pipelineDesc.depthStencilState = depthStencilState;
+            pipelineDesc.vertexDescState = staticMeshAsset->GetMesh()->GetRenderData()->LODResources[0].VertexFactory->GetRHIVertexDescState();
 
             //rendertarget info
             pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
@@ -309,7 +311,7 @@ namespace Test {
                         std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
                         blendDesc.attachments = attachments;
                         auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState.get();
+                        pipelineDesc.colorBlendState = colorBlendState;
                     }
                     else {
                         RHI::RHIColorBlendStateDesc blendDesc;
@@ -319,29 +321,32 @@ namespace Test {
                         std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
                         blendDesc.attachments = attachments;
                         auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState.get();
+                        pipelineDesc.colorBlendState = colorBlendState;
                     }
                     auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
                     auto state = pipeline;
                     // 参数
                     
-                    BEGIN_SHADER_PARAMETER_STRUCT(PixelMaterialParameters)
-                        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
-                    END_SHADER_PARAMETER_STRUCT(PixelMaterialParameters)
 
-                    BEGIN_SHADER_PARAMETER_STRUCT(MaterialParameters)
-                        SHADER_PARAMETER_STRUCT(LocalVertexFactoryParameters, vertexFactoryParameters)
-                        SHADER_PARAMETER_STRUCT(PixelMaterialParameters, pixelParameters)
-                    END_SHADER_PARAMETER_STRUCT(MaterialParameters)
-                    auto* params = builder.AllocateParameter<MaterialParameters>();
-                    params->vertexFactoryParameters.CameraWorldPosition = sceneView.CameraWorldPos;
-                    params->vertexFactoryParameters.ViewProjection = sceneView.ViewProjectionMatrix;
-                    params->vertexFactoryParameters.ViewProjection = Core::Float4x4::Identity();
-					params->vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
-                    params->vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
-					params->vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
-                    params->vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
-
+                    BEGIN_SHADER_PARAMETER_STRUCT(PassParameters)
+                        SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialShaderVSParameters, vertexParameters)
+                        SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialShaderPSParameters, pixelParameters)
+                    END_SHADER_PARAMETER_STRUCT(PassParameters)
+                    auto* params = builder.AllocateParameter<PassParameters>();
+                    params->vertexParameters.vertexFactoryParameters.CameraWorldPosition = sceneView.CameraWorldPos;
+                    params->vertexParameters.vertexFactoryParameters.ViewProjection = sceneView.ViewProjectionMatrix;
+                    params->vertexParameters.vertexFactoryParameters.ViewProjection = Core::Float4x4::Identity();
+					params->vertexParameters.vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
+                    params->vertexParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
+					params->vertexParameters.vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
+                    params->vertexParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
+                    params->pixelParameters.vertexFactoryParameters.CameraWorldPosition = sceneView.CameraWorldPos;
+                    params->pixelParameters.vertexFactoryParameters.ViewProjection = sceneView.ViewProjectionMatrix;
+                    params->pixelParameters.vertexFactoryParameters.ViewProjection = Core::Float4x4::Identity();
+                    params->pixelParameters.vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
+                    params->pixelParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
+                    params->pixelParameters.vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
+                    params->pixelParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
                     auto rdgDst = builder.RegisterExternalTexture("DstTex", renderTarget.get());
                     auto depthRdgDst = builder.RegisterExternalTexture("DstDepthTex", depthRenderTarget.get());
                     params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
@@ -353,28 +358,28 @@ namespace Test {
                     // -------------------------------------
                     // 添加 pass
                     // -------------------------------------
-                    builder.AddPass<MaterialParameters>(
+                    builder.AddPass<PassParameters>(
                         "BlitPass",
-                        MaterialParameters::GetMetaData(),
+                        PassParameters::GetMetaData(),
                         params,
                         EPassFlag::Graphic,
                         [=](RHI::RHICommandListBase& RHICmdList)
                         {
                             auto& cmd = static_cast<RHI::RHIGraphicCommandList&>(RHICmdList);
-							MaterialParameters* materialParams = params;
+                            PassParameters* passParams = params;
 
 
 
-                            cmd.SetGraphicPipelineState(state.get());
+                            cmd.SetGraphicPipelineState(state);
                             //绑定vertexfactory
                             batch.VertexFactory->Bind(cmd);
                             cmd.SetViewport(0, 0, FrameWidth, FrameHeight, 0.0f, 1.0f);
                             cmd.SetScissor(0, 0, FrameWidth, FrameHeight);
                             //设置vertex参数
-                            SetShaderParameters(cmd, vertexShader, params);
+                            SetShaderParameters(cmd, vertexShader, &passParams->vertexParameters);
 
                             //设置pixel参数
-                            SetShaderParameters(cmd, pixelShader, params);
+                            SetShaderParameters(cmd, pixelShader, &passParams->pixelParameters);
                             auto boundRenderTarget = params->pixelParameters.renderTargetSlots.GetBoundRenderTarget();
                             RHIRenderPassInfo passInfo;
                             passInfo.RenderTargets = boundRenderTarget;
@@ -466,7 +471,7 @@ namespace Test {
         RenderCore::Shader* blitTextureShader0;
         std::shared_ptr<StaticMeshAsset> staticMeshAsset;
         StaticMeshComponent* staticMeshComponent;
-        SceneInterface* scene;
+        Engine::SceneInterface* scene;
         RHI::RHIGraphicsPipelineStateDesc pipelineDesc;
         Shader* vertexShader;
         Shader* pixelShader;

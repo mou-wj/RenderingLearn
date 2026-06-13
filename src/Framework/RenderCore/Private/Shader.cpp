@@ -55,13 +55,14 @@ void Shader::ProcessMetadataRecursive(
     const ShaderParametersMetadata& Metadata,
     const std::string& Prefix,
     const ShaderParameterAllocationMap& ParameterMap,
+    const uint64_t MetadataOffset,
     ShaderParameterBindingInfo& OutBindings)
 {
     for (const auto& Member : Metadata.GetMembers())
     {
         std::string Name = Prefix.empty()
             ? Member.Name
-            : Prefix + "_" + Member.Name;
+            : Member.Name;
 
         // =========================
         // 1. Resource（SRV/UAV/Sampler）
@@ -71,26 +72,34 @@ void Shader::ProcessMetadataRecursive(
             auto Allocation = ParameterMap.FindParameterAllocation(Name);
             if (!Allocation.has_value())
                 continue; // shader没用到
-
             ShaderParameterBindingInfo::ShaderResourceBinding Binding;
             Binding.BaseType = Member.BaseType;
             Binding.BindSlot = Allocation->BaseIndex;
             Binding.ArraySize = (Member.NumElements > 0) ? Member.NumElements : 1;
-            Binding.Offset = Member.Offset;
-
+            Binding.Offset = Member.Offset + MetadataOffset;
             OutBindings.AddResourceBinding(Name, Binding);
         }
         // =========================
         // 2. Struct（递归展开）
         // =========================
-        else if (Member.IsStruct())
+        else if (Member.IsIncludeStruct() || Member.IsReferenceStruct())
         {
             ProcessMetadataRecursive(
                 *Member.StructMetadata,
-                Name,
+                "",
                 ParameterMap,
+                Member.Offset + MetadataOffset,
                 OutBindings);
         }
+        //else if (Member.IsNestedStruct())
+        //{
+        //    ProcessMetadataRecursive(
+        //        *Member.StructMetadata,
+        //        Name,
+        //        ParameterMap,
+        //        Member.Offset + MetadataOffset,
+        //        OutBindings);
+        //}
         // =========================
         // 3. Uniform（关键）
         // =========================
@@ -113,7 +122,7 @@ void Shader::ProcessMetadataRecursive(
             Binding.BaseType = Member.BaseType;
             Binding.BufferIndex = Allocation->BufferIndex;
             Binding.BaseIndex = Allocation->BaseIndex;
-            Binding.Offset = Member.Offset;
+            Binding.Offset = Member.Offset + MetadataOffset;
             Binding.Size = Allocation->Size;
 
             OutBindings.AddUniformBinding(Name, Binding);
@@ -134,6 +143,7 @@ void Shader::InitShaderBindings(const ShaderParametersMetadata* Metadata, const 
         *Metadata,
         "",                     // prefix
         InParameterMap,
+        0,
         Bindings);
 }
 

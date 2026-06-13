@@ -67,7 +67,7 @@ namespace RHIVulkan {
 		OutAccessMask = 0;
 		OutStageMask = 0;
 
-		if (InAccess == ERHIResourceAccess::Unknown || InAccess == ERHIResourceAccess::Undefined)
+		if (InAccess == ERHIResourceAccess::Unknown)
 		{
 			OutLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			OutAccessMask = 0;
@@ -545,7 +545,7 @@ namespace RHIVulkan {
 	VkImageLayout DetermineImageLayout(ERHIResourceAccess access, bool bIsDepthStencil)
 	{
 		// 1. 无效/初始状态
-		if (access == ERHIResourceAccess::Unknown || access == ERHIResourceAccess::Undefined)
+		if (access == ERHIResourceAccess::Unknown)
 		{
 			return VK_IMAGE_LAYOUT_UNDEFINED;
 		}

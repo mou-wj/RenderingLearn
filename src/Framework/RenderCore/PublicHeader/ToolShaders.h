@@ -15,8 +15,8 @@ namespace RenderCore {
         SHADER_PARAMETER(Core::Float2, DstSize)
         SHADER_PARAMETER(Core::Float2, DstInvSize)
         SHADER_PARAMETER(float, SrcMipLevel)
-        SHADER_PARAMETER_TEXTURE(RenderGraphTexture, SrcTexture)
-        SHADER_PARAMETER_TEXTURE_UAV(RenderGraphTextureUAV, DstTexture)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D,SrcTexture)
+        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>,DstTexture)
 		SHADER_PARAMETER_SAMPLER(SrcSampler)
     END_SHADER_PARAMETER_STRUCT(BlitTextureParameters)
 

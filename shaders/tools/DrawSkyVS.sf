@@ -1,0 +1,20 @@
+struct FVertexOutput
+{
+    float4 Position : SV_Position;
+    float2 UV : TEXCOORD0;
+};
+
+FVertexOutput MainVS(uint VertexId : SV_VertexID)
+{
+    static const float2 Positions[3] = {
+        float2(-1.0f, -1.0f),
+        float2( 3.0f, -1.0f),
+        float2(-1.0f,  3.0f)
+    };
+
+    FVertexOutput Out;
+    float2 pos = Positions[VertexId];
+    Out.Position = float4(pos.xy, 0.0f, 1.0f);
+    Out.UV = pos * 0.5f + 0.5f;
+    return Out;
+}

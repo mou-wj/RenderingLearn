@@ -4,7 +4,7 @@
 using namespace RHI;
 
 namespace RenderCore {
-	RHI::RHIVertexDescStateSP VertexFactory::GetRHIVertexDescState() const
+	RHI::RHIVertexDescState* VertexFactory::GetRHIVertexDescState() const
 	{
 		return RHIVertexDescState;
 	}

@@ -20,10 +20,34 @@ struct VulkanTransientHeap
         uint64_t Offset = 0;
         uint64_t Size = 0;
 
-        uint32_t FreeAfterIndex = 0; // 生命周期结束
-        bool bFree = true;
+        uint32_t EndIndex = 0; // 生命周期结束
+        uint32_t AliasingCount = 0;
+        
     };
+public:
 
+    Block* Allocate(
+        uint64_t requestSize,
+        uint64_t alignment,
+        uint32_t beginIndex,
+        uint32_t endIndex);
+
+    void Release(
+        uint64_t offset,
+        uint64_t size);
+
+private:
+
+    void MergeAdjacent();
+
+    uint64_t Align(
+        uint64_t value,
+        uint64_t alignment) const
+    {
+        return (value + alignment - 1)
+            & ~(alignment - 1);
+    }
+public:
     std::vector<Block> Blocks;
 };
 
@@ -52,8 +76,8 @@ public:
         uint32_t endIndex) override;
 
     // 释放（逻辑释放）
-    void ReleaseTransientTexture(const RHI::RHITransientTexture* texture, uint32_t endIndex) override;
-    void ReleaseTransientBuffer(const RHI::RHITransientBuffer* buffer, uint32_t endIndex) override;
+    void ReleaseTransientTexture(const RHI::RHITransientTexture* texture) override;
+    void ReleaseTransientBuffer(const RHI::RHITransientBuffer* buffer) override;
     VulkanTransientResourceManager(const VulkanTransientResourceManager&) = delete;
     VulkanTransientResourceManager& operator=(const VulkanTransientResourceManager&) = delete;
 private:
@@ -65,11 +89,11 @@ private:
         uint64_t size,
         uint64_t alignment,
         uint32_t beginIndex,
+        uint32_t endIndex,
         uint32_t memTypeIndex);
 
     void Free(
-        VulkanTransientAllocation& alloc,
-        uint32_t endIndex);
+        VulkanTransientAllocation& alloc);
 
     VulkanTransientHeap* CreateHeap(uint64_t sizem, uint32_t memoryTypeIndex);
 

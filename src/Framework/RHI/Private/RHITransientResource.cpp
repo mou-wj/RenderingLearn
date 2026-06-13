@@ -10,20 +10,7 @@ namespace RHI {
     // 析构函数
     RHITransientResource::~RHITransientResource() = default;
 
-    // Acquire 方法
-    void RHITransientResource::Acquire(const std::string& name, uint32_t beginIndex)
-    {
-        Name = name;
-        BeginIndex = beginIndex;
-        bAcquired = true;
-    }
-
-    // Release 方法
-    void RHITransientResource::Release(uint32_t endIndex)
-    {
-        EndIndex = endIndex;
-        bAcquired = false;
-    }
+   
 
     // Getter
     bool RHITransientResource::IsAcquired() const

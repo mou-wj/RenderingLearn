@@ -273,7 +273,8 @@ private:
     std::unordered_map<RenderGraphTexture*, RHI::RHITexture*> RDGToRHITexture;
     std::unordered_map<RenderGraphBuffer*, RHI::RHIBuffer*>  RDGToRHIBuffer;
 
-
+    std::unordered_map<RHI::RHITexture*, PooledTransientRenderTarget*> RHITextureToTransientTarget;
+    std::unordered_map<RHI::RHIBuffer*, PooledTransientBuffer*>  RHIBufferTransientBuffer;
     RenderGraphAllocator Allocator;
     TransientResourceAllocator* TransientAllocator;
 

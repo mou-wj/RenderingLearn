@@ -24,7 +24,6 @@ namespace Renderer
         {
             return false;
         }
-
         return true;
     }
 
@@ -90,10 +89,12 @@ namespace Renderer
         Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
     }
 
+
+
     const RenderCore::ShaderParametersMetadata*
         StaticMeshMaterialShaderPS::GetShaderParameterMetadata()
     {
-        return LocalVertexFactoryParameters::GetMetaData();
+        return StaticMeshMaterialShaderPSParameters::GetMetaData();
     }
 
     IMPLEMENT_MESH_MATERIAL_SHADER_TYPE(

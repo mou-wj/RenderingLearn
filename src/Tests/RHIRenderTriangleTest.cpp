@@ -143,7 +143,7 @@ public:
             cmdList.SetImmediate(true);
             cmdList.Begin();
             // 设置图形管线状态
-            cmdList.SetGraphicPipelineState(TriangleGraphicsPipelineState.get());
+            cmdList.SetGraphicPipelineState(TriangleGraphicsPipelineState);
 
             // 设置顶点缓冲区流
             cmdList.SetStreamSource(0, VertexBuffer.get(), 0);
@@ -214,8 +214,6 @@ public:
         VertexBuffer.reset();
         VertexShader.reset();
         FragmentShader.reset();
-        TriangleGraphicsPipelineState.reset();
-        VertexDescState.reset();
         depthStencilTexture.reset();
         Swapchain.reset();
 		Window.reset();
@@ -235,8 +233,8 @@ private:
     RHI::RHIBufferSP VertexBuffer;
     RHI::RHIVertexShaderSP VertexShader;
     RHI::RHIFragmentShaderSP FragmentShader;
-    RHI::RHIGraphicsPipelineStateSP TriangleGraphicsPipelineState;
-    RHI::RHIVertexDescStateSP VertexDescState;
+    RHI::RHIGraphicsPipelineState* TriangleGraphicsPipelineState;
+    RHI::RHIVertexDescState* VertexDescState;
     RHI::RHISwapchainSP Swapchain;
     Slate::WindowSP Window;
     int WindiwWidth = 512;
@@ -446,10 +444,10 @@ private:
         pipelineDesc.shaderStages.vertexShader = VertexShader.get();
         pipelineDesc.shaderStages.fragmentShader = FragmentShader.get();
         // 这里可以设置更多管线配置...
-        pipelineDesc.rasterizerState = rasterizerState.get();
-        pipelineDesc.colorBlendState = colorBlendState.get();
-        pipelineDesc.depthStencilState = depthStencilState.get();
-        pipelineDesc.vertexDescState = VertexDescState.get();
+        pipelineDesc.rasterizerState = rasterizerState;
+        pipelineDesc.colorBlendState = colorBlendState;
+        pipelineDesc.depthStencilState = depthStencilState;
+        pipelineDesc.vertexDescState = VertexDescState;
 
         //rendertarget info
 		pipelineDesc.attachmentDesc.colorAttachmentCount = 1;

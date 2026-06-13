@@ -2,6 +2,7 @@
 #include "Module.h"
 #include "RenderModule.h"
 #include "Math.hpp"
+#include "EngineGlobal.h"
 namespace App {
     using namespace Engine;
     using namespace Core;
@@ -13,12 +14,41 @@ namespace App {
     void AppViewportClient::InitResources()
     {
         AssetManager::Get().LoadSync<MaterialAsset>(Core::GetProjectDir() + "/resources/material/DefaultWhite/material.json");
-
+        //AssetManager::Get().LoadSync<SkyLightAsset>(Core::GetProjectDir() + "/resources/pic/DaySkyHDRI046A_1K-TONEMAPPED.jpg");
         staticMeshAsset = AssetManager::Get().LoadSync<StaticMeshAsset>(Core::GetProjectDir() + "/resources/glb/sphere.glb");
         staticMeshComponent = new StaticMeshComponent();
         staticMeshComponent->SetStaticMesh(staticMeshAsset->GetMesh());
-        scene = Renderer::GetRenderModuleInstance()->AllocateScene();
+        scene = GetRenderModuleInstance()->AllocateScene();
         scene->AddPrimitive(staticMeshComponent);
+
+        // Create Directional Light
+        directionalLight = new DirectionalLightComponent();
+        directionalLight->SetWorldLocation({ 5.0f, 5.0f, 5.0f });
+        directionalLight->SetDirection({ -1.0f, -1.0f, -1.0f });
+        directionalLight->SetColor({ 1.0f, 1.0f, 1.0f });
+        directionalLight->SetIntensity(1.0f);
+        directionalLight->SetCastShadow(true);
+        scene->AddLight(directionalLight);
+
+        // Create Point Light
+        pointLight = new PointLightComponent();
+        pointLight->SetWorldLocation({ -3.0f, 2.0f, 0.0f });
+        pointLight->SetColor({ 1.0f, 0.5f, 0.2f });
+        pointLight->SetIntensity(1.0f);
+        pointLight->SetAttenuationRadius(10.0f);
+        scene->AddLight(pointLight);
+
+        // Create Spot Light
+        spotLight = new SpotLightComponent();
+        spotLight->SetWorldLocation({ 3.0f, 2.0f, 0.0f });
+        spotLight->SetDirection({ -1.0f, -0.5f, 0.0f });
+        spotLight->SetColor({ 0.2f, 0.5f, 1.0f });
+        spotLight->SetIntensity(1.0f);
+        spotLight->SetAttenuationRadius(15.0f);
+        spotLight->SetInnerConeAngle(20.0f);
+        spotLight->SetOuterConeAngle(45.0f);
+        scene->AddLight(spotLight);
+
         scene->FlushPendingUpdates();
 
         camera.SetPosition({ 0.0f, 0.0f, -5.0f });
@@ -31,10 +61,31 @@ namespace App {
     {
 		if (scene) {
 			scene->RemovePrimitive(staticMeshComponent);
+            
+            // Remove lights from scene
+            if (directionalLight) {
+                scene->RemoveLight(directionalLight);
+            }
+            if (pointLight) {
+                scene->RemoveLight(pointLight);
+            }
+            if (spotLight) {
+                scene->RemoveLight(spotLight);
+            }
+
             scene->FlushPendingUpdates();
 		}
 		delete staticMeshComponent;
 		staticMeshComponent = nullptr;
+        
+        // Delete lights
+        delete directionalLight;
+        directionalLight = nullptr;
+        delete pointLight;
+        pointLight = nullptr;
+        delete spotLight;
+        spotLight = nullptr;
+
 		staticMeshAsset.reset();
         delete scene;
 		scene = nullptr;
@@ -46,13 +97,13 @@ namespace App {
         if (!InViewport)
             return;
 
-        // ¹¹½¨ SceneViewCollection
+        // ï¿½ï¿½ï¿½ï¿½ SceneViewCollection
         ;
         family.RenderTarget = InViewport;
         BuildSceneViews(InViewport, family);
 
-        // µ÷ÓÃ RenderInterface Ö´ÐÐäÖÈ¾
-        Renderer::GetRenderModuleInstance()->BeginRender(&family);
+        // ï¿½ï¿½ï¿½ï¿½ RenderInterface Ö´ï¿½ï¿½ï¿½ï¿½È¾
+        GetRenderModuleInstance()->BeginRender(&family);
     }
 
     void AppViewportClient::BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewFamily& OutViews)
@@ -62,7 +113,7 @@ namespace App {
         auto proj = camera.GetProjectionMatrix();
 		auto vp = view * proj;
         ;
-        //»æÖÆ³¡¾°
+        //ï¿½ï¿½ï¿½Æ³ï¿½ï¿½ï¿½
         SceneView sceneView;
         sceneView.CameraWorldPos = camera.GetPosition();
         sceneView.ViewMatrix = view;
@@ -255,6 +306,8 @@ namespace App {
         camera.SetUp(
             { 0.0f, 1.0f, 0.0f });
         camera.SetPerspective(Core::DegToRad(45.0f), 1, 0.1f, 100.0f);
+        //Yaw = Core::DegToRad(90.0f);
+        //Pitch = 0;
     }
 
 

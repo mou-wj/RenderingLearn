@@ -52,6 +52,9 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, b
     imageInfo.samples = TransformSampleCountFrom(desc.SampleCount);
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = TransformTextureUsageFlagsFrom(desc.Usage); // TODO: Support other usages
+    if (desc.Type == ERHITextureType::TextureCube) {
+        imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    }
 	std::vector<uint32_t> queueFamilyIndices;
     VulkanQueue* initialQueue = ResolveInitialQueue(Device, desc.InitialQueueType);
     queueFamilyIndices.push_back(initialQueue ? initialQueue->GetFamilyIndex() : Device->GetGraphicsQueue()->GetFamilyIndex());
@@ -75,32 +78,12 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, b
 
         // Bind memory to image
         VKFunc::BindImageMemory(vkDevice, Image, Allocation.GetMemory(), Allocation.GetOffset());
+        CreateDefaultView();
     }
 
 
-    // Create VkImageView
-    bool viewSuccess = DefaltView.Create(
-        device,                                // fvulkan_device& device
-        Image,                                 // VkImage
-        TransformViewTypeFrom(desc.Type),      // VkImageViewType
-        GetImageAspectFlags(TransformFormatFrom(desc.Format)), // VkImageAspectFlags
-        TransformFormatFrom(desc.Format),       // VkFormat
-        0,                                      // first mip level
-        desc.MipLevels,                         // number of mips
-        0,                                      // base array layer
-        desc.ArraySize,                          // number of array layers
-        true,                                   // use identity swizzle
-        imageInfo.usage
-    );
 
-    if (!viewSuccess) {
-        Image = VK_NULL_HANDLE;
-        VKFunc::DestroyImage(vkDevice, Image);
-        if (!externalAllocated)
-        {
-            memoryManager->Free(Allocation);
-        }
-    }
+
 #ifdef DEBUG_INFO
     std::string debugName;
     if (Desc.DebugName) {
@@ -168,6 +151,34 @@ VulkanTexture::~VulkanTexture() {
     }
 }
 
+void VulkanTexture::CreateDefaultView()
+{
+    auto usage = TransformTextureUsageFlagsFrom(Desc.Usage);
+    // Create VkImageView
+    bool viewSuccess = DefaltView.Create(
+        Device,                                // fvulkan_device& device
+        Image,                                 // VkImage
+        TransformViewTypeFrom(Desc.Type),      // VkImageViewType
+        GetImageAspectFlags(TransformFormatFrom(Desc.Format)), // VkImageAspectFlags
+        TransformFormatFrom(Desc.Format),       // VkFormat
+        0,                                      // first mip level
+        Desc.MipLevels,                         // number of mips
+        0,                                      // base array layer
+        Desc.ArraySize,                          // number of array layers
+        true,                                   // use identity swizzle
+        usage
+    );
+    VulkanMemoryManager* memoryManager = Device->GetMemoryManager();
+    if (!viewSuccess) {
+        Image = VK_NULL_HANDLE;
+        VKFunc::DestroyImage(Device->GetHandle(), Image);
+        if (!ExternalAllocated)
+        {
+            memoryManager->Free(Allocation);
+        }
+    }
+}
+
 void VulkanTexture::AttachView(VulkanViewBase* view)
 {
     views.push_back(view);
@@ -186,7 +197,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
 {
     // --- 0. 初始默认值 ---
     OutLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    OutAccess = ERHIResourceAccess::Undefined;
+    OutAccess = ERHIResourceAccess::Unknown;
 
     // --- 1. 优先级最高：呈现 (Swapchain) ---
     // Swapchain 图像在 Vulkan 中非常特殊，必须处于 PRESENT 布局才能交给窗口系统
@@ -280,7 +291,7 @@ void VulkanTexture::DetermineDefaultLayout(ERHITextureCreateFlags Flags, VkImage
     // --- 9. 兜底：Undefined ---
     // 没有任何明确用途标志时，保持 Undefined
     OutLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    OutAccess = ERHIResourceAccess::Undefined;
+    OutAccess = ERHIResourceAccess::Unknown;
 }
 
 // Vulkan Buffer

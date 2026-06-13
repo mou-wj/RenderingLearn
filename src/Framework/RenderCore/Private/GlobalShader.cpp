@@ -2,6 +2,7 @@
 #include "ShaderCompiler.h"
 #include "RHIApi.h"
 #include "PathInfo.h"
+#include "Log.h"
 #include <functional>
 #include <sstream>
 
@@ -92,7 +93,7 @@ namespace RenderCore{
                 if (!output.Success)
                 {
                     // 记录错误并跳过此变体
-                    // LOG_ERROR("Failed to compile %s (Permutation %d)", st->Name.c_str(), permId);
+                    LOG_ERROR("Failed to compile %s (Permutation %d)", st->Name.c_str(), permId);
                     continue;
                 }
 

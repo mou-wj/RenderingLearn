@@ -18,88 +18,88 @@ std::mutex RHIPipelineStateCache::s_rasterizerMutex;
 std::mutex RHIPipelineStateCache::s_colorBlendMutex;
 std::mutex RHIPipelineStateCache::s_depthStencilMutex;
 
-RHIGraphicsPipelineStateSP RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) {
+RHIGraphicsPipelineState* RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(const RHIGraphicsPipelineStateDesc& desc) {
 	std::lock_guard<std::mutex> lock(RHIPipelineStateCache::s_graphicsMutex);
 	size_t hash = RHIPipelineStateCache::HashGraphicsPipelineDesc(desc);
 
 	auto it = RHIPipelineStateCache::s_graphicsCache.find(hash);
 	if (it != RHIPipelineStateCache::s_graphicsCache.end()) {
-		return it->second;
+		return it->second.get();
 	}
 	auto state = GRHIApi->CreateGraphicsPipelineState(desc);
 	RHIPipelineStateCache::s_graphicsCache[hash] = state;
-	return state;
+	return state.get();
 }
 
 
-RHIComputePipelineStateSP RHIPipelineStateCache::GetOrCreateComputePipelineState(const RHIComputePipelineStateDesc& desc) {
+RHIComputePipelineState* RHIPipelineStateCache::GetOrCreateComputePipelineState(const RHIComputePipelineStateDesc& desc) {
 	std::lock_guard<std::mutex> lock(s_computeMutex);
 	size_t hash = HashComputePipelineDesc(desc);
 
 	auto it = s_computeCache.find(hash);
 	if (it != s_computeCache.end()) {
-		return it->second;
+		return it->second.get();
 	}
 	auto state = GRHIApi->CreateComputePipelineState(desc);
 	s_computeCache[hash] = state;
-	return state;
+	return state.get();
 
 }
 
-RHIVertexDescStateSP RHIPipelineStateCache::GetOrCreateVertexDescState(const RHIVertexDescStateDesc& desc) {
+RHIVertexDescState* RHIPipelineStateCache::GetOrCreateVertexDescState(const RHIVertexDescStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_vertexDescMutex);
     size_t hash = HashVertexDescState(desc);
     
     auto it = s_vertexDescCache.find(hash);
     if (it != s_vertexDescCache.end()) {
-        return it->second;
+        return it->second.get();
     }
 
     auto state = GRHIApi->CreateVertexDescState(desc);
     s_vertexDescCache[hash] = state;
-    return state;
+    return state.get();
 }
 
-RHIRasterizerStateSP RHIPipelineStateCache::GetOrCreateRasterizerState(const RHIRasterizerStateDesc& desc) {
+RHIRasterizerState* RHIPipelineStateCache::GetOrCreateRasterizerState(const RHIRasterizerStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_rasterizerMutex);
     size_t hash = HashRasterizerState(desc);
     
     auto it = s_rasterizerCache.find(hash);
     if (it != s_rasterizerCache.end()) {
-        return it->second;
+        return it->second.get();
     }
 
     auto state = GRHIApi->CreateRasterizerState(desc);
     s_rasterizerCache[hash] = state;
-    return state;
+    return state.get();
 }
 
-RHIColorBlendStateSP RHIPipelineStateCache::GetOrCreateColorBlendState(const RHIColorBlendStateDesc& desc) {
+RHIColorBlendState* RHIPipelineStateCache::GetOrCreateColorBlendState(const RHIColorBlendStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_colorBlendMutex);
     size_t hash = HashColorBlendState(desc);
     
     auto it = s_colorBlendCache.find(hash);
     if (it != s_colorBlendCache.end()) {
-        return it->second;
+        return it->second.get();
     }
 
     auto state = GRHIApi->CreateColorBlendState(desc);
     s_colorBlendCache[hash] = state;
-    return state;
+    return state.get();
 }
 
-RHIDepthStencilStateSP RHIPipelineStateCache::GetOrCreateDepthStencilState(const RHIDepthStencilStateDesc& desc) {
+RHIDepthStencilState* RHIPipelineStateCache::GetOrCreateDepthStencilState(const RHIDepthStencilStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_depthStencilMutex);
     size_t hash = HashDepthStencilState(desc);
     
     auto it = s_depthStencilCache.find(hash);
     if (it != s_depthStencilCache.end()) {
-        return it->second;
+        return it->second.get();
     }
 
     auto state = GRHIApi->CreateDepthStencilState(desc);
     s_depthStencilCache[hash] = state;
-    return state;
+    return state.get();
 }
 
 void RHIPipelineStateCache::ClearAll() {
