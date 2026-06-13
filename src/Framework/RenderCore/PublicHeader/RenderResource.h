@@ -132,6 +132,7 @@ public:
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
     void UploadData(const void* data, uint32_t mipIndex ,uint32_t arraySlice,uint32_t planeSlice = 0);
+    void GenerateMipMaps();
     RHI::RHITexture* GetRHI() const { return Texture.get(); }
     RenderTextureTracker& GetTracker() { return Tracker; }
     TextureViewCache& GetViewCache() { return ViewCache; }

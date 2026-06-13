@@ -42,7 +42,7 @@ namespace Renderer {
             SRVDesc.NumElements = 1;
             SRVDesc.Stride = SceneLightResourceInfo.DirectionalLightBuffer->GetRHI()->GetDesc().Size;
             SRVDesc.Buffer = rdgB;
-            Out.LightParameters.DirectionalLights = Builder.CreateBufferSRV("SpotLightsSRV", SRVDesc);
+            Out.LightParameters.DirectionalLights = Builder.CreateBufferSRV("DirectionalLightsSRV", SRVDesc);
         }
 
     }

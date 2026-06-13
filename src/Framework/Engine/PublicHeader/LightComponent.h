@@ -140,10 +140,10 @@ namespace Engine
 
     protected:
         float InnerConeAngle =
-            20.0f;
+            Core::DegToRad(20.0f);
 
         float OuterConeAngle =
-            45.0f;
+            Core::DegToRad(45.0f);
 
         Core::Float3 Direction =
             Core::Float3(

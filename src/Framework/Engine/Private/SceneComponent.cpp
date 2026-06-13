@@ -121,14 +121,27 @@ namespace Engine
     {
         return Children;
     }
-    void SceneComponent::AddSceneListener(SceneInterface* listener)
+
+    void SceneComponent::SetSceneOwner(SceneInterface* owner)
     {
-		SceneListeners.insert(listener);
+        SceneOwner = owner;
     }
-    void SceneComponent::RemoveSceneListener(SceneInterface* listener)
+
+    SceneInterface* SceneComponent::GetSceneOwner() const
     {
-        SceneListeners.erase(listener);
+        if (SceneOwner)
+        {
+            return SceneOwner;
+        }
+
+        if (Parent)
+        {
+            return Parent->GetSceneOwner();
+        }
+
+        return nullptr;
     }
+
     void SceneComponent::SetLocalLocation(
         const Core::Float3& location)
     {
@@ -282,11 +295,11 @@ namespace Engine
     }
 
     void SceneComponent::MarkRenderStateDirty()
-	{
-		for (SceneInterface* listener : SceneListeners)
-		{
-            listener->NotifyComponentChanged(this);
-		}
+    {
+        if (auto* owner = GetSceneOwner())
+        {
+            owner->NotifyComponentChanged(this);
+        }
     }
 
     void SceneComponent::OnTransformChanged()

@@ -1,0 +1,12 @@
+struct FPixelShaderInput
+{
+    float2 UV : TEXCOORD0;
+};
+
+Texture2D EnvironmentMap;
+SamplerState EnvironmentMapSampler;
+
+float4 MainPS(FPixelShaderInput Input) : SV_Target
+{
+    return EnvironmentMap.Sample(EnvironmentMapSampler, Input.UV);
+}

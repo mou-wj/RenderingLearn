@@ -135,7 +135,7 @@ namespace Engine
         SetInnerConeAngle(
             float angle)
     {
-        InnerConeAngle = angle;
+        InnerConeAngle = Core::DegToRad(angle);
 
         MarkRenderStateDirty();
     }
@@ -144,7 +144,7 @@ namespace Engine
         SetOuterConeAngle(
             float angle)
     {
-        OuterConeAngle = angle;
+        OuterConeAngle = Core::DegToRad(angle);
 
         MarkRenderStateDirty();
     }

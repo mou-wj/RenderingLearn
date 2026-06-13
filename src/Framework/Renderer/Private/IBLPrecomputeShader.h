@@ -6,16 +6,22 @@
 #include "ShaderCore.h"
 
 namespace Renderer {
+    BEGIN_SHADER_PARAMETER_STRUCT(IBLPrecomputeSpecEvnParameters)
+        SHADER_PARAMETER_RHI_UAV(RWTexture2DArray<float4>, OutputSpecularTexture)
+    END_SHADER_PARAMETER_STRUCT(IBLPrecomputeSpecEvnParameters)
+    BEGIN_SHADER_PARAMETER_STRUCT(IBLPrecomputeDiffuseEvnParameters)
+        SHADER_PARAMETER_RHI_UAV(RWTexture2DArray<float4>, OutputDiffuseTexture)
+    END_SHADER_PARAMETER_STRUCT(IBLPrecomputeDiffuseEvnParameters)
     BEGIN_SHADER_PARAMETER_STRUCT(IBLPrecomputeEvnParameters)
         SHADER_PARAMETER(int, SampleCount)
-        SHADER_PARAMETER(int, RoughnessCount)
+        SHADER_PARAMETER(float, Roughness)
         SHADER_PARAMETER_RHI_TEXTURE(Texture2D, EnvironmentMap)
         SHADER_PARAMETER_SAMPLER(EnvSampler)
-        SHADER_PARAMETER_RHI_UAV(RWTexture2D<float4>, OutputDiffuseTexture)
-        SHADER_PARAMETER_RHI_UAV(RWTexture2DArray<float4>, OutputSpecularTexture)
+        SHADER_PARAMETER_STRUCT_REFERENCE(IBLPrecomputeSpecEvnParameters, OutputSpecularParam)
+        SHADER_PARAMETER_STRUCT_REFERENCE(IBLPrecomputeDiffuseEvnParameters, OutputDiffuseParam)
     END_SHADER_PARAMETER_STRUCT(IBLPrecomputeEvnParameters)
     BEGIN_SHADER_PARAMETER_STRUCT(IBLPrecomputeBRDFParameters)
-        SHADER_PARAMETER_RHI_UAV(RWTexture2DArray<float4>, OutputBRDFLUT)
+        SHADER_PARAMETER_RHI_UAV(RWTexture2D<float4>, OutputBRDFLUT)
     END_SHADER_PARAMETER_STRUCT(IBLPrecomputeBRDFParameters)
 
     // IBL 预计算所需参数，包含环境贴图与 BRDF LUT 两种输出（由变体选择）
@@ -27,17 +33,18 @@ namespace Renderer {
 
     // 变体宏：选择计算类型（0 = EnvMap, 1 = BRDF_LUT）
     static constexpr char Macro_IBLMode[] = "IBL_PRECOMPUTE_MODE";
-    using IBLModeDim = RenderCore::FPermutationDimensionEnum<Macro_IBLMode, 2>;
-    using PermutationDomain = RenderCore::ShaderPermutationDomain<IBLModeDim>;
+    using IBLModeDim = RenderCore::FPermutationDimensionEnum<Macro_IBLMode, 3>;
+    
 
     class IBLPrecomputeCS : public RenderCore::GlobalShader
     {
     public:
+        using PermutationDomain = RenderCore::ShaderPermutationDomain<IBLModeDim>;
         DECLARE_GLOBAL_SHADER_TYPE(IBLPrecomputeCS);
 
         static bool ShouldCompilePermutation(const RenderCore::ShaderPermutationParameters& Parameters)
         {
-            return true;
+            return false;
         }
 
         static void ModifyShaderCompilerEnvironment(const RenderCore::ShaderPermutationParameters& Parameters, RenderCore::ShaderCompilerEnvironment& OutEnvironment)

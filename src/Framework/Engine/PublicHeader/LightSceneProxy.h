@@ -17,15 +17,12 @@ namespace Engine
         virtual ELightType GetLightType()
             const = 0;
 
-        virtual void UpdateFromComponent(
-            const LightComponent* component);
+        virtual void UpdateFromComponent();
 
     public:
         const Core::Float3&
             GetPosition() const;
 
-        const Core::Float3&
-            GetDirection() const;
 
         const Core::Float3&
             GetColor() const;
@@ -43,11 +40,7 @@ namespace Engine
                 0.0f,
                 0.0f);
 
-        Core::Float3 Direction =
-            Core::Float3(
-                1.0f,
-                0.0f,
-                0.0f);
+        // Direction is light-type specific (directional/spot)
 
         Core::Float3 Color =
             Core::Float3(
@@ -60,6 +53,7 @@ namespace Engine
 
         bool bCastShadow =
             true;
+        const LightComponent* Component = nullptr;
     };
 
     class ENGINE_API DirectionalLightSceneProxy
@@ -69,6 +63,15 @@ namespace Engine
         explicit DirectionalLightSceneProxy(
             const DirectionalLightComponent*
             component);
+
+    public:
+        void UpdateFromComponent() override;
+
+    public:
+        const Core::Float3& GetDirection() const;
+
+    protected:
+        Core::Float3 Direction = Core::Float3(0.0f, -1.0f, 0.0f);
 
     public:
         ELightType GetLightType()
@@ -84,9 +87,7 @@ namespace Engine
             component);
 
     public:
-        void UpdateFromComponent(
-            const LightComponent*
-            component)
+        void UpdateFromComponent()
             override;
 
     public:
@@ -120,13 +121,14 @@ namespace Engine
             component);
 
     public:
-        void UpdateFromComponent(
-            const LightComponent*
-            component)
+        void UpdateFromComponent()
             override;
 
         ELightType GetLightType()
             const override;
+
+    public:
+        const Core::Float3& GetDirection() const;
 
     public:
         float GetInnerConeAngle()
@@ -141,6 +143,8 @@ namespace Engine
 
         float OuterConeAngle =
             45.0f;
+
+        Core::Float3 Direction = Core::Float3(0.0f, -1.0f, 0.0f);
     };
 
     class ENGINE_API SkyLightSceneProxy
@@ -151,7 +155,7 @@ namespace Engine
             const SkyLightComponent*
             component);
     public:
-        void UpdateFromComponent(const LightComponent* component) override;
+        void UpdateFromComponent() override;
 
         // Environment texture and precompute dirty flag (copied from component)
         RenderCore::RenderTexture* GetEnvironmentMap() const { return EnvironmentMap; }

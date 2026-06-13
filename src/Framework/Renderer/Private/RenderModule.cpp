@@ -84,59 +84,91 @@ namespace Renderer {
     Engine::SceneInterface* RenderModule::AllocateScene() {
         return new Scene();
     }
-    void RenderModule::PreComputeIBL(RenderCore::RenderTexture* InHDRTexture, RenderCore::RenderTexture* OutDiffuseIBL, RenderCore::RenderTexture* OutSpecularIBL){
+    void RenderModule::PreComputeIBL(RenderCore::RenderTexture* InHDRTexture, RenderCore::RenderTexture* OutDiffuseIBL, RenderCore::RenderTexture* OutSpecularIBL) {
         if (!InHDRTexture || !OutDiffuseIBL || !OutSpecularIBL) return;
         IBLPrecomputeParameters params;
         uint32_t roughnessCount = OutDiffuseIBL->GetRHI()->GetDesc().MipLevels;
         Core::Int2 outsize;
         outsize.x = OutDiffuseIBL->GetRHI()->GetDesc().Width;
         outsize.y = OutDiffuseIBL->GetRHI()->GetDesc().Height;
-		params.OutputSize = outsize;
+        
         params.EnvironmentMapParameter.SampleCount = 4;
-		params.EnvironmentMapParameter.RoughnessCount = roughnessCount;
-        RHI::RHITexUAVCreateInfo DifEnvUAVDesc;
-        DifEnvUAVDesc.Format = OutDiffuseIBL->GetRHI()->GetDesc().Format;
-        DifEnvUAVDesc.MipCount = OutDiffuseIBL->GetRHI()->GetDesc().MipLevels;
-        DifEnvUAVDesc.ArraySize = OutDiffuseIBL->GetRHI()->GetDesc().ArraySize;
-        auto difuav = OutDiffuseIBL->GetViewCache().GetOrCreateUAV(OutDiffuseIBL->GetRHI(), DifEnvUAVDesc);
-        RHI::RHITexUAVCreateInfo SpecEnvUAVDesc;
-        SpecEnvUAVDesc.Format = OutSpecularIBL->GetRHI()->GetDesc().Format;
-        SpecEnvUAVDesc.MipCount = OutSpecularIBL->GetRHI()->GetDesc().MipLevels;
-        SpecEnvUAVDesc.ArraySize = OutSpecularIBL->GetRHI()->GetDesc().ArraySize;
-        auto specuav = OutSpecularIBL->GetViewCache().GetOrCreateUAV(OutSpecularIBL->GetRHI(), SpecEnvUAVDesc);
+
+
         TransitionTextureImmediate(RHI::GRHIApi, InHDRTexture, RHI::RHISubresourceRange{}, RHI::ERHIResourceAccess::SRV, RHI::EQueueType::Compute);
-        TransitionTextureImmediate(RHI::GRHIApi,OutDiffuseIBL, RHI::RHISubresourceRange{},RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
+        TransitionTextureImmediate(RHI::GRHIApi, OutDiffuseIBL, RHI::RHISubresourceRange{}, RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
         TransitionTextureImmediate(RHI::GRHIApi, OutSpecularIBL, RHI::RHISubresourceRange{}, RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
         params.EnvironmentMapParameter.EnvSampler = RenderCore::GlobalSampler.get();
         params.EnvironmentMapParameter.EnvironmentMap = InHDRTexture->GetRHI();
-        params.EnvironmentMapParameter.OutputDiffuseTexture = difuav;
-        params.EnvironmentMapParameter.OutputSpecularTexture = specuav;
+
 
         // 获取 shader 实例（按变体 id）
         auto& GShaderMap = RenderCore::GShaderMap;
         auto shaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global]["IBLPrecomputeCS"];
-        RenderCore::Shader* shader = GShaderMap.GetShader(shaderType, 0);
-        if (!shader) return;
         
+        
+
         // 创建或获取 compute pipeline state
-        RHI::RHIComputePipelineStateDesc computeDesc;
-        computeDesc.computeShader = dynamic_cast<RHI::RHIComputeShader*>(shader->GetRHIShader());
-        auto pipelineState = RHI::RHIPipelineStateCache::GetOrCreateComputePipelineState(computeDesc);
+
+        
         auto computeContex = GRHIApi->GetQueue(RHI::EQueueType::Compute)->AcquireCastedCommandContext<RHI::RHIComputeContex>();
         RHI::RHIComputeCommandList cmdlist(computeContex);
         cmdlist.SetImmediate(true);
-        cmdlist.SetComputePipelineState(pipelineState);
         
-        // 设置 shader 参数
+        float roughnessStep = 1 / 6.0;
+        //计算镜面反射预计算贴图
+		for (uint32_t mip = 0; mip < 6; mip++) {
+
+            params.EnvironmentMapParameter.Roughness = mip * roughnessStep;
+            RenderCore::Shader* shader = GShaderMap.GetShader(shaderType, 0);
+            if (!shader) return;
+            RHI::RHIComputePipelineStateDesc computeDesc;
+            computeDesc.computeShader = dynamic_cast<RHI::RHIComputeShader*>(shader->GetRHIShader());
+            auto pipelineState = RHI::RHIPipelineStateCache::GetOrCreateComputePipelineState(computeDesc);
+            cmdlist.SetComputePipelineState(pipelineState);
+            RHI::RHITexUAVCreateInfo SpecEnvUAVDesc;
+            SpecEnvUAVDesc.Format = OutSpecularIBL->GetRHI()->GetDesc().Format;
+            SpecEnvUAVDesc.ArraySize = OutSpecularIBL->GetRHI()->GetDesc().ArraySize;
+			SpecEnvUAVDesc.FirstMipSlice = mip;
+            auto specuav = OutSpecularIBL->GetViewCache().GetOrCreateUAV(OutSpecularIBL->GetRHI(), SpecEnvUAVDesc);
+            
+            params.EnvironmentMapParameter.OutputSpecularParam.OutputSpecularTexture = specuav;
+
+
+            // 设置 shader 参数
+            SetShaderParameters(cmdlist, shader, IBLPrecomputeParameters::GetMetaData(), &params);
+            // Dispatch
+            params.OutputSize = outsize / pow(2,mip);
+
+            int width = params.OutputSize.x;
+            int height = params.OutputSize.y;
+            uint32_t groupX = (width + 15) / 16;
+            uint32_t groupY = (height + 15) / 16;
+            cmdlist.Dispatch(groupX, groupY, 6);
+            
+        }
+		//计算漫反射预计算贴图
+        RHI::RHITexUAVCreateInfo DifEnvUAVDesc;
+        DifEnvUAVDesc.Format = OutDiffuseIBL->GetRHI()->GetDesc().Format;
+        DifEnvUAVDesc.ArraySize = OutDiffuseIBL->GetRHI()->GetDesc().ArraySize;
+        auto difuav = OutDiffuseIBL->GetViewCache().GetOrCreateUAV(OutDiffuseIBL->GetRHI(), DifEnvUAVDesc);
+        params.EnvironmentMapParameter.OutputDiffuseParam.OutputDiffuseTexture = difuav;
+        RenderCore::Shader* shader = GShaderMap.GetShader(shaderType, 1);
+        if (!shader) return;
         SetShaderParameters(cmdlist, shader, IBLPrecomputeParameters::GetMetaData(), &params);
         // Dispatch
+        params.OutputSize = outsize;
         int width = params.OutputSize.x;
         int height = params.OutputSize.y;
         uint32_t groupX = (width + 15) / 16;
-        uint32_t groupY = (height + 15) / 16;
-        cmdlist.Dispatch(groupX, groupY, 1);
+		uint32_t groupY = (height + 15) / 16;
+        cmdlist.Dispatch(groupX, groupY, 6);
+        //生成diffuse的mipmap
+
+
+
         cmdlist.End();
-		auto fence = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
+        auto fence = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
         InHDRTexture->GetTracker().UpdateLastAccessFence(fence);
         OutDiffuseIBL->GetTracker().UpdateLastAccessFence(fence);
         OutSpecularIBL->GetTracker().UpdateLastAccessFence(fence);
@@ -144,11 +176,5 @@ namespace Renderer {
 
 	IMPLEMENT_SIMPLE_MODULE(RenderModule, "Renderer");
 
-    RenderModule* GetRenderModuleInstance() {
-        static RenderModule* instance = nullptr;
-        if (instance == nullptr) {
-            instance = dynamic_cast<RenderModule*>(Core::ModuleManager::Get().GetModule("Renderer").get());
-        }
-        return instance;
-    }
+
 }

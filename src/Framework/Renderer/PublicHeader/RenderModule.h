@@ -28,7 +28,7 @@ namespace Renderer {
     };
 
 
-    RENDERER_API RenderModule* GetRenderModuleInstance();
+
 
 
 }

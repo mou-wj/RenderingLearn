@@ -52,6 +52,9 @@ VulkanTexture::VulkanTexture(VulkanDevice* device, const RHITextureDesc& desc, b
     imageInfo.samples = TransformSampleCountFrom(desc.SampleCount);
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = TransformTextureUsageFlagsFrom(desc.Usage); // TODO: Support other usages
+    if (desc.Type == ERHITextureType::TextureCube) {
+        imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    }
 	std::vector<uint32_t> queueFamilyIndices;
     VulkanQueue* initialQueue = ResolveInitialQueue(Device, desc.InitialQueueType);
     queueFamilyIndices.push_back(initialQueue ? initialQueue->GetFamilyIndex() : Device->GetGraphicsQueue()->GetFamilyIndex());

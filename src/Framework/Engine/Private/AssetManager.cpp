@@ -1,8 +1,11 @@
 #include "AssetManager.h"
+#include "EngineGlobal.h"
+#include "RenderInterface.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_gltf.h"
 #include <fstream>
 #include <nlohmann/json.hpp>
+
 using namespace RHI;
 using namespace RenderCore;
 namespace Engine {
@@ -458,7 +461,25 @@ namespace Engine {
 
 
     bool SkyLightAsset::Load(){
-
+		uint32_t cubeWidth = 512;
+        uint32_t cubeHeight = 512;
+        uint32_t roughnessCount = 8;
+        HDRTexture = CreateTexture(Path);
+        Name = Core::GetFileName(Path);
+        RHI::RHITextureDesc Desc;
+        Desc.Format = RHI::ERHIFormat::B8G8R8A8_UNorm;
+        Desc.Width = cubeWidth;
+        Desc.Height = cubeHeight;
+		Desc.ArraySize = 6;
+        Desc.MipLevels = 1;
+        Desc.Usage = RHI::ERHITextureCreateFlag::ShaderResource;
+		Desc.Type = RHI::ERHITextureType::TextureCube;
+        DiffuseIrradiance = std::make_shared<RenderCore::RenderTexture>(Desc);
+        DiffuseIrradiance->InitRHIResource();
+        Desc.MipLevels = 6;
+        SpecularPrefilter = std::make_shared<RenderCore::RenderTexture>(Desc);
+        SpecularPrefilter->InitRHIResource();
+        GetRenderModuleInstance()->PreComputeIBL(HDRTexture.get(), DiffuseIrradiance.get(), SpecularPrefilter.get());
         return true;
     }
 }

@@ -27,6 +27,7 @@
 #include "StaticMeshProcess.h"
 #include "StaticMeshProxy.h"
 #include "../Private/StaticMeshMaterialShader.h"
+#include "EngineGlobal.h"
 using namespace RenderCore;
 using namespace Engine;
 using namespace Renderer;

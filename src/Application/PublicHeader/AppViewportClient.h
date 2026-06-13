@@ -46,7 +46,7 @@ namespace App {
             5.0f;
 
         float Yaw =
-            0.0f;
+            Core::DegToRad(90.0f);
 
         float Pitch =
             0.0f;

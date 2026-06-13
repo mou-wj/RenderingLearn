@@ -92,7 +92,9 @@ void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arr
 	GetTracker().UpdateLastAccessFence(fence);
 	queue->WaitFence(fence);
 }
+void RenderTexture::GenerateMipMaps() {
 
+}
 
 void TransitionTextureImmediate(
 	RHI::RHIApi* api,

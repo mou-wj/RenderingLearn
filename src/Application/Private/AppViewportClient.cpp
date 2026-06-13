@@ -2,6 +2,7 @@
 #include "Module.h"
 #include "RenderModule.h"
 #include "Math.hpp"
+#include "EngineGlobal.h"
 namespace App {
     using namespace Engine;
     using namespace Core;
@@ -13,11 +14,11 @@ namespace App {
     void AppViewportClient::InitResources()
     {
         AssetManager::Get().LoadSync<MaterialAsset>(Core::GetProjectDir() + "/resources/material/DefaultWhite/material.json");
-
+        //AssetManager::Get().LoadSync<SkyLightAsset>(Core::GetProjectDir() + "/resources/pic/DaySkyHDRI046A_1K-TONEMAPPED.jpg");
         staticMeshAsset = AssetManager::Get().LoadSync<StaticMeshAsset>(Core::GetProjectDir() + "/resources/glb/sphere.glb");
         staticMeshComponent = new StaticMeshComponent();
         staticMeshComponent->SetStaticMesh(staticMeshAsset->GetMesh());
-        scene = Renderer::GetRenderModuleInstance()->AllocateScene();
+        scene = GetRenderModuleInstance()->AllocateScene();
         scene->AddPrimitive(staticMeshComponent);
 
         // Create Directional Light
@@ -102,7 +103,7 @@ namespace App {
         BuildSceneViews(InViewport, family);
 
         // ���� RenderInterface ִ����Ⱦ
-        Renderer::GetRenderModuleInstance()->BeginRender(&family);
+        GetRenderModuleInstance()->BeginRender(&family);
     }
 
     void AppViewportClient::BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewFamily& OutViews)
@@ -305,6 +306,8 @@ namespace App {
         camera.SetUp(
             { 0.0f, 1.0f, 0.0f });
         camera.SetPerspective(Core::DegToRad(45.0f), 1, 0.1f, 100.0f);
+        //Yaw = Core::DegToRad(90.0f);
+        //Pitch = 0;
     }
 
 

@@ -6,31 +6,25 @@ namespace Engine
 
     LightSceneProxy::
         LightSceneProxy(
-            const LightComponent* component)
+            const LightComponent* component) : Component(component)
     {
-        UpdateFromComponent(
-            component);
+        
     }
 
     void LightSceneProxy::
-        UpdateFromComponent(
-            const LightComponent* component)
+        UpdateFromComponent()
     {
         
         Position =
-            component->GetWorldLocation();
-
-        Direction =
-            component->GetForwardVector();
-
+            Component->GetWorldLocation();
         Color =
-            component->GetColor();
+            Component->GetColor();
 
         Intensity =
-            component->GetIntensity();
+            Component->GetIntensity();
 
         bCastShadow =
-            component->IsCastShadow();
+            Component->IsCastShadow();
     }
 
     const Core::Float3&
@@ -40,12 +34,6 @@ namespace Engine
         return Position;
     }
 
-    const Core::Float3&
-        LightSceneProxy::
-        GetDirection() const
-    {
-        return Direction;
-    }
 
     const Core::Float3&
         LightSceneProxy::
@@ -73,6 +61,24 @@ namespace Engine
         :
         LightSceneProxy(component)
     {
+        UpdateFromComponent();
+    }
+
+    void DirectionalLightSceneProxy::
+        UpdateFromComponent()
+    {
+        LightSceneProxy::UpdateFromComponent();
+
+        auto dir = static_cast<const DirectionalLightComponent*>(Component);
+        if (dir)
+        {
+            Direction = dir->GetDirection();
+        }
+    }
+
+    const Core::Float3& DirectionalLightSceneProxy::GetDirection() const
+    {
+        return Direction;
     }
 
     ELightType
@@ -94,18 +100,15 @@ namespace Engine
     }
 
     void LocalLightSceneProxy::
-        UpdateFromComponent(
-            const LightComponent*
-            component)
+        UpdateFromComponent()
     {
         LightSceneProxy::
-            UpdateFromComponent(
-                component);
+            UpdateFromComponent();
 
         auto localLight =
             static_cast<
             const LocalLightComponent*>(
-                component);
+                Component);
 
         AttenuationRadius =
             localLight->
@@ -127,6 +130,7 @@ namespace Engine
         LocalLightSceneProxy(
             component)
     {
+        UpdateFromComponent();
     }
 
     ELightType
@@ -144,6 +148,7 @@ namespace Engine
         LocalLightSceneProxy(
             component)
     {
+
         InnerConeAngle =
             component->
             GetInnerConeAngle();
@@ -151,27 +156,32 @@ namespace Engine
         OuterConeAngle =
             component->
             GetOuterConeAngle();
+        Direction = component->GetDirection();
+        UpdateFromComponent();
     }
 
     void SpotLightSceneProxy::
-        UpdateFromComponent(
-            const LightComponent*
-            component)
+        UpdateFromComponent()
     {
         LocalLightSceneProxy::
-            UpdateFromComponent(
-                component);
+            UpdateFromComponent();
 
         auto spot =
             static_cast<
             const SpotLightComponent*>(
-                component);
+                Component);
 
         InnerConeAngle =
             spot->GetInnerConeAngle();
 
         OuterConeAngle =
             spot->GetOuterConeAngle();
+        Direction = spot->GetDirection();
+    }
+
+    const Core::Float3& SpotLightSceneProxy::GetDirection() const
+    {
+        return Direction;
     }
 
     ELightType
@@ -202,13 +212,14 @@ namespace Engine
         :
         LightSceneProxy(component)
     {
+        UpdateFromComponent();
     }
 
-    void SkyLightSceneProxy::UpdateFromComponent(const LightComponent* component)
+    void SkyLightSceneProxy::UpdateFromComponent()
     {
-        LightSceneProxy::UpdateFromComponent(component);
+        LightSceneProxy::UpdateFromComponent();
 
-        auto sky = static_cast<const SkyLightComponent*>(component);
+        auto sky = static_cast<const SkyLightComponent*>(Component);
         if (sky)
         {
             EnvironmentMap = sky->GetEnvironmentMap();

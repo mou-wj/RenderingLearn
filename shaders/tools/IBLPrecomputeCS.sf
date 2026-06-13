@@ -8,7 +8,11 @@
 #include "/Generated/ShaderParameters/IBLPrecomputeParameters.sf"
 #if IBL_PRECOMPUTE_MODE == 0
 #include "/Generated/ShaderParameters/IBLPrecomputeEvnParameters.sf"
+#include "/Generated/ShaderParameters/IBLPrecomputeSpecEvnParameters.sf"
 #elif IBL_PRECOMPUTE_MODE == 1
+#include "/Generated/ShaderParameters/IBLPrecomputeEvnParameters.sf"
+#include "/Generated/ShaderParameters/IBLPrecomputeDiffuseEvnParameters.sf"
+#elif IBL_PRECOMPUTE_MODE == 2
 #include "/Generated/ShaderParameters/IBLPrecomputeBRDFParameters.sf"
 #endif
 
@@ -51,12 +55,12 @@ float3 ImportanceSampleGGX(float2 Xi, float roughness, float3 N)
     return normalize(tangent * H.x + bitangent * H.y + N * H.z);
 }
 
-float3 SampleEquirectangularEnvMap(Texture2D<float4> env, SamplerState samp, float3 dir)
+float3 SampleEquirectangularEnvMap(float3 dir)
 {
     float2 uv;
     uv.x = atan2(dir.z, dir.x) / (2.0 * PI) + 0.5;
     uv.y = acos(saturate(dir.y)) / PI;
-    return env.SampleLevel(samp, uv, 0.0).rgb;
+    return EnvironmentMap.SampleLevel(EnvSampler, uv, 0.0).rgb;
 }
 
 float3 EquirectangularUVToDirection(float2 uv)
@@ -106,7 +110,69 @@ float2 IntegrateBRDF(float NdotV, float roughness)
     return float2(A / float(SAMPLE_COUNT), B / float(SAMPLE_COUNT));
 }
 
-#ifdef IBL_PRECOMPUTE_ENVIRONMENT_MAP
+float3 CubemapFaceToDirection(
+    uint face,
+    float2 uv)
+{
+    // [0,1] -> [-1,1]
+    float2 st = uv * 2.0 - 1.0;
+
+    // HLSL / Vulkan 常见需要翻转 Y
+    st.y = -st.y;
+
+    switch (face)
+    {
+        // +X
+        case 0:
+            return normalize(
+                float3(
+                    1.0,
+                    st.y,
+                    -st.x));
+
+        // -X
+        case 1:
+            return normalize(
+                float3(
+                    -1.0,
+                    st.y,
+                    st.x));
+
+        // +Y
+        case 2:
+            return normalize(
+                float3(
+                    st.x,
+                    1.0,
+                    -st.y));
+
+        // -Y
+        case 3:
+            return normalize(
+                float3(
+                    st.x,
+                    -1.0,
+                    st.y));
+
+        // +Z
+        case 4:
+            return normalize(
+                float3(
+                    st.x,
+                    st.y,
+                    1.0));
+
+        // -Z
+        default:
+            return normalize(
+                float3(
+                    -st.x,
+                    st.y,
+                    -1.0));
+    }
+}
+
+#if IBL_PRECOMPUTE_MODE == 0
 float3 PrefilterEnvironment(float3 R, float roughness, int sampleCount)
 {
     float3 N = float3(0.0, 0.0, 1.0);
@@ -122,7 +188,7 @@ float3 PrefilterEnvironment(float3 R, float roughness, int sampleCount)
         float NdotL = saturate(L.z);
         if (NdotL > 0.0)
         {
-            float3 sampleColor = SampleEquirectangularEnvMap(EnvironmentMap, EnvSampler, L);
+            float3 sampleColor = SampleEquirectangularEnvMap(L);
             prefilteredColor += sampleColor * NdotL;
             totalWeight += NdotL;
         }
@@ -130,6 +196,8 @@ float3 PrefilterEnvironment(float3 R, float roughness, int sampleCount)
 
     return prefilteredColor / max(totalWeight, 1e-5);
 }
+
+#elif IBL_PRECOMPUTE_MODE == 1
 
 float3 ImportanceSampleCosineHemisphere(float2 Xi, float3 N)
 {
@@ -160,7 +228,7 @@ float3 PrefilterDiffuseEnvironment(float3 N, int sampleCount)
         float NdotL = saturate(dot(N, L));
         if (NdotL > 0.0)
         {
-            float3 sampleColor = SampleEquirectangularEnvMap(EnvironmentMap, EnvSampler, L);
+            float3 sampleColor = SampleEquirectangularEnvMap(L);
             irradiance += sampleColor * NdotL;
         }
     }
@@ -176,32 +244,65 @@ float3 PrefilterDiffuseEnvironment(float3 N, int sampleCount)
 [numthreads(16, 16, 1)]
 void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
 {
-#if IBL_PRECOMPUTE_MODE == 0
-    uint2 pix = DispatchThreadID.xy;
-    int totalHeight = OutputSize.y * max(RoughnessCount, 1);
-    if (pix.x >= uint(OutputSize.x) || pix.y >= uint(totalHeight))
+#if IBL_PRECOMPUTE_MODE == 0 || IBL_PRECOMPUTE_MODE == 1
+     uint2 pix = DispatchThreadID.xy;
+    uint face = DispatchThreadID.z;
+
+    // 当前 mip 的尺寸
+    if (pix.x >= uint(OutputSize.x) ||
+        pix.y >= uint(OutputSize.y))
+    {
         return;
-
-    int roughnessLayer = int(pix.y) / OutputSize.y;
-    int row = int(pix.y) % OutputSize.y;
-    float2 uv = (float2(pix.x, row) + 0.5) / float2(OutputSize);
-    float3 R = EquirectangularUVToDirection(uv);
-
-    float roughness = 0.0;
-    if (RoughnessCount > 1)
-    {
-        roughness = float(roughnessLayer) / float(RoughnessCount - 1);
     }
 
-    float3 specularColor = PrefilterEnvironment(R, roughness, SampleCount);
-    OutputSpecularTexture[uint3(pix.x, row, uint(roughnessLayer))] = float4(specularColor, 1.0);
+    // 当前 cubemap face 的 uv
+    float2 uv =
+        (float2(pix) + 0.5) /
+        float2(OutputSize);
 
-    if (roughnessLayer == 0)
-    {
-        float3 diffuseColor = PrefilterDiffuseEnvironment(R, SampleCount);
-        OutputDiffuseTexture[pix] = float4(diffuseColor, 1.0);
-    }
+    // cubemap face -> direction
+    float3 R =
+        CubemapFaceToDirection(
+            face,
+            uv);
+
+
+#endif
+#if IBL_PRECOMPUTE_MODE == 0
+    // 当前 mip 对应 roughness
+    float roughness = Roughness;
+    // Specular prefilter
+    float3 specularColor =
+        PrefilterEnvironment(
+            R,
+            roughness,
+            SampleCount);
+
+    OutputSpecularTexture[
+        uint3(
+            pix.x,
+            pix.y,
+            face)
+    ] = float4(
+        specularColor,
+        1.0);
+
 #elif IBL_PRECOMPUTE_MODE == 1
+     
+        float3 diffuseColor =
+            PrefilterDiffuseEnvironment(
+                R,
+                SampleCount);
+
+        OutputDiffuseTexture[
+            uint3(
+                pix.x,
+                pix.y,
+                face)
+        ] = float4(
+            diffuseColor,
+            1.0);
+#elif IBL_PRECOMPUTE_MODE == 2
     uint2 pix = DispatchThreadID.xy;
     if (pix.x >= uint(OutputSize.x) || pix.y >= uint(OutputSize.y))
         return;

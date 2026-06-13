@@ -29,9 +29,10 @@ namespace Engine {
 
         Out.UniformData
             .Specular = 0.5f;
-
+        Out.UniformData.AmbientOcclusion = 1;
         Out.TextureData
             .TextureMask = 0;
+
         RenderCore::RenderGraphTextureDesc emptyDesc;
         emptyDesc.Format = ERHIFormat::R8G8B8A8_UNorm;
         emptyDesc.Width = 1;

@@ -63,7 +63,7 @@ namespace Renderer {
         if (PrimitiveInfos.find(Component) != PrimitiveInfos.end()) {
             return;
         }
-        Component->AddSceneListener(this);
+        Component->SetSceneOwner(this);
         auto Proxy =
             std::unique_ptr<Engine::PrimitiveSceneProxy>(Component
             ->CreateSceneProxy());
@@ -99,7 +99,7 @@ namespace Renderer {
         if (PrimitiveInfos.find(Component) == PrimitiveInfos.end()) {
             return;
         }
-        Component->RemoveSceneListener(this);
+        Component->SetSceneOwner(nullptr);
         SceneCommand Command;
 
         Command.Type =
@@ -127,7 +127,7 @@ namespace Renderer {
         if (LightInfos.find(Component) != LightInfos.end()) {
             return;
         }
-        Component->AddSceneListener(this);
+        Component->SetSceneOwner(this);
         auto Proxy =
             std::unique_ptr<Engine::LightSceneProxy>(Component
             ->CreateSceneProxy());
@@ -163,7 +163,7 @@ namespace Renderer {
         if (LightInfos.find(Component) == LightInfos.end()) {
             return;
         }
-        Component->RemoveSceneListener(this);
+        Component->SetSceneOwner(nullptr);
         SceneCommand Command;
 
         Command.Type =
@@ -409,7 +409,8 @@ namespace Renderer {
                     Data;
                 Data.Common.Color = Proxy->GetColor();
                 Data.Common.Intensity = Proxy->GetIntensity();
-                Data.Direction = Proxy->GetDirection();
+                auto DirProxy = dynamic_cast<DirectionalLightSceneProxy*>(Proxy);
+                Data.Direction = DirProxy ? DirProxy->GetDirection() : Core::Float3(0.0f, -1.0f, 0.0f);
                 GPUData.emplace_back(
                     Data);
             }
@@ -423,7 +424,7 @@ namespace Renderer {
             Desc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
             LightRes.DirectionalLightBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
             LightRes.DirectionalLightBuffer->InitRHIResource();
-            LightRes.DirectionalLightBuffer->UploadData(GPUData.data(), GPUData.size());
+            LightRes.DirectionalLightBuffer->UploadData(GPUData.data(), Desc.Size);
         }
 
         //------------------------------------------------

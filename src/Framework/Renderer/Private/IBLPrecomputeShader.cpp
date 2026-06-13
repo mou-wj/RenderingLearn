@@ -8,7 +8,7 @@ namespace Renderer {
     IMPLEMENT_GLOBAL_SHADER_TYPE(
         IBLPrecomputeCS,
         "IBLPrecomputeCS",
-        "/tools/IBLPrecomputeBRDFLut.sf",
+        "/tools/IBLPrecomputeCS.sf",
         "MainCS",
         RHI::ERHIShaderFrequency::Compute
     );
