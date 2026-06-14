@@ -16,7 +16,6 @@
 #include "RHIPipelineStateCache.h"
 #include "VulkanBarriers.h"
 #include "RHITransition.h"
-#include "VulkanSwapchain.h"
 #include "VulkanQueue.h"
 #include "RHICaptureHelper.h"
 
@@ -256,6 +255,200 @@ void VulkanRHIApi::UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, 
 
 	// 4. 记录 command
 	cmdList.AddCommand<VulkanCommandUpdateBuffer>(vulkanBuffer, staging, copyRegion);
+}
+
+void* VulkanRHIApi::MapReadTexture(RHICommandListBase& cmdList, RHITexture* texture, const RHIReadTextureInfo& info)
+{
+	if (!texture)
+		return nullptr;
+
+	VulkanTexture* vkTexture =
+		dynamic_cast<VulkanTexture*>(texture);
+
+	const auto& desc =
+		texture->GetDesc();
+
+	const auto format =
+		desc.Format;
+
+	const auto vkFormat =
+		TransformFormatFrom(format);
+
+	const uint32_t bpp =
+		RHI::GFormatInfoMap.at(format)
+		.BytesPerPixel;
+
+	// mip size
+	auto mipsize = texture->GetMipSize(info.MipLevel);
+	const uint32_t width = mipsize.x;
+	const uint32_t height = mipsize.y;
+	const uint32_t depth = mipsize.z;
+
+	//---------------------------------------
+	// Vulkan row pitch alignment
+	//---------------------------------------
+
+	VkDeviceSize tightRowPitch =
+		width * bpp;
+
+	// Vulkan buffer copy alignment
+	VkDeviceSize alignedRowPitch =
+		tightRowPitch;
+
+	VkDeviceSize totalSize =
+		alignedRowPitch *
+		height *
+		depth;
+
+	//---------------------------------------
+	// staging readback buffer
+	//---------------------------------------
+
+	auto staging =
+		Device->GetStagingManager()
+		->Acquire(totalSize);
+	Device->GetStagingManager()->MarkMappedBuffersUsed(staging,true);
+	
+	//---------------------------------------
+	// copy region
+	//---------------------------------------
+
+	VkBufferImageCopy region{};
+
+	region.bufferOffset = 0;
+
+	region.bufferRowLength = 0;
+	region.bufferImageHeight = 0;
+
+	region.imageSubresource.aspectMask =
+		GetImageAspectFlags(vkFormat);
+
+	region.imageSubresource.mipLevel =
+		info.MipLevel;
+
+	region.imageSubresource.baseArrayLayer =
+		info.ArraySlice;
+
+	region.imageSubresource.layerCount = info.ArrayCount;
+
+	region.imageOffset = { 0, 0, 0 };
+
+	region.imageExtent =
+	{
+		width,
+		height,
+		depth
+	};
+
+	//---------------------------------------
+	// enqueue gpu copy
+	//---------------------------------------
+
+	cmdList.AddCommand<
+		VulkanCommandReadTexture>(
+			vkTexture,
+			staging,
+			region);
+
+	//---------------------------------------
+	// map readback
+	//---------------------------------------
+
+	void* mapped =
+		staging->Map(0, totalSize);
+	MappedStagingBuffers[mapped] = staging;
+
+	return mapped;
+}
+
+void* VulkanRHIApi::MapReadBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const RHIReadBufferInfo& info)
+{
+	if (!buffer)
+		return nullptr;
+
+	VulkanBuffer* vkBuffer =
+		dynamic_cast<VulkanBuffer*>(buffer);
+
+	const auto& desc =
+		buffer->GetDesc();
+
+	//---------------------------------------
+	// region size
+	//---------------------------------------
+
+	VkDeviceSize offset =
+		info.offset;
+
+	VkDeviceSize size =
+		info.size;
+
+	if (size == 0)
+	{
+		size =
+			desc.Size - offset;
+	}
+
+	//---------------------------------------
+	// staging readback buffer
+	//---------------------------------------
+
+	auto staging =
+		Device->GetStagingManager()
+		->Acquire(size);
+
+	Device->GetStagingManager()
+		->MarkMappedBuffersUsed(
+			staging,
+			true);
+
+	//---------------------------------------
+	// copy region
+	//---------------------------------------
+
+	VkBufferCopy region{};
+
+	region.srcOffset =
+		offset;
+
+	region.dstOffset = 0;
+
+	region.size =
+		size;
+
+	//---------------------------------------
+	// enqueue gpu copy
+	//---------------------------------------
+
+	cmdList.AddCommand<
+		VulkanCommandReadBuffer>(
+			vkBuffer,
+			staging,
+			region);
+
+	//---------------------------------------
+	// map readback memory
+	//---------------------------------------
+
+	void* mapped =
+		staging->Map(
+			0,
+			size);
+
+	MappedStagingBuffers[mapped] =
+		staging;
+
+	return mapped;
+}
+
+void VulkanRHIApi::Unmap(void* mappedPtr)
+{
+	auto it = MappedStagingBuffers.find(mappedPtr);
+	if (it != MappedStagingBuffers.end())
+	{
+		it->second->Unmap();
+		Device->GetStagingManager()->MarkMappedBuffersUsed(it->second, false);
+		MappedStagingBuffers.erase(it);
+	}
 }
 
 RHIShaderResourceViewSP VulkanRHIApi::CreateTextureShaderResourceView(

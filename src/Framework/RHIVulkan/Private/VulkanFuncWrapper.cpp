@@ -93,6 +93,7 @@
     V(vkCmdDispatch) \
     V(vkCmdCopyBuffer) \
     V(vkCmdCopyBufferToImage) \
+    V(vkCmdCopyImageToBuffer) \
     V(vkCmdCopyImage)\
     V(vkCmdBlitImage)\
     V(vkCmdPipelineBarrier) \
@@ -728,9 +729,12 @@ namespace VKFunc {
     void CmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferCopy* pRegions) {
         if (commandBuffer && srcBuffer && dstBuffer && pRegions) vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
     }
-
     void CmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) {
         if (commandBuffer && srcBuffer && dstImage && pRegions) vkCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);
+    }
+    void CmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions)
+    {
+        if (commandBuffer && srcImage && dstBuffer && pRegions) vkCmdCopyImageToBuffer(commandBuffer, srcImage, srcImageLayout,dstBuffer, regionCount, pRegions);
     }
     void CmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageCopy* pRegions)
     {

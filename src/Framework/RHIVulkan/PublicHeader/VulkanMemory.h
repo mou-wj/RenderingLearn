@@ -103,6 +103,8 @@ public:
     void ReleaseToCmdBuffer(VulkanCommandBuffer* cmd,
         std::shared_ptr<VulkanStagingBuffer> buffer);
 
+    void MarkMappedBuffersUsed(std::shared_ptr<VulkanStagingBuffer> buffer,bool used);
+
 
     // 每帧调用，检查 fence 并回收 staging
     void GarbageCollect();
@@ -119,7 +121,8 @@ private:
     VulkanMemoryManager* memManager_;
 
     std::vector<std::shared_ptr<VulkanStagingBuffer>> freeBuffers_;
-
+    std::vector<std::shared_ptr<VulkanStagingBuffer>> mapedToFreeBuffers_;
+    std::unordered_map<std::shared_ptr<VulkanStagingBuffer>, bool> mapedToFreeBufferUsed_;
     // 记录某个 cmdBuffer 本次录制用了哪些 staging
     std::unordered_map<VulkanCommandBuffer*, PendingEntry> pendingBufferMap_;
 

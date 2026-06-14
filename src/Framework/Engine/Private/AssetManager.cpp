@@ -472,7 +472,7 @@ namespace Engine {
         Desc.Height = cubeHeight;
 		Desc.ArraySize = 6;
         Desc.MipLevels = 1;
-        Desc.Usage = RHI::ERHITextureCreateFlag::ShaderResource;
+        Desc.Usage = RHI::ERHITextureCreateFlag::ShaderResource | RHI::ERHITextureCreateFlag::UAV;
 		Desc.Type = RHI::ERHITextureType::TextureCube;
         DiffuseIrradiance = std::make_shared<RenderCore::RenderTexture>(Desc);
         DiffuseIrradiance->InitRHIResource();

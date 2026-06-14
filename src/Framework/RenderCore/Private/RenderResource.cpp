@@ -1,10 +1,12 @@
 #include "RenderResource.h"
 #include "RHIApi.h"
-#include "AssetManager.h"
 #include "stb_image.h"
+#include "stb_image_write.h"
 #include "RenderThread.h"
 #include "RHICommandContex.h"
 #include "RHICommandList.h"
+#include "Log.h"
+#include <filesystem>
 using namespace RHI;
 namespace RenderCore {
 
@@ -67,7 +69,7 @@ void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arr
 	auto lastAccess = GetTracker().GetSubresourceAccess(range);
 	if (lastAccess != ERHIResourceAccess::TransferDest) {
 		std::vector<RHI::RHITransitionInfo> infos;
-		infos.emplace_back(Texture.get(), lastAccess, ERHIResourceAccess::TransferDest);
+		infos.emplace_back(Texture.get(), lastAccess, ERHIResourceAccess::TransferDest,lastQueueType,lastQueueType);
 		char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
 		auto* transition = new(transitionMem) RHI::RHITransition();
 		GRHIApi->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
@@ -92,6 +94,170 @@ void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arr
 	GetTracker().UpdateLastAccessFence(fence);
 	queue->WaitFence(fence);
 }
+void RenderTexture::ReadData(void* data, uint32_t mipIndex, uint32_t arraySlice, uint32_t planeSlice) {
+	if (!data)
+		return;
+
+	auto lastQueueType =
+		GetTracker()
+		.GetLastAccessFence()
+		.QueueType;
+
+	auto* queue =
+		GRHIApi->GetQueue(lastQueueType);
+
+	auto* ctx =
+		queue->AcquireCommandContext();
+
+	RHICommandListBase cmd(ctx);
+
+	cmd.SetImmediate(true);
+	cmd.Begin();
+
+	//---------------------------------
+	// subresource
+	//---------------------------------
+
+	RHI::RHISubresourceRange range;
+
+	range.ArraySlice =
+		arraySlice;
+
+	range.MipIndex =
+		mipIndex;
+
+	range.PlaneSlice =
+		planeSlice;
+
+	//---------------------------------
+	// transition to TransferSource
+	//---------------------------------
+
+	auto lastAccess =
+		GetTracker()
+		.GetSubresourceAccess(range);
+
+	if (lastAccess !=
+		ERHIResourceAccess::TransferSrc)
+	{
+		std::vector<
+			RHI::RHITransitionInfo> infos;
+
+		infos.emplace_back(
+			Texture.get(),
+			lastAccess,
+			ERHIResourceAccess::
+			TransferSrc, lastQueueType, lastQueueType);
+
+		char* transitionMem =
+			new char[
+				RHI::G_RHITransition_TotalSize];
+
+		auto* transition =
+			new(transitionMem)
+			RHI::RHITransition();
+
+		GRHIApi->RHICreateTransition(
+			transition,
+			RHI::RHITransitionCreateInfo(
+				RHI::
+				ERHITransitionCreateFlags::
+				None,
+				std::move(infos)));
+
+		cmd.BeginTransitions(
+			{ transition });
+
+		cmd.EndTransitions(
+			{ transition });
+
+		GRHIApi
+			->RHIReleaseTransition(
+				transition);
+
+		delete[] transitionMem;
+	}
+
+	//---------------------------------
+	// map read
+	//---------------------------------
+
+	RHI::RHIReadTextureInfo readInfo;
+
+	readInfo.MipLevel =
+		mipIndex;
+
+	readInfo.ArraySlice =
+		arraySlice;
+
+	readInfo.ArrayCount = 1;
+
+	void* mapped =
+		GRHIApi->MapReadTexture(
+			cmd,
+			Texture.get(),
+			readInfo);
+
+	//---------------------------------
+	// execute
+	//---------------------------------
+
+	cmd.End();
+
+	auto fence =
+		queue->ExecuteContext(
+			{ ctx },
+			{});
+
+	queue->WaitFence(
+		fence);
+
+	//---------------------------------
+	// copy cpu data
+	//---------------------------------
+
+	auto mipSize =
+		Texture->GetMipSize(
+			mipIndex);
+
+	const uint32_t bpp =
+		RHI::GFormatInfoMap
+		.at(Desc.Format)
+		.BytesPerPixel;
+
+	size_t totalSize =
+		mipSize.x *
+		mipSize.y *
+		mipSize.z *
+		bpp;
+
+	memcpy(
+		data,
+		mapped,
+		totalSize);
+
+	//---------------------------------
+	// unmap
+	//---------------------------------
+
+	GRHIApi->Unmap(
+		mapped);
+
+	//---------------------------------
+	// tracker update
+	//---------------------------------
+
+	GetTracker()
+		.UpdateSubresourceAccess(
+			range,
+			ERHIResourceAccess::
+			TransferSrc);
+
+	GetTracker()
+		.UpdateLastAccessFence(
+			fence);
+}
+
 void RenderTexture::GenerateMipMaps() {
 
 }
@@ -99,7 +265,6 @@ void RenderTexture::GenerateMipMaps() {
 void TransitionTextureImmediate(
 	RHI::RHIApi* api,
 	RenderTexture* resource,
-	const RHI::RHISubresourceRange& range,
 	RHI::ERHIResourceAccess targetAccess,
 	RHI::EQueueType targetQueueType)
 {
@@ -108,22 +273,17 @@ void TransitionTextureImmediate(
 		return;
 	}
 	auto currentQueueType = resource->GetTracker().GetLastAccessFence().QueueType; // 获取当前访问的 Fence
-	auto currentAccess = resource->GetTracker().GetSubresourceAccess(range); // 获取当前访问的 Access
+	auto currentAccess = resource->GetTracker().GetSubresourceAccess(RHISubresourceRange{}); // 获取当前访问的 Access
 	if (currentAccess == targetAccess && currentQueueType == targetQueueType)
 	{
 		return;
 	}
 
 	std::vector<RHI::RHITransitionInfo> infos;
-	if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
+	if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource->GetRHI()))
 	{
-		RHI::RHITransitionInfo info;
-		static_cast<RHI::RHISubresourceRange>(info) = range;
-		info.AccessBefore = currentAccess;
-		info.AccessAfter = targetAccess;
-		info.Texture = texture;
-		info.QueueTypeBefore = currentQueueType;
-		info.QueueTypeAfter = targetQueueType;
+		RHI::RHITransitionInfo info(texture, currentAccess, targetAccess, currentQueueType,targetQueueType);
+		infos.emplace_back(info);
 	}
 	char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
 	auto* transition = new(transitionMem) RHI::RHITransition();
@@ -155,7 +315,7 @@ void TransitionTextureImmediate(
 	auto fence = RHI::GRHIApi->GetQueue(currentQueueType)->ExecuteContext(contex);
 	RHI::GRHIApi->GetQueue(currentQueueType)->WaitFence(fence);
 	//更新 Tracker 状态
-	resource->GetTracker().UpdateSubresourceAccess(range, targetAccess);
+	resource->GetTracker().UpdateSubresourceAccess(RHISubresourceRange{}, targetAccess);
 	resource->GetTracker().UpdateLastAccessFence(fence);
 	api->RHIReleaseTransition(transition);
 	delete[] transitionMem;
@@ -304,7 +464,6 @@ bool InitGlobalRenderResource() {
 	GlobalTestTexture = CreateTexture(rootPath + "/resources/pic/OIP.jpg");
 	RHI::RHISamplerDesc samplerDesc{};
 	GlobalSampler = RHI::GRHIApi->CreateSampler(samplerDesc);
-
     return true;
 }
 void ReleaseGlobalRenderResource() {
@@ -373,7 +532,129 @@ RenderTextureSP CreateTexture(const std::string& Path)
 	stbi_image_free(pixels);
 	return outTexture;
 }
+void SaveTexture(RenderTexture* texture,const std::string& path, uint32_t array, uint32_t mip) {
+	if (!texture)
+		return;
 
+	const auto& desc =
+		texture->GetRHI()->GetDesc();
+
+	//--------------------------------------
+	// mip size
+	//--------------------------------------
+
+	auto mipSize =
+		texture->GetRHI()->GetMipSize(mip);
+
+	const uint32_t width =
+		mipSize.x;
+
+	const uint32_t height =
+		mipSize.y;
+
+	//--------------------------------------
+	// format
+	//--------------------------------------
+
+	const auto format =
+		desc.Format;
+
+	const auto& formatInfo =
+		RHI::GFormatInfoMap.at(format);
+
+	const uint32_t bytesPerPixel =
+		formatInfo.BytesPerPixel;
+
+	//--------------------------------------
+	// cpu readback
+	//--------------------------------------
+
+	std::vector<uint8_t> pixels;
+
+	pixels.resize(
+		width *
+		height *
+		bytesPerPixel);
+
+	texture->ReadData(
+		pixels.data(),
+		mip,
+		array);
+
+	//--------------------------------------
+	// extension
+	//--------------------------------------
+
+	std::filesystem::path fsPath(path);
+
+	auto ext =
+		fsPath.extension()
+		.string();
+
+	std::transform(
+		ext.begin(),
+		ext.end(),
+		ext.begin(),
+		::tolower);
+
+	//--------------------------------------
+	// save
+	//--------------------------------------
+
+	int success = 0;
+
+	if (ext == ".png")
+	{
+		success =
+			stbi_write_png(
+				path.c_str(),
+				static_cast<int>(width),
+				static_cast<int>(height),
+				bytesPerPixel,
+				pixels.data(),
+				width * bytesPerPixel);
+	}
+	else if (ext == ".bmp")
+	{
+		success =
+			stbi_write_bmp(
+				path.c_str(),
+				static_cast<int>(width),
+				static_cast<int>(height),
+				bytesPerPixel,
+				pixels.data());
+	}
+	else if (ext == ".tga")
+	{
+		success =
+			stbi_write_tga(
+				path.c_str(),
+				static_cast<int>(width),
+				static_cast<int>(height),
+				bytesPerPixel,
+				pixels.data());
+	}
+	else if (ext == ".jpg" ||
+		ext == ".jpeg")
+	{
+		success =
+			stbi_write_jpg(
+				path.c_str(),
+				static_cast<int>(width),
+				static_cast<int>(height),
+				bytesPerPixel,
+				pixels.data(),
+				95);
+	}
+
+
+	if (!success)
+	{
+		LOG_ERROR(
+			"Failed to save texture: {}",
+			path);
+	}
+}
 
 void TransientResourceAllocator::InitRHI() 
 {

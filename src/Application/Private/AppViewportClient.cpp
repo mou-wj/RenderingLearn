@@ -14,7 +14,7 @@ namespace App {
     void AppViewportClient::InitResources()
     {
         AssetManager::Get().LoadSync<MaterialAsset>(Core::GetProjectDir() + "/resources/material/DefaultWhite/material.json");
-        //AssetManager::Get().LoadSync<SkyLightAsset>(Core::GetProjectDir() + "/resources/pic/DaySkyHDRI046A_1K-TONEMAPPED.jpg");
+        AssetManager::Get().LoadSync<SkyLightAsset>(Core::GetProjectDir() + "/resources/pic/DaySkyHDRI046A_1K-TONEMAPPED.jpg");
         staticMeshAsset = AssetManager::Get().LoadSync<StaticMeshAsset>(Core::GetProjectDir() + "/resources/glb/sphere.glb");
         staticMeshComponent = new StaticMeshComponent();
         staticMeshComponent->SetStaticMesh(staticMeshAsset->GetMesh());

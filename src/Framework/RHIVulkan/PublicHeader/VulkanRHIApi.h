@@ -10,7 +10,7 @@ namespace RHIVulkan{
 class VulkanDevice;
 class VulkanQueue;
 class VulkanPresentExecutor;
-
+class VulkanStagingBuffer;
 class RHIVULKAN_API VulkanRHIApi : public RHIApi
 {
 public:
@@ -24,7 +24,9 @@ public:
     RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) override;
     void UpdateTexture(RHICommandListBase& cmdList, RHITexture* texture, const void* data,const RHIUpdateTextureRegion& size) override;
     void UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const void* data, const RHIUpdateBufferRegion& region) override;
-
+    void* MapReadTexture(RHICommandListBase& cmdList, RHITexture* texture, const RHIReadTextureInfo& info) override;
+    void* MapReadBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const RHIReadBufferInfo& info) override;
+    void Unmap(void* mappedPtr) override;
     RHIShaderResourceViewSP CreateTextureShaderResourceView(
         RHITexture* Texture, const RHITexSRVCreateInfo& Desc) override;
 
@@ -83,7 +85,7 @@ private:
 	std::vector<const char*> GetWantedDeviceLayers();
 
     std::vector<const char*> GetWantedDeviceExtensions();
-
+    std::map<void*,std::shared_ptr<VulkanStagingBuffer>> MappedStagingBuffers;
 
 
     // Vulkan 设备和上下文资源

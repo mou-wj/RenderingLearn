@@ -648,6 +648,10 @@ namespace RHIVulkan {
             if (bDirtyPipelineState) {
                 CurrentPipeline->Bind(cmd);
                 CurrentState->FlushAndBind(cmd);
+                //暂时每次都重置一下
+                for (auto& state : States) {
+                    state.second->Reset();
+                }
                 bDirtyPipelineState = false;
             }
 

@@ -715,6 +715,15 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         out.ErrorMessage = shader.getInfoLog();
         out.ErrorMessage += "\n";
         out.ErrorMessage += shader.getInfoDebugLog();
+        std::string text = preprocessedSource;
+        std::ofstream file("error_shader_source.txt");
+        if (file.is_open())
+        {
+            file << text;
+            file << "\n\n\n\n\n\n\n\n\n\n\n";
+            file << out.ErrorMessage;
+            file.close();
+        }
         LOG_ERROR("parse error %s", out.ErrorMessage);
         // ����
         for (auto p : preprocessorDefines) delete[] p;
