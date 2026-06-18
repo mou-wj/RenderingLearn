@@ -165,6 +165,87 @@ float3 EvaluateSceneLighting(
                 Light);
     }
 
+    // =====================================================
+    // IBL
+    // =====================================================
+
+    {
+        float3 N =
+            normalize(
+                Material.NormalTS);
+
+        float3 V =
+            normalize(
+                Context.ViewDirection);
+
+        float3 R =
+            reflect(
+                -V,
+                N);
+
+        float NdotV =
+            saturate(
+                dot(N, V));
+
+        //---------------------------------
+        // Sample diffuse irradiance
+        //---------------------------------
+
+        float3 DiffuseIrradiance =
+            IBLDiffuseMap.Sample(
+                LinearClampSampler,
+                N).rgb;
+
+        //---------------------------------
+        // Sample prefiltered specular
+        //---------------------------------
+
+        uint Width;
+        uint Height;
+        uint MipCount;
+
+        IBLSpecularMap.GetDimensions(
+            0,
+            Width,
+            Height,
+            MipCount);
+
+        float MipLevel =
+            Material.Roughness *
+            (MipCount - 1);
+
+        float3 PrefilteredSpecular =
+            IBLSpecularMap.SampleLevel(
+                LinearClampSampler,
+                R,
+                MipLevel).rgb;
+
+        //---------------------------------
+        // Sample BRDF LUT
+        //---------------------------------
+
+        float2 BRDF =
+            IBLLut.Sample(
+                LinearClampSampler,
+                float2(
+                    NdotV,
+                    Material.Roughness)).rg;
+
+        //---------------------------------
+        // Evaluate IBL
+        //---------------------------------
+
+        Result +=
+            ShadeIBL(
+                Context,
+                Material,
+                DiffuseIrradiance,
+                PrefilteredSpecular,
+                BRDF);
+    }
+
+
+
     // AO
     Result *=
         Material.AmbientOcclusion;

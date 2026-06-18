@@ -125,7 +125,16 @@ float3 FresnelSchlick(
             5.0);
 }
 
+float3 FresnelSchlickRoughness(
+    float CosTheta,
+    float3 F0,
+    float Roughness)
+{
 
+    float3 F90 = max(float3(1.0 - Roughness, 1.0 - Roughness, 1.0 - Roughness), F0);
+    
+    return F0 + (F90 - F0) * pow(clamp(1.0 - CosTheta, 0.0, 1.0), 5.0);
+}
 
 // ============================================================================
 // BRDF
@@ -344,4 +353,72 @@ float3 ShadeSpotLight(
             Light.Color,
             Light.Intensity *
             Attenuation);
+}
+
+float3 ShadeIBL(
+    ShadingContext Context,
+    MaterialData Material,
+    float3 DiffuseIrradiance,
+    float3 PrefilteredSpecular,
+    float2 BRDF)
+{
+    float3 N =
+        normalize(
+            Material.NormalTS);
+
+    float3 V =
+        normalize(
+            Context.ViewDirection);
+
+    float NdotV =
+        saturate(
+            dot(N, V));
+
+    //------------------------------------
+    // Fresnel
+    //------------------------------------
+
+    float3 F0 =
+        lerp(
+            0.04.xxx,
+            Material.BaseColor,
+            Material.Metallic);
+
+    float3 F =
+        FresnelSchlickRoughness(
+            NdotV,
+            F0,
+            Material.Roughness);
+
+    //------------------------------------
+    // Diffuse
+    //------------------------------------
+
+    float3 kd =
+        (1.0 - F) *
+        (1.0 - Material.Metallic);
+
+    float3 Diffuse =
+        DiffuseIrradiance *
+        Material.BaseColor;
+
+    //------------------------------------
+    // Specular
+    //------------------------------------
+
+    float3 Specular =
+        PrefilteredSpecular *
+        (
+            F * BRDF.x +
+            BRDF.y
+        );
+
+    //------------------------------------
+    // Final
+    //------------------------------------
+
+    return
+        kd *
+        Diffuse +
+        Specular;
 }

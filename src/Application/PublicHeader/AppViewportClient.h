@@ -61,6 +61,7 @@ namespace App {
         Engine::DirectionalLightComponent* directionalLight;
         Engine::PointLightComponent* pointLight;
         Engine::SpotLightComponent* spotLight;
+        Engine::SkyLightComponent* skyLight;
     };
 
 

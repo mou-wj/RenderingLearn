@@ -19,6 +19,7 @@ namespace SlateRHIRenderer {
 	}
     uint64_t frameCount = 0;
 	void SlateRHIRenderer::Render(Slate::Window* window) {
+        
         CreateViewport(window);
         auto slateViewport = Viewports[window];
 		auto rhiSwapchain = slateViewport.SwapchainRHI;
@@ -34,7 +35,7 @@ namespace SlateRHIRenderer {
         widgets.push_back(windowWidget);
         auto computeTransitionContex = RHI::GRHIApi->GetQueue(EQueueType::Compute)->AcquireCommandContext();
         RHIComputeCommandList computeTransitionCmd(dynamic_cast<RHIComputeContex*>(computeTransitionContex));
-        computeTransitionCmd.SetImmediate(true);
+        computeTransitionCmd.SetImmediate(false);
         computeTransitionCmd.Begin();
 		auto graphicTransitionContex = RHI::GRHIApi->GetQueue(EQueueType::Graphics)->AcquireCommandContext();
         RHIGraphicCommandList graphicTransitionCmd(dynamic_cast<RHIGraphicContex*>(graphicTransitionContex));
@@ -100,11 +101,15 @@ namespace SlateRHIRenderer {
 			computeWaitInfos.push_back(computeValidFinish);
             
             computeTransitionCmd.End();
+            computeTransitionCmd.ExecuteAll();
             auto transientComputeFence = RHI::GRHIApi->GetQueue(EQueueType::Compute)->ExecuteContext(computeTransitionContex);
             RHIWaitInfo waitInfoCompute;
             waitInfoCompute.QueueType = EQueueType::Compute;
 			waitInfoCompute.Value = transientComputeFence.Value;
             graphicWaitInfos.push_back(waitInfoCompute);
+        }
+        else {
+            RHI::GRHIApi->GetQueue(EQueueType::Compute)->ReleaseCommandContext(computeTransitionContex);
         }
 
 		graphicTransitionCmd.End();

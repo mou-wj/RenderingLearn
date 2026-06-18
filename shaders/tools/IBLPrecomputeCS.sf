@@ -185,10 +185,23 @@ float3 CubemapFaceToDirection(
 #if IBL_PRECOMPUTE_MODE == 0 || IBL_PRECOMPUTE_MODE == 1
 float3 SampleEquirectangularEnvMap(float3 dir)
 {
+    dir = normalize(dir);
+
     float2 uv;
-    uv.x = atan2(dir.z, dir.x) / (2.0 * PI) + 0.5;
-    uv.y = acos(saturate(dir.y)) / PI;
-    return EnvironmentMap.SampleLevel(EnvSampler, uv, 0.0).rgb;
+
+    uv.x =
+        atan2(dir.z, dir.x) /
+        (2.0 * PI) +
+        0.5;
+
+    uv.y =
+        acos(clamp(dir.y, -1.0, 1.0)) /
+        PI;
+
+    return EnvironmentMap.SampleLevel(
+        EnvSampler,
+        uv,
+        0.0).rgb;
 }
 #endif
 

@@ -177,4 +177,7 @@ namespace VKFunc {
     void GetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32_t* pImageCount, VkImage* pImages);
     bool AcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex);
     bool QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo);
+
+    //
+    void GetDeviceFaultInfoEXT(VkDevice device, VkDeviceFaultCountsEXT* pFaultCounts, VkDeviceFaultInfoEXT* pFaultInfo);
 }

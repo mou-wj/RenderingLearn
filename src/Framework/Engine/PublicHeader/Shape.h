@@ -4,10 +4,10 @@
 
 namespace Engine {
 
-extern StaticMeshSP GStaticMesh_Cube;
-extern StaticMeshSP GStaticMesh_Sphere;
-extern StaticMeshSP GStaticMesh_Plane;
-extern StaticMeshSP GStaticMesh_Cylinder;
+ENGINE_API extern StaticMeshSP GStaticMesh_Cube;
+ENGINE_API extern StaticMeshSP GStaticMesh_Sphere;
+ENGINE_API extern StaticMeshSP GStaticMesh_Plane;
+ENGINE_API extern StaticMeshSP GStaticMesh_Cylinder;
 
 ENGINE_API bool InitializeShapeStaticMeshes();
 ENGINE_API void ReleaseShapeStaticMeshes();

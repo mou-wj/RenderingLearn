@@ -119,6 +119,7 @@ namespace RHIVulkan{
         std::vector<const char*> res;
 #ifdef _WIN32
         res.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+        //res.push_back("VK_EXT_device_fault");
 #elif defined(__APPLE__)
         res.push_back(VK_KHR_METAL_SURFACE_EXTENSION_NAME);
 #elif defined(__linux__)

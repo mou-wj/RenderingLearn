@@ -1,20 +1,57 @@
+struct FVertexInput
+{
+    float3 Position : POSITION;
+};
+
 struct FVertexOutput
 {
     float4 Position : SV_Position;
-    float2 UV : TEXCOORD0;
+    float3 Direction : TEXCOORD0;
 };
+#include "/Generated/ShaderParameters/DrawSkyVertexParameters.sf"
 
-FVertexOutput MainVS(uint VertexId : SV_VertexID)
+
+FVertexOutput MainVS(
+    FVertexInput Input)
 {
-    static const float2 Positions[3] = {
-        float2(-1.0f, -1.0f),
-        float2( 3.0f, -1.0f),
-        float2(-1.0f,  3.0f)
-    };
-
     FVertexOutput Out;
-    float2 pos = Positions[VertexId];
-    Out.Position = float4(pos.xy, 0.0f, 1.0f);
-    Out.UV = pos * 0.5f + 0.5f;
+
+    //-----------------------------------
+    // remove translation
+    //-----------------------------------
+
+    float4x4 ViewNoTranslation =
+        View;
+
+    ViewNoTranslation[0][3] = 0;
+    ViewNoTranslation[1][3] = 0;
+    ViewNoTranslation[2][3] = 0;
+    //-----------------------------------
+    // direction for cubemap sampling
+    //-----------------------------------
+
+    Out.Direction =
+        Input.Position;
+
+    //-----------------------------------
+    // project cube
+    //-----------------------------------
+
+    float4 Pos =
+        mul(
+            Projection,
+            mul(
+                ViewNoTranslation,
+                float4(
+                    Input.Position,
+                    1.0)));
+
+    //-----------------------------------
+    // push to far plane
+    //-----------------------------------
+
+    Out.Position =
+        Pos.xyww;
+
     return Out;
 }

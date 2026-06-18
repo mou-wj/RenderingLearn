@@ -182,15 +182,6 @@ namespace Engine
     {
     }
 
-    void SkyLightComponent::SetEnvironmentMap(RenderCore::RenderTexture* InEnvMap)
-    {
-        EnvironmentMap = InEnvMap;
-        // 标记需要重新预计算
-        bPrecomputeDirty = true;
-
-        // 通知渲染线程需要更新
-        MarkRenderStateDirty();
-    }
 
     LightSceneProxy* SkyLightComponent::CreateSceneProxy()
     {

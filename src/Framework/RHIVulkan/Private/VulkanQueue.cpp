@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <cassert>
 #include <algorithm>
+#include <format>
 
 namespace RHIVulkan {
 
@@ -83,7 +84,10 @@ VulkanQueue::VulkanQueue(VulkanDevice* device, VkQueue queue, uint32_t familyInd
 		queueTypeName = "Unknown";
 		break;
 	}
-	VKFunc::SetDebugName(device_->GetHandle(), VK_OBJECT_TYPE_QUEUE, (uint64_t)queue_, ("VulkanQueue:" + queueTypeName).c_str());
+    std::string str1 = std::format("{:#x}", uint64_t(queue_));
+    
+	VKFunc::SetDebugName(device_->GetHandle(), VK_OBJECT_TYPE_QUEUE, (uint64_t)queue_, ("VulkanQueue:" + queueTypeName + " " + str1).c_str());
+    LOG_INFO("Create VulkanQueue: %s %s", queueTypeName.c_str(), str1.c_str());
 #endif
 }
 
@@ -122,7 +126,7 @@ void VulkanQueue::GarbageCollect()
 				ReleaseCommandContext(contex);
             }
             for (auto sem : front.PendingBinarySemaphores) {
-                device_->GetSemaphoreManager()->Release(sem);
+                device_->GetSemaphoreManager()->ReleaseBinary(sem);
             }
             PendingInfos.pop();
             continue;
@@ -240,7 +244,6 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     // 2. 确定本次提交的 Signal Value (自增)
     // 假设 SubmitSyncPoint_ 是当前 Queue 对应的时间轴信号量
     uint64_t signalValue = ++currentTimelineValue_;
-
     // 3. 收集所有的 Command Buffers
     std::vector<VkCommandBuffer> cmdHandles;
     std::vector<VulkanCommandBuffer*> cmdBuffers;
@@ -252,6 +255,7 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
         vkcontexts.push_back(vkCtx);
         auto recorededCmdBuffer = vkCtx->GetRecordedCommandBuffer();
         if (recorededCmdBuffer) {
+            recorededCmdBuffer->MarkState(VulkanCommandBuffer::ECommandBufferState::Pending);
             cmdHandles.push_back(recorededCmdBuffer->GetHandle());
             cmdBuffers.push_back(recorededCmdBuffer);
         }
@@ -277,16 +281,32 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     VkSemaphore signalHandle = SubmitSyncPoint_->GetSemaphore()->GetHandle();
     submitInfo.pSignalSemaphores = &signalHandle;
 
-    VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+    bool suc =VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+    VKFunc::DeviceWaitIdle(device_->GetHandle());
+    VkDeviceFaultCountsEXT faultCounts{ VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT };
+    //if (!suc) {
+    //    VKFunc::GetDeviceFaultInfoEXT(device_->GetHandle(), &faultCounts, nullptr);
+    //
+    //    if (faultCounts.addressInfoCount > 0 || faultCounts.vendorInfoCount > 0) {
+    //        // 说明 GPU 真的挂了！
+    //        VkDeviceFaultInfoEXT faultInfo{ VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT };
+    //        faultInfo.pAddressInfos = new VkDeviceFaultAddressInfoEXT[faultCounts.addressInfoCount];
+    //
+    //        VKFunc::GetDeviceFaultInfoEXT(device_->GetHandle(), &faultCounts, &faultInfo);
+    //        // 这里能直接读到发生错误的 GPU 虚拟地址（VA）和故障类型（如页错误、越界等）
+    //    }
+    //}
+
+
 
     device_->GetStagingManager()->GarbageCollect();
-    for (auto cmdBuffer : cmdBuffers)
-    {
-        cmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
-        cmdBuffer->GetImageLayoutManager()->Clear();
-
-    }
-    imageLayoutManager_.PrintLayoutInfo();
+    //for (auto cmdBuffer : cmdBuffers)
+    //{
+    //    cmdBuffer->GetImageLayoutManager()->TransferTo(imageLayoutManager_);
+    //    cmdBuffer->GetImageLayoutManager()->Clear();
+    //
+    //}
+    //imageLayoutManager_.PrintLayoutInfo();
 
     // 5. 资源回收与状态更新
     device_->ReleaseDeferredResources();
@@ -306,12 +326,16 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
 
 }
 
-void VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue, VkSemaphore binarySignal)
+VulkanSemaphore* VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue)
 {
+    auto sigSemaphore = device_->GetSemaphoreManager()->AcquireBinary();
+    uint64_t signalValue = ++currentTimelineValue_;
+    std::array<uint64_t, 2> signalValues = {1,signalValue };
     VkTimelineSemaphoreSubmitInfo timelineInfo{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
     timelineInfo.waitSemaphoreValueCount = 1;
     timelineInfo.pWaitSemaphoreValues = &waitValue;
-
+    timelineInfo.signalSemaphoreValueCount = 2;
+    timelineInfo.pSignalSemaphoreValues = signalValues.data();
     VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
     submitInfo.pNext = &timelineInfo;
 
@@ -323,11 +347,24 @@ void VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t w
 
     // 触发 Binary
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &binarySignal;
-
+    VkSemaphore sigVKSemaphore = sigSemaphore->GetHandle();
+    VkSemaphore curTimeLineSemaphore = SubmitSyncPoint_->GetSemaphore()->GetHandle();
+    std::array<VkSemaphore,2> sigSemaphores = { sigVKSemaphore,curTimeLineSemaphore };
+    submitInfo.pSignalSemaphores = sigSemaphores.data();
+    
     // 提交空命令
     VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
+    VKFunc::DeviceWaitIdle(device_->GetHandle());
+
+    PendingInfo pendingInfo{};
+    pendingInfo.Cmds = {};
+    pendingInfo.FinishedTimelineValue = signalValue;
+    pendingInfo.Contexts = {};
+    pendingInfo.PendingBinarySemaphores = { sigSemaphore };
+    PendingInfos.push(pendingInfo);
+    return sigSemaphore;
 }
+
 
 void VulkanQueue::WaitFence(RHIFence Fence)
 {

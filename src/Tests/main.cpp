@@ -4,10 +4,15 @@
 #include "RHICaptureHelper.h"
 #  include <Windows.h>
 #include "vulkan/vulkan.h"
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
 int main(int argc, char** argv)
 {
+    //_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+    //_CrtSetBreakAlloc(17506);
     //RHI::RHICaptureHelper::GetInstance();
-    std::string testName = "StaticMeshRenderTest"; // 默认
+    std::string testName = "RenderGraphBuildTest"; // 默认
     if (argc > 1)
         testName = argv[1];
 

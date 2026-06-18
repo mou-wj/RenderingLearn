@@ -4,9 +4,13 @@
 #include "ShaderParameter.h"
 #include "RHICommandList.h"
 #include "ShaderCore.h"
+#include "RenderResource.h"
+#include "SceneView.h"
 
 namespace Renderer {
     BEGIN_SHADER_PARAMETER_STRUCT(DrawSkyVertexParameters)
+        SHADER_PARAMETER(Core::Float4x4,View)
+        SHADER_PARAMETER(Core::Float4x4, Projection)
     END_SHADER_PARAMETER_STRUCT(DrawSkyVertexParameters)
 
     class DrawSkyVS : public RenderCore::GlobalShader
@@ -31,8 +35,9 @@ namespace Renderer {
     };
 
     BEGIN_SHADER_PARAMETER_STRUCT(DrawSkyPixelParameters)
-        SHADER_PARAMETER_RHI_TEXTURE(Texture2D, EnvironmentMap)
-        SHADER_PARAMETER_SAMPLER(EnvironmentMapSampler)
+        SHADER_PARAMETER_RDG_TEXTURE(TextureCube, SkyCubemap)
+        SHADER_PARAMETER_SAMPLER(SkySampler)
+        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
     END_SHADER_PARAMETER_STRUCT(DrawSkyPixelParameters)
 
     class DrawSkyPS : public RenderCore::GlobalShader
@@ -55,4 +60,6 @@ namespace Renderer {
             return DrawSkyPixelParameters::GetMetaData();
         }
     };
+
+    void AddDrawSkyBoxPass(RenderCore::RenderGraphBuilder& builder, RenderCore::RenderTexture* envMap, RenderCore::RenderGraphTexture* colorAttachment, RenderCore::RenderGraphTexture* depthAttachment,Engine::SceneView& view);
 }

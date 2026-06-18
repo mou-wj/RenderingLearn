@@ -185,7 +185,10 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
     if (timelineSemaphoreFeatures_.timelineSemaphore) {
 		createInfo.pNext = &timelineSemaphoreFeatures_;
     }
-
+    //VkPhysicalDeviceFaultFeaturesEXT faultFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT };
+    //faultFeatures.deviceFault = VK_TRUE; // ◄── 必须开启这个
+    //faultFeatures.deviceFaultVendorBinary = VK_TRUE; // ◄── 必须开启这个
+    //timelineSemaphoreFeatures_.pNext = &faultFeatures;
     VKFunc::CreateDevice(physicalDevice, &createInfo,&device_);
     
     // 获取队列

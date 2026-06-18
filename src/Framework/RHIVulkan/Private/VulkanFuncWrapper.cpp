@@ -1,5 +1,6 @@
 #include "VulkanFuncWrapper.h"
 #include "Log.h"
+#include <assert.h>
 
 // 基础入口函数（通过动态库直接导出）
 #define VK_EXPORTED_FUNC_LIST(V) \
@@ -118,6 +119,7 @@
     V(vkGetSwapchainImagesKHR) \
     V(vkAcquireNextImageKHR) \
     V(vkQueuePresentKHR) \
+    V(vkGetDeviceFaultInfoEXT)\
     V(vkSetDebugUtilsObjectNameEXT) // 对应 SetDebugName
 
 #define DECLARE_PFN(name) static PFN_##name name = nullptr;
@@ -333,7 +335,16 @@ namespace VKFunc {
     }
 
     void DeviceWaitIdle(VkDevice device) {
-        if (device) vkDeviceWaitIdle(device);
+        if (device) {
+            VkResult result = vkDeviceWaitIdle(device);
+            if (result != VK_SUCCESS) {
+                fprintf(stderr, "[ERROR] vkDeviceWaitIdle failed with code: %d\n", result);
+                if (result == VK_ERROR_DEVICE_LOST) {
+                    // 强制触发断点（Windows 下可用 __debugbreak()，Linux 下用 raise(SIGTRAP) 或直接 assert）
+                    assert(false && "GPU 崩溃：Device Lost 发生在了这次 WaitIdle 之前！");
+                }
+            }
+        }
     }
 
     void QueueWaitIdle(VkQueue queue) {
@@ -347,6 +358,7 @@ namespace VKFunc {
         VkResult res = vkQueueSubmit(queue, submitCount, pSubmits, fence);
 #ifdef DEBUG_INFO
         if (res != VK_SUCCESS) { 
+           
             LOG_ERROR("VK: QueueSubmit failed: %d", res); 
         }
 #endif
@@ -907,6 +919,11 @@ namespace VKFunc {
         if (!queue || !pPresentInfo) return false;
         VkResult res = vkQueuePresentKHR(queue, pPresentInfo);
         return res == VK_SUCCESS;
+    }
+
+    void GetDeviceFaultInfoEXT(VkDevice device, VkDeviceFaultCountsEXT* pFaultCounts, VkDeviceFaultInfoEXT* pFaultInfo)
+    {
+        vkGetDeviceFaultInfoEXT(device, pFaultCounts, pFaultInfo);
     }
 
 

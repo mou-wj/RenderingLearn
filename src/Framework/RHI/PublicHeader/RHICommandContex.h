@@ -156,7 +156,7 @@ class RHIQueue {
 public:
     virtual ~RHIQueue() = default;
 
-    virtual EQueueType GetType() const { return Type; };
+    virtual EQueueType GetType() const  = 0;
 
     template<typename ContextType>
     ContextType* AcquireCastedCommandContext() {
@@ -181,7 +181,6 @@ public:
 
     virtual RHISyncPoint* GetSyncPoint() = 0;
 private:
-    EQueueType Type;
 };
 
 using RHISwapchainSP = std::shared_ptr<RHISwapchain>;

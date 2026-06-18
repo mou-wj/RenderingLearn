@@ -51,7 +51,7 @@ void VulkanCommandBuffer::End()
 void VulkanCommandBuffer::Reset()
 {
     VKFunc::ResetCommandBuffer(commandBuffer, 0);
-    imageLayoutManager.Clear();
+    //imageLayoutManager.Clear();
 }
 
 // VulkanCommandBufferPool
@@ -87,7 +87,6 @@ VulkanCommandBuffer* VulkanCommandBufferPool::AllocateCommandBuffer(VkCommandBuf
         availableBuffers.pop_back();
         return buf;
     }
-
     auto cmdBuf = std::make_unique<VulkanCommandBuffer>(device, this,level);
     cmdBuf->AllocateMemory();
     VulkanCommandBuffer* ptr = cmdBuf.get();
@@ -166,6 +165,7 @@ VulkanCommandBuffer* VulkanCommandBufferManager::GetActiveCommandBuffer(VkComman
     }
     // 没有可用的，分配新的
     VulkanCommandBuffer* newBuffer = Allocate(level);
+    
     ManagedBuffers.emplace_back(newBuffer);
     newBuffer->Begin();
     commandContext->GetQueue()->UpdatedCommandBufferImageLayoutManager(newBuffer);
@@ -203,7 +203,6 @@ void VulkanCommandBufferManager::GarbageCollect()
 		{
 			// 回收资源
 			(*it)->Reset();
-			it = ManagedBuffers.erase(it);
             (*it)->MarkState(VulkanCommandBuffer::Free);
 		}
 		else

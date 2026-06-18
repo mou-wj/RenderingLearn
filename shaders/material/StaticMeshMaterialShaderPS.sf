@@ -37,7 +37,6 @@ float4 MainPS(VertexFactoryVSToPS Input) : SV_Target0
         Material.NormalTS = Context.WorldNormal;
     }
     float3 Lighting = EvaluateSceneLighting(Context,Material);
-    Lighting = Lighting + float3(0.2,0.1,0.0);
     return float4(Lighting, 1.0);
 
 #elif MATERIAL_SHADING_MODEL == SHADINGMODEL_UNLIT

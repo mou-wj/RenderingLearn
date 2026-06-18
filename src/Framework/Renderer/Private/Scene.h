@@ -127,14 +127,15 @@ namespace Renderer {
         PointLight = 1 << 1,
         SpotLight = 1 << 2,
         RectLight = 1 << 3,
-
-        Primitive = 1 << 4,
+        SkyLight = 1 << 4,
+        Primitive = 1 << 5,
 
         AllLight =
         DirectionalLight |
         PointLight |
         SpotLight |
-        RectLight,
+        RectLight |
+        SkyLight,
 
         All = 0xFFFFFFFF
     };
@@ -149,6 +150,8 @@ namespace Renderer {
         RenderCore::RenderBufferSP SpotLightBuffer = nullptr;
         RenderCore::RenderBufferSP DirectionalLightBuffer = nullptr;
         RenderCore::RenderBufferSP RectLightBuffer = nullptr;
+        RenderCore::RenderTexture* IBLDiffuseTexture = nullptr;
+        RenderCore::RenderTexture* IBLSpecularTexture = nullptr;
     };
     struct SceneGPUResourceInfo {
         SceneGPULightResourceInfo LightResourceInfo;

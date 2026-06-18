@@ -18,8 +18,10 @@
 #include "RHITransition.h"
 #include "VulkanQueue.h"
 #include "RHICaptureHelper.h"
+#include "VulkanFuncWrapper.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
+VkDevice deviceLocal;
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 	VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -27,8 +29,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	void* pUserData) {
 
 	// 如果严重程度大于警告，可以使用红色输出或断点
-	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+	if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
 		fprintf(stderr, "Validation Layer: %s\n", pCallbackData->pMessage);
+
 	}
 
 	return VK_FALSE; // 永远返回 FALSE，否则 API 会在报错处中断并返回错误码
@@ -63,6 +66,19 @@ bool VulkanRHIApi::Init()
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
+	VkValidationFeatureEnableEXT enabledFeatures[] = {
+			VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,             // 开启 GPU 辅助校验
+			VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT // 为其预留 Descriptor 槽位
+	};
+
+	VkValidationFeaturesEXT validationFeatures{};
+	validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+	validationFeatures.pNext = nullptr;
+	validationFeatures.enabledValidationFeatureCount = 2;
+	validationFeatures.pEnabledValidationFeatures = enabledFeatures;
+	validationFeatures.disabledValidationFeatureCount = 0;
+	validationFeatures.pDisabledValidationFeatures = nullptr;
+	//createInfo.pNext = &validationFeatures;
 
     // 可以在这里添加扩展和验证层
 	auto wantExtensions = GetWantedInstanceExtensions();
@@ -115,7 +131,7 @@ bool VulkanRHIApi::Init()
 		return false;
 	}
 	VulkanDevice* device = new VulkanDevice(this, PhysicalDevice);
-
+	deviceLocal = device->GetHandle();
 	
 	wantExtensions = GetWantedDeviceExtensions();
 	wantedLayers = GetWantedDeviceLayers();

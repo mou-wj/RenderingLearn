@@ -85,7 +85,6 @@ namespace RHIVulkan {
         allocInfo.descriptorPool = Pool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &layout;
-
         if (VKFunc::AllocateDescriptorSets(Device->GetHandle(), &allocInfo, &outSet))
         {
             ++AllocatedCount;
@@ -270,7 +269,7 @@ namespace RHIVulkan {
         {
             VulkanCommandBuffer* cmdBuffer = it->CmdBuffer;
 
-            if (!cmdBuffer->GetState() != VulkanCommandBuffer::NeedRecycle)
+            if (cmdBuffer->GetState() != VulkanCommandBuffer::NeedRecycle)
             {
                 ++it;
                 continue;

@@ -45,6 +45,11 @@ namespace Renderer {
         SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(DirectionalLightData,DirectionalLights)
         SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(PointLightData,PointLights)
         SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(SpotLightData,SpotLights)
+        SHADER_PARAMETER(uint32_t, EnableIBLMap)
+        SHADER_PARAMETER_SAMPLER(LinearClampSampler)
+        SHADER_PARAMETER_RDG_TEXTURE(TextureCube, IBLSpecularMap)
+        SHADER_PARAMETER_RDG_TEXTURE(TextureCube, IBLDiffuseMap)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, IBLLut)
     END_SHADER_PARAMETER_STRUCT(SceneLightParameters)
 
 	BEGIN_SHADER_PARAMETER_STRUCT(SceneShaderParameters)

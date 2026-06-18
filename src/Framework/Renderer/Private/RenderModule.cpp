@@ -12,6 +12,7 @@
 #include "GlobalShader.h"
 #include "ShaderCompiler.h"
 #include "RHIPipelineStateCache.h"
+#include "Shape.h"
 using namespace RenderCore;
 using namespace Engine;
 
@@ -35,6 +36,7 @@ namespace Renderer {
         GShaderMap.Initialize();
         //初始化ibl lut
         InitIBLLut();
+        Engine::InitializeShapeStaticMeshes();
         bLoaded = true;
     }
 
@@ -48,6 +50,7 @@ namespace Renderer {
 		GShaderMap.Clear();
         ReleaseGlobalRenderResource();
         GlobalIBLLutTexture.reset();
+        Engine::ReleaseShapeStaticMeshes();
         // �ر���Ⱦ�߳�
         RenderCore::StopRenderThread();
 		
@@ -62,6 +65,7 @@ namespace Renderer {
     void RenderModule::BeginRender(
         Engine::SceneViewFamily* Views)
     {
+
         RenderCore::RenderGraphBuilder builder;
         auto ColorTex = Views->RenderTarget->GetRenderTarget();
         auto sceneColorTexture = builder.RegisterExternalTexture("RenderTarget", ColorTex);
@@ -232,7 +236,7 @@ namespace Renderer {
         auto fence = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
         GlobalIBLLutTexture->GetTracker().UpdateLastAccessFence(fence);
         //写出测试
-        SaveTexture(GlobalIBLLutTexture.get(), "IBLLut.png",0,0);
+        //SaveTexture(GlobalIBLLutTexture.get(), "IBLLut.png",0,0);
     }
 
 	IMPLEMENT_SIMPLE_MODULE(RenderModule, "Renderer");
