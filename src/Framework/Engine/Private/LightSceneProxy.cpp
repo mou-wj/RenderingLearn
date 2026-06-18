@@ -222,10 +222,8 @@ namespace Engine
         auto sky = static_cast<const SkyLightComponent*>(Component);
         if (sky)
         {
-            EnvironmentMap = sky->GetEnvironmentMap();
             DiffuseIrradianceMap = sky->GetDiffuseIrradiance();
             SpecularPrefilterMap = sky->GetSpecularPrefilter();
-            bPrecomputeDirty = sky->IsPrecomputeDirty();
         }
     }
 

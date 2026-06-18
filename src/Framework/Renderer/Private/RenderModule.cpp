@@ -12,6 +12,7 @@
 #include "GlobalShader.h"
 #include "ShaderCompiler.h"
 #include "RHIPipelineStateCache.h"
+#include "Shape.h"
 using namespace RenderCore;
 using namespace Engine;
 
@@ -33,6 +34,9 @@ namespace Renderer {
         GMeshMaterialShaderMap.Initialize();
         GMaterialShaderMap.Initialize();
         GShaderMap.Initialize();
+        //初始化ibl lut
+        InitIBLLut();
+        Engine::InitializeShapeStaticMeshes();
         bLoaded = true;
     }
 
@@ -45,6 +49,8 @@ namespace Renderer {
         GMaterialShaderMap.Clear();
 		GShaderMap.Clear();
         ReleaseGlobalRenderResource();
+        GlobalIBLLutTexture.reset();
+        Engine::ReleaseShapeStaticMeshes();
         // �ر���Ⱦ�߳�
         RenderCore::StopRenderThread();
 		
@@ -59,6 +65,7 @@ namespace Renderer {
     void RenderModule::BeginRender(
         Engine::SceneViewFamily* Views)
     {
+
         RenderCore::RenderGraphBuilder builder;
         auto ColorTex = Views->RenderTarget->GetRenderTarget();
         auto sceneColorTexture = builder.RegisterExternalTexture("RenderTarget", ColorTex);
@@ -95,9 +102,9 @@ namespace Renderer {
         params.EnvironmentMapParameter.SampleCount = 4;
 
 
-        TransitionTextureImmediate(RHI::GRHIApi, InHDRTexture, RHI::RHISubresourceRange{}, RHI::ERHIResourceAccess::SRV, RHI::EQueueType::Compute);
-        TransitionTextureImmediate(RHI::GRHIApi, OutDiffuseIBL, RHI::RHISubresourceRange{}, RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
-        TransitionTextureImmediate(RHI::GRHIApi, OutSpecularIBL, RHI::RHISubresourceRange{}, RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
+        TransitionTextureImmediate(RHI::GRHIApi, InHDRTexture,  RHI::ERHIResourceAccess::SRV, RHI::EQueueType::Compute);
+        TransitionTextureImmediate(RHI::GRHIApi, OutDiffuseIBL, RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
+        TransitionTextureImmediate(RHI::GRHIApi, OutSpecularIBL, RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
         params.EnvironmentMapParameter.EnvSampler = RenderCore::GlobalSampler.get();
         params.EnvironmentMapParameter.EnvironmentMap = InHDRTexture->GetRHI();
 
@@ -114,7 +121,7 @@ namespace Renderer {
         auto computeContex = GRHIApi->GetQueue(RHI::EQueueType::Compute)->AcquireCastedCommandContext<RHI::RHIComputeContex>();
         RHI::RHIComputeCommandList cmdlist(computeContex);
         cmdlist.SetImmediate(true);
-        
+        cmdlist.Begin();
         float roughnessStep = 1 / 6.0;
         //计算镜面反射预计算贴图
 		for (uint32_t mip = 0; mip < 6; mip++) {
@@ -134,11 +141,11 @@ namespace Renderer {
             
             params.EnvironmentMapParameter.OutputSpecularParam.OutputSpecularTexture = specuav;
 
-
+            params.OutputSize = outsize / pow(2, mip);
             // 设置 shader 参数
             SetShaderParameters(cmdlist, shader, IBLPrecomputeParameters::GetMetaData(), &params);
             // Dispatch
-            params.OutputSize = outsize / pow(2,mip);
+            
 
             int width = params.OutputSize.x;
             int height = params.OutputSize.y;
@@ -155,9 +162,13 @@ namespace Renderer {
         params.EnvironmentMapParameter.OutputDiffuseParam.OutputDiffuseTexture = difuav;
         RenderCore::Shader* shader = GShaderMap.GetShader(shaderType, 1);
         if (!shader) return;
+        RHI::RHIComputePipelineStateDesc computeDesc;
+        computeDesc.computeShader = dynamic_cast<RHI::RHIComputeShader*>(shader->GetRHIShader());
+        auto pipelineState = RHI::RHIPipelineStateCache::GetOrCreateComputePipelineState(computeDesc);
+        cmdlist.SetComputePipelineState(pipelineState);
+        params.OutputSize = outsize;
         SetShaderParameters(cmdlist, shader, IBLPrecomputeParameters::GetMetaData(), &params);
         // Dispatch
-        params.OutputSize = outsize;
         int width = params.OutputSize.x;
         int height = params.OutputSize.y;
         uint32_t groupX = (width + 15) / 16;
@@ -165,13 +176,67 @@ namespace Renderer {
         cmdlist.Dispatch(groupX, groupY, 6);
         //生成diffuse的mipmap
 
-
-
         cmdlist.End();
         auto fence = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
         InHDRTexture->GetTracker().UpdateLastAccessFence(fence);
         OutDiffuseIBL->GetTracker().UpdateLastAccessFence(fence);
         OutSpecularIBL->GetTracker().UpdateLastAccessFence(fence);
+    }
+
+    void RenderModule::InitIBLLut() {
+        RHI::RHITextureDesc desc;
+        desc.Width = 512;
+        desc.Height = 512;
+        desc.Format = RHI::ERHIFormat::R32G32_Float;
+        desc.Usage = RHI::ERHITextureCreateFlag::ShaderResource | RHI::ERHITextureCreateFlag::UAV | RHI::ERHITextureCreateFlag::TransferSrc;
+        GlobalIBLLutTexture = std::make_shared<RenderTexture>(desc);
+        GlobalIBLLutTexture->InitRHIResource();
+
+        IBLPrecomputeParameters params;
+        Core::Int2 outsize;
+        outsize.x = GlobalIBLLutTexture->GetRHI()->GetDesc().Width;
+        outsize.y = GlobalIBLLutTexture->GetRHI()->GetDesc().Height;
+
+        params.EnvironmentMapParameter.SampleCount = 4;
+
+
+        TransitionTextureImmediate(RHI::GRHIApi, GlobalIBLLutTexture.get(),  RHI::ERHIResourceAccess::UAV, RHI::EQueueType::Compute);
+        RHI::RHITexUAVCreateInfo lutUAVDesc;
+        lutUAVDesc.Format = GlobalIBLLutTexture->GetRHI()->GetDesc().Format;
+        lutUAVDesc.ArraySize = GlobalIBLLutTexture->GetRHI()->GetDesc().ArraySize;
+        auto uav = GlobalIBLLutTexture->GetViewCache().GetOrCreateUAV(GlobalIBLLutTexture->GetRHI(), lutUAVDesc);
+        params.BRDFParameter.OutputBRDFLUT = uav;
+        // 获取 shader 实例（按变体 id）
+        auto& GShaderMap = RenderCore::GShaderMap;
+        auto shaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Global]["IBLPrecomputeCS"];
+
+        // 创建或获取 compute pipeline state
+        auto computeContex = GRHIApi->GetQueue(RHI::EQueueType::Compute)->AcquireCastedCommandContext<RHI::RHIComputeContex>();
+        RHI::RHIComputeCommandList cmdlist(computeContex);
+        cmdlist.SetImmediate(true);
+
+        //计算lut预计算贴图
+        RenderCore::Shader* shader = GShaderMap.GetShader(shaderType, 2);
+        if (!shader) return;
+        RHI::RHIComputePipelineStateDesc computeDesc;
+        computeDesc.computeShader = dynamic_cast<RHI::RHIComputeShader*>(shader->GetRHIShader());
+        auto pipelineState = RHI::RHIPipelineStateCache::GetOrCreateComputePipelineState(computeDesc);
+        cmdlist.SetComputePipelineState(pipelineState);
+        params.OutputSize = outsize;
+        SetShaderParameters(cmdlist, shader, IBLPrecomputeParameters::GetMetaData(), &params);
+        // Dispatch
+        
+        int width = params.OutputSize.x;
+        int height = params.OutputSize.y;
+        uint32_t groupX = (width + 15) / 16;
+        uint32_t groupY = (height + 15) / 16;
+        cmdlist.Dispatch(groupX, groupY, 1);
+        //生成diffuse的mipmap
+        cmdlist.End();
+        auto fence = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
+        GlobalIBLLutTexture->GetTracker().UpdateLastAccessFence(fence);
+        //写出测试
+        //SaveTexture(GlobalIBLLutTexture.get(), "IBLLut.png",0,0);
     }
 
 	IMPLEMENT_SIMPLE_MODULE(RenderModule, "Renderer");

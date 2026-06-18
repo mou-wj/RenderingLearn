@@ -75,8 +75,8 @@ namespace Engine{
     void SceneViewport::InitRHIResource()
     {
         RHITextureDesc desc;
-        desc.Width = static_cast<uint32_t>(Width);
-        desc.Height = static_cast<uint32_t>(Height);
+        desc.Width = static_cast<uint32_t>(Width) > 0 ? static_cast<uint32_t>(Width) : 1;
+        desc.Height = static_cast<uint32_t>(Height) > 0 ? static_cast<uint32_t>(Height) : 1;
         desc.Depth = 1;
         desc.MipLevels = 1; // 0 通常在 RHI 中表示自动计算全链层级
         desc.ArraySize = 1;

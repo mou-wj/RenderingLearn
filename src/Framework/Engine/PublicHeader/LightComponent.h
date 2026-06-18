@@ -163,17 +163,16 @@ namespace Engine
             const override;
     
     public:
-        void SetEnvironmentMap(RenderCore::RenderTexture* InEnvMap);
-        RenderCore::RenderTexture* GetEnvironmentMap() const { return EnvironmentMap; }
-
+        void SetDiffuseIrradiance(RenderCore::RenderTexture* diffuseIrradianceMap) {
+            DiffuseIrradianceMap = diffuseIrradianceMap ;
+        }
+        void SetSpecularIrradiance(RenderCore::RenderTexture* specularIrradianceMap) {
+            SpecularPrefilterMap = specularIrradianceMap;
+        }
         RenderCore::RenderTexture* GetDiffuseIrradiance() const { return DiffuseIrradianceMap; }
         RenderCore::RenderTexture* GetSpecularPrefilter() const { return SpecularPrefilterMap; }
 
-        void MarkPrecomputeDirty() { bPrecomputeDirty = true; }
-        bool IsPrecomputeDirty() const { return bPrecomputeDirty; }
     protected:
-        RenderCore::RenderTexture* EnvironmentMap;
-
         RenderCore::RenderTexture* DiffuseIrradianceMap;
         RenderCore::RenderTexture* SpecularPrefilterMap;
 

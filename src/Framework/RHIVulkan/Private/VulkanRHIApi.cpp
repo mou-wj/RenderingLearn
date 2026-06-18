@@ -16,11 +16,12 @@
 #include "RHIPipelineStateCache.h"
 #include "VulkanBarriers.h"
 #include "RHITransition.h"
-#include "VulkanSwapchain.h"
 #include "VulkanQueue.h"
 #include "RHICaptureHelper.h"
+#include "VulkanFuncWrapper.h"
 
 #define DynamicPtrCast(ptr, type) (std::dynamic_pointer_cast<type>(ptr))
+VkDevice deviceLocal;
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 	VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -28,8 +29,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	void* pUserData) {
 
 	// 如果严重程度大于警告，可以使用红色输出或断点
-	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+	if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
 		fprintf(stderr, "Validation Layer: %s\n", pCallbackData->pMessage);
+
 	}
 
 	return VK_FALSE; // 永远返回 FALSE，否则 API 会在报错处中断并返回错误码
@@ -64,6 +66,19 @@ bool VulkanRHIApi::Init()
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
+	VkValidationFeatureEnableEXT enabledFeatures[] = {
+			VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,             // 开启 GPU 辅助校验
+			VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT // 为其预留 Descriptor 槽位
+	};
+
+	VkValidationFeaturesEXT validationFeatures{};
+	validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+	validationFeatures.pNext = nullptr;
+	validationFeatures.enabledValidationFeatureCount = 2;
+	validationFeatures.pEnabledValidationFeatures = enabledFeatures;
+	validationFeatures.disabledValidationFeatureCount = 0;
+	validationFeatures.pDisabledValidationFeatures = nullptr;
+	//createInfo.pNext = &validationFeatures;
 
     // 可以在这里添加扩展和验证层
 	auto wantExtensions = GetWantedInstanceExtensions();
@@ -116,7 +131,7 @@ bool VulkanRHIApi::Init()
 		return false;
 	}
 	VulkanDevice* device = new VulkanDevice(this, PhysicalDevice);
-
+	deviceLocal = device->GetHandle();
 	
 	wantExtensions = GetWantedDeviceExtensions();
 	wantedLayers = GetWantedDeviceLayers();
@@ -256,6 +271,200 @@ void VulkanRHIApi::UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, 
 
 	// 4. 记录 command
 	cmdList.AddCommand<VulkanCommandUpdateBuffer>(vulkanBuffer, staging, copyRegion);
+}
+
+void* VulkanRHIApi::MapReadTexture(RHICommandListBase& cmdList, RHITexture* texture, const RHIReadTextureInfo& info)
+{
+	if (!texture)
+		return nullptr;
+
+	VulkanTexture* vkTexture =
+		dynamic_cast<VulkanTexture*>(texture);
+
+	const auto& desc =
+		texture->GetDesc();
+
+	const auto format =
+		desc.Format;
+
+	const auto vkFormat =
+		TransformFormatFrom(format);
+
+	const uint32_t bpp =
+		RHI::GFormatInfoMap.at(format)
+		.BytesPerPixel;
+
+	// mip size
+	auto mipsize = texture->GetMipSize(info.MipLevel);
+	const uint32_t width = mipsize.x;
+	const uint32_t height = mipsize.y;
+	const uint32_t depth = mipsize.z;
+
+	//---------------------------------------
+	// Vulkan row pitch alignment
+	//---------------------------------------
+
+	VkDeviceSize tightRowPitch =
+		width * bpp;
+
+	// Vulkan buffer copy alignment
+	VkDeviceSize alignedRowPitch =
+		tightRowPitch;
+
+	VkDeviceSize totalSize =
+		alignedRowPitch *
+		height *
+		depth;
+
+	//---------------------------------------
+	// staging readback buffer
+	//---------------------------------------
+
+	auto staging =
+		Device->GetStagingManager()
+		->Acquire(totalSize);
+	Device->GetStagingManager()->MarkMappedBuffersUsed(staging,true);
+	
+	//---------------------------------------
+	// copy region
+	//---------------------------------------
+
+	VkBufferImageCopy region{};
+
+	region.bufferOffset = 0;
+
+	region.bufferRowLength = 0;
+	region.bufferImageHeight = 0;
+
+	region.imageSubresource.aspectMask =
+		GetImageAspectFlags(vkFormat);
+
+	region.imageSubresource.mipLevel =
+		info.MipLevel;
+
+	region.imageSubresource.baseArrayLayer =
+		info.ArraySlice;
+
+	region.imageSubresource.layerCount = info.ArrayCount;
+
+	region.imageOffset = { 0, 0, 0 };
+
+	region.imageExtent =
+	{
+		width,
+		height,
+		depth
+	};
+
+	//---------------------------------------
+	// enqueue gpu copy
+	//---------------------------------------
+
+	cmdList.AddCommand<
+		VulkanCommandReadTexture>(
+			vkTexture,
+			staging,
+			region);
+
+	//---------------------------------------
+	// map readback
+	//---------------------------------------
+
+	void* mapped =
+		staging->Map(0, totalSize);
+	MappedStagingBuffers[mapped] = staging;
+
+	return mapped;
+}
+
+void* VulkanRHIApi::MapReadBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const RHIReadBufferInfo& info)
+{
+	if (!buffer)
+		return nullptr;
+
+	VulkanBuffer* vkBuffer =
+		dynamic_cast<VulkanBuffer*>(buffer);
+
+	const auto& desc =
+		buffer->GetDesc();
+
+	//---------------------------------------
+	// region size
+	//---------------------------------------
+
+	VkDeviceSize offset =
+		info.offset;
+
+	VkDeviceSize size =
+		info.size;
+
+	if (size == 0)
+	{
+		size =
+			desc.Size - offset;
+	}
+
+	//---------------------------------------
+	// staging readback buffer
+	//---------------------------------------
+
+	auto staging =
+		Device->GetStagingManager()
+		->Acquire(size);
+
+	Device->GetStagingManager()
+		->MarkMappedBuffersUsed(
+			staging,
+			true);
+
+	//---------------------------------------
+	// copy region
+	//---------------------------------------
+
+	VkBufferCopy region{};
+
+	region.srcOffset =
+		offset;
+
+	region.dstOffset = 0;
+
+	region.size =
+		size;
+
+	//---------------------------------------
+	// enqueue gpu copy
+	//---------------------------------------
+
+	cmdList.AddCommand<
+		VulkanCommandReadBuffer>(
+			vkBuffer,
+			staging,
+			region);
+
+	//---------------------------------------
+	// map readback memory
+	//---------------------------------------
+
+	void* mapped =
+		staging->Map(
+			0,
+			size);
+
+	MappedStagingBuffers[mapped] =
+		staging;
+
+	return mapped;
+}
+
+void VulkanRHIApi::Unmap(void* mappedPtr)
+{
+	auto it = MappedStagingBuffers.find(mappedPtr);
+	if (it != MappedStagingBuffers.end())
+	{
+		it->second->Unmap();
+		Device->GetStagingManager()->MarkMappedBuffersUsed(it->second, false);
+		MappedStagingBuffers.erase(it);
+	}
 }
 
 RHIShaderResourceViewSP VulkanRHIApi::CreateTextureShaderResourceView(

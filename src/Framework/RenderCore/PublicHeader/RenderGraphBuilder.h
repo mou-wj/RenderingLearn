@@ -33,6 +33,7 @@ public:
      */
     template<typename T, typename... Args>
     T* Allocate(Args&&... args) {
+        std::lock_guard<std::recursive_mutex> lock(Mutex_);
         // 1. ����ռ�
         void* RawMem = AllocateRaw(sizeof(T), alignof(T));
 
@@ -71,6 +72,7 @@ public:
 
 private:
     void* AllocateRaw(size_t Size, size_t Alignment) {
+        std::lock_guard<std::recursive_mutex> lock(Mutex_);
         // ����Ķ����߼�ȷ��ָ����� CPU Ҫ��
         size_t Padding = (Alignment - (CurrentOffset % Alignment)) % Alignment;
 
@@ -100,7 +102,7 @@ private:
     size_t PageSize;
     int32_t CurrentPage;
     size_t CurrentOffset;
-
+    std::recursive_mutex Mutex_;
     std::vector<void*> Pages;                // ����ҳ��
     std::vector<DestructionItem> DestructionStack; // ������������
 };

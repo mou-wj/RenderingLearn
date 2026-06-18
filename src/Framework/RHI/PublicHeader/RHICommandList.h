@@ -58,6 +58,29 @@ namespace RHI {
         void Execute(RHICommandListBase& cmdList) override;
     };
 
+    struct RHI_API RHICommandBegin : public RHICommandBase
+    {
+        RHICommandBegin();
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+    struct RHI_API RHICommandEnd : public RHICommandBase
+    {
+        RHICommandEnd();
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+    struct RHI_API RHICommandBeginTransitions : public RHICommandBase
+    {
+        std::vector<const RHITransition*> Transitions;
+        RHICommandBeginTransitions(std::vector<const RHITransition*> InTransitions);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+    struct RHI_API RHICommandEndTransitions : public RHICommandBase
+    {
+        std::vector<const RHITransition*> Transitions;
+        RHICommandEndTransitions(std::vector<const RHITransition*> InTransitions);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
     struct RHI_API RHICommandCopyTexture : public RHICommandBase
     {
         RHITexture* Src = nullptr;

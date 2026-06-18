@@ -14,6 +14,7 @@ namespace Engine {
     {
         EngineObj = std::make_unique<IEngine>();
         EngineObj->Init();
+
         isLoaded = true;
     }
 

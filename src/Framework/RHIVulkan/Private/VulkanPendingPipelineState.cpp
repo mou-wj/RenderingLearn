@@ -67,24 +67,14 @@ namespace RHIVulkan {
                 // 标记为clean
                 buffer.MarkClean();
             }
-        }
-
-  
-        // 然后处理Descriptor的分配和更新
-        for (uint32_t i = 0; i < sets.size(); i++)
-        {
-            AllocateIfNeeded(i, sets[i]);
-        }
-        
-
-        // 更新global uniform buffer的绑定
-        for (const auto& bufferPair : PackedUniformBuffersByFrequency)
-        {
-            ERHIShaderFrequency freq = bufferPair.first;
-            const PackedUniformBuffer& buffer = bufferPair.second;
-            
             // 从GlobalUniformBufferInfo中查找该frequency对应的set和binding
-            for (const auto& BindingInfos : buffer.Bindings) {
+            for (auto& BindingInfos : buffer.Bindings) {
+                if (BindingInfos.bUseExternalBuffer)
+                {
+                    BindingInfos.bUseExternalBuffer=false;
+                    continue;
+                }
+
                 uint32_t setIndex = BindingInfos.SetIndex;
                 uint32_t binding = BindingInfos.Binding;
 
@@ -97,8 +87,13 @@ namespace RHIVulkan {
             }
         }
 
-        UpdateIfDirty();
-
+  
+        // 然后处理Descriptor的分配和更新
+        bool isUpdated = UpdateDescriptorSetsIfDirty();
+        if (!isUpdated) {
+            //如果没有更新就不需要重新绑定，所以直接return
+            return ;
+        }
 
         std::vector<VkDescriptorSet> vkSets;
         vkSets.reserve(sets.size());

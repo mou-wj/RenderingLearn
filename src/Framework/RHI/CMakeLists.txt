@@ -55,7 +55,7 @@ endif()
 
 # Enable RenderDoc Capture
 
-target_compile_definitions(${TARGET_NAME} PRIVATE ENABLE_RENDERDOC_CAPTURE=1)
+#target_compile_definitions(${TARGET_NAME} PRIVATE ENABLE_RENDERDOC_CAPTURE=1)
 
 # Position independent code for shared libs
 set_target_properties(${TARGET_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)

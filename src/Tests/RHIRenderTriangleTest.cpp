@@ -124,22 +124,22 @@ public:
             return;
         }
 
-        auto* cmdContext = queue->AcquireCommandContext();
-        if (!cmdContext)
-        {
-            return;
-        }
 
-        auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(cmdContext);
-        if (!graphicContext)
-        {
-            return;
-        }
-        RHI::RHIGraphicCommandList cmdList(graphicContext);
-        constexpr int kMaxFrames = 10000;
+        constexpr int kMaxFrames = 1000000;
         for (int frameIndex = 0; frameIndex < kMaxFrames; ++frameIndex) {
             // 设置为即时执行模式
+            auto* cmdContext = queue->AcquireCommandContext();
+            if (!cmdContext)
+            {
+                return;
+            }
 
+            auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(cmdContext);
+            if (!graphicContext)
+            {
+                return;
+            }
+            RHI::RHIGraphicCommandList cmdList(graphicContext);
             cmdList.SetImmediate(true);
             cmdList.Begin();
             // 设置图形管线状态
@@ -413,7 +413,7 @@ private:
         // 创建光栅化状态
         RHI::RHIRasterizerStateDesc rasterizerDesc;
         rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
-        rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
+        rasterizerDesc.cullMode = RHI::ERHICullMode::None;
         rasterizerDesc.frontFace = RHI::ERHIFrontFace::Clockwise;
         rasterizerDesc.lineWidth = 1.0f;
         rasterizerDesc.depthBiasEnable = false;

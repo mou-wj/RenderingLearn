@@ -155,4 +155,92 @@ struct VulkanCommandUpdateBuffer : public RHICommandBase
     }
 };
 
+struct VulkanCommandReadTexture : public RHICommandBase
+{
+    VulkanTexture* texture;
+    std::shared_ptr<VulkanStagingBuffer> staging;
+    VkBufferImageCopy copyRegion{};
+
+    VulkanCommandReadTexture(
+        VulkanTexture* texture,
+        std::shared_ptr<VulkanStagingBuffer> buffer,
+        VkBufferImageCopy region)
+        : texture(texture)
+        , staging(buffer)
+        , copyRegion(region)
+    {
+    }
+
+    void Execute(RHICommandListBase& cmdList) override
+    {
+        auto* vulkanContext =
+            dynamic_cast<VulkanCommandContext*>(
+                cmdList.GetCommandContex());
+
+        VulkanCommandBuffer* cmdBuffer =
+            vulkanContext
+            ->GetCommandBufferManager()
+            ->GetActiveCommandBuffer();
+        VKFunc::CmdCopyImageToBuffer(
+            cmdBuffer->GetHandle(),
+            texture->GetImage(),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            staging->GetHandle(),
+            1,
+            &copyRegion
+        );
+
+        vulkanContext
+            ->GetDevice()
+            ->GetStagingManager()
+            ->ReleaseToCmdBuffer(
+                cmdBuffer,
+                staging);
+    }
+};
+
+struct VulkanCommandReadBuffer : public RHICommandBase
+{
+    VulkanBuffer* buffer;
+    std::shared_ptr<VulkanStagingBuffer> staging;
+    VkBufferCopy copyRegion{};
+
+    VulkanCommandReadBuffer(
+        VulkanBuffer* buffer,
+        std::shared_ptr<VulkanStagingBuffer> stagingBuffer,
+        VkBufferCopy region)
+        : buffer(buffer)
+        , staging(stagingBuffer)
+        , copyRegion(region)
+    {
+    }
+
+    void Execute(RHICommandListBase& cmdList) override
+    {
+        auto* vulkanContext =
+            dynamic_cast<VulkanCommandContext*>(
+                cmdList.GetCommandContex());
+
+        VulkanCommandBuffer* cmdBuffer =
+            vulkanContext
+            ->GetCommandBufferManager()
+            ->GetActiveCommandBuffer();
+
+        VKFunc::CmdCopyBuffer(
+            cmdBuffer->GetHandle(),
+            buffer->GetHandle(),
+            staging->GetHandle(),
+            1,
+            &copyRegion
+        );
+
+        vulkanContext
+            ->GetDevice()
+            ->GetStagingManager()
+            ->ReleaseToCmdBuffer(
+                cmdBuffer,
+                staging);
+    }
+};
+
 } // namespace WR::RHIVulkan

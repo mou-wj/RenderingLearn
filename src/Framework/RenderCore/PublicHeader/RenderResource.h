@@ -132,6 +132,7 @@ public:
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
     void UploadData(const void* data, uint32_t mipIndex ,uint32_t arraySlice,uint32_t planeSlice = 0);
+    void ReadData(void* data, uint32_t mipIndex, uint32_t arraySlice, uint32_t planeSlice = 0);
     void GenerateMipMaps();
     RHI::RHITexture* GetRHI() const { return Texture.get(); }
     RenderTextureTracker& GetTracker() { return Tracker; }
@@ -148,7 +149,6 @@ private:
 RENDERCORE_API void TransitionTextureImmediate(
     RHI::RHIApi* api,
     RenderTexture* resource,
-    const RHI::RHISubresourceRange& range,
     RHI::ERHIResourceAccess targetAccess,
     RHI::EQueueType targetQueueType);
 
@@ -534,5 +534,5 @@ RENDERCORE_API bool InitGlobalRenderResource();
 RENDERCORE_API void ReleaseGlobalRenderResource();
 
 RENDERCORE_API RenderTextureSP CreateTexture(const std::string& Path);
-
+RENDERCORE_API void SaveTexture(RenderTexture* texture,const std::string& Path,uint32_t array,uint32_t mip);
 } // namespace RenderCore

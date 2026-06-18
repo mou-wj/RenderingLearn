@@ -74,6 +74,7 @@ namespace RHIVulkan {
             uint32_t GPUOffset = 0;
 
             uint32_t Size = 0;
+            bool bUseExternalBuffer = false;
         };
         std::vector<PackedUniformBinding> Bindings;
 		int GetBindingInfoIndex(uint32_t BufferIndex) const
@@ -152,14 +153,23 @@ namespace RHIVulkan {
             VulkanTexture* texture)
         {
             auto& set = Sets[setIndex];
+            DescriptorBindingState state;
+            state.Kind = DescriptorBindingState::EKind::Image;
+            state.Type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 
-            set.Writer.WriteImage(
+            state.Image.imageView =
+                texture->GetImageView();
+
+            state.Image.imageLayout =
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            state.Image.sampler =
+                VK_NULL_HANDLE;
+
+            UpdateBindingState(
+                set,
                 binding,
-                VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                texture->GetImageView(),
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-            set.bDirty = true;
+                state);
         }
         
 		void SetSampler(
@@ -168,13 +178,26 @@ namespace RHIVulkan {
 			VulkanSampler* sampler)
 		{
 			auto& set = Sets[setIndex];
-			set.Writer.WriteImage(
-				binding,
-				VK_DESCRIPTOR_TYPE_SAMPLER,
-				VK_NULL_HANDLE,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-                sampler->GetSampler());
-			set.bDirty = true;
+            DescriptorBindingState state;
+            state.Kind =
+                DescriptorBindingState::EKind::Image;
+
+            state.Type =
+                VK_DESCRIPTOR_TYPE_SAMPLER;
+
+            state.Image.sampler =
+                sampler->GetSampler();
+
+            state.Image.imageView =
+                VK_NULL_HANDLE;
+
+            state.Image.imageLayout =
+                VK_IMAGE_LAYOUT_UNDEFINED;
+
+            UpdateBindingState(
+                set,
+                binding,
+                state);
 		}
 
     public:
@@ -190,35 +213,62 @@ namespace RHIVulkan {
         {
             auto& set = Sets[setIndex];
 
+            DescriptorBindingState state;
+
             if (srv->IsTexture())
             {
-                set.Writer.WriteImage(
-                    binding,
-                    srv->GetDescriptorType(),
-                    srv->GetTextureView().View,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                state.Kind =
+                    DescriptorBindingState::EKind::Image;
+
+                state.Type =
+                    srv->GetDescriptorType();
+
+                state.Image.imageView =
+                    srv->GetTextureView().View;
+
+                state.Image.imageLayout =
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
             else
             {
-                auto hasBufferView = srv->GetBufferView().View != VK_NULL_HANDLE;
-                if (!hasBufferView) {
-                    set.Writer.WriteBuffer(
-						binding,
-                        srv->GetDescriptorType(),
-                        srv->GetBufferView().Buffer,
-                        srv->GetBufferView().Offset,
-                        srv->GetBufferView().Size);
-				}
+                auto hasBufferView =
+                    srv->GetBufferView().View !=
+                    VK_NULL_HANDLE;
+
+                if (!hasBufferView)
+                {
+                    state.Kind =
+                        DescriptorBindingState::EKind::Buffer;
+
+                    state.Type =
+                        srv->GetDescriptorType();
+
+                    state.Buffer.buffer =
+                        srv->GetBufferView().Buffer;
+
+                    state.Buffer.offset =
+                        srv->GetBufferView().Offset;
+
+                    state.Buffer.range =
+                        srv->GetBufferView().Size;
+                }
                 else
                 {
-                    set.Writer.WriteTexelBuffer(
-                        binding,
-                        srv->GetDescriptorType(),
-                        srv->GetBufferView().View);
+                    state.Kind =
+                        DescriptorBindingState::EKind::TexelBuffer;
+
+                    state.Type =
+                        srv->GetDescriptorType();
+
+                    state.BufferView =
+                        srv->GetBufferView().View;
                 }
             }
 
-            set.bDirty = true;
+            UpdateBindingState(
+                set,
+                binding,
+                state);
         }
 
     public:
@@ -234,34 +284,63 @@ namespace RHIVulkan {
         {
             auto& set = Sets[setIndex];
 
+            DescriptorBindingState state;
+
             if (uav->IsTexture())
             {
-                set.Writer.WriteImage(
-                    binding,
-                    uav->GetDescriptorType(),
-                    uav->GetTextureView().View,
-                    VK_IMAGE_LAYOUT_GENERAL);
+                state.Kind =
+                    DescriptorBindingState::EKind::Image;
+
+                state.Type =
+                    uav->GetDescriptorType();
+
+                state.Image.imageView =
+                    uav->GetTextureView().View;
+
+                state.Image.imageLayout =
+                    VK_IMAGE_LAYOUT_GENERAL;
             }
             else
             {
-                auto hasBufferView = uav->GetBufferView().View  != VK_NULL_HANDLE;
-                if (!hasBufferView) {
-					set.Writer.WriteBuffer(
-						binding,
-                        uav->GetDescriptorType(),
-                        uav->GetBufferView().Buffer,
-                        uav->GetBufferView().Offset,
-                        uav->GetBufferView().Size);
+                auto hasBufferView =
+                    uav->GetBufferView().View !=
+                    VK_NULL_HANDLE;
+
+                if (!hasBufferView)
+                {
+                    state.Kind =
+                        DescriptorBindingState::EKind::Buffer;
+
+                    state.Type =
+                        uav->GetDescriptorType();
+
+                    state.Buffer.buffer =
+                        uav->GetBufferView().Buffer;
+
+                    state.Buffer.offset =
+                        uav->GetBufferView().Offset;
+
+                    state.Buffer.range =
+                        uav->GetBufferView().Size;
                 }
-                else {
-                    set.Writer.WriteTexelBuffer(
-                        binding,
-                        uav->GetDescriptorType(),
-                        uav->GetBufferView().View);
+                else
+                {
+                    state.Kind =
+                        DescriptorBindingState::EKind::TexelBuffer;
+
+                    state.Type =
+                        uav->GetDescriptorType();
+
+                    state.BufferView =
+                        uav->GetBufferView().View;
                 }
             }
 
-            set.bDirty = true;
+            UpdateBindingState(
+                set,
+                binding,
+                state);
+
         }
 
     public:
@@ -279,58 +358,119 @@ namespace RHIVulkan {
         {
             auto& set = Sets[setIndex];
 
-            set.Writer.WriteBuffer(
+            DescriptorBindingState state;
+
+            state.Kind =
+                DescriptorBindingState::EKind::Buffer;
+
+            state.Type =
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+            state.Buffer.buffer = buffer;
+            state.Buffer.offset = offset;
+            state.Buffer.range = size;
+
+            UpdateBindingState(
+                set,
                 binding,
-                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                buffer,
-                offset,
-                size);
-
-            set.bDirty = true;
+                state);
         }
 
     public:
-
-        //---------------------------------------------------------
-        // Allocate
-        //---------------------------------------------------------
-
-        void AllocateIfNeeded(
-            uint32_t setIndex,
-            const DescriptorSetLayoutInfo& layoutInfo)
+        //
+        bool UpdateDescriptorSetsIfDirty()
         {
-            auto& set = Sets[setIndex];
-
-            if (set.DescriptorSet != VK_NULL_HANDLE)
-                return;
-
-            set.DescriptorSet = Device->GetDescriptorSetManager()
-                ->GetDescriptorSet(layoutInfo);
-        }
-
-    public:
-
-        //---------------------------------------------------------
-        // Update
-        //---------------------------------------------------------
-
-        void UpdateIfDirty()
-        {
-            for (auto& set : Sets)
+            bool isUpdate = false;
+            VulkanDescriptorWriter batchWriter;
+            const auto& sets = pipeline->GetLayout()->GetInfo().GetAllLayouts();
+            for (uint32_t i = 0;
+                i < sets.size();
+                ++i)
             {
-                if (set.DescriptorSet == VK_NULL_HANDLE)
+                auto& set = Sets[i];
+
+                //---------------------------------
+                // Skip
+                //---------------------------------
+
+                if (!set.bDirty)
+                {
+                    continue;
+                }
+
+                set.DescriptorSet =
+                    Device
+                    ->GetDescriptorSetManager()
+                    ->GetDescriptorSet(
+                        sets[i]);
+
+                //---------------------------------
+                // No Dirty
+                //---------------------------------
+
+                if (!set.bDirty)
                     continue;
 
-                if (set.bDirty)
-                {
-                    set.Writer.Update(
-                        Device->GetHandle(),
-                        set.DescriptorSet);
+                //---------------------------------
+                // Build Writes
+                //---------------------------------
 
-                    set.bDirty = false;
+                for (auto& [binding, state]
+                    : set.BindingStates)
+                {
+                    switch (state.Kind)
+                    {
+                        case DescriptorBindingState
+                        ::EKind::Image:
+
+                            batchWriter.WriteImage(set.DescriptorSet,
+                                binding,
+                                state.Type,
+                                state.Image.imageView,
+                                state.Image.imageLayout,
+                                state.Image.sampler);
+
+                            break;
+
+                            case DescriptorBindingState
+                            ::EKind::Buffer:
+
+                                batchWriter.WriteBuffer(
+                                    set.DescriptorSet,
+                                    binding,
+                                    state.Type,
+                                    state.Buffer.buffer,
+                                    state.Buffer.offset,
+                                    state.Buffer.range);
+
+                                break;
+
+                                case DescriptorBindingState
+                                ::EKind::TexelBuffer:
+
+                                    batchWriter
+                                        .WriteTexelBuffer(
+                                            set.DescriptorSet,
+                                            binding,
+                                            state.Type,
+                                            state.BufferView);
+
+                                    break;
+                    }
                 }
+
+                set.bDirty = false;
             }
+
+            //---------------------------------
+            // Batch Update
+            //---------------------------------
+            bool isUpdated = batchWriter.IsDirty();
+            batchWriter.Update(
+                Device->GetHandle());
+            return isUpdated;
         }
+
 
     public:
 
@@ -344,19 +484,65 @@ namespace RHIVulkan {
         static constexpr uint32_t MaxDescriptorSets = 8;
 
     protected:
+        struct DescriptorBindingState
+        {
+            VkDescriptorType Type{};
+
+            enum class EKind
+            {
+                None,
+                Image,
+                Buffer,
+                TexelBuffer
+            } Kind = EKind::None;
+
+            VkDescriptorImageInfo Image{};
+            VkDescriptorBufferInfo Buffer{};
+            VkBufferView BufferView{};
+
+            bool operator==(const DescriptorBindingState& rhs) const
+            {
+                if (Kind != rhs.Kind ||
+                    Type != rhs.Type)
+                {
+                    return false;
+                }
+
+                switch (Kind)
+                {
+                case EKind::Image:
+                    return
+                        Image.imageView == rhs.Image.imageView &&
+                        Image.imageLayout == rhs.Image.imageLayout &&
+                        Image.sampler == rhs.Image.sampler;
+
+                case EKind::Buffer:
+                    return
+                        Buffer.buffer == rhs.Buffer.buffer &&
+                        Buffer.offset == rhs.Buffer.offset &&
+                        Buffer.range == rhs.Buffer.range;
+
+                case EKind::TexelBuffer:
+                    return BufferView == rhs.BufferView;
+
+                default:
+                    return true;
+                }
+            }
+        };
+
 
         struct VulkanPerSetDescriptorState
         {
-            VulkanDescriptorWriter Writer;
 
             VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
-
+            std::unordered_map<uint32_t, DescriptorBindingState> BindingStates;
             bool bDirty = true;
 
             void Reset()
             {
-                Writer.Reset();
                 DescriptorSet = VK_NULL_HANDLE;
+                BindingStates.clear();
                 bDirty = true;
             }
         };
@@ -365,7 +551,24 @@ namespace RHIVulkan {
 
         std::vector<VulkanPerSetDescriptorState> Sets;
         VulkanPipelineBase* pipeline;
+        bool UpdateBindingState(
+            VulkanPerSetDescriptorState& set,
+            uint32_t binding,
+            const DescriptorBindingState& newState)
+        {
+            auto it = set.BindingStates.find(binding);
 
+            if (it != set.BindingStates.end() &&
+                it->second == newState)
+            {
+                return false;
+            }
+
+            set.BindingStates[binding] = newState;
+            set.bDirty = true;
+
+            return true;
+        }
     private:
         void ParsePipelineLayout(const VulkanPipelineLayout& layout)
         {
@@ -432,6 +635,22 @@ namespace RHIVulkan {
         }
 
         void FlushAndBind(VulkanCommandBuffer* cmd);
+        void MarkUiformBufferUseExternal(ERHIShaderFrequency frequency, uint32_t set, uint32_t binding)
+        {
+            auto it = PackedUniformBuffersByFrequency.find(frequency);
+            if (it == PackedUniformBuffersByFrequency.end())
+                return;
+
+            PackedUniformBuffer& buffer = it->second;
+            for (auto& bindingInfo : buffer.Bindings)
+            {
+                if (bindingInfo.SetIndex == set && bindingInfo.Binding == binding)
+                {
+                    bindingInfo.bUseExternalBuffer = true;
+                    return;
+                }
+            }
+        }
     protected:
         std::unordered_map<ERHIShaderFrequency, PackedUniformBuffer> PackedUniformBuffersByFrequency;
         public:
@@ -628,6 +847,7 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
+                CurrentState->MarkUiformBufferUseExternal(frequency,setIndex,binding);
                 CurrentState->SetUniformBuffer(setIndex, binding, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
             }
         }
@@ -647,10 +867,9 @@ namespace RHIVulkan {
         {
             if (bDirtyPipelineState) {
                 CurrentPipeline->Bind(cmd);
-                CurrentState->FlushAndBind(cmd);
                 bDirtyPipelineState = false;
             }
-
+            CurrentState->FlushAndBind(cmd);
         }
 
     private:
@@ -698,10 +917,10 @@ namespace RHIVulkan {
         // Pipeline
         void SetPipeline(VulkanGraphicsPipelineState* pipeline)
         {
-            bDirtyPipelineState = true;
+            
             if (CurrentPipeline == pipeline)
                 return;
-            
+            bDirtyPipelineState = true;
             CurrentPipeline = pipeline;
             auto it = States.find(pipeline);
             if (it == States.end())
@@ -793,6 +1012,7 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
+                CurrentState->MarkUiformBufferUseExternal(frequency,setIndex,binding);
                 CurrentState->SetUniformBuffer(setIndex, binding, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
             }
         }
@@ -846,11 +1066,10 @@ namespace RHIVulkan {
             if (bDirtyPipelineState) {
                 // 1. Bind pipeline
                 CurrentPipeline->Bind(cmd);
-
-                // 2. Bind descriptor sets
-                CurrentState->FlushAndBind(cmd);
                 bDirtyPipelineState = false;
             }
+            // 2. Bind descriptor sets
+            CurrentState->FlushAndBind(cmd);
             // 3. Bind vertex buffers
             if (bDirtyVertexStreams)
             {

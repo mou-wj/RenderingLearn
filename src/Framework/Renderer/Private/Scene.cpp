@@ -207,6 +207,8 @@ namespace Renderer {
                     break;
                 case Engine::ELightType::Spot:
                     GPUResourceInfo.DirtyFlags |= ESceneGPUResourceDirty::SpotLight;
+                case Engine::ELightType::Sky:
+                    GPUResourceInfo.DirtyFlags |= ESceneGPUResourceDirty::SkyLight;
                     break;
                 default:
                     break;
@@ -306,7 +308,11 @@ namespace Renderer {
                     ESceneGPUResourceDirty
                     ::SpotLight;
                 break;
-
+            case ELightType::Sky:
+                GPUResourceInfo.DirtyFlags |=
+                    ESceneGPUResourceDirty
+                    ::SkyLight;
+                break;
             }
         }
     }
@@ -543,8 +549,36 @@ namespace Renderer {
             LightRes.SpotLightBuffer->InitRHIResource();
             LightRes.SpotLightBuffer->UploadData(GPUData.data(), Desc.Size);
         }
+        LightRes.IBLSpecularTexture = nullptr;
+        LightRes.IBLSpecularTexture = nullptr;
+        if (EnumHasAnyFlags(
+            Dirty,
+            ESceneGPUResourceDirty
+            ::SkyLight)) {
+            for (auto& Pair :
+                LightInfos)
+            {
+                auto* Proxy =
+                    Pair.second
+                    ->GetProxy();
 
+                if (!Proxy)
+                    continue;
 
+                if (Proxy
+                    ->GetLightType()
+                    != ELightType
+                    ::Sky)
+                {
+                    continue;
+                }
+                auto SkyLightProxy = dynamic_cast<SkyLightSceneProxy*>(Proxy);
+                LightRes.IBLSpecularTexture = SkyLightProxy->GetSpecularPrefilter();
+                LightRes.IBLDiffuseTexture = SkyLightProxy->GetDiffuseIrradiance();
+            }
+
+        }
+        
     }
 
     

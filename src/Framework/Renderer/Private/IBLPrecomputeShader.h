@@ -4,8 +4,11 @@
 #include "ShaderParameter.h"
 #include "RHICommandList.h"
 #include "ShaderCore.h"
+#include "RenderResource.h"
 
 namespace Renderer {
+    extern RENDERER_API RenderCore::RenderTextureSP GlobalIBLLutTexture;
+
     BEGIN_SHADER_PARAMETER_STRUCT(IBLPrecomputeSpecEvnParameters)
         SHADER_PARAMETER_RHI_UAV(RWTexture2DArray<float4>, OutputSpecularTexture)
     END_SHADER_PARAMETER_STRUCT(IBLPrecomputeSpecEvnParameters)
@@ -21,7 +24,7 @@ namespace Renderer {
         SHADER_PARAMETER_STRUCT_REFERENCE(IBLPrecomputeDiffuseEvnParameters, OutputDiffuseParam)
     END_SHADER_PARAMETER_STRUCT(IBLPrecomputeEvnParameters)
     BEGIN_SHADER_PARAMETER_STRUCT(IBLPrecomputeBRDFParameters)
-        SHADER_PARAMETER_RHI_UAV(RWTexture2D<float4>, OutputBRDFLUT)
+        SHADER_PARAMETER_RHI_UAV(RWTexture2D<float2>, OutputBRDFLUT)
     END_SHADER_PARAMETER_STRUCT(IBLPrecomputeBRDFParameters)
 
     // IBL 预计算所需参数，包含环境贴图与 BRDF LUT 两种输出（由变体选择）
@@ -44,7 +47,7 @@ namespace Renderer {
 
         static bool ShouldCompilePermutation(const RenderCore::ShaderPermutationParameters& Parameters)
         {
-            return false;
+            return true;
         }
 
         static void ModifyShaderCompilerEnvironment(const RenderCore::ShaderPermutationParameters& Parameters, RenderCore::ShaderCompilerEnvironment& OutEnvironment)

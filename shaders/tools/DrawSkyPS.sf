@@ -1,12 +1,25 @@
-struct FPixelShaderInput
+#include "/Generated/ShaderParameters/DrawSkyPixelParameters.sf"
+
+struct FVertexOutput
 {
-    float2 UV : TEXCOORD0;
+    float4 Position : SV_Position;
+    float3 Direction : TEXCOORD0;
 };
 
-Texture2D EnvironmentMap;
-SamplerState EnvironmentMapSampler;
-
-float4 MainPS(FPixelShaderInput Input) : SV_Target
+float4 MainPS(
+    FVertexOutput Input)
+    : SV_Target
 {
-    return EnvironmentMap.Sample(EnvironmentMapSampler, Input.UV);
+    float3 Direction =
+        normalize(
+            Input.Direction);
+
+    float3 SkyColor =
+        SkyCubemap.Sample(
+            SkySampler,
+            Direction).rgb;
+
+    return float4(
+        SkyColor,
+        1.0);
 }

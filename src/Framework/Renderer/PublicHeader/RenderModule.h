@@ -21,7 +21,7 @@ namespace Renderer {
         void PreComputeIBL(RenderCore::RenderTexture* InHDRTexture, RenderCore::RenderTexture* OutDiffuseIBL, RenderCore::RenderTexture* OutSpecularIBL) override;
 
     private:
-
+        void InitIBLLut();
     private:
         bool bLoaded = false;
         std::string ModuleName = "RenderModule";

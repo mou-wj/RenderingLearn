@@ -5,6 +5,8 @@
 #include "GlobalShader.h"
 
 namespace Renderer {
+    RenderCore::RenderTextureSP GlobalIBLLutTexture = nullptr;
+
     IMPLEMENT_GLOBAL_SHADER_TYPE(
         IBLPrecomputeCS,
         "IBLPrecomputeCS",

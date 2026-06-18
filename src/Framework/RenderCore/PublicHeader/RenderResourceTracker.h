@@ -166,7 +166,7 @@ inline void TransitionResource(
     cmdList.EndTransitions({ transition });
 
     api->RHIReleaseTransition(transition);
-    delete[] transitionMem;
+    delete transitionMem;
 }
 
 

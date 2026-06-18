@@ -6,6 +6,8 @@
 #include <map>
 #include <array>
 #include <set>
+#include <list>
+#include <unordered_map>
 #define VK_DESCRIPTOR_TYPE_RANGE_SIZE (VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT - VK_DESCRIPTOR_TYPE_SAMPLER + 1)
 
 namespace RHIVulkan {
@@ -148,7 +150,7 @@ namespace RHIVulkan {
             Dirty = false;
         }
 
-        void WriteImage(
+        void WriteImage(VkDescriptorSet set,
             uint32_t binding,
             VkDescriptorType type,
             VkImageView view,
@@ -161,6 +163,7 @@ namespace RHIVulkan {
             info.sampler = sampler;
 
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            write.dstSet = set;
             write.dstBinding = binding;
             write.descriptorType = type;
             write.descriptorCount = 1;
@@ -170,7 +173,7 @@ namespace RHIVulkan {
             Dirty = true;
         }
 
-        void WriteBuffer(
+        void WriteBuffer(VkDescriptorSet set,
             uint32_t binding,
             VkDescriptorType type,
             VkBuffer buffer,
@@ -183,6 +186,7 @@ namespace RHIVulkan {
             info.range = range;
 
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            write.dstSet = set;
             write.dstBinding = binding;
             write.descriptorType = type;
             write.descriptorCount = 1;
@@ -191,9 +195,10 @@ namespace RHIVulkan {
             Writes.push_back(write);
             Dirty = true;
         }
-        void WriteTexelBuffer(uint32_t binding, VkDescriptorType type, VkBufferView view)
+        void WriteTexelBuffer(VkDescriptorSet set,uint32_t binding, VkDescriptorType type, VkBufferView view)
         {
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            write.dstSet = set;
             write.dstBinding = binding;
             write.descriptorType = type;
             write.descriptorCount = 1;
@@ -203,10 +208,8 @@ namespace RHIVulkan {
             Dirty = true;
         }
 
-        void Update(VkDevice device, VkDescriptorSet set)
+        void Update(VkDevice device)
         {
-            for (auto& w : Writes)
-                w.dstSet = set;
 
             VKFunc::UpdateDescriptorSets(device,
                 (uint32_t)Writes.size(),

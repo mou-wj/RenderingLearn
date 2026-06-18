@@ -373,6 +373,7 @@ ShaderCompiler::ShaderCompiler()
 
 ShaderCompiler::~ShaderCompiler()
 {
+    glslang::FinalizeProcess();
 }
 
 
@@ -406,7 +407,6 @@ ShaderCompilationOutput ShaderCompiler::Compile(const ShaderCompileInput& input)
         compiled = false;
         break;
     }
-
     return output;
 }
 
@@ -708,6 +708,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         char* defStr = new char[def.size() + 1];
         memcpy(defStr, def.c_str(), def.size() + 1);
         preprocessorDefines.push_back(defStr);
+        
     }
 
     if (!shader.parse(&resources, 100, false, messages))
@@ -715,6 +716,15 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         out.ErrorMessage = shader.getInfoLog();
         out.ErrorMessage += "\n";
         out.ErrorMessage += shader.getInfoDebugLog();
+        std::string text = preprocessedSource;
+        std::ofstream file("error_shader_source.txt");
+        if (file.is_open())
+        {
+            file << text;
+            file << "\n\n\n\n\n\n\n\n\n\n\n";
+            file << out.ErrorMessage;
+            file.close();
+        }
         LOG_ERROR("parse error %s", out.ErrorMessage);
         // ����
         for (auto p : preprocessorDefines) delete[] p;

@@ -1,6 +1,7 @@
 #include "SceneShaderParameters.h"
 #include "RenderGraphBuilder.h"
 #include "Scene.h"
+#include "IBLPrecomputeShader.h"
 namespace Renderer {
 
 
@@ -14,6 +15,9 @@ namespace Renderer {
         Out.LightParameters.PointLightCount = SceneLightResourceInfo.PointLightCount;
 		Out.LightParameters.SpotLightCount = SceneLightResourceInfo.SpotLightCount;
 		Out.LightParameters.DirectionalLightCount = SceneLightResourceInfo.DirectionalLightCount;
+        Out.LightParameters.PointLightCount = 0;
+        Out.LightParameters.SpotLightCount = 0;
+        Out.LightParameters.DirectionalLightCount = 0;
         if (SceneLightResourceInfo.PointLightBuffer) {
             auto rdgB = Builder.RegisterExternalBuffer(
                 "PointLights",
@@ -44,7 +48,35 @@ namespace Renderer {
             SRVDesc.Buffer = rdgB;
             Out.LightParameters.DirectionalLights = Builder.CreateBufferSRV("DirectionalLightsSRV", SRVDesc);
         }
+        if (SceneLightResourceInfo.IBLDiffuseTexture != nullptr && SceneLightResourceInfo.IBLSpecularTexture != nullptr) {
 
+
+            auto rdgT = Builder.RegisterExternalTexture("IBLDiffuseTexture", SceneLightResourceInfo.IBLDiffuseTexture);
+            Out.LightParameters.IBLDiffuseMap = rdgT;
+            rdgT = Builder.RegisterExternalTexture("IBLSpecularTexture", SceneLightResourceInfo.IBLSpecularTexture);
+            Out.LightParameters.IBLSpecularMap = rdgT;
+            rdgT = Builder.RegisterExternalTexture("IBLLutTexture", GlobalIBLLutTexture.get());
+            Out.LightParameters.LinearClampSampler = RenderCore::GlobalSampler.get();
+            Out.LightParameters.IBLLut = rdgT;
+            Out.LightParameters.EnableIBLMap = 1;
+        }else{
+            RenderCore::RenderGraphTextureDesc emptyCubeMapDesc;
+            emptyCubeMapDesc.Type = RHI::ERHITextureType::TextureCube;
+            emptyCubeMapDesc.Width = 1;
+            emptyCubeMapDesc.Height = 1;
+            emptyCubeMapDesc.ArraySize = 6;
+            emptyCubeMapDesc.MipLevels = 1;
+            emptyCubeMapDesc.Usage = RHI::ERHITextureCreateFlag::ShaderResource;
+            emptyCubeMapDesc.Format = RHI::ERHIFormat::R8G8B8A8_UNorm;
+            Out.LightParameters.LinearClampSampler = RenderCore::GlobalSampler.get();
+            auto rdgT = Builder.CreateTexture("EmptyCubeMap", emptyCubeMapDesc);
+            Out.LightParameters.IBLDiffuseMap = rdgT;
+            Out.LightParameters.IBLSpecularMap = rdgT;
+            rdgT = Builder.RegisterExternalTexture("IBLLutTexture", GlobalIBLLutTexture.get());
+            Out.LightParameters.IBLLut = rdgT;
+            Out.LightParameters.EnableIBLMap = 0;
+
+        }
     }
 
 

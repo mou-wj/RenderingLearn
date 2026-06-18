@@ -136,7 +136,7 @@ VulkanStagingBuffer::VulkanStagingBuffer(VulkanDevice* device, VulkanMemoryManag
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = size_;
-    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 
@@ -224,6 +224,12 @@ void VulkanStagingManager::ReleaseToCmdBuffer(
     entry.pendingBuffers.push_back(buffer);
 }
 
+void VulkanStagingManager::MarkMappedBuffersUsed(std::shared_ptr<VulkanStagingBuffer> buffer, bool used)
+{
+	std::lock_guard<std::mutex> lock(mutex_);
+	mapedToFreeBufferUsed_[buffer] = used;
+}
+
 void VulkanStagingManager::GarbageCollect()
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -236,10 +242,28 @@ void VulkanStagingManager::GarbageCollect()
 			completedCmds.push_back(entry.first);
 			for (auto& buf : entry.second.pendingBuffers)
 			{
+                if (mapedToFreeBufferUsed_.find(buf) != mapedToFreeBufferUsed_.end()) {
+                    if (mapedToFreeBufferUsed_[buf] = true) {
+                        mapedToFreeBuffers_.push_back(buf);
+                    }
+                    else {
+                        freeBuffers_.push_back(buf);
+                        mapedToFreeBufferUsed_.erase(buf);
+                    }
+                    continue;
+                }
                 freeBuffers_.push_back(buf);
 			}
 		}
 	}
+    for (auto& buf : mapedToFreeBuffers_) {
+        if (mapedToFreeBufferUsed_.find(buf) != mapedToFreeBufferUsed_.end()) {
+            if (mapedToFreeBufferUsed_[buf] = false) {
+                freeBuffers_.push_back(buf);
+                mapedToFreeBufferUsed_.erase(buf);
+            }
+        }
+    }
     for (auto& cmd : completedCmds)
 	{
         pendingBufferMap_.erase(cmd);

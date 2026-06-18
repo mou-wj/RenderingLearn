@@ -120,56 +120,40 @@ namespace RHIVulkan{
 
     VulkanSemaphoreManager::VulkanSemaphoreManager(VulkanDevice* device)
         : device_(device) {
+        
     }
 
     VulkanSemaphoreManager::~VulkanSemaphoreManager() {
         std::lock_guard<std::mutex> lock(mutex_);
-        pool_ = {};
-        for (auto sem : managedObjects_) {
-            delete sem; // ж
+        for (auto sem : allAllocateds_) {
+            delete sem;
         }
-        managedObjects_.clear();
+
     }
 
-    VulkanSemaphore* VulkanSemaphoreManager::Acquire(bool requireUnsignaled) {
+    void VulkanSemaphoreManager::BatchCreateSemaphores(size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            VulkanSemaphore* sem = new VulkanSemaphore(device_, true);
+            freePool_.insert(sem);
+            allAllocateds_.insert(sem);
+        }
+    }
+
+    VulkanSemaphore* VulkanSemaphoreManager::AcquireBinary() {
         std::lock_guard<std::mutex> lock(mutex_);
-
-        if (requireUnsignaled)
-        {
-            VulkanSemaphore* sem = new VulkanSemaphore(device_,true);
-            managedObjects_.push_back(sem);
-            return sem;
+        if (freePool_.empty()) {
+            BatchCreateSemaphores(BatchSize);
         }
-
-        if (!pool_.empty())
-        {
-            VulkanSemaphore* sem = pool_.front();
-            pool_.pop();
-            return sem;
-        }
-
-        VulkanSemaphore* sem = new VulkanSemaphore(device_,true);
-        managedObjects_.push_back(sem);
+        
+        VulkanSemaphore* sem = *freePool_.begin();
+        freePool_.erase(freePool_.begin());
         return sem;
     }
 
-    void VulkanSemaphoreManager::Release(VulkanSemaphore* sem) {
+    void VulkanSemaphoreManager::ReleaseBinary(VulkanSemaphore* sem) {
         if (!sem) return;
         std::lock_guard<std::mutex> lock(mutex_);
-
-        if (pool_.size() >= MaxSemaphorePoolSize)
-        {
-            auto it = std::find(managedObjects_.begin(), managedObjects_.end(), sem);
-            if (it != managedObjects_.end())
-            {
-                managedObjects_.erase(it);
-            }
-            delete sem;
-        }
-        else
-        {
-            pool_.push(sem);
-        }
+        freePool_.insert(sem);
     }
 
 // -------------------------------------------------------------------------------------------------

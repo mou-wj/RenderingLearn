@@ -6,6 +6,7 @@
 #include "RHIShaderLibrary.h"
 #include <map>
 #include <string>
+#include <vector>
 #include "Module.h"
 #include "RHITransientResource.h"
 namespace RHI{
@@ -27,7 +28,9 @@ public:
     virtual RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) = 0;
     virtual void UpdateTexture(RHICommandListBase& cmdList,RHITexture* texture, const void* data,const RHIUpdateTextureRegion& size) = 0;
     virtual void UpdateBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const void* data,const RHIUpdateBufferRegion& region) = 0;
-
+    virtual void* MapReadTexture(RHICommandListBase& cmdList, RHITexture* texture, const RHIReadTextureInfo& info) = 0;
+    virtual void* MapReadBuffer(RHICommandListBase& cmdList, RHIBuffer* buffer, const RHIReadBufferInfo& info) = 0;
+    virtual void Unmap(void* mappedData) = 0;
     virtual RHIShaderResourceViewSP CreateTextureShaderResourceView(
         RHITexture* Texture, const RHITexSRVCreateInfo& Desc) = 0;
 

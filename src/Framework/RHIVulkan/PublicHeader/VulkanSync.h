@@ -5,6 +5,7 @@
 #include <mutex>
 #include <deque>
 #include <vector>
+#include <set>
 #include <memory>
 
 namespace RHIVulkan{
@@ -75,19 +76,22 @@ public:
     // binary semaphore manager
     // requireUnsignaled=true: always create a new unsignaled semaphore.
     // requireUnsignaled=false: reuse from pool when available.
-    VulkanSemaphore* Acquire(bool requireUnsignaled = false);
-    void Release(VulkanSemaphore* sem);
+    VulkanSemaphore* AcquireBinary();
+    void ReleaseBinary(VulkanSemaphore* sem);
 
 private:
+    void BatchCreateSemaphores(size_t count);
+
     VulkanDevice* device_;
-
-    static constexpr size_t MaxSemaphorePoolSize = 100;
-    std::queue<VulkanSemaphore*> pool_;
-
-    // �������д�������
-    std::vector<VulkanSemaphore*> managedObjects_;
-
     std::mutex mutex_;
+
+    static constexpr size_t BatchSize = 100;
+
+    // 空闲池：存放全新 vkCreate 出来的干净信号量
+    std::set<VulkanSemaphore*> freePool_;
+
+    // 已用池：存放外部归还的、确定已空闲的信号量，攒满即砸碎
+    std::set<VulkanSemaphore*> allAllocateds_;
 };
 
 // Vulkan Fence

@@ -31,10 +31,10 @@ public:
     VulkanDevice* GetDevice() const { return device_; }
     VulkanImageLayoutManager* GetImageLayoutManager() { return &imageLayoutManager_; }
     void UpdatedCommandBufferImageLayoutManager(VulkanCommandBuffer* commandBuffer) {
-        if (commandBuffer) {
-            auto layoutManager = commandBuffer->GetImageLayoutManager();
-            imageLayoutManager_.TransferTo(*layoutManager);
-        }
+        //if (commandBuffer) {
+        //    auto layoutManager = commandBuffer->GetImageLayoutManager();
+        //    imageLayoutManager_.TransferTo(*layoutManager);
+        //}
     }
 
     // ---- RHI::RHIQueue overrides ----
@@ -43,7 +43,7 @@ public:
     RHI::RHIContextBase* ReleaseCommandContext(RHI::RHIContextBase* Context) override;
     RHI::RHIFence ExecuteContext(RHI::RHIContextBase* context) override;
     RHI::RHIFence ExecuteContext(const std::vector<RHI::RHIContextBase*>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
-    void SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue, VkSemaphore binarySignal);
+    VulkanSemaphore* SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue);
     void WaitFence(RHIFence Fence) override;
 
     void WaitIdle() override;

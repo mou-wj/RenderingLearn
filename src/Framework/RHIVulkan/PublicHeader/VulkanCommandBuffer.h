@@ -40,7 +40,7 @@ public:
     void Reset();
 
 
-	VulkanImageLayoutManager* GetImageLayoutManager() { return &imageLayoutManager; }
+	//VulkanImageLayoutManager* GetImageLayoutManager() { return &imageLayoutManager; }
 
 private:
     VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -48,7 +48,7 @@ private:
     VulkanDevice* device = nullptr;
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     friend class VulkanQueue;
-    VulkanImageLayoutManager imageLayoutManager;
+    //VulkanImageLayoutManager imageLayoutManager;
     ECommandBufferState state = ECommandBufferState::Free;
 };
 

@@ -44,11 +44,11 @@ namespace Test {
             std::vector<RHI::RHITransitionInfo> infos;
             if (auto* texture = dynamic_cast<RHI::RHITexture*>(resource))
             {
-                infos.emplace_back(texture, currentAccess, targetAccess);
+                infos.emplace_back(texture, currentAccess, targetAccess, currentQueueType,targetQueueType);
             }
             else if (auto* buffer = dynamic_cast<RHI::RHIBuffer*>(resource))
             {
-                infos.emplace_back(buffer, currentAccess, targetAccess);
+                infos.emplace_back(buffer, currentAccess, targetAccess, currentQueueType, targetQueueType);
             }
             else
             {

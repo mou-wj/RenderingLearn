@@ -38,6 +38,8 @@ struct RHI_API RHITransitionInfo : public RHISubresourceRange
 		class RHITexture* InTexture,
 		ERHIResourceAccess InPreviousState,
 		ERHIResourceAccess InNewState,
+		EQueueType InQueueTypeBefore = EQueueType::Graphics,
+		EQueueType InQueueTypeAfter = EQueueType::Graphics,
 		EResourceTransitionFlags InFlags = EResourceTransitionFlags::None,
 		uint32_t InMipIndex = kAllSubresources,
 		uint32_t InArraySlice = kAllSubresources,
@@ -47,50 +49,41 @@ struct RHI_API RHITransitionInfo : public RHISubresourceRange
 		, Type(EType::Texture)
 		, AccessBefore(InPreviousState)
 		, AccessAfter(InNewState)
+		, QueueTypeBefore(InQueueTypeBefore)
+        , QueueTypeAfter(InQueueTypeAfter)
 		, Flags(InFlags)
 	{}
 
-	RHITransitionInfo(class RHIUnorderedAccessView* InUAV, ERHIResourceAccess InPreviousState, ERHIResourceAccess InNewState, EResourceTransitionFlags InFlags = EResourceTransitionFlags::None)
+	RHITransitionInfo(class RHIUnorderedAccessView* InUAV, ERHIResourceAccess InPreviousState, ERHIResourceAccess InNewState, EQueueType InQueueTypeBefore = EQueueType::Graphics,EQueueType InQueueTypeAfter = EQueueType::Graphics, EResourceTransitionFlags InFlags = EResourceTransitionFlags::None)
 		: UAV(InUAV)
 		, Type(EType::UAV)
 		, AccessBefore(InPreviousState)
 		, AccessAfter(InNewState)
+		, QueueTypeBefore(InQueueTypeBefore)
+		, QueueTypeAfter(InQueueTypeAfter)
 		, Flags(InFlags)
 	{}
 
-	RHITransitionInfo(class RHIBuffer* InRHIBuffer, ERHIResourceAccess InPreviousState, ERHIResourceAccess InNewState, EResourceTransitionFlags InFlags = EResourceTransitionFlags::None)
+	RHITransitionInfo(class RHIBuffer* InRHIBuffer, ERHIResourceAccess InPreviousState, ERHIResourceAccess InNewState, EQueueType InQueueTypeBefore = EQueueType::Graphics, EQueueType InQueueTypeAfter = EQueueType::Graphics, EResourceTransitionFlags InFlags = EResourceTransitionFlags::None)
 		: Buffer(InRHIBuffer)
 		, Type(EType::Buffer)
 		, AccessBefore(InPreviousState)
 		, AccessAfter(InNewState)
+		, QueueTypeBefore(InQueueTypeBefore)
+		, QueueTypeAfter(InQueueTypeAfter)
 		, Flags(InFlags)
 	{}
 
-	RHITransitionInfo(class RHIRayTracingAccelerationStructure* InBVH, ERHIResourceAccess InPreviousState, ERHIResourceAccess InNewState, EResourceTransitionFlags InFlags = EResourceTransitionFlags::None)
+	RHITransitionInfo(class RHIRayTracingAccelerationStructure* InBVH, ERHIResourceAccess InPreviousState, ERHIResourceAccess InNewState, EQueueType InQueueTypeBefore = EQueueType::Graphics, EQueueType InQueueTypeAfter = EQueueType::Graphics, EResourceTransitionFlags InFlags = EResourceTransitionFlags::None)
 		: BVH(InBVH)
 		, Type(EType::BVH)
 		, AccessBefore(InPreviousState)
 		, AccessAfter(InNewState)
+		, QueueTypeBefore(InQueueTypeBefore)
+		, QueueTypeAfter(InQueueTypeAfter)
 		, Flags(InFlags)
 	{}
 
-	RHITransitionInfo(class RHITexture* InTexture, ERHIResourceAccess InNewState)
-		: Texture(InTexture)
-		, Type(EType::Texture)
-		, AccessAfter(InNewState)
-	{}
-
-	RHITransitionInfo(class RHIUnorderedAccessView* InUAV, ERHIResourceAccess InNewState)
-		: UAV(InUAV)
-		, Type(EType::UAV)
-		, AccessAfter(InNewState)
-	{}
-
-	RHITransitionInfo(class RHIBuffer* InRHIBuffer, ERHIResourceAccess InNewState)
-		: Buffer(InRHIBuffer)
-		, Type(EType::Buffer)
-		, AccessAfter(InNewState)
-	{}
 
 	inline bool operator == (RHITransitionInfo const& RHS) const
 	{

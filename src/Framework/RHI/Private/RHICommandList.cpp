@@ -49,6 +49,40 @@ void RHICommandTraceRays::Execute(RHICommandListBase& cmdList)
     }
 }
 
+RHICommandBegin::RHICommandBegin(){}
+void RHICommandBegin::Execute(RHICommandListBase& cmdList) {
+    auto* context = dynamic_cast<RHIContextBase*>(cmdList.GetContext());
+    if (context)
+    {
+        context->Begin();
+    }
+}
+RHICommandEnd::RHICommandEnd() {}
+void RHICommandEnd::Execute(RHICommandListBase& cmdList) {
+    auto* context = dynamic_cast<RHIContextBase*>(cmdList.GetContext());
+    if (context)
+    {
+        context->End();
+    }
+}
+RHICommandBeginTransitions::RHICommandBeginTransitions(std::vector<const RHITransition*> InTransitions):Transitions(InTransitions) {}
+void RHICommandBeginTransitions::Execute(RHICommandListBase& cmdList) {
+    auto* context = dynamic_cast<RHIContextBase*>(cmdList.GetContext());
+    if (context)
+    {
+        context->BeginTransitions(Transitions);
+    }
+}
+RHICommandEndTransitions::RHICommandEndTransitions(std::vector<const RHITransition*> InTransitions) :Transitions(InTransitions) {}
+void RHICommandEndTransitions::Execute(RHICommandListBase& cmdList) {
+    auto* context = dynamic_cast<RHIContextBase*>(cmdList.GetContext());
+    if (context)
+    {
+        context->EndTransitions(Transitions);
+    }
+}
+
+
 RHICommandCopyTexture::RHICommandCopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
     : Src(src), Dst(dst), CopyDesc(copyDesc)
 {
@@ -242,7 +276,7 @@ RHICommandListBase::RHICommandListBase(RHIContextBase* context)
 {
 }
 
-RHICommandListBase::~RHICommandListBase() = default;
+RHICommandListBase::~RHICommandListBase() { commands.clear(); };
 
 void RHICommandListBase::ExecuteAll()
 {
@@ -282,34 +316,22 @@ RHIContextBase* RHICommandListBase::GetCommandContex() const
 
 void RHICommandListBase::Begin()
 {
-    if (Context)
-    {
-        Context->Begin();
-    }
+    AddCommand<RHICommandBegin>();
 }
 
 void RHICommandListBase::End()
 {
-    if (Context)
-    {
-        Context->End();
-    }
+    AddCommand<RHICommandEnd>();
 }
 
 void RHICommandListBase::BeginTransitions(std::vector<const RHITransition*> Transitions)
 {
-    if (Context)
-    {
-        Context->BeginTransitions(std::move(Transitions));
-    }
+    AddCommand<RHICommandBeginTransitions>(Transitions);
 }
 
 void RHICommandListBase::EndTransitions(std::vector<const RHITransition*> Transitions)
 {
-    if (Context)
-    {
-        Context->EndTransitions(std::move(Transitions));
-    }
+    AddCommand<RHICommandEndTransitions>(Transitions);
 }
 void RHICommandListBase::CopyTexture(RHITexture* src, RHITexture* dst, const RHICopyTextureDesc& copyDesc)
 {

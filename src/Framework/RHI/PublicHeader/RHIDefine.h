@@ -496,6 +496,16 @@ enum class ERHIShaderFrequency
         uint32_t offset = 0; // 偏移
         uint32_t size = 0; // 大小
     };
+    //
+    struct RHI_API RHIReadTextureInfo {
+        uint32_t MipLevel = 0;
+        uint32_t ArraySlice = 0;
+        uint32_t ArrayCount = 1;
+    };
+    struct RHI_API RHIReadBufferInfo {
+        uint64_t offset = 0; // 偏移
+        uint64_t size = 0; // 大小};
+    };
 
     // ---------------------------
     // Texture Shader Resource View

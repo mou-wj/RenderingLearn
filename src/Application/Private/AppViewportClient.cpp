@@ -14,7 +14,7 @@ namespace App {
     void AppViewportClient::InitResources()
     {
         AssetManager::Get().LoadSync<MaterialAsset>(Core::GetProjectDir() + "/resources/material/DefaultWhite/material.json");
-        //AssetManager::Get().LoadSync<SkyLightAsset>(Core::GetProjectDir() + "/resources/pic/DaySkyHDRI046A_1K-TONEMAPPED.jpg");
+        auto skyAsset = AssetManager::Get().LoadSync<SkyLightAsset>(Core::GetProjectDir() + "/resources/pic/DaySkyHDRI046A_1K-TONEMAPPED.jpg");
         staticMeshAsset = AssetManager::Get().LoadSync<StaticMeshAsset>(Core::GetProjectDir() + "/resources/glb/sphere.glb");
         staticMeshComponent = new StaticMeshComponent();
         staticMeshComponent->SetStaticMesh(staticMeshAsset->GetMesh());
@@ -49,6 +49,12 @@ namespace App {
         spotLight->SetOuterConeAngle(45.0f);
         scene->AddLight(spotLight);
 
+        // Create Sky Light
+        skyLight = new SkyLightComponent();
+        skyLight->SetDiffuseIrradiance(skyAsset->GetDiffuseIrradiance());
+        skyLight->SetSpecularIrradiance(skyAsset->GetSpecularPrefilter());
+        scene->AddLight(skyLight);
+
         scene->FlushPendingUpdates();
 
         camera.SetPosition({ 0.0f, 0.0f, -5.0f });
@@ -71,6 +77,9 @@ namespace App {
             }
             if (spotLight) {
                 scene->RemoveLight(spotLight);
+            }
+            if (skyLight) {
+                scene->RemoveLight(skyLight);
             }
 
             scene->FlushPendingUpdates();

@@ -143,7 +143,7 @@ public:
         // ========================
         // 执行计算着色器 (4 次迭代)
         // ========================
-        for (int iteration = 0; iteration < 1000; ++iteration)
+        for (int iteration = 0; iteration < 1000000; ++iteration)
         {
             cmdList.SetImmediate(true);
             cmdList.Begin();

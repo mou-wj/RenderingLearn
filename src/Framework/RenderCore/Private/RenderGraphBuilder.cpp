@@ -962,6 +962,8 @@ namespace RenderCore {
 
             // ✅ 写回 subresource
             entry.Tracker->UpdateSubresourceAccess(Key.Range, Access);
+            //写回fence
+            entry.Tracker->UpdateLastAccessFence(tex->GetTracker().GetLastAccessFence());
         }
 
         // =========================
@@ -991,7 +993,7 @@ namespace RenderCore {
 
             // ❗ fallback：整 buffer
             entry.Tracker->UpdateAccess(Access);
-
+            entry.Tracker->UpdateLastAccessFence(buf->GetTracker().GetLastAccessFence());
         }
     }
 
@@ -1039,7 +1041,7 @@ namespace RenderCore {
                                 cmd = Allocator.Allocate<RHI::RHIGraphicCommandList>(dynamic_cast<RHI::RHIGraphicContex*>(ctx));
                             else if (q == RHI::EQueueType::Compute)
                                 cmd = Allocator.Allocate <RHI::RHIComputeCommandList>(dynamic_cast<RHI::RHIComputeContex*>(ctx));
-                            cmd->SetImmediate(true);
+                            cmd->SetImmediate(false);
                             cmd->Begin();
                             cmdLists[q] = cmd;
                             cmdContexts[q] = ctx;
@@ -1104,6 +1106,9 @@ namespace RenderCore {
 
             for (auto& [q, cmd] : group.CmdLists)
             {
+                if (cmd) {
+                    cmd->ExecuteAll();
+                }
                 auto* queue = api->GetQueue(q);
                 std::vector<RHI::RHIWaitInfo> waitInfos;
                 for (auto& [otherQ, value] : Timeline)
