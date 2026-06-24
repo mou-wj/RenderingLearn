@@ -233,22 +233,29 @@ float3 PrefilterEnvironment(float3 R, float roughness, int sampleCount)
 
 #elif IBL_PRECOMPUTE_MODE == 1
 
-float3 ImportanceSampleCosineHemisphere(float2 Xi, float3 N)
+float3 UniformSampleHemisphere(float2 Xi, float3 N)
 {
     float phi = 2.0 * PI * Xi.x;
-    float cosTheta = sqrt(max(0.0, 1.0 - Xi.y));
-    float sinTheta = sqrt(max(0.0, Xi.y));
+
+    float cosTheta = Xi.y;
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
 
     float3 H;
     H.x = sinTheta * cos(phi);
     H.y = sinTheta * sin(phi);
     H.z = cosTheta;
 
-    float3 up = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 up = abs(N.z) < 0.999
+        ? float3(0.0, 0.0, 1.0)
+        : float3(1.0, 0.0, 0.0);
+
     float3 tangent = normalize(cross(up, N));
     float3 bitangent = cross(N, tangent);
 
-    return normalize(tangent * H.x + bitangent * H.y + N * H.z);
+    return normalize(
+        tangent * H.x +
+        bitangent * H.y +
+        N * H.z);
 }
 
 float3 PrefilterDiffuseEnvironment(float3 N, int sampleCount)
@@ -258,12 +265,14 @@ float3 PrefilterDiffuseEnvironment(float3 N, int sampleCount)
     for (int i = 0; i < sampleCount; ++i)
     {
         float2 Xi = Hammersley(uint(i), uint(sampleCount));
-        float3 L = ImportanceSampleCosineHemisphere(Xi, N);
+        float3 L = UniformSampleHemisphere(Xi, N);
         float NdotL = saturate(dot(N, L));
+        float cosTheta = NdotL;
+        float sinTheta = sqrt(1 - NdotL * NdotL);
         if (NdotL > 0.0)
         {
             float3 sampleColor = SampleEquirectangularEnvMap(L);
-            irradiance += sampleColor * NdotL;
+            irradiance += sampleColor * cosTheta * sinTheta;
         }
     }
 

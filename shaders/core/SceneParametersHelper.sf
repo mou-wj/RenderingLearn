@@ -157,14 +157,14 @@ float3 EvaluateSceneLighting(
         SpotLight Light =
             MakeSpotLight(
                 Raw);
-
+        
         Result +=
             ShadeSpotLight(
                 Context,
                 Material,
                 Light);
     }
-
+    
     // =====================================================
     // IBL
     // =====================================================

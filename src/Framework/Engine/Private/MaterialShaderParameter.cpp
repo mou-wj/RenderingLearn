@@ -22,10 +22,10 @@ namespace Engine {
         { 1,1,1,1 };
 
         Out.UniformData
-            .Metallic = 0.0f;
+            .Metallic = 0.8f;
 
         Out.UniformData
-            .Roughness = 0.5f;
+            .Roughness = 0.2f;
 
         Out.UniformData
             .Specular = 0.5f;
