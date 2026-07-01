@@ -33,18 +33,13 @@ namespace RenderCore {
         using PermutationDomain = ShaderPermutationDomain<ColorConversionDim>;
 
         
-
-        // ����Ϊ Global Shader ����
-        // ��һ��������� IMPLEMENT_SHADER_TYPE_FLAG ����ע���߼�
         DECLARE_GLOBAL_SHADER_TYPE(BlitTextureCS);
 
-        // Ĭ�������ȫ�� Shader �������б���
         static bool ShouldCompilePermutation(const ShaderPermutationParameters& Parameters)
         {
             return true;
         }
 
-        // �޸ı��뻷���������Ҫ����ĳЩ�꣬����֧�ֲ�ͬ�Ĳ�����ʽ��
         static void ModifyShaderCompilerEnvironment(const ShaderPermutationParameters& Parameters,ShaderCompilerEnvironment& OutEnvironment)
         {
             PermutationDomain Domain;
@@ -52,7 +47,6 @@ namespace RenderCore {
             Domain.ModifyCompilationEnvironment(OutEnvironment);
         }
 
-        // ��ȡ����Ԫ���ݣ����ڷ���
         static const ShaderParametersMetadata* GetShaderParameterMetadata()
         {
             return BlitTextureParameters::GetMetaData();

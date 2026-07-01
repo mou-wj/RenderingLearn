@@ -1,0 +1,93 @@
+#include "/core/ShadingContext.sf"
+#define SHADINGMODEL_UNLIT 0
+#define SHADINGMODEL_LIT 1
+#include "/Generated/ShaderParameters/StaticMeshMaterialDefferedShadingCSParameters.sf"
+#include "/core/SceneParametersHelper.sf"
+
+
+
+
+MaterialData ReconstructMaterialData(float2 UV)
+{
+    MaterialData M;
+
+    float4 A = GBufferA.SampleLevel(PointSampler, UV, 0);
+    float4 B = GBufferB.SampleLevel(PointSampler, UV, 0);
+    float4 C = GBufferC.SampleLevel(PointSampler, UV, 0);
+
+    M.BaseColor = A.rgb;
+    M.Metallic = A.a;
+
+    M.NormalTS = B.rgb * 2 - 1;
+    M.Roughness = B.a;
+
+    M.Specular = C.r;
+    M.AmbientOcclusion = C.g;
+
+    M.EmissiveColor = 0;
+    M.Opacity = 1;
+    M.OpacityMask = 1;
+
+    return M;
+}
+uint GetShadingModelId(float2 UV)
+{
+    float4 A = GBufferC.SampleLevel(PointSampler, UV, 0);
+    return (uint)(A.b * 255.0);
+}
+
+
+float3 ReconstructWorldPosition(
+    float2 UV,
+    float Depth)
+{
+    // Screen UV -> NDC
+    // UV: [0,1]
+    // NDC.x: [-1,1]
+    // NDC.y: [ 1,-1] (flip Y for screen space)
+    float2 NDC;
+    NDC.x = UV.x * 2.0 - 1.0;
+    NDC.y = (1.0 - UV.y) * 2.0 - 1.0;
+
+    // Construct clip-space position
+    float4 ClipPos = float4(
+        NDC.x,
+        NDC.y,
+        Depth,
+        1.0);
+
+    // Transform back to world space
+    float4 WorldPos =
+        mul(InvViewProj, ClipPos);
+
+    // Perspective divide
+    WorldPos.xyz /= WorldPos.w;
+
+    return WorldPos.xyz;
+}
+
+[numthreads(8,8,1)]
+void MainCS(uint3 DTid : SV_DispatchThreadID)
+{
+    uint2 PixelPos = DTid.xy;
+    float2 UV = (PixelPos + 0.5) / ScreenSize;
+    ShadingContext Context;
+    float depth = Depth.SampleLevel(PointSampler, UV, 0).r;
+    Context.WorldPosition = ReconstructWorldPosition(UV,depth);
+    float3 viewDir = normalize(CameraPos - Context.WorldPosition);
+    Context.ViewDirection = viewDir;
+    MaterialData Material = ReconstructMaterialData(UV);
+    uint ShadingModelId = GetShadingModelId(UV);
+    float3 Lighting  = Material.BaseColor.rgb;;
+    switch(ShadingModelId)
+    {
+        case SHADINGMODEL_LIT:
+            Lighting = EvaluateSceneLighting(Context, Material);
+            break;
+        case SHADINGMODEL_UNLIT:
+            break;
+        default:
+            break;
+    }
+    OutputColor[PixelPos] = float4(Lighting, 1);
+}

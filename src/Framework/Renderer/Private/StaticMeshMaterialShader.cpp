@@ -105,4 +105,64 @@ namespace Renderer
         ERHIShaderFrequency::Fragment
     )
 
+        /*
+           ===============================================================================
+               StaticMeshMaterialShaderPS
+           ===============================================================================
+           */
+
+        bool StaticMeshMaterialGBufferShaderPS::ShouldCompilePermutation(
+            const RenderCore::ShaderPermutationParameters& Parameters)
+    {
+        const MeshMaterialShaderPermutationParameters& MeshParams =
+            static_cast<const MeshMaterialShaderPermutationParameters&>(Parameters);
+
+        if (MeshParams.VFType == nullptr)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    void StaticMeshMaterialGBufferShaderPS::ModifyShaderCompilerEnvironment(
+        const RenderCore::ShaderPermutationParameters& Parameters,
+        RenderCore::ShaderCompilerEnvironment& OutEnvironment)
+    {
+        const MeshMaterialShaderPermutationParameters& MeshParams =
+            static_cast<const MeshMaterialShaderPermutationParameters&>(Parameters);
+
+        OutEnvironment.SetDefine("PIXEL_SHADER", 1);
+        Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
+    }
+
+
+
+    const RenderCore::ShaderParametersMetadata*
+        StaticMeshMaterialGBufferShaderPS::GetShaderParameterMetadata()
+    {
+        return StaticMeshMaterialGBufferShaderPSParameters::GetMetaData();
+    }
+
+    IMPLEMENT_MESH_MATERIAL_SHADER_TYPE(
+        StaticMeshMaterialGBufferShaderPS,
+        "StaticMeshMaterialGBufferShaderPS",
+        "/material/StaticMeshMaterialGBufferShaderPS.sf",
+        "MainPS",
+        ERHIShaderFrequency::Fragment
+    )
+    void StaticMeshMaterialDefferedShadingCS::ModifyShaderCompilerEnvironment(const RenderCore::ShaderPermutationParameters& Parameters, RenderCore::ShaderCompilerEnvironment& OutEnvironment)
+    {
+        const MaterialShaderPermutationParameters& MeshParams =
+            static_cast<const MaterialShaderPermutationParameters&>(Parameters);
+        Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
+    }
+
+        IMPLEMENT_MATERIAL_SHADER_TYPE(
+            StaticMeshMaterialDefferedShadingCS,
+            "StaticMeshMaterialDefferedShadingCS",
+            "/material/StaticMeshMaterialDefferedShadingCS.sf",
+            "MainCS",
+            RHI::ERHIShaderFrequency::Compute
+        );
 }

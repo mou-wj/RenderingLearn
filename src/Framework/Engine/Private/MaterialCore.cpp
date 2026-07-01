@@ -189,6 +189,7 @@ namespace Engine {
         MaterialShaderPermutationParameters permParams;
         permParams.Platform = static_cast<uint32_t>(platform);
         permParams.PermutationId = static_cast<uint32_t>(key.PermutationId);
+        permParams.MaterialParams = key.MaterialParameter;
         if (st->ShouldCompilePermutation && !st->ShouldCompilePermutation(permParams))
         {
             return nullptr;

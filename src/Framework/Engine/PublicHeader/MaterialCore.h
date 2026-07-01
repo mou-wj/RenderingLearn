@@ -61,7 +61,7 @@ namespace Engine {
 
         // Default constructor
         MaterialShaderKey(
-            ) : ShaderType(nullptr), PermutationId(), MaterialParameter(*(MaterialPermutationParameters*)nullptr) {}
+            ) : ShaderType(nullptr), PermutationId(), MaterialParameter(MaterialPermutationParameters()) {}
 
         bool operator==(const MaterialShaderKey& other) const {
             return ShaderType == other.ShaderType &&
@@ -293,6 +293,7 @@ namespace Engine {
 
         RenderCore::Shader* GetShader(const MaterialShaderKey& Key);
 
+
     private:
         RenderCore::Shader* CompileShader(const MaterialShaderKey& Key);
 
@@ -314,6 +315,7 @@ namespace Engine {
     class ENGINE_API MaterialShaderType : public RenderCore::ShaderType
     {
     public:
+
         using ShaderCompiledInitializer = RenderCore::ShaderCompiledInitializer;
         using Super = RenderCore::ShaderType;
 
@@ -352,7 +354,8 @@ namespace Engine {
     extern ENGINE_API MaterialShaderMap GMaterialShaderMap;
 
 #define DECLARE_MATERIAL_SHADER_TYPE(ClassType) \
-    DECLARE_SHADER_TYPE(ClassType)
+    DECLARE_SHADER_TYPE(ClassType)\
+    ClassType(const ShaderMetaType::ShaderCompiledInitializer& Initializer) : MaterialShader(Initializer) {}
 #define IMPLEMENT_MATERIAL_SHADER_TYPE(ClassType,ShaderPath,ShaderName,EntryPoint,Frequency ) \
     IMPLEMENT_SHADER_TYPE(ClassType,ShaderPath,ShaderName,EntryPoint,Frequency)
 

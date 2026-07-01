@@ -13,13 +13,14 @@
 #include "ShaderCompiler.h"
 #include "RHIPipelineStateCache.h"
 #include "Shape.h"
+#include "GBufferInfo.h"
 using namespace RenderCore;
 using namespace Engine;
 
 namespace Renderer {
 
     SceneRendererSP CreateSceneRenderer() {
-        return std::make_shared<ForwardSceneRenderer>();
+        return std::make_shared<DefferedSceneRenderer>();
     }
 
     RenderModule::RenderModule() = default;
@@ -73,20 +74,43 @@ namespace Renderer {
         depthDesc.Format = RHI::ERHIFormat::D32_Float;
         depthDesc.Width = ColorTex->GetRHI()->GetDesc().Width;
 		depthDesc.Height = ColorTex->GetRHI()->GetDesc().Height;
-        depthDesc.Usage = RHI::ERHITextureCreateFlag::DepthStencil;
+        depthDesc.Usage = RHI::ERHITextureCreateFlag::DepthStencil | RHI::ERHITextureCreateFlag::ShaderResource;
         auto PoolDepthTarget = GRenderTargetPool.GetFreeRenderTarget(depthDesc);
 		PoolDepthTarget->MarkUsed(true);
 		auto depthText = builder.RegisterExternalTexture("DepthTarget", PoolDepthTarget.get());
-
+        //构建Gbuffer
+        auto gbufferInfo = CreateGBufferInfo({});
+        std::vector<RenderCore::RenderGraphTextureRef> gbuffers;
+        std::vector<PooledRenderTarget*> GbufferTargets;
+        for (int i = 0; i < gbufferInfo.NumTargets; i++) {
+            PoolRenderTargetDesc gbufferDesc;
+            gbufferDesc.Format = gbufferInfo.Targets[i].TargetFormat;
+            gbufferDesc.Width = ColorTex->GetRHI()->GetDesc().Width;
+            gbufferDesc.Height = ColorTex->GetRHI()->GetDesc().Height;
+            gbufferDesc.Usage = RHI::ERHITextureCreateFlag::RenderTarget | RHI::ERHITextureCreateFlag::ShaderResource;
+            auto PoolGbufferTarget = GRenderTargetPool.GetFreeRenderTarget(gbufferDesc);
+            PoolGbufferTarget->MarkUsed(true);
+            GbufferTargets.push_back(PoolGbufferTarget.get());
+            auto gbufferText = builder.RegisterExternalTexture(std::string("GBufferTarget") + std::to_string(i), PoolGbufferTarget.get());
+            gbuffers.push_back(gbufferText);
+        }
+        
         auto sceneRenderer = CreateSceneRenderer();
         sceneRenderer->Scene =  dynamic_cast<Scene*>(Views->Scene);
         sceneRenderer->Views = Views;
         sceneRenderer->SceneTextures.SceneColor = sceneColorTexture;
         sceneRenderer->SceneTextures.SceneDepth = depthText;
+        sceneRenderer->SceneTextures.GBufferA = gbuffers[0];
+        sceneRenderer->SceneTextures.GBufferB = gbuffers[1];
+        sceneRenderer->SceneTextures.GBufferC = gbuffers[2];
+
         sceneRenderer->Build(builder);
         
         builder.Execute();
         PoolDepthTarget->MarkUsed(false);
+        for (auto gTarget : GbufferTargets) {
+            gTarget->MarkUsed(false);
+        }
     }
     Engine::SceneInterface* RenderModule::AllocateScene() {
         return new Scene();
@@ -122,7 +146,7 @@ namespace Renderer {
         RHI::RHIComputeCommandList cmdlist(computeContex);
         cmdlist.SetImmediate(true);
         cmdlist.Begin();
-        float roughnessStep = 1 / 6.0;
+        float roughnessStep = 1 / 5.0;
         //计算镜面反射预计算贴图
 		for (uint32_t mip = 0; mip < 6; mip++) {
 

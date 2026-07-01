@@ -128,6 +128,7 @@ namespace App {
         sceneView.ViewMatrix = view;
         sceneView.ProjectionMatrix = proj;
         sceneView.ViewProjectionMatrix = proj * view;
+		sceneView.InvViewProjectionMatrix = Core::Inverse(sceneView.ViewProjectionMatrix);
         sceneView.Viewport.width = InViewport->GetWidth();
         sceneView.Viewport.height = InViewport->GetHeight();
         family.Scene = scene;

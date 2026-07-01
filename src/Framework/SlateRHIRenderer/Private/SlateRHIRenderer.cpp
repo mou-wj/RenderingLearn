@@ -35,8 +35,8 @@ namespace SlateRHIRenderer {
         widgets.push_back(windowWidget);
         auto computeTransitionContex = RHI::GRHIApi->GetQueue(EQueueType::Compute)->AcquireCommandContext();
         RHIComputeCommandList computeTransitionCmd(dynamic_cast<RHIComputeContex*>(computeTransitionContex));
-        computeTransitionCmd.SetImmediate(false);
-        computeTransitionCmd.Begin();
+        computeTransitionCmd.SetImmediate(true);
+        
 		auto graphicTransitionContex = RHI::GRHIApi->GetQueue(EQueueType::Graphics)->AcquireCommandContext();
         RHIGraphicCommandList graphicTransitionCmd(dynamic_cast<RHIGraphicContex*>(graphicTransitionContex));
         graphicTransitionCmd.SetImmediate(true);
@@ -65,7 +65,10 @@ namespace SlateRHIRenderer {
 					graphicValidFinish.Value = CORE_MAX(graphicValidFinish.Value, value);
                 }
                 else if (lastQueue == EQueueType::Compute) {
-                    TransitionResource(RHI::GRHIApi, computeTransitionCmd, widgetTeture->GetRHI(), widgetTeture->GetTracker().GetSubresourceAccess(RHI::RHISubresourceRange{}), ERHIResourceAccess::TransferSrc, lastQueue, lastQueue);
+                    if (!hasCompute) {
+                        computeTransitionCmd.Begin();
+                    }
+                    TransitionResource(RHI::GRHIApi, computeTransitionCmd, widgetTeture->GetRHI(), widgetTeture->GetTracker().GetSubresourceAccess(RHI::RHISubresourceRange{}), ERHIResourceAccess::TransferSrc, lastQueue, RHI::EQueueType::Graphics);
 					hasCompute = true;
                     computeValidFinish.Value = CORE_MAX(computeValidFinish.Value, value);
                 }

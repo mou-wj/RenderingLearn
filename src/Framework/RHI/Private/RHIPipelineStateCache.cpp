@@ -178,6 +178,7 @@ size_t RHIPipelineStateCache::HashRasterizerState(const RHIRasterizerStateDesc& 
 
 size_t RHIPipelineStateCache::HashColorBlendState(const RHIColorBlendStateDesc& desc) {
     size_t hash = std::hash<bool>()(desc.logicOpEnable);
+    hash ^= std::hash<int>()(static_cast<int>(desc.attachments.size()));
     for (const auto& attachment : desc.attachments) {
         hash ^= std::hash<bool>()(attachment.blendEnable);
         hash ^= std::hash<uint32_t>()(attachment.colorWriteMask);

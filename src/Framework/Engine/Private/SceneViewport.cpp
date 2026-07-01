@@ -87,8 +87,8 @@ namespace Engine{
 
         desc.Type = ERHITextureType::Texture2D;
         desc.SampleCount = 1;
-        desc.Usage = ERHITextureCreateFlag::ShaderResource | ERHITextureCreateFlag::RenderTarget | ERHITextureCreateFlag::TransferSrc | ERHITextureCreateFlag::TransferDest;
-
+        desc.Usage = ERHITextureCreateFlag::ShaderResource | ERHITextureCreateFlag::RenderTarget | ERHITextureCreateFlag::TransferSrc | ERHITextureCreateFlag::TransferDest | ERHITextureCreateFlag::UAV;
+        desc.DebugName = "SceneViewportTarget";
         // 如果需要生成 Mips，确保 Usage 包含相应的 Flag (如 RenderTarget 或 UAV，取决于 RHI 实现)
         desc.bGenerateMips = false;
 

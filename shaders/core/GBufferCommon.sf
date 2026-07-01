@@ -1,0 +1,60 @@
+struct FGBufferOutput
+{
+    float4 GBufferA : SV_Target0;
+    float4 GBufferB : SV_Target1;
+    float4 GBufferC : SV_Target2;
+};
+
+
+void WriteBaseColor(
+    inout FGBufferOutput Out,
+    float3 Value)
+{
+    Out.GBufferA.rgb = Value;
+}
+
+void WriteMetallic(
+    inout FGBufferOutput Out,
+    float Value)
+{
+    Out.GBufferA.a = Value;
+}
+
+float3 EncodeNormal(float3 N)
+{
+    return N * 0.5 + 0.5;
+}
+
+void WriteNormal(
+    inout FGBufferOutput Out,
+    float3 Value)
+{
+    Out.GBufferB.rgb = EncodeNormal(Value);
+}
+
+void WriteRoughness(
+    inout FGBufferOutput Out,
+    float Value)
+{
+    Out.GBufferB.a = Value;
+}
+
+void WriteSpecular(
+    inout FGBufferOutput Out,
+    float Value)
+{
+    Out.GBufferC.r = Value;
+}
+
+void WriteAO(
+    inout FGBufferOutput Out,
+    float Value)
+{
+    Out.GBufferC.g = Value;
+}
+void WriteShadingModelId(
+    inout FGBufferOutput Out,
+    uint Value)
+{
+   Out.GBufferC.b = Value / 255.0;
+}

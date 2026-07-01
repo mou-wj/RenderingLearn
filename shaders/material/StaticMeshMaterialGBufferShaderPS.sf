@@ -1,15 +1,14 @@
 #include "/Generated/VertexFactory.sf"
-
+#include "/core/GBufferCommon.sf"
 #define SHADINGMODEL_UNLIT   0
 #define SHADINGMODEL_LIT 1
-#include "/Generated/ShaderParameters/StaticMeshMaterialShaderPSParameters.sf"
 #if MATERIAL_SHADING_MODEL == SHADINGMODEL_LIT
 #include "/core/MaterialParametersHelper.sf"
-#include "/core/SceneParametersHelper.sf"
 #endif 
 
-float4 MainPS(VertexFactoryVSToPS Input) : SV_Target0
+FGBufferOutput MainPS(VertexFactoryVSToPS Input) : SV_Target0
 {
+    FGBufferOutput Out = (FGBufferOutput)0;
     /*
     ===========================================================================
         Reconstruct Stable Shading Semantic
@@ -36,16 +35,17 @@ float4 MainPS(VertexFactoryVSToPS Input) : SV_Target0
     if(!HasMaterialTexture(MATERIAL_TEXTURE_NORMAL)){
         Material.NormalTS = Context.WorldNormal;
     }
-    float3 Lighting = EvaluateSceneLighting(Context,Material);
-    return float4(Lighting, 1.0);
+    WriteBaseColor(Out, Material.BaseColor);
+    WriteMetallic(Out, Material.Metallic);
+    WriteNormal(Out, Material.NormalTS);
+    WriteRoughness(Out, Material.Roughness);
+    WriteSpecular(Out, Material.Specular);
+    WriteAO(Out, Material.AmbientOcclusion);
+    WriteShadingModelId(Out, SHADINGMODEL_LIT);
 
 #elif MATERIAL_SHADING_MODEL == SHADINGMODEL_UNLIT
-
-    return float4(BaseColor, 1.0);
-
-#else
-
-    return float4(1, 0, 1, 1); // invalid shading model
-
+    WriteBaseColor(Out, BaseColor);
+    WriteShadingModelId(Out, SHADINGMODEL_UNLIT);
 #endif
+    return Out;
 }

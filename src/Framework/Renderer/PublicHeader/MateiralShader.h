@@ -7,10 +7,6 @@
 namespace Renderer
 {
 
-    class Material;
-    class MaterialShaderType;
-    class VertexFactoryType;
-
     /*
     ===============================================================================
 
@@ -25,11 +21,11 @@ namespace Renderer
 
     ===============================================================================
     */
-    class RENDERCORE_API MaterialShader : public RenderCore::Shader
+    class RENDERER_API MaterialShader : public RenderCore::Shader
     {
     public:
-        using ShaderMetaType = MaterialShaderType;
-        MaterialShader(const RenderCore::ShaderCompiledInitializer& Initializer)
+        using ShaderMetaType = Engine::MaterialShaderType;
+        MaterialShader(const ShaderMetaType::ShaderCompiledInitializer& Initializer)
             : Shader(Initializer)
         {
         }

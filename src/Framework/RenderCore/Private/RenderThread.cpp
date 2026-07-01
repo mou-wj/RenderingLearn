@@ -15,8 +15,6 @@ void RenderThread::Start() {
     if (bRunning.load()) return;
     bRunning.store(true);
     WorkerThread = std::thread(&RenderThread::ThreadFunc, this);
-    ImmediateQueue = RHI::GRHIApi ? RHI::GRHIApi->GetQueue(RHI::EQueueType::Graphics) : nullptr;
-    ImmediateCommandContex = ImmediateQueue ? ImmediateQueue->AcquireCommandContext() : nullptr;
 }
 
 void RenderThread::Stop() {
@@ -48,9 +46,9 @@ void RenderThread::ExecuteSync(const RenderCommand& cmd) {
     RenderCommand wrappedCmd = cmd;
     auto originalExecute = cmd.Execute;
 
-    wrappedCmd.Execute = [originalExecute, &promise](auto& commandList) {
+    wrappedCmd.Execute = [originalExecute, &promise]() {
         if (originalExecute) {
-            originalExecute(commandList);
+            originalExecute();
         }
         // ��Ⱦ����ִ����ϣ�֪ͨ�ȴ��߳�
         promise.set_value();
@@ -78,37 +76,25 @@ void RenderThread::ThreadFunc() {
             }
         }
         if (cmd.Execute) {
-            if (!ImmediateCommandContex || !ImmediateQueue)
-            {
-                continue;
-            }
-            auto* graphicContext = dynamic_cast<RHI::RHIGraphicContex*>(ImmediateCommandContex);
-            if (!graphicContext)
-            {
-                continue;
-            }
-            RHI::RHIGraphicCommandList immediateCommandList(graphicContext);
-            ImmediateCommandContex->Begin();
-            //cmd.Execute(immediateCommandList);
-            immediateCommandList.ExecuteAll();
-            ImmediateCommandContex->End();
-            ImmediateQueue->ExecuteContext(ImmediateCommandContex);
-            immediateCommandList.Clear();
+            cmd.Execute();
         }
         CmdFinishCV.notify_one();
     }
 }
 
 RenderThread Instance;
+RenderThread RHIInstance;
 
 bool StartRenderThread() 
 {
-	Instance.Start();
+    Instance.Start();
+    RHIInstance.Start();
 	return true;
 }
 
 bool StopRenderThread() 
 {
+    RHIInstance.Stop();
 	Instance.Stop();
 	return true;
 }
@@ -118,10 +104,16 @@ void EnqueueRenderCommand(const RenderCommand& cmd)
     Instance.EnqueueCommand(cmd);
 }
 
-void EnqueueRenderCommand(const std::string& cmdName, const std::function<void(RHI::RHICommandListBase&)>& cmdFunc)
+void EnqueueRenderCommand(const std::string& cmdName, const std::function<void()>& cmdFunc)
 {
 	RenderCommand namedCmd(cmdName, cmdFunc);
 	EnqueueRenderCommand(namedCmd);
+}
+
+RENDERCORE_API void EnqueueRHICommand(const std::string& cmdName, const std::function<void()>& cmdFunc)
+{
+    RenderCommand namedCmd(cmdName, cmdFunc);
+    RHIInstance.EnqueueCommand(namedCmd);
 }
 
 RENDERCORE_API void ExecuteSync(const RenderCommand& cmd)
@@ -129,7 +121,7 @@ RENDERCORE_API void ExecuteSync(const RenderCommand& cmd)
     Instance.ExecuteSync(cmd);
 }
 
-RENDERCORE_API void ExecuteSync(const std::string& cmdName, const std::function<void(RHI::RHICommandListBase&)>& cmdFunc)
+RENDERCORE_API void ExecuteSync(const std::string& cmdName, const std::function<void()>& cmdFunc)
 {
     RenderCommand namedCmd(cmdName, cmdFunc);
     ExecuteSync(namedCmd);
