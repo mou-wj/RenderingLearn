@@ -33,7 +33,7 @@ namespace Engine {
         virtual ~PrimitiveSceneProxy();
 
         int32_t GetPrimitiveId() const { return PrimitiveId; }
-        const Core::AABB& GetBounds() const { return ProxyBounds; }
+        const Core::BoxSphereBounds& GetBounds() const { return ProxyBounds; }
         const Core::Mat4& GetLocalToWorld() const { return LocalToWorld; }
         const Core::Mat4& GetWorldToLocal() const { return WorldToLocal; }
 
@@ -46,7 +46,7 @@ namespace Engine {
         DECLARE_TYPE_ID_BASE_TYPE(PrimitiveSceneProxy)
     protected:
         int32_t PrimitiveId;
-        Core::AABB ProxyBounds;
+        Core::BoxSphereBounds ProxyBounds;
         Core::Mat4 LocalToWorld;
 		Core::Mat4 WorldToLocal;
 

@@ -32,7 +32,7 @@ namespace Engine
 
         bool IsCastShadow()
             const;
-
+        bool bUpdateCastShadow = false;
     protected:
         Core::Float3 Position =
             Core::Float3(

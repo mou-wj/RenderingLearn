@@ -7,7 +7,7 @@
 #include "SceneShaderParameters.h"
 #include "MaterialShaderParameter.h"
 #include "MateiralShader.h"
-#include "LocalVertexFactory.h"
+#include "ShaderParameter.h"
 
 namespace Renderer
 {
@@ -128,6 +128,30 @@ namespace Renderer
         {
             return StaticMeshMaterialDefferedShadingCSParameters::GetMetaData();
         }
+    };
+
+    BEGIN_SHADER_PARAMETER_STRUCT(StaticMeshMaterialLightShadowPassPSParameters)
+        SHADER_PARAMETER_STRUCT_REFERENCE(Engine::LocalVertexFactoryParameters, vertexFactoryParameters)
+        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
+    END_SHADER_PARAMETER_STRUCT(StaticMeshMaterialLightShadowPassPSParameters)
+    /*
+    ===============================================================================
+        StaticMeshMaterialLightShadowPassPS
+    ===============================================================================
+    */
+    class StaticMeshMaterialLightShadowPassPS : public MeshMaterialShader
+    {
+    public:
+        DECLARE_MESH_MATERIAL_SHADER_TYPE(StaticMeshMaterialLightShadowPassPS)
+        static bool ShouldCompilePermutation(
+            const RenderCore::ShaderPermutationParameters& Parameters);
+
+        static void ModifyShaderCompilerEnvironment(
+            const RenderCore::ShaderPermutationParameters& Parameters,
+            RenderCore::ShaderCompilerEnvironment& OutEnvironment);
+
+        static const RenderCore::ShaderParametersMetadata*
+            GetShaderParameterMetadata();
     };
 
 }

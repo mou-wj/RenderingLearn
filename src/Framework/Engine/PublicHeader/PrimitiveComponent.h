@@ -39,7 +39,7 @@ namespace Engine {
 		bool bVisible;                      // visible / hidden
 
 		// ------------------ Scene linkage (GameThread only bookkeeping) ------------------
-		SceneInterface* OwnerScene;         // scene this component is registered with
+
 		PrimitiveSceneProxy* PendingSceneProxy;      // bookkeeping pointer on GameThread (RenderThread owns proxy)
 
 		// Debug

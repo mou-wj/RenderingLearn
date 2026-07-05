@@ -14,7 +14,9 @@ namespace Engine
     void LightSceneProxy::
         UpdateFromComponent()
     {
-        
+        if (Position != Component->GetWorldLocation()) {
+            bUpdateCastShadow = true;
+        }
         Position =
             Component->GetWorldLocation();
         Color =
@@ -53,7 +55,6 @@ namespace Engine
     {
         return bCastShadow;
     }
-
     DirectionalLightSceneProxy::
         DirectionalLightSceneProxy(
             const DirectionalLightComponent*
@@ -72,6 +73,9 @@ namespace Engine
         auto dir = static_cast<const DirectionalLightComponent*>(Component);
         if (dir)
         {
+            if (Direction != dir->GetDirection()) {
+                bUpdateCastShadow = true;
+            }
             Direction = dir->GetDirection();
         }
     }
@@ -156,6 +160,9 @@ namespace Engine
         OuterConeAngle =
             component->
             GetOuterConeAngle();
+        if(Direction != component->GetDirection()) {
+            bUpdateCastShadow = true;
+        }
         Direction = component->GetDirection();
         UpdateFromComponent();
     }

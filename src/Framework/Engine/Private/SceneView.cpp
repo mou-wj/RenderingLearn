@@ -118,7 +118,78 @@ namespace Engine {
         OutUniforms.CameraPos.z = CameraWorldPos.z;
         OutUniforms.CameraPos.w = 1.0f; // 常规齐次坐标预留
     }
+    static Core::Float3 UnprojectFromNDC(
+        const Core::Float4x4& invVP,
+        float x,
+        float y,
+        float z)
+    {
+        Core::Float4 p(x, y, z, 1.0f);
 
+        Core::Float4 world = invVP * p.Data;
+
+        if (std::abs(world.w) > 1e-6f)
+        {
+            world.x /= world.w;
+            world.y /= world.w;
+            world.z /= world.w;
+        }
+
+        return Core::Float3(world.x, world.y, world.z);
+    }
+    std::array<Core::Float3, 8> SceneView::GetFrustumCornersWS(float nearDepth, float farDepth) const {
+        std::array<Core::Float3, 8> corners;
+
+        //----------------------------------------
+        // 1. Full frustum corners in world space
+        //----------------------------------------
+        std::array<Core::Float3, 8> fullCorners;
+
+        // Near plane (z=0)
+        fullCorners[0] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, -1.f, 0.f);
+        fullCorners[1] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, -1.f, 0.f);
+        fullCorners[2] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, 1.f, 0.f);
+        fullCorners[3] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, 1.f, 0.f);
+
+        // Far plane (z=1)
+        fullCorners[4] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, -1.f, 1.f);
+        fullCorners[5] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, -1.f, 1.f);
+        fullCorners[6] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, 1.f, 1.f);
+        fullCorners[7] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, 1.f, 1.f);
+
+        //----------------------------------------
+        // 2. Convert depth -> ratio
+        //----------------------------------------
+        float nearRatio =
+            (nearDepth - NearClip) /
+            (FarClip - NearClip);
+
+        float farRatio =
+            (farDepth - NearClip) /
+            (FarClip - NearClip);
+
+        nearRatio = std::clamp(nearRatio, 0.0f, 1.0f);
+        farRatio = std::clamp(farRatio, 0.0f, 1.0f);
+
+        //----------------------------------------
+        // 3. Interpolate cascade corners
+        //----------------------------------------
+        for (uint32_t i = 0; i < 4; i++)
+        {
+            Core::Float3 nearCorner = fullCorners[i];
+            Core::Float3 farCorner = fullCorners[i + 4];
+
+            Core::Float3 ray = farCorner - nearCorner;
+
+            corners[i] =
+                nearCorner + ray * nearRatio;
+
+            corners[i + 4] =
+                nearCorner + ray * farRatio;
+        }
+
+        return corners;
+    }
 
 
     int SceneViewFamily::AddView(const SceneView& View)

@@ -80,6 +80,7 @@ namespace Engine {
         void BuildFrustum();
         bool IsBoxVisible(const Core::AABB& Box) const;
         void PackViewUniforms(ViewUniforms& OutUniforms) const;
+        std::array<Core::Float3, 8> GetFrustumCornersWS(float nearDepth,float farDepth) const;
     };
 
     /*

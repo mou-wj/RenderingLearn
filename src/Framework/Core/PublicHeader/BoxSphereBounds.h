@@ -97,6 +97,11 @@ struct CORE_API BoxSphereBounds {
 		Box.Merge(Other.Box);
 		Sphere = BoundingSphere::FromAABB(Box);
 	}
+
+	void SetEmpty() {
+        Box.SetEmpty();
+        Sphere = BoundingSphere();
+     }
 };
 
 } // namespace NSCore

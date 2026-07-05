@@ -24,7 +24,7 @@ namespace Renderer {
         for (auto view : views) {
             MeshBatchList DrawMeshBatches;
             std::vector<Engine::StaticMeshProxy*> proxys;
-            Scene->ForEachPrimitiveInView(view, [this, &builder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
+            Scene->ForEachPrimitive([this, &builder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
                 if (proxy->IsA<Engine::StaticMeshProxy>()) {
                     proxys.push_back(static_cast<Engine::StaticMeshProxy*>(proxy));
                 }

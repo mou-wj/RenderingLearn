@@ -8,6 +8,7 @@
 namespace Engine
 {
 	class SceneInterface;
+    // SceneComponent 为场景独有，一个scenecomponent不能加入到多个scneeinterface
     class ENGINE_API SceneComponent
     {
     public:
@@ -47,6 +48,7 @@ namespace Engine
         void SetWorldScale(
             const Core::Float3& scale);
 
+        SceneInterface* OwnerScene;         // scene this component is registered with
     public:
         const Core::Float3&
             GetLocalLocation() const;

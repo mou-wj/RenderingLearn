@@ -43,6 +43,13 @@ public:
     uint32_t GetMemoryTypeIndex() const { return memoryTypeIndex_; }
 
 private:
+    void MergeFreeList();
+    struct FreeRegion
+    {
+        VkDeviceSize offset;
+        VkDeviceSize size;
+    };
+    std::vector<FreeRegion> freeList_;
     VulkanDevice* device_;
     VkDeviceMemory memory_;
     VkDeviceSize size_;

@@ -1,0 +1,15 @@
+#include "/Generated/VertexFactory.sf"
+struct PSInput
+{
+    float4 Position : SV_Position;            
+    VertexFactoryVSToPS FactoryInterpolants; 
+};
+float4 MainPS(PSInput Input) : SV_Target0
+{
+    float4 Out;
+    float4 clipPos = Input.Position;
+    Out.r = clipPos.z / clipPos.w;
+    Out.g = Out.r * Out.r;
+    return Out;
+
+}

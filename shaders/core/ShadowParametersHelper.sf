@@ -1,0 +1,292 @@
+
+#include "/Generated/ShaderParameters/SceneLightShadowParameters.sf"
+
+
+#ifndef SHADOW_BIAS
+#define SHADOW_BIAS 0.0005
+#endif
+
+#ifndef SHADOW_FILTER_RADIUS
+#define SHADOW_FILTER_RADIUS 1
+#endif
+
+#define SHADOW_TYPE_NONE         0
+#define SHADOW_TYPE_SPOT         1
+#define SHADOW_TYPE_DIRECTIONAL  2
+#define SHADOW_TYPE_POINT        3
+
+
+//==========================================================
+// Common
+//==========================================================
+
+float2 ClipToUV(float2 clipXY)
+{
+    return clipXY * 0.5f + 0.5f;
+}
+
+//==========================================================
+// PCF
+//==========================================================
+
+float ShadowPCF2D(
+    Texture2D shadowTexture,
+    float2 uv,
+    float compareDepth)
+{
+    uint width;
+    uint height;
+
+    shadowTexture.GetDimensions(width, height);
+
+    float2 texelSize =
+        1.0 / float2(width, height);
+
+    float visibility = 0.0;
+    float sampleCount = 0.0;
+
+    [unroll]
+    for (int y = -SHADOW_FILTER_RADIUS; y <= SHADOW_FILTER_RADIUS; y++)
+    {
+        [unroll]
+        for (int x = -SHADOW_FILTER_RADIUS; x <= SHADOW_FILTER_RADIUS; x++)
+        {
+            float2 sampleUV =
+                uv +
+                float2(x, y) * texelSize;
+
+            float shadowDepth =
+                shadowTexture.SampleLevel(
+                    LinearClampSampler,
+                    sampleUV,
+                    0).r;
+
+            visibility +=
+                (compareDepth - SHADOW_BIAS <= shadowDepth) ? 1.0 : 0.0;
+
+            sampleCount += 1.0;
+        }
+    }
+
+    return visibility / sampleCount;
+}
+
+float ShadowPCFCube(
+    TextureCube shadowTexture,
+    float3 direction,
+    float compareDepth)
+{
+    float shadowDepth =
+        shadowTexture.SampleLevel(
+            LinearClampSampler,
+            direction,
+            0).r;
+
+    return
+        (compareDepth - SHADOW_BIAS <= shadowDepth)
+        ? 1.0
+        : 0.0;
+}
+
+//==========================================================
+// VSM (ռλ)
+//==========================================================
+
+float ShadowVSM2D(
+    Texture2D shadowTexture,
+    float2 uv,
+    float compareDepth)
+{
+    float2 moment =
+        shadowTexture.SampleLevel(
+            LinearClampSampler,
+            uv,
+            0).rg;
+
+    float mean = moment.x;
+    float mean2 = moment.y;
+
+    float variance =
+        max(mean2 - mean * mean, 0.00002);
+
+    float d =
+        compareDepth - mean;
+
+    float p =
+        variance /
+        (variance + d * d);
+
+    return saturate(p);
+}
+
+//==========================================================
+// Spot
+//==========================================================
+
+float ComputeSpotShadow(
+    uint lightIndex,
+    float3 worldPos)
+{
+    LightAccessInfo access =
+        LightShadowInfos[lightIndex];
+
+    AtlasTextureAccessInfo atlas =
+        AtlasTextureInfos[
+            access.AtlasInfoIndex];
+
+    float4 shadowPos =
+        mul(float4(worldPos, 1.0), atlas.ViewProj);
+
+    shadowPos.xyz /= shadowPos.w;
+
+    float2 uv =
+        ClipToUV(shadowPos.xy);
+
+    uv =
+        uv *
+        atlas.UVScale +
+        atlas.UVBias;
+
+    if (any(uv < 0.0) ||
+        any(uv > 1.0))
+    {
+        return 1.0;
+    }
+
+    float depth =
+        shadowPos.z;
+
+    return
+        ShadowPCF2D(
+            LightShadowAtlas,
+            uv,
+            depth);
+}
+
+//==========================================================
+// Directional
+//==========================================================
+
+float ComputeDirectionalShadow(
+    uint lightIndex,
+    float3 worldPos,
+    float cameraDepth)
+{
+    LightAccessInfo access =
+        LightShadowInfos[lightIndex];
+
+    uint cascade =
+        min(
+            (uint)cameraDepth,
+            access.CascadeCount - 1);
+
+    Texture2D shadowTex =
+        ParrallelLightShadows[
+            access.ShadowTextureIndex +
+            cascade];
+
+    float4 shadowPos =
+        mul(
+            float4(worldPos,1),
+            AtlasTextureInfos[
+                access.AtlasInfoIndex +
+                cascade].ViewProj);
+
+    shadowPos.xyz /= shadowPos.w;
+
+    float2 uv =
+        ClipToUV(shadowPos.xy);
+
+    if(any(uv<0)||any(uv>1))
+    {
+        return 1;
+    }
+
+    return
+        ShadowPCF2D(
+            shadowTex,
+            uv,
+            shadowPos.z);
+}
+
+//==========================================================
+// Point
+//==========================================================
+
+float ComputePointShadow(
+    uint lightIndex,
+    float3 worldPos,
+    float3 lightPos,
+    float radius)
+{
+    LightAccessInfo access =
+        LightShadowInfos[
+            lightIndex];
+
+    float3 dir =
+        worldPos -
+        lightPos;
+
+    float distance =
+        length(dir);
+
+    dir /= distance;
+
+    float depth =
+        distance /
+        radius;
+
+    return
+        ShadowPCFCube(
+            PointLightShadows[
+                access.ShadowTextureIndex],
+            dir,
+            depth);
+}
+
+//==========================================================
+// Unified Interface
+//==========================================================
+
+float ComputeShadowVisibility(
+    uint lightIndex,
+    float3 worldPos,
+    float cameraDepth,
+    float3 lightPosition,
+    float pointLightRadius)
+{
+    LightAccessInfo access =
+        LightShadowInfos[
+            lightIndex];
+
+    switch(access.ShadowType)
+    {
+    case SHADOW_TYPE_SPOT:
+
+        return
+            ComputeSpotShadow(
+                lightIndex,
+                worldPos);
+
+    case SHADOW_TYPE_DIRECTIONAL:
+
+        return
+            ComputeDirectionalShadow(
+                lightIndex,
+                worldPos,
+                cameraDepth);
+
+    case SHADOW_TYPE_POINT:
+
+        return
+            ComputePointShadow(
+                lightIndex,
+                worldPos,
+                lightPosition,
+                pointLightRadius);
+
+    default:
+
+        return 1.0;
+    }
+}

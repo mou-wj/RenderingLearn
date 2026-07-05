@@ -91,10 +91,13 @@ PipelineLayoutInfo VulkanGraphicsPipelineState::BuildPipelineLayoutInfo(const RH
                     vkType,
                     binding.Count,
                     stageMask);
-                PipelineLayoutInfo::ShaderResourceParameterLayoutInfo rpLayout;
-                rpLayout.SetIndex = binding.Set;
-                rpLayout.BindingIndex = binding.Binding;
-                freqInfo.ResourceParameterLayouts.push_back(rpLayout);
+                for (uint32_t i = 0; i < binding.Count; ++i) {
+                    PipelineLayoutInfo::ShaderResourceParameterLayoutInfo rpLayout;
+                    rpLayout.SetIndex = binding.Set;
+                    rpLayout.BindingIndex = binding.Binding + i;
+                    freqInfo.ResourceParameterLayouts.push_back(rpLayout);
+                }
+
             }
 
             for (const auto& binding : header.UniformBufferBindings) {
@@ -289,10 +292,13 @@ PipelineLayoutInfo VulkanComputePipelineState::BuildPipelineLayoutInfo(const RHI
             vkType,
             binding.Count,
             stageMask);
-        PipelineLayoutInfo::ShaderResourceParameterLayoutInfo rpLayout;
-        rpLayout.SetIndex = binding.Set;
-        rpLayout.BindingIndex = binding.Binding;
-        freqInfo.ResourceParameterLayouts.push_back(rpLayout);
+        for (uint32_t i = 0; i < binding.Count; ++i) {
+            PipelineLayoutInfo::ShaderResourceParameterLayoutInfo rpLayout;
+            rpLayout.SetIndex = binding.Set;
+            rpLayout.BindingIndex = binding.Binding + i;
+            freqInfo.ResourceParameterLayouts.push_back(rpLayout);
+        }
+
     }
 
     for (const auto& binding : header.UniformBufferBindings) {

@@ -29,7 +29,13 @@ namespace Renderer {
 
         }
     };
-
+    struct ShadowRenderView
+    {
+        ShadowAllocationSlice Allocation;
+        Core::Float4x4 ViewProjection;
+        uint32_t TargetWidth = 0;
+        uint32_t TargetHeight = 0;
+    };
     // SceneRenderer.h
     class SceneRenderer
     {
@@ -42,9 +48,11 @@ namespace Renderer {
 
         // һ֡��Ⱦ���
         virtual void Build(RenderCore::RenderGraphBuilder& graphBuilder) = 0;
-
+        void BuildSceneLightShadowMap(RenderCore::RenderGraphBuilder& graphBuilder);
+        void BuildSceneLightCascadeShadowMap(RenderCore::RenderGraphBuilder& graphBuilder,const Engine::SceneView& view);
+        void UploadShadowMapInfo(RenderCore::RenderGraphBuilder& graphBuilder);
     protected:
-        
+		void BuildLightShadow(RenderCore::RenderGraphBuilder& graphBuilder , std::vector<ShadowRenderView>& shadowRenderViews);
     };
     using SceneRendererSP = std::shared_ptr<SceneRenderer>;
 

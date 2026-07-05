@@ -282,7 +282,14 @@ namespace Core {
             : x(ix), y(iy), z(iz), w(iw)
         {
         }
-
+        Vec4(const std::array<T, 4>& data)
+            : Data(data)
+        {
+        }
+        Vec4(const Vec3<T>& v3,T iw)
+            : x(v3.x), y(v3.y), z(v3.z), w(iw)
+        {
+        }
         T& operator[](size_t i) { return Data[i]; }
         const T& operator[](size_t i) const { return Data[i]; }
 

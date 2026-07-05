@@ -158,11 +158,59 @@ namespace Renderer
         Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
     }
 
-        IMPLEMENT_MATERIAL_SHADER_TYPE(
-            StaticMeshMaterialDefferedShadingCS,
-            "StaticMeshMaterialDefferedShadingCS",
-            "/material/StaticMeshMaterialDefferedShadingCS.sf",
-            "MainCS",
-            RHI::ERHIShaderFrequency::Compute
-        );
+    IMPLEMENT_MATERIAL_SHADER_TYPE(
+        StaticMeshMaterialDefferedShadingCS,
+        "StaticMeshMaterialDefferedShadingCS",
+        "/material/StaticMeshMaterialDefferedShadingCS.sf",
+        "MainCS",
+        RHI::ERHIShaderFrequency::Compute
+    );
+    
+    
+    /*
+     ===============================================================================
+         StaticMeshMaterialLightShadowPassPS
+     ===============================================================================
+     */
+    
+    bool StaticMeshMaterialLightShadowPassPS::ShouldCompilePermutation(
+        const RenderCore::ShaderPermutationParameters& Parameters)
+    {
+        const MeshMaterialShaderPermutationParameters& MeshParams =
+            static_cast<const MeshMaterialShaderPermutationParameters&>(Parameters);
+    
+        if (MeshParams.VFType == nullptr)
+        {
+            return false;
+        }
+    
+        return true;
+    }
+    
+    void StaticMeshMaterialLightShadowPassPS::ModifyShaderCompilerEnvironment(
+        const RenderCore::ShaderPermutationParameters& Parameters,
+        RenderCore::ShaderCompilerEnvironment& OutEnvironment)
+    {
+        const MeshMaterialShaderPermutationParameters& MeshParams =
+            static_cast<const MeshMaterialShaderPermutationParameters&>(Parameters);
+    
+        OutEnvironment.SetDefine("PIXEL_SHADER", 1);
+        Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
+    }
+    
+    
+    
+    const RenderCore::ShaderParametersMetadata*
+        StaticMeshMaterialLightShadowPassPS::GetShaderParameterMetadata()
+    {
+        return StaticMeshMaterialGBufferShaderPSParameters::GetMetaData();
+    }
+    
+    IMPLEMENT_MESH_MATERIAL_SHADER_TYPE(
+        StaticMeshMaterialLightShadowPassPS,
+        "StaticMeshMaterialLightShadowPassPS",
+        "/material/StaticMeshMaterialLightShadowPassPS.sf",
+        "MainPS",
+        ERHIShaderFrequency::Fragment
+    )
 }

@@ -201,6 +201,7 @@ namespace RenderCore {
             bool IsReferenceStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::StructReference; }
             bool IsNestedStruct() const { return StructMetadata != nullptr && BaseType == EShaderParameterBaseType::StructNested; }
             bool IsResource() const { return (BaseType >= EShaderParameterBaseType::RDGTexture); }
+            bool IsArray() const { return (NumElements > 1); }
             bool IsRenderTargetSlots() const { return BaseType == EShaderParameterBaseType::RenderTargetSlots; }
         };
 		bool InitFlag = false;
@@ -320,7 +321,38 @@ struct ShaderParameterTypeInfo
         return nullptr;
     }
 };
+struct ShaderParameterElementAccessor {
+    virtual const uint8_t* GetElementOffset(uint32_t Index) const = 0;
+    virtual size_t GetElementCount() const = 0;
+};
+template<typename T, size_t InNumElements>
+struct ShaderParameterArray : public ShaderParameterElementAccessor,public std::array<T, InNumElements> {
+    const uint8_t* GetElementOffset(uint32_t Index) const override {
+        return (uint8_t*)&(*this)[Index];
+    }
+	size_t GetElementCount() const override {
+		return InNumElements;
+	}
+};
 
+template<typename T,size_t InNumElements>
+struct ShaderParameterArrayInfo
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Unknown;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 1;
+    static constexpr uint32_t NumElements = InNumElements;
+
+    static constexpr uint32_t Alignment = SHADER_PARAMETER_ALIGNMENT;
+    static constexpr bool bIsStoredInConstantBuffer = true;
+
+    using TAlignedType = ShaderParameterArray<T, InNumElements>;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata()
+    {
+        return nullptr;
+    }
+};
 template<>
 struct ShaderParameterTypeInfo<RenderCore::RenderGraphTexture>
 {
@@ -335,6 +367,8 @@ struct ShaderParameterTypeInfo<RenderCore::RenderGraphTexture>
 
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
 };
+template<size_t Count>
+using ShaderParameterTypeRDGTextureArray = ShaderParameterArrayInfo<RenderCore::RenderGraphTexture, Count>;
 
 template<>
 struct ShaderParameterTypeInfo<RenderCore::RenderGraphTextureUAV>
@@ -658,6 +692,12 @@ SHADER_PARAMETER_INTERNAL("",Name,ShaderParameterTypeInfo<ClassType>)
         TEXT(MemberTypeName),\
         MemberName, \
         ShaderParameterTypeInfo<RenderCore::RenderGraphTexture>)
+
+#define SHADER_PARAMETER_RDG_TEXTURE_ARRAY(MemberTypeName,MemberName,Count) \
+    SHADER_PARAMETER_INTERNAL( \
+        TEXT(MemberTypeName),\
+        MemberName, \
+        ShaderParameterTypeRDGTextureArray<Count>)
 
 #define SHADER_PARAMETER_SAMPLER(MemberName) \
     SHADER_PARAMETER_INTERNAL( \

@@ -3,6 +3,8 @@
 #include "SceneInterface.h"
 #include "RenderResource.h"
 #include "Flags.h"
+#include "ShadowMapAllocator.h"
+#include "BoxSphereBounds.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
@@ -83,6 +85,15 @@ namespace Renderer {
             Proxy;
     };
 
+    struct LightShadowInfo
+    {
+        ShadowAllocation Allocation;
+
+        std::vector<Core::Float4x4> ShadowMatrices;
+
+        bool bDirty = true;
+    };
+
     //====================================================
     // Scene Commands
     //====================================================
@@ -153,8 +164,15 @@ namespace Renderer {
         RenderCore::RenderTexture* IBLDiffuseTexture = nullptr;
         RenderCore::RenderTexture* IBLSpecularTexture = nullptr;
     };
+    struct SceneShadowResourceInfo
+    {
+        std::unordered_map<Engine::LightSceneProxy*, LightShadowInfo> LightShadowInfos;
+        RenderCore::RenderBufferSP LightShadowInfoBuffer = nullptr;
+        RenderCore::RenderBufferSP AtlasAccessInfoBuffer = nullptr;
+    };
     struct SceneGPUResourceInfo {
         SceneGPULightResourceInfo LightResourceInfo;
+        SceneShadowResourceInfo ShadowResourceInfo;
         ESceneGPUResourceDirtys DirtyFlags = ESceneGPUResourceDirty::None;
     };
 
@@ -183,12 +201,16 @@ namespace Renderer {
         void NotifyComponentChanged(Engine::SceneComponent* Component) override;
         
         
-        void ForEachPrimitiveInView(const Engine::SceneView& View, std::function<void(Engine::PrimitiveSceneProxy*)> Visitor);
+        void ForEachPrimitive(std::function<void(Engine::PrimitiveSceneProxy*)> Visitor);
 
         void ForEachLight(std::function<void(Engine::LightSceneProxy*)> Visitor);
 
         const SceneGPUResourceInfo& GetGPUResourceInfo() const;
+        ShadowMapAllocator& GetShadowMapAllocator();
+        const Core::BoxSphereBounds& GetSceneBounds() const;
+        LightShadowInfo& GetLightShadowInfo(Engine::LightSceneProxy* Light);
     private:
+		friend class SceneRenderer;
         void UpdateGPUResourceIfNeeded();
 
         //=========================================
@@ -207,6 +229,11 @@ namespace Renderer {
             LightSceneInfo>>
             LightInfos;
 
+        std::unordered_map<
+            Engine::LightSceneProxy*,
+            uint32_t>
+            LightIndexs;
+
         //=========================================
         // GT -> RT command queue
         //=========================================
@@ -218,5 +245,7 @@ namespace Renderer {
         std::mutex
             PendingCommandMutex;
         SceneGPUResourceInfo GPUResourceInfo;
+        ShadowMapAllocator ShadowMapAllocator;
+        Core::BoxSphereBounds SceneBounds;
     };
 } // namespace Renderer

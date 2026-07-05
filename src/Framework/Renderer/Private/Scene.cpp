@@ -46,6 +46,10 @@ namespace Renderer {
 
     Scene::Scene()
     {
+		ShadowMapAllocator.Initialize(
+			ShadowAllocatorDesc{
+				{ 4096, 4096 } // SpotShadowAtlas
+			});
     }
 
     Scene::~Scene()
@@ -281,7 +285,11 @@ namespace Renderer {
 
 		//build GPU resource info
         UpdateGPUResourceIfNeeded();
-
+        //update scene bounds
+        SceneBounds.SetEmpty();
+        for (auto& primitive : PrimitiveInfos) {
+            SceneBounds.Merge(primitive.second->GetProxy()->GetBounds());
+        }
     }
 
     void Scene::NotifyComponentChanged(SceneComponent* Component)
@@ -317,8 +325,7 @@ namespace Renderer {
         }
     }
 
-    void Scene::ForEachPrimitiveInView(
-        const Engine::SceneView&,
+    void Scene::ForEachPrimitive(
         std::function<void(
             Engine::PrimitiveSceneProxy*)>
         Visitor)
@@ -365,10 +372,26 @@ namespace Renderer {
         return GPUResourceInfo;
     }
 
+    ShadowMapAllocator& Scene::GetShadowMapAllocator()
+    {
+        return ShadowMapAllocator;
+    }
+
+    const Core::BoxSphereBounds& Scene::GetSceneBounds() const
+    {
+        return SceneBounds;
+    }
+
+    LightShadowInfo& Scene::GetLightShadowInfo(Engine::LightSceneProxy* Light)
+    {
+        return GPUResourceInfo.ShadowResourceInfo.LightShadowInfos[Light];
+    }
+
+
     void Scene::UpdateGPUResourceIfNeeded()
     {
         auto Dirty = GPUResourceInfo.DirtyFlags;
-
+        uint32_t lightIndex = 0;
         if (Dirty ==
             ESceneGPUResourceDirty
             ::None)
@@ -415,10 +438,14 @@ namespace Renderer {
                     Data;
                 Data.Common.Color = Proxy->GetColor();
                 Data.Common.Intensity = Proxy->GetIntensity();
+                Data.Common.LightId = lightIndex;
+                LightIndexs[Proxy] = lightIndex;
+                lightIndex++;
                 auto DirProxy = dynamic_cast<DirectionalLightSceneProxy*>(Proxy);
                 Data.Direction = DirProxy ? DirProxy->GetDirection() : Core::Float3(0.0f, -1.0f, 0.0f);
                 GPUData.emplace_back(
                     Data);
+                
             }
 
             LightRes.DirectionalLightCount = static_cast<uint32_t>(GPUData.size());
@@ -469,6 +496,9 @@ namespace Renderer {
                 Data.Common.Color = Proxy->GetColor();
                 Data.Common.Intensity = Proxy->GetIntensity();
                 Data.Position = Proxy->GetPosition();
+                Data.Common.LightId = lightIndex;
+                LightIndexs[Proxy] = lightIndex;
+                lightIndex++;
                 auto PointLightProxy = dynamic_cast<PointLightSceneProxy*>(Proxy);
                 Data.Radius = PointLightProxy->GetAttenuationRadius();
 
@@ -525,6 +555,9 @@ namespace Renderer {
                     Data;
                 Data.Common.Color = Proxy->GetColor();
                 Data.Common.Intensity = Proxy->GetIntensity();
+                Data.Common.LightId = lightIndex;
+                LightIndexs[Proxy] = lightIndex;
+                lightIndex++;
                 Data.Position = Proxy->GetPosition();
                 auto SpotLightProxy = dynamic_cast<SpotLightSceneProxy*>(Proxy);
                 Data.Radius = SpotLightProxy->GetAttenuationRadius();

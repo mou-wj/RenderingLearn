@@ -724,150 +724,167 @@ namespace RenderCore {
 
             if (Member.IsResource())
             {
-                // ============================
-                // Texture SRV
-                // ============================
-                if (Member.BaseType == EShaderParameterBaseType::RDGTexture_SRV)
-                {
-                    auto SRV = *reinterpret_cast<RenderGraphTextureSRV* const*>(MemberAddr);
+                std::vector<const uint8_t*> ResourcePtrs;
+                if (Member.IsArray()) {
+                    auto* Array = *reinterpret_cast<ShaderParameterElementAccessor* const*>(MemberAddr);
+                    ResourcePtrs.resize(Array->GetElementCount());
+                    for (uint32_t i = 0; i < Array->GetElementCount(); ++i) {
+                        ResourcePtrs[i] = Array->GetElementOffset(i);
+                    }
+                }
+                else {
+                    ResourcePtrs.push_back(MemberAddr);
+                }
+                for (uint32_t i = 0; i < ResourcePtrs.size(); ++i) {
 
-                    if (SRV)
+                    const uint8_t* MemberAddr = ResourcePtrs[i];
+                    // ============================
+                    // Texture SRV
+                    // ============================
+                    if (Member.BaseType == EShaderParameterBaseType::RDGTexture_SRV)
                     {
-                        auto* Tex = static_cast<RenderGraphTexture*>(SRV->Desc.Texture);
-                        const auto& Desc = SRV->Desc;
+                        auto SRV = *reinterpret_cast<RenderGraphTextureSRV* const*>(MemberAddr);
 
-                        RenderGraphPass::RenderGraphTextureIntent Intent;
-                        Intent.Texture = Tex;
-                        uint32_t mipSlice = Desc.FirstMipSlice;
-                        if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
-							mipSlice = RHISubresourceRange::kAllSubresources;
+                        if (SRV)
+                        {
+                            auto* Tex = static_cast<RenderGraphTexture*>(SRV->Desc.Texture);
+                            const auto& Desc = SRV->Desc;
+
+                            RenderGraphPass::RenderGraphTextureIntent Intent;
+                            Intent.Texture = Tex;
+                            uint32_t mipSlice = Desc.FirstMipSlice;
+                            if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
+                                mipSlice = RHISubresourceRange::kAllSubresources;
+                            }
+                            uint32_t arraySlice = Desc.FirstArraySlice;
+                            if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
+                                arraySlice = RHISubresourceRange::kAllSubresources;
+                            }
+
+                            Intent.SubresourceRange = RHISubresourceRange(
+                                mipSlice,
+                                arraySlice,
+                                RHISubresourceRange::kAllSubresources
+                            );
+
+                            // SRV → ReadOnly
+                            Intent.RequiredAccess = ERHIResourceAccess::SRV;
+
+                            Pass->AddTextureIntent(Intent);
                         }
-						uint32_t arraySlice = Desc.FirstArraySlice;
-						if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
-                            arraySlice = RHISubresourceRange::kAllSubresources;
+                    }
+                    // ============================
+                    // Texture UAV
+                    // ============================
+                    else if (Member.BaseType == EShaderParameterBaseType::RDGTexture_UAV)
+                    {
+                        auto UAV = *reinterpret_cast<RenderGraphTextureUAV* const*>(MemberAddr);
+
+                        if (UAV)
+                        {
+                            auto* Tex = static_cast<RenderGraphTexture*>(UAV->Desc.Texture);
+                            const auto& Desc = UAV->Desc;
+
+                            RenderGraphPass::RenderGraphTextureIntent Intent;
+                            Intent.Texture = Tex;
+                            uint32_t mipSlice = Desc.FirstMipSlice;
+                            if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
+                                mipSlice = RHISubresourceRange::kAllSubresources;
+                            }
+                            uint32_t arraySlice = Desc.FirstArraySlice;
+                            if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
+                                arraySlice = RHISubresourceRange::kAllSubresources;
+                            }
+                            Intent.SubresourceRange = RHISubresourceRange(
+                                mipSlice,
+                                arraySlice,
+                                RHISubresourceRange::kAllSubresources
+                            );
+
+                            // UAV → ReadWrite
+                            Intent.RequiredAccess = ERHIResourceAccess::UAV;
+
+                            Pass->AddTextureIntent(Intent);
                         }
-
-                        Intent.SubresourceRange = RHISubresourceRange(
-                            mipSlice,
-                            arraySlice,
-                            RHISubresourceRange::kAllSubresources
-                        );
-
-                        // SRV → ReadOnly
-                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
-
-                        Pass->AddTextureIntent(Intent);
                     }
-                }
-                // ============================
-                // Texture UAV
-                // ============================
-                else if (Member.BaseType == EShaderParameterBaseType::RDGTexture_UAV)
-                {
-                    auto UAV = *reinterpret_cast<RenderGraphTextureUAV* const*>(MemberAddr);
-
-                    if (UAV)
+                    // ============================
+                    // Texture (裸Texture，极少用)
+                    // ============================
+                    else if (Member.BaseType == EShaderParameterBaseType::RDGTexture)
                     {
-                        auto* Tex = static_cast<RenderGraphTexture*>(UAV->Desc.Texture);
-                        const auto& Desc = UAV->Desc;
+                        auto Tex = *reinterpret_cast<RenderGraphTexture* const*>(MemberAddr);
 
-                        RenderGraphPass::RenderGraphTextureIntent Intent;
-                        Intent.Texture = Tex;
-                        uint32_t mipSlice = Desc.FirstMipSlice;
-                        if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
-                            mipSlice = RHISubresourceRange::kAllSubresources;
+                        if (Tex)
+                        {
+                            RenderGraphPass::RenderGraphTextureIntent Intent;
+                            Intent.Texture = Tex;
+                            Intent.SubresourceRange = RHISubresourceRange(); // whole
+
+                            Intent.RequiredAccess = ERHIResourceAccess::SRV;
+
+                            Pass->AddTextureIntent(Intent);
                         }
-                        uint32_t arraySlice = Desc.FirstArraySlice;
-                        if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
-                            arraySlice = RHISubresourceRange::kAllSubresources;
+                    }
+
+                    // ============================
+                    // Buffer SRV
+                    // ============================
+                    else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer_SRV)
+                    {
+                        auto SRV = *reinterpret_cast<RenderGraphBufferSRV* const*>(MemberAddr);
+                        auto vDesc = SRV->Desc;
+                        if (SRV)
+                        {
+                            auto* Buf = static_cast<RenderGraphBuffer*>(SRV->Desc.Buffer);
+
+                            RenderGraphPass::RenderGraphBufferIntent Intent;
+                            Intent.Buffer = Buf;
+
+                            Intent.RequiredAccess = ERHIResourceAccess::SRV;
+
+                            Pass->AddBufferIntent(Intent);
                         }
-                        Intent.SubresourceRange = RHISubresourceRange(
-                            mipSlice,
-                            arraySlice,
-                            RHISubresourceRange::kAllSubresources
-                        );
-
-                        // UAV → ReadWrite
-                        Intent.RequiredAccess = ERHIResourceAccess::UAV;
-
-                        Pass->AddTextureIntent(Intent);
                     }
-                }
-                // ============================
-                // Texture (裸Texture，极少用)
-                // ============================
-                else if (Member.BaseType == EShaderParameterBaseType::RDGTexture)
-                {
-                    auto Tex = *reinterpret_cast<RenderGraphTexture* const*>(MemberAddr);
 
-                    if (Tex)
+                    // ============================
+                    // Buffer UAV
+                    // ============================
+                    else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer_UAV)
                     {
-                        RenderGraphPass::RenderGraphTextureIntent Intent;
-                        Intent.Texture = Tex;
-                        Intent.SubresourceRange = RHISubresourceRange(); // whole
+                        auto UAV = *reinterpret_cast<RenderGraphBufferUAV* const*>(MemberAddr);
+                        auto uavDesc = UAV->Desc;
+                        if (UAV)
+                        {
+                            auto* Buf = static_cast<RenderGraphBuffer*>(UAV->Desc.Buffer);
 
-                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
+                            RenderGraphPass::RenderGraphBufferIntent Intent;
+                            Intent.Buffer = Buf;
 
-                        Pass->AddTextureIntent(Intent);
+                            Intent.RequiredAccess = ERHIResourceAccess::UAV;
+
+                            Pass->AddBufferIntent(Intent);
+                        }
                     }
-                }
 
-                // ============================
-                // Buffer SRV
-                // ============================
-                else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer_SRV)
-                {
-                    auto SRV = *reinterpret_cast<RenderGraphBufferSRV* const*>(MemberAddr);
-                    auto vDesc = SRV->Desc;
-                    if (SRV)
+                    // ============================
+                    // Buffer（裸）
+                    // ============================
+                    else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer)
                     {
-                        auto* Buf = static_cast<RenderGraphBuffer*>(SRV->Desc.Buffer);
+                        auto Buf = *reinterpret_cast<RenderGraphBuffer* const*>(MemberAddr);
 
-                        RenderGraphPass::RenderGraphBufferIntent Intent;
-                        Intent.Buffer = Buf;
+                        if (Buf)
+                        {
+                            RenderGraphPass::RenderGraphBufferIntent Intent;
+                            Intent.Buffer = Buf;
 
-                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
+                            Intent.RequiredAccess = ERHIResourceAccess::SRV;
 
-                        Pass->AddBufferIntent(Intent);
+                            Pass->AddBufferIntent(Intent);
+                        }
                     }
-                }
 
-                // ============================
-                // Buffer UAV
-                // ============================
-                else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer_UAV)
-                {
-                    auto UAV = *reinterpret_cast<RenderGraphBufferUAV* const*>(MemberAddr);
-					auto uavDesc = UAV->Desc;
-                    if (UAV)
-                    {
-                        auto* Buf = static_cast<RenderGraphBuffer*>(UAV->Desc.Buffer);
 
-                        RenderGraphPass::RenderGraphBufferIntent Intent;
-                        Intent.Buffer = Buf;
-
-                        Intent.RequiredAccess = ERHIResourceAccess::UAV;
-
-                        Pass->AddBufferIntent(Intent);
-                    }
-                }
-
-                // ============================
-                // Buffer（裸）
-                // ============================
-                else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer)
-                {
-                    auto Buf = *reinterpret_cast<RenderGraphBuffer* const*>(MemberAddr);
-
-                    if (Buf)
-                    {
-                        RenderGraphPass::RenderGraphBufferIntent Intent;
-                        Intent.Buffer = Buf;
-
-                        Intent.RequiredAccess = ERHIResourceAccess::SRV;
-
-                        Pass->AddBufferIntent(Intent);
-                    }
                 }
             }
             else if (Member.IsReferenceStruct() || Member.IsIncludeStruct())

@@ -36,6 +36,7 @@ namespace App {
         pointLight->SetColor({ 1.0f, 0.5f, 0.2f });
         pointLight->SetIntensity(1.0f);
         pointLight->SetAttenuationRadius(10.0f);
+        pointLight->SetCastShadow(true);
         scene->AddLight(pointLight);
 
         // Create Spot Light
@@ -47,6 +48,7 @@ namespace App {
         spotLight->SetAttenuationRadius(15.0f);
         spotLight->SetInnerConeAngle(20.0f);
         spotLight->SetOuterConeAngle(45.0f);
+        spotLight->SetCastShadow(true);
         scene->AddLight(spotLight);
 
         // Create Sky Light

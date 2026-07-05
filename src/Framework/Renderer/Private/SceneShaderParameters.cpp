@@ -15,9 +15,6 @@ namespace Renderer {
         Out.LightParameters.PointLightCount = SceneLightResourceInfo.PointLightCount;
 		Out.LightParameters.SpotLightCount = SceneLightResourceInfo.SpotLightCount;
 		Out.LightParameters.DirectionalLightCount = SceneLightResourceInfo.DirectionalLightCount;
-        //Out.LightParameters.PointLightCount = 0;
-        //Out.LightParameters.SpotLightCount = 0;
-        //Out.LightParameters.DirectionalLightCount = 0;
         if (SceneLightResourceInfo.PointLightBuffer) {
             auto rdgB = Builder.RegisterExternalBuffer(
                 "PointLights",

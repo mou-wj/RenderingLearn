@@ -24,6 +24,7 @@ VulkanMemoryBlock::VulkanMemoryBlock(VulkanDevice* device, uint32_t memoryTypeIn
 
     if (mappable_)
         VKFunc::MapMemory(device_->GetHandle(), memory_, 0, VK_WHOLE_SIZE, 0, &mapped_);
+    freeList_.push_back({ 0, size_ });
 }
 
 VulkanMemoryBlock::~VulkanMemoryBlock()
@@ -35,30 +36,103 @@ VulkanMemoryBlock::~VulkanMemoryBlock()
 
 bool VulkanMemoryBlock::Allocate(VkDeviceSize size, VkDeviceSize alignment, VulkanAllocation& outAlloc)
 {
-    VkDeviceSize alignedOffset = (offset_ + alignment - 1) & ~(alignment - 1);
-    if (alignedOffset + size > size_)
-        return false;
+    // 1. 先在 free list 找合适的块
+    for (auto it = freeList_.begin(); it != freeList_.end(); ++it)
+    {
+        // 命中 free block
+        VkDeviceSize start = it->offset;
+        VkDeviceSize end = it->offset + it->size;
+    
+        VkDeviceSize alignedOffset =
+            (start + alignment - 1) & ~(alignment - 1);
+    
+        VkDeviceSize allocEnd = alignedOffset + size;
+    
+        if (allocEnd > end)
+            continue;
+    
+        // 切分前后两段
+        VkDeviceSize beforeSize = alignedOffset - start;
+        VkDeviceSize afterOffset = allocEnd;
+        VkDeviceSize afterSize = end - allocEnd;
+    
+        // 先删掉当前 block
+        it = freeList_.erase(it);
+    
+        // 插入 before
+        if (beforeSize > 0)
+            freeList_.push_back({ start, beforeSize });
+    
+        // 插入 after
+        if (afterSize > 0)
+            freeList_.push_back({ afterOffset, afterSize });
+    
+        // 返回分配
+        outAlloc = VulkanAllocation(
+            memory_,
+            alignedOffset,
+            size,
+            mapped_ ? static_cast<char*>(mapped_) + alignedOffset : nullptr
+        );
+    
+        return true;
+    }
+    
+    return false;
 
-    outAlloc = VulkanAllocation(memory_, alignedOffset, size, mapped_ ? static_cast<char*>(mapped_) + alignedOffset : nullptr);
-    offset_ = alignedOffset + size;
-    return true;
 }
 
 void VulkanMemoryBlock::Reset()
 {
     offset_ = 0;
+    freeList_.clear();
+    freeList_.push_back({ 0, size_ });
 }
 
 bool VulkanMemoryBlock::Free(VulkanAllocation& alloc)
 {
-    if (alloc.GetMemory() == memory_)
-    {
-        alloc = VulkanAllocation(); // 清空分配
-        return true;
-    }
-    return false;
-}
+    if (alloc.GetMemory() != memory_)
+        return false;
+    
+    freeList_.push_back({
+        alloc.GetOffset(),
+        alloc.GetSize()
+        });
+    
+    alloc = VulkanAllocation();
+    MergeFreeList();
+    return true;
 
+}
+void VulkanMemoryBlock::MergeFreeList()
+{
+    std::sort(freeList_.begin(), freeList_.end(),
+        [](auto& a, auto& b) { return a.offset < b.offset; });
+
+    std::vector<FreeRegion> merged;
+
+    for (auto& r : freeList_)
+    {
+        if (merged.empty())
+        {
+            merged.push_back(r);
+            continue;
+        }
+
+        auto& last = merged.back();
+
+        if (last.offset + last.size == r.offset)
+        {
+            last.size += r.size;
+        }
+        else
+        {
+            merged.push_back(r);
+        }
+    }
+
+    freeList_ = std::move(merged);
+}
 
 // VulkanMemoryManager
 VulkanMemoryManager::VulkanMemoryManager(VulkanDevice* device)

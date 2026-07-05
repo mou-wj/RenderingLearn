@@ -8,7 +8,7 @@ namespace Engine {
     // PrimitiveComponent implementation
     PrimitiveComponent::PrimitiveComponent()
         : LocalTransform(), WorldTransform(), Bounds(), Mobility(EMobility::Static),
-        bVisible(true), OwnerScene(nullptr), PendingSceneProxy(nullptr), DebugName(nullptr) {
+        bVisible(true), PendingSceneProxy(nullptr), DebugName(nullptr) {
     }
 
     PrimitiveComponent::~PrimitiveComponent() {
