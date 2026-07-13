@@ -196,6 +196,9 @@ namespace Renderer
     
         OutEnvironment.SetDefine("PIXEL_SHADER", 1);
         Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
+        PermutationDomain Domain;
+        Domain.SetFromId(Parameters.PermutationId);
+        Domain.ModifyCompilationEnvironment(OutEnvironment);
     }
     
     

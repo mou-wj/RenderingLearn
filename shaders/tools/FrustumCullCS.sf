@@ -1,0 +1,60 @@
+#include "/core/ShadingCommon.sf"
+
+#include "/Generated/ShaderParameters/FrustumCullParameters.sf"
+
+struct AABB
+{
+    float3 Min;
+    float3 Max;
+};
+
+bool IsAABBVisible(const AABB box, const float4x4 viewProj)
+{
+    // 逐面判断包围盒是否完全被裁剪
+    // NOTE: 为了保持简单，这里直接用 SIMD 风格的矩阵乘法
+    float4 corners[8];
+    corners[0] = float4(box.Min.x, box.Min.y, box.Min.z, 1.0);
+    corners[1] = float4(box.Max.x, box.Min.y, box.Min.z, 1.0);
+    corners[2] = float4(box.Min.x, box.Max.y, box.Min.z, 1.0);
+    corners[3] = float4(box.Max.x, box.Max.y, box.Min.z, 1.0);
+    corners[4] = float4(box.Min.x, box.Min.y, box.Max.z, 1.0);
+    corners[5] = float4(box.Max.x, box.Min.y, box.Max.z, 1.0);
+    corners[6] = float4(box.Min.x, box.Max.y, box.Max.z, 1.0);
+    corners[7] = float4(box.Max.x, box.Max.y, box.Max.z, 1.0);
+
+    uint insideMask = 0xFFFFFFFF;
+    for (int i = 0; i < 8; ++i)
+    {
+        float4 clip = mul(viewProj, corners[i]);
+        if (clip.w == 0.0)
+            continue;
+
+        float3 ndc = clip.xyz / clip.w;
+        uint mask = 0;
+        mask |= (ndc.x < -1.0) ? 1u : 0u;
+        mask |= (ndc.x >  1.0) ? 2u : 0u;
+        mask |= (ndc.y < -1.0) ? 4u : 0u;
+        mask |= (ndc.y >  1.0) ? 8u : 0u;
+        mask |= (ndc.z <  0.0) ? 16u : 0u;
+        mask |= (ndc.z >  1.0) ? 32u : 0u;
+        insideMask &= mask;
+    }
+
+    return insideMask == 0;
+}
+
+[numthreads(64, 1, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    uint index = DispatchThreadID.x;
+    if (index >= PrimitiveCount)
+        return;
+
+    AABB box;
+    box.Min = AABBs[index * 2 + 0].Min;
+    box.Max = AABBs[index * 2 + 0].Max;
+
+    // 这里 shader 需要一个可读 SRV，按平台语义包裹
+    bool visible = IsAABBVisible(box, ViewProjection);
+    VisibilityFlags[index] = visible ? 1u : 0u;
+}

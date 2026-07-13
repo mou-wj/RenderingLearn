@@ -69,7 +69,7 @@ public:
         : Contents(reinterpret_cast<const uint8_t*>(InContents))
         , Metadata(InMetadata)
     {
-        assert(Contents && Metadata);
+        
     }
 
     // 获取原始内存指针

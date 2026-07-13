@@ -286,19 +286,19 @@ void VulkanComputeContext::SetBatchedShaderParameters(RHIComputeShader* shader, 
         switch (resourceParam.Type)
         {
         case RHIShaderResourceParameter::EType::Texture:
-            PendingCompute->SetTexture(shaderType, resourceParam.Index, static_cast<VulkanTexture*>(resourceParam.GetResourceAs<RHITexture>()));
+            PendingCompute->SetTexture(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanTexture*>(resourceParam.GetResourceAs<RHITexture>()));
             break;
         case RHIShaderResourceParameter::EType::SRV:
-            PendingCompute->SetSRV(shaderType, resourceParam.Index, static_cast<VulkanShaderResourceView*>(resourceParam.GetResourceAs<RHIShaderResourceView>()));
+            PendingCompute->SetSRV(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanShaderResourceView*>(resourceParam.GetResourceAs<RHIShaderResourceView>()));
             break;
         case RHIShaderResourceParameter::EType::UAV:
-            PendingCompute->SetUAV(shaderType, resourceParam.Index, static_cast<VulkanUnorderedAccessView*>(resourceParam.GetResourceAs<RHIUnorderedAccessView>()));
+            PendingCompute->SetUAV(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanUnorderedAccessView*>(resourceParam.GetResourceAs<RHIUnorderedAccessView>()));
             break;
         case RHIShaderResourceParameter::EType::Sampler:
-            PendingCompute->SetSampler(shaderType, resourceParam.Index, static_cast<VulkanSampler*>(resourceParam.GetResourceAs<RHISampler>()));
+            PendingCompute->SetSampler(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanSampler*>(resourceParam.GetResourceAs<RHISampler>()));
             break;
         case RHIShaderResourceParameter::EType::UniformBuffer:
-            PendingCompute->SetUniformBuffer(shaderType, resourceParam.Index, static_cast<VulkanBuffer*>(resourceParam.GetResourceAs<RHIBuffer>()));
+            PendingCompute->SetUniformBuffer(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanBuffer*>(resourceParam.GetResourceAs<RHIBuffer>()));
             break;
         default:
             break;
@@ -393,19 +393,19 @@ void VulkanGraphicContext::SetBatchedShaderParameters(RHIGraphicShader* shader, 
         switch (resourceParam.Type)
         {
         case RHIShaderResourceParameter::EType::Texture:
-            PendingGfx->SetTexture(shaderType, resourceParam.Index, static_cast<VulkanTexture*>(resourceParam.GetResourceAs<RHITexture>()));
+            PendingGfx->SetTexture(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanTexture*>(resourceParam.GetResourceAs<RHITexture>()));
             break;
         case RHIShaderResourceParameter::EType::SRV:
-            PendingGfx->SetSRV(shaderType, resourceParam.Index, static_cast<VulkanShaderResourceView*>(resourceParam.GetResourceAs<RHIShaderResourceView>()));
+            PendingGfx->SetSRV(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanShaderResourceView*>(resourceParam.GetResourceAs<RHIShaderResourceView>()));
             break;
         case RHIShaderResourceParameter::EType::UAV:
-            PendingGfx->SetUAV(shaderType, resourceParam.Index, static_cast<VulkanUnorderedAccessView*>(resourceParam.GetResourceAs<RHIUnorderedAccessView>()));
+            PendingGfx->SetUAV(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanUnorderedAccessView*>(resourceParam.GetResourceAs<RHIUnorderedAccessView>()));
             break;
         case RHIShaderResourceParameter::EType::Sampler:
-            PendingGfx->SetSampler(shaderType, resourceParam.Index, static_cast<VulkanSampler*>(resourceParam.GetResourceAs<RHISampler>()));
+            PendingGfx->SetSampler(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanSampler*>(resourceParam.GetResourceAs<RHISampler>()));
             break;
         case RHIShaderResourceParameter::EType::UniformBuffer:
-            PendingGfx->SetUniformBuffer(shaderType, resourceParam.Index, static_cast<VulkanBuffer*>(resourceParam.GetResourceAs<RHIBuffer>()));
+            PendingGfx->SetUniformBuffer(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanBuffer*>(resourceParam.GetResourceAs<RHIBuffer>()));
             break;
         default:
             break;

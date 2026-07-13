@@ -89,5 +89,8 @@ void MainCS(uint3 DTid : SV_DispatchThreadID)
         default:
             break;
     }
+
+    uint x = AtlasTextureInfos[0].Layer;
+
     OutputColor[PixelPos] = float4(Lighting, 1);
 }

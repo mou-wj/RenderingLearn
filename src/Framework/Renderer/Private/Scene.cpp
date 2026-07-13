@@ -1,10 +1,12 @@
 #include "Scene.h"
+#include "SceneView.h"
 #include "PrimitiveSceneProxy.h"
 #include "PrimitiveComponent.h"
 #include "LightComponent.h"
 #include "LightSceneProxy.h"
 #include "SceneShaderParameters.h"
 #include <cstring>
+#include <algorithm>
 using namespace Engine;
 
 
@@ -37,6 +39,132 @@ namespace Renderer {
         :
         Proxy(std::move(InProxy))
     {
+    }
+
+    //====================================================
+    // SceneAccelerationStructure
+
+    void SceneAccelerationStructure::Clear()
+    {
+        Nodes.clear();
+        Primitives.clear();
+    }
+
+    void SceneAccelerationStructure::Build(const std::unordered_map<Engine::PrimitiveComponent*, std::unique_ptr<PrimitiveSceneInfo>>& PrimitiveInfos)
+    {
+        Primitives.clear();
+        Nodes.clear();
+
+        Primitives.reserve(PrimitiveInfos.size());
+        for (auto& Pair : PrimitiveInfos)
+        {
+            if (!Pair.second) continue;
+            if (!Pair.second->bVisible) continue;
+            auto* Proxy = Pair.second->GetProxy();
+            if (Proxy)
+            {
+                Primitives.push_back(Proxy);
+            }
+        }
+
+        if (Primitives.empty())
+        {
+            return;
+        }
+
+        Nodes.reserve(Primitives.size() * 2);
+        BuildNode(0, static_cast<int>(Primitives.size()));
+    }
+
+    int SceneAccelerationStructure::Partition(int Start, int Count, int Axis)
+    {
+        auto Compare = [Axis](Engine::PrimitiveSceneProxy* A, Engine::PrimitiveSceneProxy* B) {
+            const Core::AABB& ABox = A->GetBounds().Box;
+            const Core::AABB& BBox = B->GetBounds().Box;
+            float ACenter = (Axis == 0 ? (ABox.Min.x + ABox.Max.x) : (Axis == 1 ? (ABox.Min.y + ABox.Max.y) : (ABox.Min.z + ABox.Max.z)));
+            float BCenter = (Axis == 0 ? (BBox.Min.x + BBox.Max.x) : (Axis == 1 ? (BBox.Min.y + BBox.Max.y) : (BBox.Min.z + BBox.Max.z)));
+            return ACenter < BCenter;
+        };
+
+        int Mid = Start + Count / 2;
+        std::nth_element(Primitives.begin() + Start, Primitives.begin() + Mid, Primitives.begin() + Start + Count, Compare);
+        return Mid;
+    }
+
+    int SceneAccelerationStructure::BuildNode(int Start, int Count)
+    {
+        int NodeIndex = static_cast<int>(Nodes.size());
+        Nodes.emplace_back();
+        Node& Current = Nodes.back();
+        Current.Start = Start;
+        Current.Count = Count;
+        Current.LeftChild = -1;
+        Current.RightChild = -1;
+        Current.bLeaf = false;
+        Current.Bounds.SetEmpty();
+
+        for (int Index = Start; Index < Start + Count; ++Index)
+        {
+            Current.Bounds.Merge(Primitives[Index]->GetBounds());
+        }
+
+        if (Count <= 4)
+        {
+            Current.bLeaf = true;
+            return NodeIndex;
+        }
+
+        Core::Float3 Extent = Current.Bounds.Box.GetExtent();
+        int Axis = 0;
+        if (Extent.y > Extent.x) Axis = 1;
+        if (Extent.z > ((Axis == 0) ? Extent.x : Extent.y)) Axis = 2;
+
+        int Mid = Partition(Start, Count, Axis);
+        if (Mid <= Start || Mid >= Start + Count)
+        {
+            Current.bLeaf = true;
+            return NodeIndex;
+        }
+
+        Current.LeftChild = BuildNode(Start, Mid - Start);
+        Current.RightChild = BuildNode(Mid, Start + Count - Mid);
+        return NodeIndex;
+    }
+
+    void SceneAccelerationStructure::Query(const Engine::SceneView& View, std::vector<Engine::PrimitiveSceneProxy*>& OutPrimitives) const
+    {
+        if (Nodes.empty())
+        {
+            return;
+        }
+
+        auto QueryNode = [&](auto&& self, int NodeIndex) -> void {
+            const Node& Current = Nodes[NodeIndex];
+            if (!View.IsBoxVisible(Current.Bounds.Box))
+            {
+                return;
+            }
+
+            if (Current.bLeaf)
+            {
+                for (int Index = Current.Start; Index < Current.Start + Current.Count; ++Index)
+                {
+                    OutPrimitives.push_back(Primitives[Index]);
+                }
+                return;
+            }
+
+            if (Current.LeftChild != -1)
+            {
+                self(self, Current.LeftChild);
+            }
+            if (Current.RightChild != -1)
+            {
+                self(self, Current.RightChild);
+            }
+        };
+
+        QueryNode(QueryNode, 0);
     }
 
 
@@ -290,6 +418,8 @@ namespace Renderer {
         for (auto& primitive : PrimitiveInfos) {
             SceneBounds.Merge(primitive.second->GetProxy()->GetBounds());
         }
+        AccelerationStructure.Build(PrimitiveInfos);
+
     }
 
     void Scene::NotifyComponentChanged(SceneComponent* Component)
@@ -385,6 +515,66 @@ namespace Renderer {
     LightShadowInfo& Scene::GetLightShadowInfo(Engine::LightSceneProxy* Light)
     {
         return GPUResourceInfo.ShadowResourceInfo.LightShadowInfos[Light];
+    }
+
+    std::vector<Engine::PrimitiveSceneProxy*> Scene::GatherVisiblePrimitivesCPU(const Engine::SceneView& View) const
+    {
+        std::vector<Engine::PrimitiveSceneProxy*> Result;
+        Result.reserve(PrimitiveInfos.size());
+
+        if (AccelerationStructure.IsValid())
+        {
+            AccelerationStructure.Query(View, Result);
+            return Result;
+        }
+
+        for (const auto& Pair : PrimitiveInfos)
+        {
+            const PrimitiveSceneInfo* Info = Pair.second.get();
+            if (!Info || !Info->bVisible)
+            {
+                continue;
+            }
+            Engine::PrimitiveSceneProxy* Proxy = Info->GetProxy();
+            if (!Proxy)
+            {
+                continue;
+            }
+            if (View.IsBoxVisible(Proxy->GetBounds().Box))
+            {
+                Result.push_back(Proxy);
+            }
+        }
+        return Result;
+    }
+
+    std::vector<Engine::PrimitiveSceneProxy*> Scene::GatherVisiblePrimitivesGPU(const Engine::SceneView& View) const
+    {
+        std::vector<Engine::PrimitiveSceneProxy*> Result;
+        Result.reserve(PrimitiveInfos.size());
+
+        if (AccelerationStructure.IsValid())
+        {
+            AccelerationStructure.Query(View, Result);
+        }
+        else
+        {
+            return GatherVisiblePrimitivesCPU(View);
+        }
+
+        return Result;
+    }
+
+    std::vector<Engine::PrimitiveSceneProxy*> Scene::GatherVisiblePrimitives(const Engine::SceneView& View, Engine::SceneInterface::ECullingMethod Method) const
+    {
+        switch (Method)
+        {
+        case Engine::SceneInterface::ECullingMethod::GPU:
+            return GatherVisiblePrimitivesGPU(View);
+        case Engine::SceneInterface::ECullingMethod::CPU:
+        default:
+            return GatherVisiblePrimitivesCPU(View);
+        }
     }
 
 

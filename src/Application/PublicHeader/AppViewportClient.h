@@ -56,6 +56,7 @@ namespace App {
         Engine::SceneInterface* scene;
         std::shared_ptr<Engine::StaticMeshAsset> staticMeshAsset;
         Engine::StaticMeshComponent* staticMeshComponent;
+        Engine::StaticMeshComponent* staticMeshComponent2;
         Engine::SceneViewFamily family;
 
         Engine::DirectionalLightComponent* directionalLight;

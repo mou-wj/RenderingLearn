@@ -18,6 +18,7 @@ public:
 
     bool Init() override;
     void Shutdown() override;
+    const RHIPlatformInfo& GetPlatformInfo() const override;
     VkInstance GetInstance() const { return Instance; }
 
     RHITextureSP CreateTexture(const RHITextureDesc& desc) override;

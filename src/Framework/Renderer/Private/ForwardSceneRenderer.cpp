@@ -15,6 +15,13 @@ namespace Renderer {
     void ForwardSceneRenderer::Build(RenderCore::RenderGraphBuilder& builder)
     {
         auto SceneColorTargetTexture = SceneTextures.SceneColor;
+        //ClearRenderTarget
+		RenderTargetBindingSlots renderTargetBindingSlots;
+        renderTargetBindingSlots.NumColorRenderTargets = 1;
+        renderTargetBindingSlots[0].Texture = SceneTextures.SceneColor;
+        renderTargetBindingSlots.DepthStencil.Texture = SceneTextures.SceneDepth;
+        AddClearRenderTargetsPass(builder, renderTargetBindingSlots);
+
         auto sceneEnvMap = Scene->GetGPUResourceInfo().LightResourceInfo.IBLSpecularTexture;
         //本renderer绘制到DefferedOutputColor
         //获取所有static mesh primitive
@@ -58,8 +65,8 @@ namespace Renderer {
                 // 创建光栅化状态
                 RHI::RHIRasterizerStateDesc rasterizerDesc;
                 rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
-                rasterizerDesc.cullMode = RHI::ERHICullMode::None;
-                rasterizerDesc.frontFace = RHI::ERHIFrontFace::Clockwise;
+                rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
+                rasterizerDesc.frontFace = RHI::ERHIFrontFace::CounterClockwise;
                 rasterizerDesc.lineWidth = 1.0f;
                 rasterizerDesc.depthBiasEnable = false;
             
@@ -89,8 +96,8 @@ namespace Renderer {
                 //rendertarget info
                 pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
                 pipelineDesc.attachmentDesc.colorAttachments[0].format = RHI::ERHIFormat::R8G8B8A8_UNorm;
-                pipelineDesc.attachmentDesc.colorAttachments[0].actions = ERenderTargetActions::Clear_Store;
-                pipelineDesc.attachmentDesc.depthActions = ERenderTargetActions::Clear_Store;
+                pipelineDesc.attachmentDesc.colorAttachments[0].actions = ERenderTargetActions::Load_Store;
+                pipelineDesc.attachmentDesc.depthActions = ERenderTargetActions::Load_Store;
                 pipelineDesc.attachmentDesc.enableDepth = true;
                 pipelineDesc.attachmentDesc.depthStencilFormat = RHI::ERHIFormat::D32_Float;
             
@@ -102,96 +109,94 @@ namespace Renderer {
                 if (shdingMode == EShadingModel::Lit) {
                     //填充材质以及场景信息
                     BuildShaderParameters(Scene, builder, params->pixelParameters.Scene);
+                    UploadSplits(builder, view,&(params->pixelParameters.Scene.LightShadowParameters.SplitBuffer));
                     BuildShaderParameters(MeshBatch.MaterialProxy, builder, params->pixelParameters.Material);
                 }
             
-                for (auto& batch : DrawMeshBatches) {
-                    auto materialOwner = batch.MaterialProxy->GetParent();
+				auto& batch = MeshBatch;
+                auto materialOwner = batch.MaterialProxy->GetParent();
             
-                    //颜色混合
-                    if (materialOwner->GetBlendMode() == EBlendMode::Opaque)
-                    {
-                        RHI::RHIColorBlendStateDesc blendDesc;
-                        // 创建颜色混合状态
-                        RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
-                        blendAttachDesc.blendEnable = false;
-                        std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
-                        blendDesc.attachments = attachments;
-                        auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState;
-                    }
-                    else {
-                        RHI::RHIColorBlendStateDesc blendDesc;
-                        // 创建颜色混合状态
-                        RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
-                        blendAttachDesc.blendEnable = true;
-                        std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
-                        blendDesc.attachments = attachments;
-                        auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
-                        pipelineDesc.colorBlendState = colorBlendState;
-                    }
-                    auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
-                    
-                    // 参数
-            
-            
-                    params->vertexParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
-                    params->vertexParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
-                    //params->vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
-                    params->vertexParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
-                    //params->vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
-                    params->vertexParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
-                    params->pixelParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
-                    params->pixelParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
-                    //params->pixelParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
-                    params->pixelParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
-                    //params->pixelParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
-                    params->pixelParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
-                    params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
-                    params->pixelParameters.renderTargetSlots[0].Texture = SceneTextures.SceneColor;
-                    params->pixelParameters.renderTargetSlots.DepthStencil.Texture = SceneTextures.SceneDepth;
-            
-            
-                    // -------------------------------------
-                    // 添加 pass
-                    // -------------------------------------
-                    builder.AddPass<PassParameters>(
-                        "StaticMeshDrawPass",
-                        PassParameters::GetMetaData(),
-                        params,
-                        EPassFlag::Graphic,
-                        [=](RHI::RHICommandListBase& RHICmdList)
-                        {
-                            auto& cmd = static_cast<RHI::RHIGraphicCommandList&>(RHICmdList);
-                            PassParameters* materialParams = params;
-            
-                            cmd.SetGraphicPipelineState(pipeline);
-                            //绑定vertexfactory
-                            batch.VertexFactory->Bind(cmd);
-                            cmd.SetViewport(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height, 0.0f, 1.0f);
-                            cmd.SetScissor(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height);
-                            //设置vertex参数
-                            SetShaderParameters(cmd, vertexShader, &params->vertexParameters);
-            
-                            //设置pixel参数
-                            SetShaderParameters(cmd, pixelShader, &params->pixelParameters);
-                            auto boundRenderTarget = params->pixelParameters.renderTargetSlots.GetBoundRenderTarget();
-                            RHIRenderPassInfo passInfo;
-                            passInfo.RenderTargets = boundRenderTarget;
-                            passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;
-							passInfo.RenderArea.X = view.Viewport.x;
-                            passInfo.RenderArea.Y = view.Viewport.y;
-                            passInfo.RenderArea.Width = view.Viewport.width;
-                            passInfo.RenderArea.Height = view.Viewport.height;
-                            cmd.BeginRenderPass(passInfo);
-                            //绘制
-                            for (auto element : batch.Elements) {
-                                cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumIndices, element.NumInstances, element.FirstIndex, element.BaseVertexIndex, element.StartInstance);
-                            }
-                            cmd.EndRenderPass();
-                        }
-                    );
+                //颜色混合
+                if (materialOwner->GetBlendMode() == EBlendMode::Opaque)
+                {
+                    RHI::RHIColorBlendStateDesc blendDesc;
+                    // 创建颜色混合状态
+                    RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
+                    blendAttachDesc.blendEnable = false;
+                    std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
+                    blendDesc.attachments = attachments;
+                    auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
+                    pipelineDesc.colorBlendState = colorBlendState;
                 }
+                else {
+                    RHI::RHIColorBlendStateDesc blendDesc;
+                    // 创建颜色混合状态
+                    RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
+                    blendAttachDesc.blendEnable = true;
+                    std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
+                    blendDesc.attachments = attachments;
+                    auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
+                    pipelineDesc.colorBlendState = colorBlendState;
+                }
+                auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
+                
+                // 参数
+            
+            
+                params->vertexParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
+                params->vertexParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
+                params->vertexParameters.vertexFactoryParameters.LocalToWorld = batch.LocalToWorld;
+                params->vertexParameters.vertexFactoryParameters.WorldToLocal = batch.WorldToLocal;
+                params->pixelParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
+                params->pixelParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
+                params->pixelParameters.vertexFactoryParameters.LocalToWorld = batch.LocalToWorld;
+                params->pixelParameters.vertexFactoryParameters.WorldToLocal = batch.WorldToLocal;
+                params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
+                params->pixelParameters.renderTargetSlots[0].Texture = SceneTextures.SceneColor;
+                params->pixelParameters.renderTargetSlots[0].Action = ERenderTargetActions::Load_Store;
+                params->pixelParameters.renderTargetSlots.DepthStencil.Texture = SceneTextures.SceneDepth;
+                params->pixelParameters.renderTargetSlots.DepthStencil.DepthAction = ERenderTargetActions::Load_Store;
+            
+                // -------------------------------------
+                // 添加 pass
+                // -------------------------------------
+                builder.AddPass<PassParameters>(
+                    "StaticMeshDrawPass",
+                    PassParameters::GetMetaData(),
+                    params,
+                    EPassFlag::Graphic,
+                    [=](RHI::RHICommandListBase& RHICmdList)
+                    {
+                        auto& cmd = static_cast<RHI::RHIGraphicCommandList&>(RHICmdList);
+                        PassParameters* materialParams = params;
+            
+                        cmd.SetGraphicPipelineState(pipeline);
+                        //绑定vertexfactory
+                        batch.VertexFactory->Bind(cmd);
+                        cmd.SetViewport(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height, 0.0f, 1.0f);
+                        cmd.SetScissor(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height);
+                        //设置vertex参数
+                        SetShaderParameters(cmd, vertexShader, &params->vertexParameters);
+            
+                        //设置pixel参数
+                        SetShaderParameters(cmd, pixelShader, &params->pixelParameters);
+                        auto boundRenderTarget = params->pixelParameters.renderTargetSlots.GetBoundRenderTarget();
+                        RHIRenderPassInfo passInfo;
+                        passInfo.RenderTargets = boundRenderTarget;
+                        passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;
+						passInfo.RenderArea.X = view.Viewport.x;
+                        passInfo.RenderArea.Y = view.Viewport.y;
+                        passInfo.RenderArea.Width = view.Viewport.width;
+                        passInfo.RenderArea.Height = view.Viewport.height;
+                        cmd.BeginRenderPass(passInfo);
+                        //绘制
+                        for (auto element : batch.Elements) {
+                            cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumIndices, element.NumInstances, element.FirstIndex, element.BaseVertexIndex, element.StartInstance);
+                        }
+                        cmd.EndRenderPass();
+                    }
+                );
+                
             
             
             }

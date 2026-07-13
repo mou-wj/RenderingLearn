@@ -7,8 +7,14 @@ struct PSInput
 float4 MainPS(PSInput Input) : SV_Target0
 {
     float4 Out;
-    float4 clipPos = Input.Position;
-    Out.r = clipPos.z / clipPos.w;
+    float depth = 0;
+#if DEPTH_STORE_MODE == 0
+    float4 clipPos = Input.FactoryInterpolants.ClipPosition;
+    depth = clipPos.z / clipPos.w;
+#elif DEPTH_STORE_MODE == 1
+    depth = distance(Input.FactoryInterpolants.WorldPosition,CameraWorldPosition);
+#endif
+    Out.r = depth;
     Out.g = Out.r * Out.r;
     return Out;
 

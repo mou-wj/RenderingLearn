@@ -56,7 +56,8 @@ namespace Renderer {
 
                 Batch.MaterialProxy =
                     material->GetRenderProxy();
-
+				Batch.LocalToWorld = mesh->GetLocalToWorld();
+                Batch.WorldToLocal = mesh->GetWorldToLocal();
                 Batch.IndexBuffer =
                     LOD.IndexBuffer
                     .Buffer.get();

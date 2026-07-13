@@ -854,6 +854,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         }
 
         uint32_t binding = compiler.get_decoration(ub.id, spv::DecorationBinding);
+        if (binding == 0) continue;
         uint32_t set = compiler.get_decoration(ub.id, spv::DecorationDescriptorSet);
 
         auto& type = compiler.get_type(ub.base_type_id);
@@ -924,7 +925,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-
+        if (binding == 0) continue;
         out.ParameterMap.AddParameterAllocation(
             name,
             static_cast<uint32_t>(set),
@@ -944,7 +945,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
-
+        if (binding == 0) continue;
         auto& type = compiler.get_type(sb.type_id);
 
         uint32_t arraySize = 1;
@@ -965,7 +966,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         std::string name = compiler.get_name(img.id);
         uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-
+        if (binding == 0) continue;
         out.ParameterMap.AddParameterAllocation(
             name, (uint32_t)set, (uint32_t)binding,1, EShaderParameterType::SRV
         );
@@ -978,7 +979,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-
+        if (binding == 0) continue;
         out.ParameterMap.AddParameterAllocation(
             name,
             static_cast<uint32_t>(set),
@@ -992,10 +993,10 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     for (const auto& sb : resourcesSC.storage_buffers)
     {
         std::string name = compiler.get_name(sb.id);
-
+        bool hasBinding = compiler.has_decoration(sb.id, spv::DecorationBinding);
         uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
-
+        if (binding == 0) continue;
         auto& type = compiler.get_type(sb.base_type_id);
         uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
 
@@ -1181,7 +1182,7 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
 
             info.Binding =
                 (uint16_t)compiler->get_decoration(res.id, spv::DecorationBinding);
-
+            if (info.Binding == 0) return;//binding为0表示没有使用，直接跳过
             info.Set =
                 (uint16_t)compiler->get_decoration(res.id, spv::DecorationDescriptorSet);
 

@@ -20,7 +20,7 @@ using namespace Engine;
 namespace Renderer {
 
     SceneRendererSP CreateSceneRenderer() {
-        return std::make_shared<DefferedSceneRenderer>();
+        return std::make_shared<ForwardSceneRenderer>();
     }
 
     RenderModule::RenderModule() = default;
@@ -107,6 +107,7 @@ namespace Renderer {
         for (auto& view : Views->GetViews()) {
             sceneRenderer->BuildSceneLightCascadeShadowMap(builder, view);
         }
+        sceneRenderer->UploadShadowMapInfo(builder);
         sceneRenderer->Build(builder);
         
         builder.Execute();

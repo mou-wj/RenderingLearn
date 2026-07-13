@@ -81,6 +81,7 @@ namespace RHIVulkan {
                 SetUniformBuffer(
                     setIndex,
                     binding,
+                    0,
                     uploader->GetCPUBufferHandle(),
                     BindingInfos.GPUOffset,
                     BindingInfos.Size);

@@ -142,6 +142,13 @@ namespace Renderer
     class StaticMeshMaterialLightShadowPassPS : public MeshMaterialShader
     {
     public:
+        static constexpr char Macro_DepthStoreMode[] = "DEPTH_STORE_MODE";
+
+        // 2. 定义变体维度（例如 3 种颜色转换模式）
+        using DepthStoreModeDim = RenderCore::FPermutationDimensionEnum<Macro_DepthStoreMode, 2>;
+
+        // 3. 定义变体域（Domain），可以包含多个维度
+        using PermutationDomain = RenderCore::ShaderPermutationDomain<DepthStoreModeDim>;
         DECLARE_MESH_MATERIAL_SHADER_TYPE(StaticMeshMaterialLightShadowPassPS)
         static bool ShouldCompilePermutation(
             const RenderCore::ShaderPermutationParameters& Parameters);

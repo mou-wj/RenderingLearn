@@ -36,6 +36,7 @@ struct VertexFactoryIntermediates
     float3x3 TangentToWorld;
     float2 TexCoord;
     float4 VertexColor;
+
 };
 
 #endif // VERTEX_SHADER
@@ -66,6 +67,7 @@ struct VertexFactoryVSToPS
 #endif
 
     float3 WorldPosition : TEXCOORD4;
+    float4 ClipPosition : TEXCOORD5;
 };
 
 #include "/core/ShadingContext.sf"
@@ -176,6 +178,7 @@ VSOutput GetVertexShaderOutput(VertexFactoryInput Input)
         GetVertexFactoryIntermediates(Input);
     Output.FactoryInterpolants = VertexFactoryGetVSToPS(Input, Intermediates);
     Output.Position = VertexFactoryGetClipPosition(Intermediates);
+    Output.FactoryInterpolants.ClipPosition = Output.Position;
     return Output;
 }
 
@@ -248,6 +251,7 @@ void VertexFactoryFillShadingContext(
     ---------------------------------------------------------------------------
     */
     Context.ViewDirection = normalize(CameraWorldPosition - Context.WorldPosition);
+    Context.CameraPosition = CameraWorldPosition;
 }
 
 #endif // PIXEL_SHADER

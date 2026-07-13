@@ -328,12 +328,21 @@ float3 ShadeSpotLight(
         dot(
             normalize(-Light.Direction),
             L);
-
-    float SpotFactor =
+    float SpotFactor = 0;
+    if (Cone < Light.OuterConeCos)
+    {
+        return 0.0;
+    }else if(Cone > Light.InnerConeCos){
+        SpotFactor = 1;
+    }else {
+        SpotFactor =
         smoothstep(
             Light.OuterConeCos,
             Light.InnerConeCos,
             Cone);
+    }
+
+
 
     float Attenuation =
         saturate(

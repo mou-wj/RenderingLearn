@@ -18,8 +18,12 @@ namespace App {
         staticMeshAsset = AssetManager::Get().LoadSync<StaticMeshAsset>(Core::GetProjectDir() + "/resources/glb/sphere.glb");
         staticMeshComponent = new StaticMeshComponent();
         staticMeshComponent->SetStaticMesh(staticMeshAsset->GetMesh());
+        staticMeshComponent2 = new StaticMeshComponent();
+        staticMeshComponent2->SetStaticMesh(staticMeshAsset->GetMesh());
         scene = GetRenderModuleInstance()->AllocateScene();
         scene->AddPrimitive(staticMeshComponent);
+        staticMeshComponent2->SetWorldLocation({ 3.0f, 3.0f, 3.0f });
+        scene->AddPrimitive(staticMeshComponent2);
 
         // Create Directional Light
         directionalLight = new DirectionalLightComponent();
@@ -32,7 +36,7 @@ namespace App {
 
         // Create Point Light
         pointLight = new PointLightComponent();
-        pointLight->SetWorldLocation({ -3.0f, 2.0f, 0.0f });
+        pointLight->SetWorldLocation({ 5.0f, 4.0f, 5.0f });
         pointLight->SetColor({ 1.0f, 0.5f, 0.2f });
         pointLight->SetIntensity(1.0f);
         pointLight->SetAttenuationRadius(10.0f);
@@ -59,17 +63,17 @@ namespace App {
 
         scene->FlushPendingUpdates();
 
-        camera.SetPosition({ 0.0f, 0.0f, -5.0f });
+        camera.SetPosition({ 2,2,2 });
         camera.SetTarget({ 0.0f, 0.0f, 0.0f });
         camera.SetUp({ 0.0f, 1.0f, 0.0f });
-        camera.SetPerspective(Core::DegToRad(45.0f), 1, 0.1f, 100.0f);
+        camera.SetPerspective(Core::DegToRad(45.0f), 1, 0.1f, 1000.0f);
     }
 
     void AppViewportClient::ReleaseResources()
     {
 		if (scene) {
 			scene->RemovePrimitive(staticMeshComponent);
-            
+            scene->RemovePrimitive(staticMeshComponent2);
             // Remove lights from scene
             if (directionalLight) {
                 scene->RemoveLight(directionalLight);
@@ -88,6 +92,8 @@ namespace App {
 		}
 		delete staticMeshComponent;
 		staticMeshComponent = nullptr;
+		delete staticMeshComponent2;
+		staticMeshComponent2 = nullptr;
         
         // Delete lights
         delete directionalLight;
@@ -127,15 +133,23 @@ namespace App {
         //���Ƴ���
         SceneView sceneView;
         sceneView.CameraWorldPos = camera.GetPosition();
+        sceneView.NearClip = camera.GetNearPlane();
+        sceneView.FarClip = camera.GetFarPlane();
         sceneView.ViewMatrix = view;
         sceneView.ProjectionMatrix = proj;
         sceneView.ViewProjectionMatrix = proj * view;
 		sceneView.InvViewProjectionMatrix = Core::Inverse(sceneView.ViewProjectionMatrix);
+        sceneView.IsDepthRangeZeroToOne = camera.GetDepthRangeMode() == Camera::ZeroToOne;
+        Float4 testPos = { -4.89f, 0.0f, 0.0f, 1.0f };
+        Float4 viewProjPos = sceneView.ViewProjectionMatrix * testPos.Data;
+        Float4 inverseViewProjPos = sceneView.InvViewProjectionMatrix * viewProjPos.Data;
+
         sceneView.Viewport.width = InViewport->GetWidth();
         sceneView.Viewport.height = InViewport->GetHeight();
         family.Scene = scene;
         family.ClearViews();
         family.AddView(sceneView);
+        family.BuildAllSplitDepths();
     }
     bool AppViewportClient::
         OnMouseButton(
@@ -289,6 +303,7 @@ namespace App {
         Core::Float3 forward;
 		forward = camera.GetTarget() - camera.GetPosition();
 
+        
         forward.x =
             std::cos(Yaw) *
             cosPitch;
@@ -299,7 +314,7 @@ namespace App {
         forward.z =
             std::sin(Yaw) *
             cosPitch;
-
+        
         forward =
             Core::Normalize(
                 forward);
@@ -315,9 +330,9 @@ namespace App {
         camera.SetPosition(
             position);
 
-        camera.SetUp(
-            { 0.0f, 1.0f, 0.0f });
-        camera.SetPerspective(Core::DegToRad(45.0f), 1, 0.1f, 100.0f);
+        //camera.SetUp(
+        //    { 0.0f, 1.0f, 0.0f });
+        //camera.SetPerspective(Core::DegToRad(45.0f), 1, 0.1f, 1000.0f);
         //Yaw = Core::DegToRad(90.0f);
         //Pitch = 0;
     }

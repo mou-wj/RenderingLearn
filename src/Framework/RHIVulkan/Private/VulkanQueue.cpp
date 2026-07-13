@@ -282,7 +282,7 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     submitInfo.pSignalSemaphores = &signalHandle;
 
     bool suc =VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
-    VKFunc::DeviceWaitIdle(device_->GetHandle());
+    
     VkDeviceFaultCountsEXT faultCounts{ VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT };
     //if (!suc) {
     //    VKFunc::GetDeviceFaultInfoEXT(device_->GetHandle(), &faultCounts, nullptr);
@@ -354,7 +354,7 @@ VulkanSemaphore* VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait
     
     // 提交空命令
     VKFunc::QueueSubmit(queue_, 1, &submitInfo, VK_NULL_HANDLE);
-    VKFunc::DeviceWaitIdle(device_->GetHandle());
+    
 
     PendingInfo pendingInfo{};
     pendingInfo.Cmds = {};

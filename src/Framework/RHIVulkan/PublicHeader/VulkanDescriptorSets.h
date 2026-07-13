@@ -152,6 +152,7 @@ namespace RHIVulkan {
 
         void WriteImage(VkDescriptorSet set,
             uint32_t binding,
+            uint32_t element,
             VkDescriptorType type,
             VkImageView view,
             VkImageLayout layout,
@@ -165,6 +166,7 @@ namespace RHIVulkan {
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             write.dstSet = set;
             write.dstBinding = binding;
+            write.dstArrayElement = element;
             write.descriptorType = type;
             write.descriptorCount = 1;
             write.pImageInfo = &info;
@@ -175,6 +177,7 @@ namespace RHIVulkan {
 
         void WriteBuffer(VkDescriptorSet set,
             uint32_t binding,
+            uint32_t element,
             VkDescriptorType type,
             VkBuffer buffer,
             VkDeviceSize offset,
@@ -188,6 +191,7 @@ namespace RHIVulkan {
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             write.dstSet = set;
             write.dstBinding = binding;
+            write.dstArrayElement = element;
             write.descriptorType = type;
             write.descriptorCount = 1;
             write.pBufferInfo = &info;
@@ -195,11 +199,12 @@ namespace RHIVulkan {
             Writes.push_back(write);
             Dirty = true;
         }
-        void WriteTexelBuffer(VkDescriptorSet set,uint32_t binding, VkDescriptorType type, VkBufferView view)
+        void WriteTexelBuffer(VkDescriptorSet set,uint32_t binding, uint32_t element, VkDescriptorType type, VkBufferView view)
         {
             VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             write.dstSet = set;
             write.dstBinding = binding;
+            write.dstArrayElement = element;
             write.descriptorType = type;
             write.descriptorCount = 1;
             BufferViews.push_back(view);

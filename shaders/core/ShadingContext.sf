@@ -11,6 +11,8 @@ struct ShadingContext
     float4 VertexColor;
 
     float3 ViewDirection;
+
+    float3 CameraPosition;
 };
 
 struct MaterialData

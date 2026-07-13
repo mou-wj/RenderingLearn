@@ -37,6 +37,8 @@ namespace RenderCore {
 
         uint32_t SampleCount = 1;
 
+        Core::Float4 ClearValue;
+
         bool IsValid() const
         {
             return Texture != nullptr;
@@ -118,9 +120,13 @@ namespace RenderCore {
                     DestSlot.ArraySlice = static_cast<int32_t>(SourceSlot.ArraySlice);
                     DestSlot.Actions = SourceSlot.Action;
                     DestSlot.SampleCount = SourceSlot.SampleCount;
-
+                    DestSlot.Actions = SourceSlot.Action;
                     // 设置清除标记类型
                     DestSlot.ClearBinding.Binding = RHI::RHIClearValueBinding::ClearValueBinding::Color;
+                    DestSlot.ClearBinding.Color[0] = SourceSlot.ClearValue.x;
+                    DestSlot.ClearBinding.Color[1] = SourceSlot.ClearValue.y;
+                    DestSlot.ClearBinding.Color[2] = SourceSlot.ClearValue.z;
+                    DestSlot.ClearBinding.Color[3] = SourceSlot.ClearValue.w;
                 }
             }
 
@@ -321,12 +327,14 @@ struct ShaderParameterTypeInfo
         return nullptr;
     }
 };
-struct ShaderParameterElementAccessor {
+class ShaderParameterElementAccessor {
+public:
     virtual const uint8_t* GetElementOffset(uint32_t Index) const = 0;
     virtual size_t GetElementCount() const = 0;
 };
 template<typename T, size_t InNumElements>
-struct ShaderParameterArray : public ShaderParameterElementAccessor,public std::array<T, InNumElements> {
+class ShaderParameterArray : public ShaderParameterElementAccessor,public std::array<T, InNumElements> {
+public:
     const uint8_t* GetElementOffset(uint32_t Index) const override {
         return (uint8_t*)&(*this)[Index];
     }
@@ -335,10 +343,10 @@ struct ShaderParameterArray : public ShaderParameterElementAccessor,public std::
 	}
 };
 
-template<typename T,size_t InNumElements>
+template<typename T,size_t InNumElements, RenderCore::EShaderParameterBaseType InBaseType>
 struct ShaderParameterArrayInfo
 {
-    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Unknown;
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = InBaseType;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = InNumElements;
@@ -368,7 +376,7 @@ struct ShaderParameterTypeInfo<RenderCore::RenderGraphTexture>
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
 };
 template<size_t Count>
-using ShaderParameterTypeRDGTextureArray = ShaderParameterArrayInfo<RenderCore::RenderGraphTexture, Count>;
+using ShaderParameterTypeRDGTextureArray = ShaderParameterArrayInfo<RenderCore::RenderGraphTexture*, Count, RenderCore::EShaderParameterBaseType::RDGTexture>;
 
 template<>
 struct ShaderParameterTypeInfo<RenderCore::RenderGraphTextureUAV>
@@ -384,7 +392,20 @@ struct ShaderParameterTypeInfo<RenderCore::RenderGraphTextureUAV>
 
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
 };
+template<>
+struct ShaderParameterTypeInfo<RenderCore::RenderGraphBufferSRV>
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RDGTexture_UAV;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 1;
+    static constexpr uint32_t NumElements = 0;
+    static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+    static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
 
+    using TAlignedType = RenderCore::RenderGraphBufferSRV*;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+};
 template<>
 struct ShaderParameterTypeInfo<RHI::RHISampler>
 {
@@ -711,6 +732,12 @@ SHADER_PARAMETER_INTERNAL("",Name,ShaderParameterTypeInfo<ClassType>)
         MemberName, \
         ShaderParameterTypeInfo<RenderCore::RenderGraphTextureUAV>)
 
+#define SHADER_PARAMETER_RDG_BUFFER_SRV(MemberTypeName,MemberName) \
+    SHADER_PARAMETER_INTERNAL( \
+        TEXT(MemberTypeName),\
+        MemberName, \
+        ShaderParameterTypeInfo<RenderCore::RenderGraphBufferSRV>)
+
 #define SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(MemberName) \
     SHADER_PARAMETER_INTERNAL( \
         "",\
@@ -743,6 +770,16 @@ SHADER_PARAMETER_INTERNAL( \
     "StructuredBuffer<"##TEXT(ElementType)##">",\
     Name, \
     RDGStructuredBufferTemplate<ElementType>)
+
+template<typename ElementType>
+using RDGRWStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RenderCore::RenderGraphBufferUAVRef>;
+
+#define SHADER_PARAMETER_RDG_RWSTRUCTURED_BUFFER( \
+    ElementType, Name) \
+SHADER_PARAMETER_INTERNAL( \
+    "RWStructuredBuffer<"##TEXT(ElementType)##">",\
+    Name, \
+    RDGRWStructuredBufferTemplate<ElementType>)
 
 #define SHADER_PARAMETER_RHI_TEXTURE(MemberTypeName,MemberName) \
     SHADER_PARAMETER_INTERNAL( \

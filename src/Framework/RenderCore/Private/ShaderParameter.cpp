@@ -92,19 +92,24 @@ namespace RenderCore {
             RHI::RHIShaderResourceParameter param;
             
             std::vector<const void*> resourcePtrs;
+            std::vector<uint32_t> arrayIndexs;
             if (Binding.ArraySize > 1) {
-                auto* Array = *reinterpret_cast<ShaderParameterElementAccessor* const*>(ResourcePtrLocation);
+                auto* Array = reinterpret_cast<const ShaderParameterElementAccessor*>(ResourcePtrLocation);
                 resourcePtrs.resize(Array->GetElementCount());
                 for (uint32_t i = 0; i < Array->GetElementCount(); ++i) {
                     resourcePtrs[i] = Array->GetElementOffset(i);
+                    arrayIndexs.push_back(i);
+                    
                 }
             }
             else {
                 resourcePtrs.push_back(ResourcePtrLocation);
+                arrayIndexs.push_back(0);
             }
             uint32_t innerIndex = 0;
             for (auto ResourcePtrLocation : resourcePtrs) {
-                param.Index = Binding.BindSlot + innerIndex;
+                param.Index = Binding.BindSlot;
+                param.ArrayIndex = arrayIndexs[innerIndex];
                 innerIndex++;
                 // 根据BaseType类型组装参数
                 switch (Binding.BaseType)

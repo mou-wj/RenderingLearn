@@ -7,12 +7,12 @@
 #include <vector>
 
 namespace Engine {
-    // Ç°ÖÃÉùÃ÷£ºÖ»ÉùÃ÷äÖÈ¾Ïß³Ì¿É¼ûµÄ´úÀí»òÊÓÍ¼½á¹¹
+    // Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½ß³Ì¿É¼ï¿½ï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼ï¿½á¹¹
     class PrimitiveComponent;
-    class PrimitiveSceneProxy; // ¶ÔÆëÖØ¹¹ºóµÄ Proxy Ãû³Æ
+    class PrimitiveSceneProxy; // ï¿½ï¿½ï¿½ï¿½ï¿½Ø¹ï¿½ï¿½ï¿½ï¿½ Proxy ï¿½ï¿½ï¿½ï¿½
     class LightComponent;
     class SceneComponent;
-    class SceneView;          // ¶ÔÆëäÖÈ¾ÊÓ¿ÚÌåÏµ
+    class SceneView;          // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½Ó¿ï¿½ï¿½ï¿½Ïµ
 
     using FrameIndex = uint64_t;
 
@@ -25,15 +25,20 @@ namespace Engine {
     /*
     ===============================================================================
         SceneInterface
-        ´¿Ğé»ùÀà£ºÃèÊöÁËäÖÈ¾Æ÷£¨Renderer£©ºÍäÖÈ¾Ïß³Ì´ÓÒ»¸ö³¡¾°ÊµÀıÖĞÌáÈ¡Êı¾İµÄËùÓĞÆõÔ¼
+        ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½à£ºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½ï¿½ï¿½ï¿½Rendererï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½ß³Ì´ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½İµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¼
     ===============================================================================
     */
     class ENGINE_API SceneInterface {
     public:
         virtual ~SceneInterface() = default;
 
+        enum class ECullingMethod : uint8_t {
+            CPU = 0,
+            GPU = 1
+        };
+
         // -------------------------------------------------------------------------
-        // ÓÎÏ·Ïß³Ì×é¼ş×¢²á½Ó¿Ú (ÊµÏÖÀàÄÚ²¿±ØĞë½«Æä°ü×°ÎªÃüÁîÍ¶µİµ½ Pending ¶ÓÁĞ)
+        // ï¿½ï¿½Ï·ï¿½ß³ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½Ó¿ï¿½ (Êµï¿½ï¿½ï¿½ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ë½«ï¿½ï¿½ï¿½×°Îªï¿½ï¿½ï¿½ï¿½Í¶ï¿½İµï¿½ Pending ï¿½ï¿½ï¿½ï¿½)
         // -------------------------------------------------------------------------
         virtual void AddPrimitive(PrimitiveComponent* Component) = 0;
         virtual void RemovePrimitive(PrimitiveComponent* Component) = 0;
@@ -41,5 +46,12 @@ namespace Engine {
         virtual void RemoveLight(LightComponent* Component) = 0;
         virtual void FlushPendingUpdates() = 0;
         virtual void NotifyComponentChanged(SceneComponent* Component) = 0;
+
+        // -------------------------------------------------------------------------
+        // å‰”é™¤æŸ¥è¯¢æ¥å£
+        // -------------------------------------------------------------------------
+        virtual std::vector<PrimitiveSceneProxy*> GatherVisiblePrimitivesCPU(const SceneView& View) const = 0;
+        virtual std::vector<PrimitiveSceneProxy*> GatherVisiblePrimitivesGPU(const SceneView& View) const = 0;
+        virtual std::vector<PrimitiveSceneProxy*> GatherVisiblePrimitives(const SceneView& View, ECullingMethod Method) const = 0;
     };
 } // namespace Engine

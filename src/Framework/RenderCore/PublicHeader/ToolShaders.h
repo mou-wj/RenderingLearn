@@ -53,6 +53,6 @@ namespace RenderCore {
         }
     };
 
-
+	
 
 } // namespace RenderCore

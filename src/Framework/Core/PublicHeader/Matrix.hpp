@@ -101,6 +101,16 @@ namespace Core
         constexpr T* Data() { return data.data(); }
         constexpr const T* Data() const { return data.data(); }
 
+        constexpr T* operator[](std::size_t row)
+        {
+            return data.data() + row * Cols;
+        }
+
+        constexpr const T* operator[](std::size_t row) const
+        {
+            return data.data() + row * Cols;
+        }
+
         // ------------------------------------------------------------
         // Identity (only for square matrices)
         // ------------------------------------------------------------

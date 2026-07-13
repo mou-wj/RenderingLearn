@@ -55,6 +55,8 @@ namespace Renderer {
 
         uint8_t LODIndex = 0;
         uint16_t MeshIdInPrimitive = 0;
+        Core::Mat4 LocalToWorld;
+        Core::Mat4 WorldToLocal;
 
         MeshBatch()
             : CastShadow(1)

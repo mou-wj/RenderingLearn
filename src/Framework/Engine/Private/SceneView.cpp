@@ -144,12 +144,16 @@ namespace Engine {
         // 1. Full frustum corners in world space
         //----------------------------------------
         std::array<Core::Float3, 8> fullCorners;
+        float nearP = 0;
+        if (!IsDepthRangeZeroToOne) {
+            nearP = -1.0f;
+        }
 
         // Near plane (z=0)
-        fullCorners[0] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, -1.f, 0.f);
-        fullCorners[1] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, -1.f, 0.f);
-        fullCorners[2] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, 1.f, 0.f);
-        fullCorners[3] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, 1.f, 0.f);
+        fullCorners[0] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, -1.f, nearP);
+        fullCorners[1] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, -1.f, nearP);
+        fullCorners[2] = UnprojectFromNDC(InvViewProjectionMatrix, 1.f, 1.f, nearP);
+        fullCorners[3] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, 1.f, nearP);
 
         // Far plane (z=1)
         fullCorners[4] = UnprojectFromNDC(InvViewProjectionMatrix, -1.f, -1.f, 1.f);
@@ -190,7 +194,28 @@ namespace Engine {
 
         return corners;
     }
+    void SceneView::BuildSplitDepths() {
+        
+        splitDepths[0] = NearClip;
+        splitDepths[4] = FarClip;
+        float lambda = 0.7f;
+        for (uint32_t i = 1; i < CascadeCount; i++)
+        {
+            //构建每个cascade深度
+            float p = float(i) / 4.0f;
 
+            float logSplit =
+                NearClip *
+                std::pow(FarClip / NearClip, p);
+
+            float linearSplit =
+                NearClip +
+                (FarClip - NearClip) * p;
+
+            splitDepths[i] =
+                Core::Lerp(linearSplit, logSplit, lambda);
+        }
+    }
 
     int SceneViewFamily::AddView(const SceneView& View)
     {
@@ -240,6 +265,12 @@ namespace Engine {
         for (auto& View : Views)
         {
             View.BuildFrustum();
+        }
+    }
+    void SceneViewFamily::BuildAllSplitDepths() {
+        for (auto& View : Views)
+        {
+            View.BuildSplitDepths();
         }
     }
 

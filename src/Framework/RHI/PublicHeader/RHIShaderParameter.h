@@ -29,6 +29,7 @@ namespace RHI
         RHIResource* Resource;
         EType Type; // Texture / Buffer / UAV / Sampler
         uint32_t Index = 0;
+        uint32_t ArrayIndex = 0;
 		template<typename T>
 		T* GetResourceAs() const
 		{

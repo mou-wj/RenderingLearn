@@ -18,6 +18,7 @@ namespace RHIVulkan{
         struct ShaderResourceParameterLayoutInfo {
             uint32_t SetIndex;
             uint32_t BindingIndex;
+            uint32_t DescriptorCount = 1;
         };
         struct ShaderUniformBufferLayoutInfo {
             uint32_t SetIndex;

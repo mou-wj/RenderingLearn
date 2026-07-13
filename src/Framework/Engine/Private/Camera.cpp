@@ -57,10 +57,16 @@ Camera::Camera()
     m_FarPlane(1000.f),
     m_ViewDirty(true),
     m_ProjectionDirty(true),
-    m_ViewProjectionDirty(true)
+    m_ViewProjectionDirty(true),
+    m_DepthRangeMode(EDepthRangeMode::ZeroToOne)
 {
 }
-
+void Camera::SetDepthRangeMode(EDepthRangeMode mode) {
+    m_DepthRangeMode = mode;
+}
+Camera::EDepthRangeMode Camera::GetDepthRangeMode() const {
+    return m_DepthRangeMode;
+}
 void Camera::SetPosition(
     const Core::Float3& position)
 {
@@ -174,12 +180,21 @@ void Camera::UpdateProjectionMatrix() const
     if (m_ProjectionType ==
         ProjectionType::Perspective)
     {
-        m_ProjectionMatrix =
-            Core::PerspectiveRH(
+        if (m_DepthRangeMode == EDepthRangeMode::ZeroToOne) {
+            m_ProjectionMatrix = Core::PerspectiveRH_ZO(
                 m_FovY,
                 m_Aspect,
                 m_NearPlane,
                 m_FarPlane);
+        }
+        else {
+            m_ProjectionMatrix = Core::PerspectiveRH_NO(
+                m_FovY,
+                m_Aspect,
+                m_NearPlane,
+                m_FarPlane);
+        }
+
     }
     else
     {
@@ -188,15 +203,25 @@ void Camera::UpdateProjectionMatrix() const
 
         float halfH =
             m_OrthoHeight * 0.5f;
-
-        m_ProjectionMatrix =
-            Core::OrthoRH(
+        if (m_DepthRangeMode == EDepthRangeMode::ZeroToOne) {
+            m_ProjectionMatrix =
+                Core::OrthoRH_ZO(
+                    -halfW,
+                    halfW,
+                    -halfH,
+                    halfH,
+                    m_NearPlane,
+                    m_FarPlane);
+        }
+        else {
+            m_ProjectionMatrix = Core::OrthoRH_NO(
                 -halfW,
                 halfW,
                 -halfH,
                 halfH,
                 m_NearPlane,
                 m_FarPlane);
+        }
     }
 
     m_InverseProjectionMatrix =
@@ -299,5 +324,12 @@ Camera::WorldToNdc(
         clip.y / clip.w,
         clip.z / clip.w);
 }
-
+float Camera::GetNearPlane() const
+{
+    return m_NearPlane;
+}
+float Camera::GetFarPlane() const
+{
+    return m_FarPlane;
+}
 }

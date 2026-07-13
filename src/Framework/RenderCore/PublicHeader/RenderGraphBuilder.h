@@ -150,6 +150,11 @@ public:
         return Pass;
     }
     void AddPassDependency(RenderGraphPass* pass, RenderGraphPass* passConsumer);
+    enum class EUploadPolicy {
+		Immediate, // 立即插入一个upload pass
+		Deferred   // 延迟插入upload pass，直到 Execute() 被调用是收集所有的upload buffer，然后统一插入upload pass
+    };
+    void AddUploadBuffer(RenderGraphBufferRef buffer, const void* data, size_t size, EUploadPolicy policy = EUploadPolicy::Deferred);
 
     // Resource Creation (Examples - Add more as needed)
     RenderGraphTextureRef CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc);
@@ -189,6 +194,11 @@ protected:
     void ApplyFinalStates();
     void ExecutaPasses();
 private:
+    void AnalyzeUpload();
+    struct PendingBufferUpload;
+    void AddUploadPass(std::vector<PendingBufferUpload>&& uploadInfo,RHI::EQueueType queueType);
+
+
     using PassList = std::list<RenderGraphPass*>; // Using std::list for pass management
     using PassListGroup = std::list<PassList>; // Group of passes for execution
     PassList Passes; // List of passes to execute (using std::list)
@@ -291,6 +301,15 @@ private:
 
     std::unordered_map<RenderGraphResource*, ResourceLifetime> ResourceLifetimes;
     std::unordered_map<RenderGraphPass*, std::vector<RenderGraphResource*>> PassLastUseResources;
+
+	struct PendingBufferUpload
+	{
+		RenderGraphBufferRef Buffer;
+		const void* Data;
+		size_t Size;
+        RHI::EQueueType QueueType;
+	};
+    std::vector<PendingBufferUpload> PendingBufferUploads;
 };
 
 } // namespace WR::RenderCore

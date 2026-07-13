@@ -15,6 +15,14 @@ class RHIApi;
 
 class RHIShaderLibrary;
 using RHIShaderLibrarySP = std::shared_ptr<RHIShaderLibrary>;
+enum class EDepthRange {
+    ZeroToOne,
+    NegativeOneToOne
+};
+struct RHIPlatformInfo {
+    Core::Float4 NDCToUVScaleBias;
+    EDepthRange DepthRange;
+};
 
 class RHI_API RHIApi
 {
@@ -23,6 +31,7 @@ public:
     virtual ~RHIApi() = default;
 	virtual bool Init() = 0;
 	virtual void Shutdown() = 0;
+    virtual const RHIPlatformInfo & GetPlatformInfo() const = 0;
 
     virtual RHITextureSP CreateTexture(const RHITextureDesc& desc) = 0;
     virtual RHIBufferSP CreateBuffer(const RHIBufferDesc& desc) = 0;

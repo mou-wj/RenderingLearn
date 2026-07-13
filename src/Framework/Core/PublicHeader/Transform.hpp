@@ -3,7 +3,7 @@
 #include "Math.hpp"
 namespace Core{
 
-    // LookAt (right-handed)
+    // LookAt (right-handed) 看向z轴负方向
     inline Mat4 LookAtRH(const Float3& eye, const Float3& center, const Float3& up) {
         Float3 f =
             Normalize(center - eye);
@@ -36,7 +36,7 @@ namespace Core{
     }
 
     // Perspective projection (right-handed)
-    inline Mat4 PerspectiveRH(float fovy, float aspect, float zNear, float zFar) {
+    inline Mat4 PerspectiveRH_NO(float fovy, float aspect, float zNear, float zFar) {
         float tanHalfFovy = std::tan(fovy / 2.0f);
         Mat4 result{};
         result(0, 0) = 1.0f / (aspect * tanHalfFovy);
@@ -46,9 +46,28 @@ namespace Core{
         result(3, 2) = -1.0f;
         return result;
     }
+    inline Mat4 PerspectiveRH_ZO(
+        float fovy,
+        float aspect,
+        float zNear,
+        float zFar)
+    {
+        float tanHalfFovy = std::tan(fovy / 2.0f);
 
+        Mat4 result{};
+
+        result(0, 0) = 1.0f / (aspect * tanHalfFovy);
+        result(1, 1) = 1.0f / tanHalfFovy;
+
+        result(2, 2) = zFar / (zNear - zFar);
+        result(2, 3) = zFar * zNear / (zNear - zFar);
+
+        result(3, 2) = -1.0f;
+
+        return result;
+    }
     // Orthographic projection (right-handed)
-    inline Mat4 OrthoRH(float left, float right, float bottom, float top, float zNear, float zFar) {
+    inline Mat4 OrthoRH_NO(float left, float right, float bottom, float top, float zNear, float zFar) {
         Mat4 result = Mat4::Identity();
         result(0, 0) = 2.0f / (right - left);
         result(1, 1) = 2.0f / (top - bottom);
@@ -58,8 +77,65 @@ namespace Core{
         result(2, 3) = -(zFar + zNear) / (zFar - zNear);
         return result;
     }
+    inline Mat4 OrthoRHBounds_NO(
+        float left,
+        float right,
+        float bottom,
+        float top,
+        float minZ,
+        float maxZ) {
+        Mat4 result = Mat4::Identity();
 
+        result(0, 0) = 2 / (right - left);
+        result(1, 1) = 2 / (top - bottom);
+        result(2, 2) = 2 / (maxZ - minZ);
 
+        result(0, 3) = -(right + left) / (right - left);
+        result(1, 3) = -(top + bottom) / (top - bottom);
+        result(2, 3) = -(maxZ + minZ) / (maxZ - minZ);
+        return result;
+    }
+
+    inline Mat4 OrthoRH_ZO(
+        float left,
+        float right,
+        float bottom,
+        float top,
+        float zNear,
+        float zFar)
+    {
+        Mat4 result = Mat4::Identity();
+
+        result(0, 0) = 2.0f / (right - left);
+        result(1, 1) = 2.0f / (top - bottom);
+        result(2, 2) = -1.0f / (zFar - zNear);
+
+        result(0, 3) = -(right + left) / (right - left);
+        result(1, 3) = -(top + bottom) / (top - bottom);
+        result(2, 3) = -zNear / (zFar - zNear);
+
+        return result;
+    }
+    inline Mat4 OrthoRHBounds_ZO(
+        float left,
+        float right,
+        float bottom,
+        float top,
+        float minZ,
+        float maxZ)
+    {
+        Mat4 result = Mat4::Identity();
+
+        result(0, 0) = 2.0f / (right - left);
+        result(1, 1) = 2.0f / (top - bottom);
+        result(2, 2) = 1.0f / (maxZ - minZ);
+
+        result(0, 3) = -(right + left) / (right - left);
+        result(1, 3) = -(top + bottom) / (top - bottom);
+        result(2, 3) = -minZ / (maxZ - minZ);
+
+        return result;
+    }
 
     template<typename T>
     constexpr Matrix<T, 4, 4> MakeTranslationMatrix(

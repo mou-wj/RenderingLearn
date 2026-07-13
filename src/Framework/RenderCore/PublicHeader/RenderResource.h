@@ -152,6 +152,8 @@ RENDERCORE_API void TransitionTextureImmediate(
     RHI::ERHIResourceAccess targetAccess,
     RHI::EQueueType targetQueueType);
 
+
+
 // 通用缓冲区资源
 class RENDERCORE_API RenderBuffer : public RenderResource
 {
@@ -172,7 +174,11 @@ private:
     RHI::RHIBufferDesc Desc;
     RHI::RHIBufferSP Buffer;
 };
-
+RENDERCORE_API void TransitionBufferImmediate(
+    RHI::RHIApi* api,
+    RenderBuffer* resource,
+    RHI::ERHIResourceAccess targetAccess,
+    RHI::EQueueType targetQueueType);
 
 
 struct RENDERCORE_API PoolRenderTargetDesc
@@ -529,7 +535,10 @@ using RenderTextureSP = std::shared_ptr<RenderTexture>;
 using RenderBufferSP = std::shared_ptr<RenderBuffer>;
 
 extern RENDERCORE_API RenderTextureSP GlobalTestTexture;
+extern RENDERCORE_API RenderTextureSP GlobalEmptyCubeTexture;
+extern RENDERCORE_API RenderTextureSP GlobalEmptyTexture2DArray;
 extern RENDERCORE_API RHI::RHISamplerSP GlobalSampler;
+extern RENDERCORE_API RenderBufferSP GlobalEmptyBuffer;
 RENDERCORE_API bool InitGlobalRenderResource();
 RENDERCORE_API void ReleaseGlobalRenderResource();
 

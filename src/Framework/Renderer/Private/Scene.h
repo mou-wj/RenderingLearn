@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <algorithm>
 namespace Engine
 {
     class PrimitiveComponent;
@@ -169,6 +170,8 @@ namespace Renderer {
         std::unordered_map<Engine::LightSceneProxy*, LightShadowInfo> LightShadowInfos;
         RenderCore::RenderBufferSP LightShadowInfoBuffer = nullptr;
         RenderCore::RenderBufferSP AtlasAccessInfoBuffer = nullptr;
+        RenderCore::RenderBufferSP DirectionalLightShadowViewInfoBuffer = nullptr;
+        RenderCore::RenderBufferSP SplitBuffer = nullptr;   
     };
     struct SceneGPUResourceInfo {
         SceneGPULightResourceInfo LightResourceInfo;
@@ -176,10 +179,35 @@ namespace Renderer {
         ESceneGPUResourceDirtys DirtyFlags = ESceneGPUResourceDirty::None;
     };
 
+    class SceneAccelerationStructure
+    {
+    public:
+        void Build(const std::unordered_map<Engine::PrimitiveComponent*, std::unique_ptr<PrimitiveSceneInfo>>& PrimitiveInfos);
+        void Query(const Engine::SceneView& View, std::vector<Engine::PrimitiveSceneProxy*>& OutPrimitives) const;
+        void Clear();
+        bool IsValid() const { return !Nodes.empty(); }
+
+    private:
+        struct Node
+        {
+            Core::BoxSphereBounds Bounds;
+            int Start = 0;
+            int Count = 0;
+            int LeftChild = -1;
+            int RightChild = -1;
+            bool bLeaf = false;
+        };
+
+        std::vector<Node> Nodes;
+        std::vector<Engine::PrimitiveSceneProxy*> Primitives;
+
+        int BuildNode(int Start, int Count);
+        int Partition(int Start, int Count, int Axis);
+    };
 
     /*
     ===============================================================================
-        Scene (SceneInterface µÄÍêÈ«Ìå¹¤Òµ¼¶ÊµÏÖ)
+        Scene (SceneInterface ï¿½ï¿½ï¿½ï¿½È«ï¿½å¹¤Òµï¿½ï¿½Êµï¿½ï¿½)
     ===============================================================================
     */
     class RENDERER_API Scene : public Engine::SceneInterface {
@@ -188,19 +216,22 @@ namespace Renderer {
         ~Scene() override;
 
         // -------------------------------------------------------------------------
-        // ÓÎÏ·Ïß³Ì×é¼þ×¢²á½Ó¿Ú (GameThread Only)
+        // ï¿½ï¿½Ï·ï¿½ß³ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½Ó¿ï¿½ (GameThread Only)
         // -------------------------------------------------------------------------
         void AddPrimitive(Engine::PrimitiveComponent* Component) override;
         void RemovePrimitive(Engine::PrimitiveComponent* Component) override;
         void AddLight(Engine::LightComponent* Component) override;
         void RemoveLight(Engine::LightComponent* Component) override;
         // -------------------------------------------------------------------------
-        // äÖÈ¾Ïß³Ì×¨Êô²éÑ¯½Ó¿Ú (RenderThread Only)
+        // ï¿½ï¿½È¾ï¿½ß³ï¿½×¨ï¿½ï¿½ï¿½ï¿½Ñ¯ï¿½Ó¿ï¿½ (RenderThread Only)
         // -------------------------------------------------------------------------
         void FlushPendingUpdates() override;
         void NotifyComponentChanged(Engine::SceneComponent* Component) override;
-        
-        
+
+        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesCPU(const Engine::SceneView& View) const override;
+        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesGPU(const Engine::SceneView& View) const override;
+        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitives(const Engine::SceneView& View, Engine::SceneInterface::ECullingMethod Method) const override;
+
         void ForEachPrimitive(std::function<void(Engine::PrimitiveSceneProxy*)> Visitor);
 
         void ForEachLight(std::function<void(Engine::LightSceneProxy*)> Visitor);
@@ -222,6 +253,8 @@ namespace Renderer {
             std::unique_ptr<
             PrimitiveSceneInfo>>
             PrimitiveInfos;
+
+        SceneAccelerationStructure AccelerationStructure;
 
         std::unordered_map<
             Engine::LightComponent*,

@@ -32,6 +32,25 @@ namespace RenderCore {
         passConsumer->PassProducers.push_back(pass);
     }
 
+    void RenderGraphBuilder::AddUploadBuffer(RenderGraphBufferRef buffer, const void* data, size_t size,EUploadPolicy policy)
+    {
+        EQueueType queueType = EQueueType::Graphics;
+        if (buffer->IsExternal) {
+            queueType = ExternalBuffers[buffer->GetRHIBuffer()].Tracker->GetLastAccessFence().QueueType;
+        }
+		auto mem = Allocator.AllocateBytes(size, 16);
+        memcpy(mem, data, size);
+        PendingBufferUpload bufferUpload;
+        bufferUpload.Buffer = buffer;
+        bufferUpload.Data = mem;
+		bufferUpload.Size = size;
+        bufferUpload.QueueType = queueType;
+        if (policy == EUploadPolicy::Immediate) {
+            AddUploadPass({ bufferUpload }, queueType);
+        }
+		PendingBufferUploads.push_back(bufferUpload);
+    }
+
     RenderGraphTextureRef RenderGraphBuilder::CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc)
     {
         auto it = TextureCache.find(name);
@@ -252,6 +271,7 @@ namespace RenderCore {
 
     void RenderGraphBuilder::Execute()
     {
+        AnalyzeUpload();
         AnalyzePasses();
         AllocateResources();
         ExecutaPasses();
@@ -726,7 +746,8 @@ namespace RenderCore {
             {
                 std::vector<const uint8_t*> ResourcePtrs;
                 if (Member.IsArray()) {
-                    auto* Array = *reinterpret_cast<ShaderParameterElementAccessor* const*>(MemberAddr);
+                    auto* Array =
+                        reinterpret_cast<const ShaderParameterElementAccessor*>(MemberAddr);
                     ResourcePtrs.resize(Array->GetElementCount());
                     for (uint32_t i = 0; i < Array->GetElementCount(); ++i) {
                         ResourcePtrs[i] = Array->GetElementOffset(i);
@@ -832,9 +853,10 @@ namespace RenderCore {
                     else if (Member.BaseType == EShaderParameterBaseType::RDGBuffer_SRV)
                     {
                         auto SRV = *reinterpret_cast<RenderGraphBufferSRV* const*>(MemberAddr);
-                        auto vDesc = SRV->Desc;
+                        
                         if (SRV)
                         {
+                            auto vDesc = SRV->Desc;
                             auto* Buf = static_cast<RenderGraphBuffer*>(SRV->Desc.Buffer);
 
                             RenderGraphPass::RenderGraphBufferIntent Intent;
@@ -1188,5 +1210,98 @@ namespace RenderCore {
 
             // 👉 TODO：只根据依赖插入 wait（你后面可以加）
         }
+    }
+    void RenderGraphBuilder::AnalyzeUpload()
+    {
+        //------------------------------------------------------------
+        // 收集各 Queue 的 Upload
+        //------------------------------------------------------------
+
+        std::vector<PendingBufferUpload> GraphicUploads;
+        std::vector<PendingBufferUpload> ComputeUploads;
+
+        for (const auto& upload : PendingBufferUploads)
+        {
+            switch (upload.QueueType)
+            {
+            case EQueueType::Graphics:
+                GraphicUploads.push_back(upload);
+                break;
+            case EQueueType::Compute:
+                ComputeUploads.push_back(upload);
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        PendingBufferUploads.clear();
+
+        //------------------------------------------------------------
+        // Graphic Upload Pass
+        //------------------------------------------------------------
+		struct UploadPassParameters
+		{
+		};
+        if (!GraphicUploads.empty())
+        {
+            AddUploadPass(std::move(GraphicUploads), EQueueType::Graphics);
+
+        }
+        if (!ComputeUploads.empty())
+        {
+            AddUploadPass(std::move(ComputeUploads), EQueueType::Compute);
+        }
+    }
+    void RenderGraphBuilder::AddUploadPass(std::vector<PendingBufferUpload>&& uploadInfo, EQueueType queueType)
+    {
+        if (uploadInfo.empty()) {
+            return;
+        }
+        struct UploadPassParameters
+        {
+        };
+		EPassFlag passFlag = EPassFlag::Graphic;
+		std::string passName = "GraphicBufferUpload";
+        if (queueType == EQueueType::Compute)
+		{
+			passFlag = EPassFlag::Compute;
+			passName = "ComputeBufferUpload";
+		}
+        RenderGraphParameterStruct ParameterStruct(nullptr, nullptr);
+
+        auto uploadLamba = [uploads = std::move(uploadInfo)]
+        (RHI::RHICommandListBase& RHICmdList)
+            {
+                for (const auto& upload : uploads)
+                {
+                    if (!upload.Buffer)
+                    {
+                        continue;
+                    }
+
+                    RHI::RHIUpdateBufferRegion region;
+                    region.offset = 0;
+                    region.size = upload.Size;
+                    GRHIApi->UpdateBuffer(
+                        RHICmdList,
+                        upload.Buffer->GetRHIBuffer(),
+                        upload.Data,
+                        region);
+                }
+            };
+
+        // 2. ���������� Pass ʵ�� (����֮ǰ����� RenderGraphLambdaPass)
+        auto Pass = new RenderGraphLambdaPass<UploadPassParameters, decltype(uploadLamba)>(
+            passName,
+            passFlag,
+            ParameterStruct,
+            std::move(uploadLamba)
+        );
+        for (auto& upload : uploadInfo) {
+            Pass->AddBufferIntent({ upload.Buffer, ERHIResourceAccess::TransferDest });
+        }
+        Passes.insert(Passes.begin(), Pass);
     }
 } // namespace RenderCore

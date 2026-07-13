@@ -20,7 +20,15 @@ public:
     Camera();
 
 public:
+    enum EDepthRangeMode
+    {
+        ZeroToOne,
+        NegativeOneToOne
+    };
 
+    void SetDepthRangeMode(EDepthRangeMode mode);
+
+    EDepthRangeMode GetDepthRangeMode() const;
     // -------------------------------------------------
     // Transform
     // -------------------------------------------------
@@ -94,6 +102,9 @@ public:
     Core::Float3 WorldToNdc(
         const Core::Float3& worldPos) const;
 
+    float GetNearPlane() const;
+    float GetFarPlane() const;
+
 private:
 
     void UpdateViewMatrix() const;
@@ -115,6 +126,7 @@ private:
     // -------------------------------------------------
 
     ProjectionType m_ProjectionType;
+    EDepthRangeMode m_DepthRangeMode;
 
     float m_FovY;
     float m_Aspect;

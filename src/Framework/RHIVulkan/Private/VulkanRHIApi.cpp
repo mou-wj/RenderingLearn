@@ -188,6 +188,12 @@ void VulkanRHIApi::Shutdown()
     // 销毁其他Vulkan资源
 }
 
+const RHIPlatformInfo& VulkanRHIApi::GetPlatformInfo() const
+{
+	static RHIPlatformInfo info{.NDCToUVScaleBias = Core::Float4(0.5,-0.5,0.5,0.5)};
+	return info;
+}
+
 
 // 资源创建接口实现
 RHITextureSP VulkanRHIApi::CreateTexture(const RHITextureDesc& desc)

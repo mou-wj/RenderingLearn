@@ -69,15 +69,11 @@ namespace Renderer
 
         result.Slices.resize(CascadeCount);
 
-        for (uint32_t i = 0; i < CascadeCount; i++)
-        {
-            AllocateDedicatedTexture(
-                Resolution,
-                Resolution,
-                EShadowType::Directional,
-                result.Slices[i]);
-        }
-
+        AllocateDedicatedTexture(
+            Resolution,
+            Resolution,
+            EShadowType::Directional,
+            result);
         return result;
     }
 
@@ -89,14 +85,11 @@ namespace Renderer
 
         result.Slices.resize(MaxPointLightFaces);
 
-        for (uint32_t i = 0; i < MaxPointLightFaces; i++)
-        {
-            AllocateDedicatedTexture(
-                Resolution,
-                Resolution,
-                EShadowType::Point,
-                result.Slices[i]);
-        }
+        AllocateDedicatedTexture(
+            Resolution,
+            Resolution,
+            EShadowType::Point,
+            result);
 
         return result;
     }
@@ -112,7 +105,7 @@ namespace Renderer
         AllocateFromAtlas(
             Resolution,
             Resolution,
-            result.Slices[0]);
+            result);
 
         return result;
     }
@@ -142,59 +135,64 @@ namespace Renderer
         switch (Allocation.ShadowType)
         {
             //--------------------------------------------------
-            // Dedicated texture shadow
+            // Dedicated shadow texture
             //--------------------------------------------------
         case EShadowType::Directional:
         case EShadowType::Point:
         {
-            for (auto& slice : Allocation.Slices)
+            auto* texture = Allocation.Texture;
+
+            if (texture)
             {
-                auto* texture =
-                    slice.Texture;
-
-                if (!texture)
-                    continue;
-
-                auto it =
-                    std::find_if(
-                        DedicatedShadowTextures_.begin(),
-                        DedicatedShadowTextures_.end(),
-                        [texture](const RenderCore::RenderTextureSP& tex)
-                        {
-                            return tex.get() == texture;
-                        });
+                auto it = std::find_if(
+                    DedicatedShadowTextures_.begin(),
+                    DedicatedShadowTextures_.end(),
+                    [texture](const RenderCore::RenderTextureSP& tex)
+                    {
+                        return tex.get() == texture;
+                    });
 
                 if (it != DedicatedShadowTextures_.end())
                 {
                     DedicatedShadowTextures_.erase(it);
                 }
 
-                slice.Texture = nullptr;
+                //--------------------------------------------------
+                // Remove from lookup array
+                //--------------------------------------------------
+
+                auto eraseTexture =
+                    [texture](std::vector<RenderCore::RenderTexture*>& list)
+                    {
+                        auto it =
+                            std::find(list.begin(), list.end(), texture);
+
+                        if (it != list.end())
+                        {
+                            list.erase(it);
+                        }
+                    };
+
+                eraseTexture(PointLightShadowTextures_);
+                eraseTexture(ParallelLightShadowTextures_);
             }
 
             break;
         }
 
         //--------------------------------------------------
-        // Atlas shadow
+        // Atlas
         //--------------------------------------------------
         case EShadowType::Spot:
-        {
-            // 当前版本先不回收 atlas 区域
-            // 后面如果实现 free list / buddy allocator
-            // 再把 region 放回 allocator
-            for (auto& slice : Allocation.Slices)
-            {
-                slice.Texture = nullptr;
-            }
-
+            // 后续实现 Atlas FreeList
             break;
-        }
 
         default:
             break;
         }
 
+        Allocation.Texture = nullptr;
+        Allocation.TextureIndex = 0;
         Allocation.Slices.clear();
         Allocation.ShadowType = EShadowType::Unknown;
     }
@@ -203,17 +201,36 @@ namespace Renderer
         uint32_t Width,
         uint32_t Height,
         EShadowType ShadowType,
-        ShadowAllocationSlice& OutAllocation)
+        ShadowAllocation& OutAllocation)
     {
         RHITextureDesc desc;
+
         desc.Width = Width;
         desc.Height = Height;
         desc.Depth = 1;
+
         desc.MipLevels = 1;
         desc.ArraySize = 1;
 
-        desc.Format = ERHIFormat::R16G16_Float;
         desc.Type = ERHITextureType::Texture2D;
+        switch (ShadowType)
+        {
+        case EShadowType::Directional:
+            desc.Type = ERHITextureType::Texture2DArray;
+            desc.ArraySize = MaxShadowCascadeCount;
+            desc.DebugName = "DirectionalShadow";
+            break;
+
+        case EShadowType::Point:
+            desc.Type = ERHITextureType::TextureCube;
+            desc.ArraySize = 6;
+            desc.DebugName = "PointShadow";
+            break;
+
+        default:
+            return false;
+        }
+        desc.Format = ERHIFormat::R16G16_Float;
         desc.SampleCount = 1;
 
         desc.Usage =
@@ -231,18 +248,63 @@ namespace Renderer
         DedicatedShadowTextures_.push_back(texture);
 
         OutAllocation.Texture = texture.get();
+        OutAllocation.ShadowType = ShadowType;
 
-        OutAllocation.Layer = 0;
-        OutAllocation.Mip = 0;
+        switch (ShadowType)
+        {
+        case EShadowType::Point:
+        {
+            OutAllocation.TextureIndex =
+                (uint32_t)PointLightShadowTextures_.size();
 
-        OutAllocation.X = 0;
-        OutAllocation.Y = 0;
+            PointLightShadowTextures_.push_back(texture.get());
+            break;
+        }
 
-        OutAllocation.Width = Width;
-        OutAllocation.Height = Height;
+        case EShadowType::Directional:
+        {
+            OutAllocation.TextureIndex =
+                (uint32_t)ParallelLightShadowTextures_.size();
 
-        OutAllocation.UVScale = { 1.0f, 1.0f };
-        OutAllocation.UVOffset = { 0.0f, 0.0f };
+            ParallelLightShadowTextures_.push_back(texture.get());
+            break;
+        }
+
+        default:
+            OutAllocation.TextureIndex = 0;
+            break;
+        }
+        //-----------------------------------------
+        // Fill slices
+        //-----------------------------------------
+
+        OutAllocation.Slices.resize(desc.ArraySize);
+
+        for (uint32_t i = 0; i < desc.ArraySize; ++i)
+        {
+            auto& slice = OutAllocation.Slices[i];
+
+            slice.Layer = i;
+            slice.Mip = 0;
+
+            slice.X = 0;
+            slice.Y = 0;
+
+            slice.Width = Width;
+            slice.Height = Height;
+
+            slice.UVScale =
+            {
+                1.0f,
+                1.0f
+            };
+
+            slice.UVOffset =
+            {
+                0.0f,
+                0.0f
+            };
+        }
 
         return true;
     }
@@ -250,48 +312,73 @@ namespace Renderer
     bool ShadowMapAllocator::AllocateFromAtlas(
         uint32_t Width,
         uint32_t Height,
-        ShadowAllocationSlice& OutAllocation)
+        ShadowAllocation& OutAllocation)
     {
-        static uint32_t CurrentX = 0;
-        static uint32_t CurrentY = 0;
-
         const uint32_t AtlasWidth = Desc_.SpotShadowAtlas.Width;
         const uint32_t AtlasHeight = Desc_.SpotShadowAtlas.Height;
 
-        if (CurrentX + Width > AtlasWidth)
+        //--------------------------------------------------
+        // 当前行放不下，换行
+        //--------------------------------------------------
+
+        if (AtlasCursorX + Width > AtlasWidth)
         {
-            CurrentX = 0;
-            CurrentY += Height;
+            AtlasCursorX = 0;
+            AtlasCursorY += AtlasCurrentRowHeight;
+            AtlasCurrentRowHeight = 0;
         }
 
-        if (CurrentY + Height > AtlasHeight)
+        //--------------------------------------------------
+        // Atlas 已满
+        //--------------------------------------------------
+
+        if (AtlasCursorY + Height > AtlasHeight)
         {
             return false;
         }
 
+        //--------------------------------------------------
+        // 创建 Allocation
+        //--------------------------------------------------
+
+        OutAllocation.ShadowType = EShadowType::Spot;
         OutAllocation.Texture = ShadowAtlas_.get();
+        OutAllocation.TextureIndex = 0;
 
-        OutAllocation.Layer = 0;
-        OutAllocation.Mip = 0;
+        OutAllocation.Slices.clear();
+        OutAllocation.Slices.emplace_back();
 
-        OutAllocation.X = CurrentX;
-        OutAllocation.Y = CurrentY;
-        OutAllocation.Width = Width;
-        OutAllocation.Height = Height;
+        auto& Slice = OutAllocation.Slices.front();
 
-        OutAllocation.UVScale =
+        Slice.Layer = 0;
+        Slice.Mip = 0;
+
+        Slice.X = AtlasCursorX;
+        Slice.Y = AtlasCursorY;
+
+        Slice.Width = Width;
+        Slice.Height = Height;
+
+        Slice.UVScale =
         {
-            (float)Width / AtlasWidth,
-            (float)Height / AtlasHeight
+            float(Width) / float(AtlasWidth),
+            float(Height) / float(AtlasHeight)
         };
 
-        OutAllocation.UVOffset =
+        Slice.UVOffset =
         {
-            (float)CurrentX / AtlasWidth,
-            (float)CurrentY / AtlasHeight
+            float(AtlasCursorX) / float(AtlasWidth),
+            float(AtlasCursorY) / float(AtlasHeight)
         };
 
-        CurrentX += Width;
+        //--------------------------------------------------
+        // 更新游标
+        //--------------------------------------------------
+
+        AtlasCursorX += Width;
+
+        AtlasCurrentRowHeight =
+            AtlasCurrentRowHeight > Height ? AtlasCurrentRowHeight : Height;
 
         return true;
     }

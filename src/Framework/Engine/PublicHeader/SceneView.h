@@ -61,6 +61,7 @@ namespace Engine {
         // 裁剪面
         float NearClip;
         float FarClip;
+        bool IsDepthRangeZeroToOne;
 
         // 视口与画布规格
         ViewRect Viewport;
@@ -74,13 +75,15 @@ namespace Engine {
 
         // 视锥体缓存
         Frustum CachedFrustum;
-
+		static const uint32_t CascadeCount = 4;
+        std::array<float, CascadeCount + 1> splitDepths;
         // 渲染线程专用工具函数 (构建时或构建后执行)
         void RebuildDerivedMatrices();
         void BuildFrustum();
         bool IsBoxVisible(const Core::AABB& Box) const;
         void PackViewUniforms(ViewUniforms& OutUniforms) const;
         std::array<Core::Float3, 8> GetFrustumCornersWS(float nearDepth,float farDepth) const;
+        void BuildSplitDepths();
     };
 
     /*
@@ -113,6 +116,7 @@ namespace Engine {
         // 批量更新控制
         void RebuildAllDerivedMatrices();
         void BuildAllFrustums();
+        void BuildAllSplitDepths();
 
         // 视锥体批量可见性过滤：返回所有能看到这个 AABB 的 View 索引列表
         std::vector<int> FindViewsThatSeeBox(const Core::AABB& Box) const;

@@ -150,6 +150,7 @@ namespace RHIVulkan {
         void SetTexture(
             uint32_t setIndex,
             uint32_t binding,
+            uint32_t element,
             VulkanTexture* texture)
         {
             auto& set = Sets[setIndex];
@@ -165,16 +166,19 @@ namespace RHIVulkan {
 
             state.Image.sampler =
                 VK_NULL_HANDLE;
-
+            state.Binding = binding;
+            state.ElementIndex = element;
             UpdateBindingState(
                 set,
                 binding,
+                element,
                 state);
         }
         
 		void SetSampler(
 			uint32_t setIndex,
 			uint32_t binding,
+            uint32_t element,
 			VulkanSampler* sampler)
 		{
 			auto& set = Sets[setIndex];
@@ -193,10 +197,12 @@ namespace RHIVulkan {
 
             state.Image.imageLayout =
                 VK_IMAGE_LAYOUT_UNDEFINED;
-
+            state.Binding = binding;
+            state.ElementIndex = element;
             UpdateBindingState(
                 set,
                 binding,
+                element,
                 state);
 		}
 
@@ -209,6 +215,7 @@ namespace RHIVulkan {
         void SetSRV(
             uint32_t setIndex,
             uint32_t binding,
+            uint32_t element,
             VulkanShaderResourceView* srv)
         {
             auto& set = Sets[setIndex];
@@ -264,10 +271,12 @@ namespace RHIVulkan {
                         srv->GetBufferView().View;
                 }
             }
-
+            state.Binding = binding;
+            state.ElementIndex = element;
             UpdateBindingState(
                 set,
                 binding,
+                element,
                 state);
         }
 
@@ -280,6 +289,7 @@ namespace RHIVulkan {
         void SetUAV(
             uint32_t setIndex,
             uint32_t binding,
+            uint32_t element,
             VulkanUnorderedAccessView* uav)
         {
             auto& set = Sets[setIndex];
@@ -335,10 +345,12 @@ namespace RHIVulkan {
                         uav->GetBufferView().View;
                 }
             }
-
+            state.Binding = binding;
+            state.ElementIndex = element;
             UpdateBindingState(
                 set,
                 binding,
+                element,
                 state);
 
         }
@@ -352,6 +364,7 @@ namespace RHIVulkan {
         void SetUniformBuffer(
             uint32_t setIndex,
             uint32_t binding,
+            uint32_t element,
             VkBuffer buffer,
             VkDeviceSize offset,
             VkDeviceSize size)
@@ -369,10 +382,12 @@ namespace RHIVulkan {
             state.Buffer.buffer = buffer;
             state.Buffer.offset = offset;
             state.Buffer.range = size;
-
+            state.Binding = binding;
+            state.ElementIndex = element;
             UpdateBindingState(
                 set,
                 binding,
+                element,
                 state);
         }
 
@@ -415,7 +430,7 @@ namespace RHIVulkan {
                 // Build Writes
                 //---------------------------------
 
-                for (auto& [binding, state]
+                for (auto& [key, state]
                     : set.BindingStates)
                 {
                     switch (state.Kind)
@@ -424,7 +439,8 @@ namespace RHIVulkan {
                         ::EKind::Image:
 
                             batchWriter.WriteImage(set.DescriptorSet,
-                                binding,
+                                state.Binding,
+                                state.ElementIndex,
                                 state.Type,
                                 state.Image.imageView,
                                 state.Image.imageLayout,
@@ -437,7 +453,8 @@ namespace RHIVulkan {
 
                                 batchWriter.WriteBuffer(
                                     set.DescriptorSet,
-                                    binding,
+                                    state.Binding,
+                                    state.ElementIndex,
                                     state.Type,
                                     state.Buffer.buffer,
                                     state.Buffer.offset,
@@ -451,7 +468,8 @@ namespace RHIVulkan {
                                     batchWriter
                                         .WriteTexelBuffer(
                                             set.DescriptorSet,
-                                            binding,
+                                            state.Binding,
+                                            state.ElementIndex,
                                             state.Type,
                                             state.BufferView);
 
@@ -499,6 +517,8 @@ namespace RHIVulkan {
             VkDescriptorImageInfo Image{};
             VkDescriptorBufferInfo Buffer{};
             VkBufferView BufferView{};
+            uint32_t Binding;
+            uint32_t ElementIndex;
 
             bool operator==(const DescriptorBindingState& rhs) const
             {
@@ -514,16 +534,21 @@ namespace RHIVulkan {
                     return
                         Image.imageView == rhs.Image.imageView &&
                         Image.imageLayout == rhs.Image.imageLayout &&
-                        Image.sampler == rhs.Image.sampler;
+                        Image.sampler == rhs.Image.sampler &&
+                        Binding == rhs.Binding  &&
+                        ElementIndex == rhs.ElementIndex;
 
                 case EKind::Buffer:
                     return
                         Buffer.buffer == rhs.Buffer.buffer &&
                         Buffer.offset == rhs.Buffer.offset &&
-                        Buffer.range == rhs.Buffer.range;
-
+                        Buffer.range == rhs.Buffer.range &&
+                        Binding == rhs.Binding &&
+                        ElementIndex == rhs.ElementIndex;
                 case EKind::TexelBuffer:
-                    return BufferView == rhs.BufferView;
+                    return BufferView == rhs.BufferView &&
+                    Binding == rhs.Binding &&
+                    ElementIndex == rhs.ElementIndex;
 
                 default:
                     return true;
@@ -531,12 +556,15 @@ namespace RHIVulkan {
             }
         };
 
-
+        inline uint64_t MakeDescriptorKey(uint32_t binding, uint32_t arrayIndex = 0)
+        {
+            return (static_cast<uint64_t>(binding) << 32) | arrayIndex;
+        }
         struct VulkanPerSetDescriptorState
         {
 
             VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
-            std::unordered_map<uint32_t, DescriptorBindingState> BindingStates;
+            std::unordered_map<uint64_t, DescriptorBindingState> BindingStates;
             bool bDirty = true;
 
             void Reset()
@@ -554,9 +582,11 @@ namespace RHIVulkan {
         bool UpdateBindingState(
             VulkanPerSetDescriptorState& set,
             uint32_t binding,
+            uint32_t element,
             const DescriptorBindingState& newState)
         {
-            auto it = set.BindingStates.find(binding);
+            uint64_t key = MakeDescriptorKey(binding, element);
+            auto it = set.BindingStates.find(key);
 
             if (it != set.BindingStates.end() &&
                 it->second == newState)
@@ -564,7 +594,7 @@ namespace RHIVulkan {
                 return false;
             }
 
-            set.BindingStates[binding] = newState;
+            set.BindingStates[key] = newState;
             set.bDirty = true;
 
             return true;
@@ -777,7 +807,7 @@ namespace RHIVulkan {
             }
         }
 
-        void SetTexture(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanTexture* texture)
+        void SetTexture(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanTexture* texture)
         {
             if (!CurrentState)
                 return;
@@ -786,11 +816,11 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                CurrentState->SetTexture(setIndex, binding, texture);
+                CurrentState->SetTexture(setIndex, binding,elementId, texture);
             }
         }
 
-		void SetSampler(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanSampler* sampler)
+		void SetSampler(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanSampler* sampler)
 		{
 			if (!CurrentState)
 				return;
@@ -798,7 +828,7 @@ namespace RHIVulkan {
 			uint32_t binding = 0;
 			if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
 			{
-				CurrentState->SetSampler(setIndex, binding, sampler);
+				CurrentState->SetSampler(setIndex, binding,elementId, sampler);
 			}
 		}
 
@@ -806,7 +836,7 @@ namespace RHIVulkan {
         //--------------------------------------------------------
         // ͨ�� ShaderFrequency + parameterId ���� SRV
         //--------------------------------------------------------
-        void SetSRV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanShaderResourceView* srv)
+        void SetSRV(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanShaderResourceView* srv)
         {
             if (!CurrentState)
                 return;
@@ -815,14 +845,14 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                CurrentState->SetSRV(setIndex, binding, srv);
+                CurrentState->SetSRV(setIndex, binding,elementId, srv);
             }
         }
 
         //--------------------------------------------------------
         // ͨ�� ShaderFrequency + parameterId ���� UAV
         //--------------------------------------------------------
-        void SetUAV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUnorderedAccessView* uav)
+        void SetUAV(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanUnorderedAccessView* uav)
         {
             if (!CurrentState)
                 return;
@@ -831,14 +861,14 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                CurrentState->SetUAV(setIndex, binding, uav);
+                CurrentState->SetUAV(setIndex, binding,elementId, uav);
             }
         }
 
         //--------------------------------------------------------
         // ͨ�� ShaderFrequency + parameterId ���� UniformBuffer
         //--------------------------------------------------------
-        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanBuffer* uniformBuffer)
+        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanBuffer* uniformBuffer)
         {
             if (!CurrentState)
                 return;
@@ -848,7 +878,7 @@ namespace RHIVulkan {
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
                 CurrentState->MarkUiformBufferUseExternal(frequency,setIndex,binding);
-                CurrentState->SetUniformBuffer(setIndex, binding, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
+                CurrentState->SetUniformBuffer(setIndex, binding,elementId, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
             }
         }
 
@@ -940,7 +970,7 @@ namespace RHIVulkan {
         //--------------------------------------------------------
         // ʹ�� ShaderFrequency + parameterId ���� Texture
         //--------------------------------------------------------
-        void SetTexture(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanTexture* texture)
+        void SetTexture(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanTexture* texture)
         {
             if (!CurrentState)
                 return;
@@ -949,14 +979,14 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                CurrentState->SetTexture(setIndex, binding, texture);
+                CurrentState->SetTexture(setIndex, binding,elementId, texture);
             }
         }
 
         //--------------------------------------------------------
         // ʹ�� ShaderFrequency + parameterId ���� sampler
         //--------------------------------------------------------
-		void SetSampler(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanSampler* sampler)
+		void SetSampler(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanSampler* sampler)
 		{
 			if (!CurrentState)
 				return;
@@ -964,14 +994,14 @@ namespace RHIVulkan {
 			uint32_t binding = 0;
 			if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
 			{
-				CurrentState->SetSampler(setIndex, binding, sampler);
+				CurrentState->SetSampler(setIndex, binding,elementId, sampler);
 			}
 		}
 
         //--------------------------------------------------------
         // ʹ�� ShaderFrequency + parameterId ���� SRV
         //--------------------------------------------------------
-        void SetSRV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanShaderResourceView* srv)
+        void SetSRV(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanShaderResourceView* srv)
         {
             if (!CurrentState)
                 return;
@@ -980,14 +1010,14 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                CurrentState->SetSRV(setIndex, binding, srv);
+                CurrentState->SetSRV(setIndex, binding,elementId, srv);
             }
         }
 
         //--------------------------------------------------------
         // ʹ�� ShaderFrequency + parameterId ���� UAV
         //--------------------------------------------------------
-        void SetUAV(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanUnorderedAccessView* uav)
+        void SetUAV(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanUnorderedAccessView* uav)
         {
             if (!CurrentState)
                 return;
@@ -996,14 +1026,14 @@ namespace RHIVulkan {
             uint32_t binding = 0;
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
-                CurrentState->SetUAV(setIndex, binding, uav);
+                CurrentState->SetUAV(setIndex, binding,elementId, uav);
             }
         }
 
         //--------------------------------------------------------
         // ʹ�� ShaderFrequency + parameterId ���� UniformBuffer
         //--------------------------------------------------------
-        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, VulkanBuffer* uniformBuffer)
+        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanBuffer* uniformBuffer)
         {
             if (!CurrentState)
                 return;
@@ -1013,7 +1043,7 @@ namespace RHIVulkan {
             if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
             {
                 CurrentState->MarkUiformBufferUseExternal(frequency,setIndex,binding);
-                CurrentState->SetUniformBuffer(setIndex, binding, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
+                CurrentState->SetUniformBuffer(setIndex, binding,elementId, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
             }
         }
         void SetShaderParameter(ERHIShaderFrequency frequency,uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {

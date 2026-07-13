@@ -1,5 +1,7 @@
 #include "/core/ShadingCommon.sf"
+#include "/Generated/ShaderParameters/SceneShaderParameters.sf"
 #include "/Generated/ShaderParameters/SceneLightParameters.sf"
+#include "/core/ShadowParametersHelper.sf"
 
 
 
@@ -109,12 +111,19 @@ float3 EvaluateSceneLighting(
         DirectionalLight Light =
             MakeDirectionalLight(
                 Raw);
-
-        Result +=
+        float3 LightShading =
             ShadeDirectionalLight(
                 Context,
                 Material,
                 Light);
+        uint lightId = Raw.LightId;
+        float d = distance(Context.WorldPosition,Context.CameraPosition);
+        float visibility = ComputeDirectionalShadow(
+            lightId,
+            Context.WorldPosition,
+            d);
+        Result += LightShading * visibility;
+
     }
 
 
@@ -133,12 +142,19 @@ float3 EvaluateSceneLighting(
         PointLight Light =
             MakePointLight(
                 Raw);
-
-        Result +=
+        uint lightId = Raw.LightId;
+        float visibility = ComputePointShadow(
+        lightId,
+        Context.WorldPosition,
+        Light.Position,
+        Light.Radius);
+        float3 LightShading =
             ShadePointLight(
                 Context,
                 Material,
                 Light);
+        Result += LightShading * visibility;
+
     }
 
 
@@ -157,12 +173,17 @@ float3 EvaluateSceneLighting(
         SpotLight Light =
             MakeSpotLight(
                 Raw);
-        
-        Result +=
+        float3 LightShading =
             ShadeSpotLight(
                 Context,
                 Material,
                 Light);
+        uint lightId = Raw.LightId;
+        float visibility = ComputeSpotShadow(
+        lightId,
+        Context.WorldPosition);
+        Result += LightShading * visibility;
+
     }
     
     // =====================================================

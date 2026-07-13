@@ -321,9 +321,66 @@ void TransitionTextureImmediate(
 	delete[] transitionMem;
 }
 
+void TransitionBufferImmediate(
+	RHI::RHIApi* api,
+	RenderBuffer* resource,
+	RHI::ERHIResourceAccess targetAccess,
+	RHI::EQueueType targetQueueType)
+{
+	if (!api || !resource)
+	{
+		return;
+	}
+
+	auto currentQueueType = resource->GetTracker().GetLastAccessFence().QueueType;
+	auto currentAccess = resource->GetTracker().GetLastAccess();
+	if (currentAccess == targetAccess && currentQueueType == targetQueueType)
+	{
+		return;
+	}
+
+	std::vector<RHI::RHITransitionInfo> infos;
+	if (auto* buffer = dynamic_cast<RHI::RHIBuffer*>(resource->GetRHI()))
+	{
+		infos.emplace_back(buffer, currentAccess, targetAccess, currentQueueType, targetQueueType);
+	}
+	char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
+	auto* transition = new(transitionMem) RHI::RHITransition();
+	api->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
+	RHI::RHIContextBase* contex = nullptr;
+	if (currentQueueType == RHI::EQueueType::Graphics) {
+		contex = RHI::GRHIApi->GetQueue(currentQueueType)->AcquireCommandContext();
+		auto graphicContex = dynamic_cast<RHI::RHIGraphicContex*>(contex);
+		RHIGraphicCommandList cmdList(graphicContex);
+		cmdList.SetImmediate(true);
+		cmdList.Begin();
+		cmdList.BeginTransitions({ transition });
+		cmdList.EndTransitions({ transition });
+		cmdList.End();
+
+	}
+	else if (currentQueueType == RHI::EQueueType::Compute) {
+		contex = RHI::GRHIApi->GetQueue(currentQueueType)->AcquireCommandContext();
+		auto computeContex = dynamic_cast<RHI::RHIComputeContex*>(contex);
+		RHIComputeCommandList cmdList(computeContex);
+		cmdList.SetImmediate(true);
+		cmdList.Begin();
+		cmdList.BeginTransitions({ transition });
+		cmdList.EndTransitions({ transition });
+		cmdList.End();
+
+
+	}
+	auto fence = RHI::GRHIApi->GetQueue(currentQueueType)->ExecuteContext(contex);
+	RHI::GRHIApi->GetQueue(currentQueueType)->WaitFence(fence);
+	resource->GetTracker().UpdateAccess(targetAccess);
+	resource->GetTracker().UpdateLastAccessFence(fence);
+	api->RHIReleaseTransition(transition);
+	delete[] transitionMem;
+}
+
 // RenderBuffer
-RenderBuffer::RenderBuffer(const RHI::RHIBufferDesc& inDesc) : Desc(inDesc) {};
-RenderBuffer::~RenderBuffer() = default;
+RenderBuffer::RenderBuffer(const RHI::RHIBufferDesc& inDesc) : Desc(inDesc) {};RenderBuffer::~RenderBuffer() = default;
 
 void RenderBuffer::InitRHIResource() {
 	Buffer = RHI::GRHIApi->CreateBuffer(Desc);
@@ -458,17 +515,48 @@ void RenderTargetPool::Clear()
 
 
 RenderTextureSP GlobalTestTexture = nullptr;
+RenderTextureSP GlobalEmptyTexture2DArray = nullptr;
+RenderTextureSP GlobalEmptyCubeTexture = nullptr;
 RHI::RHISamplerSP GlobalSampler = nullptr;
+ RenderBufferSP GlobalEmptyBuffer = nullptr;
 bool InitGlobalRenderResource() {
     auto rootPath = Core::GetProjectDir();
 	GlobalTestTexture = CreateTexture(rootPath + "/resources/pic/OIP.jpg");
 	RHI::RHISamplerDesc samplerDesc{};
 	GlobalSampler = RHI::GRHIApi->CreateSampler(samplerDesc);
+	RHIBufferDesc desc;
+	desc.Usage = ERHIBufferUsageFlag::ShaderResource;
+    desc.Size = 1;
+	desc.Stride = 1;
+    desc.DebugName = "EmptyBuffer";
+    GlobalEmptyBuffer = std::make_shared<RenderBuffer>(desc);
+    GlobalEmptyBuffer->InitRHIResource();
+
+	RHI::RHITextureDesc descCube;
+    descCube.ArraySize = 6;
+    descCube.Format = ERHIFormat::R8G8B8A8_UNorm;
+    descCube.Type = ERHITextureType::TextureCube;
+	descCube.Usage = ERHITextureCreateFlag::ShaderResource;
+    descCube.DebugName = "EmptyCubeTexture";
+    GlobalEmptyCubeTexture = std::make_shared<RenderTexture>(descCube);
+    GlobalEmptyCubeTexture->InitRHIResource();
+
+	RHI::RHITextureDesc Tex2dArray;
+	Tex2dArray.ArraySize = 2;
+	Tex2dArray.Format = ERHIFormat::R8G8B8A8_UNorm;
+	Tex2dArray.Type = ERHITextureType::Texture2DArray;
+	Tex2dArray.Usage = ERHITextureCreateFlag::ShaderResource;
+	Tex2dArray.DebugName = "Empty2DTextureArray";
+	GlobalEmptyTexture2DArray = std::make_shared<RenderTexture>(Tex2dArray);
+	GlobalEmptyTexture2DArray->InitRHIResource();
     return true;
 }
 void ReleaseGlobalRenderResource() {
 	GlobalTestTexture.reset();
 	GlobalSampler.reset();
+	GlobalEmptyBuffer.reset();
+	GlobalEmptyCubeTexture.reset();
+	GlobalEmptyTexture2DArray.reset();
 }
 
 RenderTextureSP CreateTexture(const std::string& Path)

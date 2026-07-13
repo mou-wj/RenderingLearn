@@ -52,38 +52,46 @@ namespace Renderer {
     END_SHADER_PARAMETER_STRUCT(SceneLightParameters)
 
     //spot light访问信息
-    BEGIN_SHADER_PARAMETER_STRUCT(AtlasTextureAccessInfo)
+    BEGIN_SHADER_PARAMETER_STRUCT(AtlasShadowTextureAccessInfo)
         SHADER_PARAMETER(uint32_t, Layer)
         SHADER_PARAMETER(uint32_t, mip)
         SHADER_PARAMETER(Core::Float2, UVScale)
         SHADER_PARAMETER(Core::Float2, UVBias)
+        SHADER_PARAMETER(Core::Float2, Padding)
         SHADER_PARAMETER(Core::Mat4, ViewProj)
-    END_SHADER_PARAMETER_STRUCT(AtlasTextureAccessInfo)
+    END_SHADER_PARAMETER_STRUCT(AtlasShadowTextureAccessInfo)
 
-    BEGIN_SHADER_PARAMETER_STRUCT(LightAccessInfo)
+    BEGIN_SHADER_PARAMETER_STRUCT(LightShadowAccessInfo)
         SHADER_PARAMETER(uint32_t, ShadowType)
         SHADER_PARAMETER(uint32_t, ShadowTextureIndex)
-        SHADER_PARAMETER(uint32_t, AtlasInfoIndex)
+        SHADER_PARAMETER(uint32_t, ShadowInfoIndex)
         SHADER_PARAMETER(uint32_t, CascadeCount)
-    END_SHADER_PARAMETER_STRUCT(LightAccessInfo)
+    END_SHADER_PARAMETER_STRUCT(LightShadowAccessInfo)
+
+    BEGIN_SHADER_PARAMETER_STRUCT(DirectionalLightCascadeShadowViewInfo)
+        SHADER_PARAMETER(Core::Mat4, ViewProj)
+    END_SHADER_PARAMETER_STRUCT(DirectionalLightCascadeShadowViewInfo)
 
     BEGIN_SHADER_PARAMETER_STRUCT(SceneLightShadowParameters)
-        SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(AtlasTextureAccessInfo, AtlasTextureInfos)
-        SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(LightAccessInfo, LightShadowInfos)
+        SHADER_PARAMETER(Core::Float4, NDCToShadowUVScaleBias)
+        SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float>, SplitBuffer)
+        SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(AtlasShadowTextureAccessInfo, AtlasTextureInfos)
+        SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(LightShadowAccessInfo, LightShadowInfos)
+        SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(DirectionalLightCascadeShadowViewInfo, DirectionalLightViewInfos)
         SHADER_PARAMETER_RDG_TEXTURE(Texture2D, LightShadowAtlas)
 		SHADER_PARAMETER_RDG_TEXTURE_ARRAY(TextureCube, PointLightShadows, 8)//先固定最大8个点光源投射阴影
-        SHADER_PARAMETER_RDG_TEXTURE_ARRAY(Texture2D, ParrallelLightShadows, 4)//先固定最大4个点光源投射阴影
+        SHADER_PARAMETER_RDG_TEXTURE_ARRAY(Texture2DArray, ParrallelLightShadows, 4)//先固定最大4个点光源投射阴影
     END_SHADER_PARAMETER_STRUCT(SceneLightShadowParameters)
 
 
 	BEGIN_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightParameters, LightParameters)
-        
+        SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightShadowParameters, LightShadowParameters)
     END_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
 
     class Scene;
     ENGINE_API void BuildShaderParameters(
-        const Scene*
+        Scene*
         Scene,
         RenderCore::RenderGraphBuilder& Builder,
         SceneShaderParameters&

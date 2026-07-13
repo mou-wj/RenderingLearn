@@ -37,7 +37,7 @@ namespace Renderer
     */
     struct ShadowAllocationSlice
     {
-        RenderCore::RenderTexture* Texture = nullptr;
+        
 
         uint32_t Layer = 0;
         uint32_t Mip = 0;
@@ -78,7 +78,8 @@ namespace Renderer
     struct ShadowAllocation
     {
         EShadowType ShadowType = EShadowType::Unknown;
-
+        RenderCore::RenderTexture* Texture = nullptr;
+        uint32_t TextureIndex = 0;
         std::vector<ShadowAllocationSlice> Slices;
 
         bool IsValid() const
@@ -157,13 +158,13 @@ namespace Renderer
         bool AllocateFromAtlas(
             uint32_t Width,
             uint32_t Height,
-            ShadowAllocationSlice& OutAllocation);
+            ShadowAllocation& OutAllocation);
 
         bool AllocateDedicatedTexture(
             uint32_t Width,
             uint32_t Height,
 			EShadowType ShadowType,
-            ShadowAllocationSlice& OutAllocation);
+            ShadowAllocation& OutAllocation);
 
     private:
         ShadowAllocatorDesc Desc_;
@@ -182,10 +183,12 @@ namespace Renderer
             Dedicated shadow resources cache
         ------------------------------------------------------------
         */
-        std::vector<RenderCore::RenderTextureSP>
-            DedicatedShadowTextures_;
+        std::vector<RenderCore::RenderTextureSP> DedicatedShadowTextures_;
         std::vector<RenderCore::RenderTexture*> PointLightShadowTextures_;
         std::vector<RenderCore::RenderTexture*> ParallelLightShadowTextures_;
+        uint32_t AtlasCursorX = 0;
+        uint32_t AtlasCursorY = 0;
+        uint32_t AtlasCurrentRowHeight = 0;
     };
 
 }

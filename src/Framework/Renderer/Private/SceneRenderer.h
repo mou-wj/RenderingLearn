@@ -29,12 +29,24 @@ namespace Renderer {
 
         }
     };
+    struct ShadowRenderSlice {
+        RenderCore::RenderGraphTextureRef Texture;
+        uint32_t Mip = 0;
+        uint32_t Layer = 0;
+        uint32_t X = 0;
+        uint32_t Y = 0;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+    };
     struct ShadowRenderView
     {
-        ShadowAllocationSlice Allocation;
+        ShadowRenderSlice Allocation;
         Core::Float4x4 ViewProjection;
         uint32_t TargetWidth = 0;
         uint32_t TargetHeight = 0;
+        bool wantRawDepth = false;
+        Core::Float3 CameraPos;
+        Core::Float4 RawDepthClearValue;
     };
     // SceneRenderer.h
     class SceneRenderer
@@ -48,10 +60,13 @@ namespace Renderer {
 
         // һ֡��Ⱦ���
         virtual void Build(RenderCore::RenderGraphBuilder& graphBuilder) = 0;
+        void AddClearRenderTargetsPass(RenderCore::RenderGraphBuilder& bulder, RenderCore::RenderTargetBindingSlots& renderTargetBindingSlots);
         void BuildSceneLightShadowMap(RenderCore::RenderGraphBuilder& graphBuilder);
         void BuildSceneLightCascadeShadowMap(RenderCore::RenderGraphBuilder& graphBuilder,const Engine::SceneView& view);
         void UploadShadowMapInfo(RenderCore::RenderGraphBuilder& graphBuilder);
     protected:
+        void UploadSplits(RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view,RenderCore::RenderGraphBufferSRV** out);
+        void AddClearShadowMapPass(RenderCore::RenderGraphBuilder& graphBuilder, std::vector<ShadowRenderView>& shadowRenderViews);
 		void BuildLightShadow(RenderCore::RenderGraphBuilder& graphBuilder , std::vector<ShadowRenderView>& shadowRenderViews);
     };
     using SceneRendererSP = std::shared_ptr<SceneRenderer>;
