@@ -1,18 +1,21 @@
-#include "/Generated/VertexFactory.sf"
+#if DEPTH_STORE_MODE == 1
+#include "/Generated/ShaderParameters/DepthShadowPassPSParameters.sf"
+#endif
 struct PSInput
 {
     float4 Position : SV_Position;            
-    VertexFactoryVSToPS FactoryInterpolants; 
+    float3 WorldPosition : TEXCOORD0;
+    float4 ClipPosition : TEXCOORD1;
 };
 float4 MainPS(PSInput Input) : SV_Target0
 {
     float4 Out;
     float depth = 0;
 #if DEPTH_STORE_MODE == 0
-    float4 clipPos = Input.FactoryInterpolants.ClipPosition;
+    float4 clipPos = Input.ClipPosition;
     depth = clipPos.z / clipPos.w;
 #elif DEPTH_STORE_MODE == 1
-    depth = distance(Input.FactoryInterpolants.WorldPosition,CameraWorldPosition);
+    depth = distance(Input.WorldPosition,CameraWorldPosition);
 #endif
     Out.r = depth;
     Out.g = Out.r * Out.r;

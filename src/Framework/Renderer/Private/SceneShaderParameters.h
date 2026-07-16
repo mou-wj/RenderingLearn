@@ -51,7 +51,7 @@ namespace Renderer {
         SHADER_PARAMETER_RDG_TEXTURE(Texture2D, IBLLut)
     END_SHADER_PARAMETER_STRUCT(SceneLightParameters)
 
-    //spot light·ÃÎÊÐÅÏ¢
+    //spot lightï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
     BEGIN_SHADER_PARAMETER_STRUCT(AtlasShadowTextureAccessInfo)
         SHADER_PARAMETER(uint32_t, Layer)
         SHADER_PARAMETER(uint32_t, mip)
@@ -73,16 +73,23 @@ namespace Renderer {
     END_SHADER_PARAMETER_STRUCT(DirectionalLightCascadeShadowViewInfo)
 
     BEGIN_SHADER_PARAMETER_STRUCT(SceneLightShadowParameters)
-        SHADER_PARAMETER(Core::Float4, NDCToShadowUVScaleBias)
+        SHADER_PARAMETER_SAMPLER(NearestSampler)
         SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float>, SplitBuffer)
         SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(AtlasShadowTextureAccessInfo, AtlasTextureInfos)
         SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(LightShadowAccessInfo, LightShadowInfos)
         SHADER_PARAMETER_RDG_STRUCTURED_BUFFER(DirectionalLightCascadeShadowViewInfo, DirectionalLightViewInfos)
         SHADER_PARAMETER_RDG_TEXTURE(Texture2D, LightShadowAtlas)
-		SHADER_PARAMETER_RDG_TEXTURE_ARRAY(TextureCube, PointLightShadows, 8)//ÏÈ¹Ì¶¨×î´ó8¸öµã¹âÔ´Í¶ÉäÒõÓ°
-        SHADER_PARAMETER_RDG_TEXTURE_ARRAY(Texture2DArray, ParrallelLightShadows, 4)//ÏÈ¹Ì¶¨×î´ó4¸öµã¹âÔ´Í¶ÉäÒõÓ°
+		SHADER_PARAMETER_RDG_TEXTURE_ARRAY(TextureCube, PointLightShadows, 8)//ï¿½È¹Ì¶ï¿½ï¿½ï¿½ï¿½8ï¿½ï¿½ï¿½ï¿½ï¿½Ô´Í¶ï¿½ï¿½ï¿½ï¿½Ó°
+        SHADER_PARAMETER_RDG_TEXTURE_ARRAY(Texture2DArray, ParrallelLightShadows, 4)//ï¿½È¹Ì¶ï¿½ï¿½ï¿½ï¿½4ï¿½ï¿½ï¿½ï¿½ï¿½Ô´Í¶ï¿½ï¿½ï¿½ï¿½Ó°
     END_SHADER_PARAMETER_STRUCT(SceneLightShadowParameters)
 
+        BEGIN_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceSubParameters)
+        SHADER_PARAMETER(Core::Float4x4, LocalToWorld)
+    END_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceSubParameters)
+
+    BEGIN_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceParameters)
+        SHADER_PARAMETER_RHI_SRV(StructuredBuffer<ScenePrimitiveInstanceSubParameters>, InstanceData)
+    END_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceParameters)
 
 	BEGIN_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightParameters, LightParameters)
@@ -96,4 +103,5 @@ namespace Renderer {
         RenderCore::RenderGraphBuilder& Builder,
         SceneShaderParameters&
         Out);
+
 }

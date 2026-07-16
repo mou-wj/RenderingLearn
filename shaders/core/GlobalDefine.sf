@@ -1,2 +1,10 @@
 
 static const float EPSILON   = 1e-5f;
+
+#ifndef CLIP_SHADOW_BIAS
+#define CLIP_SHADOW_BIAS 0.0005
+#endif
+
+#ifndef RAW_SHADOW_BIAS
+#define RAW_SHADOW_BIAS 0.01
+#endif

@@ -1,8 +1,6 @@
 #include "/Generated/ShaderParameters/SceneLightShadowParameters.sf"
 #include "/core/GlobalDefine.sf"
-#ifndef SHADOW_BIAS
-#define SHADOW_BIAS 0.0005
-#endif
+
 
 #ifndef SHADOW_FILTER_RADIUS
 #define SHADOW_FILTER_RADIUS 1
@@ -14,12 +12,66 @@
 #define SHADOW_TYPE_POINT        3
 
 //==========================================================
-// Common
+// 二维深度图的裁剪坐标到 UV 坐标的转换
 //==========================================================
 
-float2 ClipToUV(float2 clipXY,float2 clipScale,float2 clipBias)
+float2 ClipToUV(float2 clipXY)
 {
-    return clipXY * clipScale + clipBias;
+    float2 uv = clipXY * float2(0.5f,-0.5f) + 0.5f;
+    return uv;
+}
+//==========================================================
+// cube深度图的方向到 UVW 坐标的转换
+//==========================================================
+
+float3 CubeClipToUVW(float3 dir)
+{
+
+    float3 absDir = abs(dir);
+
+    uint face;
+
+    if (absDir.x >= absDir.y && absDir.x >= absDir.z)
+    {
+        // X dominant
+        face = dir.x > 0 ? 0 : 1;
+    }
+    else if (absDir.y >= absDir.x && absDir.y >= absDir.z)
+    {
+        // Y dominant
+        face = dir.y > 0 ? 2 : 3;
+    }
+    else
+    {
+        // Z dominant
+        face = dir.z > 0 ? 4 : 5;
+    }
+
+    /*
+     hlsl 中v向下，u向右
+     hlsl uv坐标映射关系:
+     +X :  u = -z / |x| ,v = -y / |x|
+     -X :  u = z / |x| ,v = -y / |x|
+     +Y :  u = x / |y| ,v = z / |y|
+     -Y :  u = x / |y| ,v = -z / |y|
+     +Z :  u = x / |z| ,v = -y / |z|
+     -Z :  u = -x / |z| ,v = -y / |z|
+     */
+
+    //为了适配cube坐标映射所做的uv必要的翻转，翻转uv
+    static const float3 FaceFlips[6] =
+    {
+        float3(1,  1, -1), // +X ，看向右，右手为+z，上为y，但是对应uv是以-z为u轴，所以需要翻转z轴，向下为-y，且为v方向所以不需要翻转
+        float3(1,  1, -1), // -X ，看向左，右手为-z，上为y，但是对应uv是以+z为u轴，所以需要翻转z轴，向下为-y，且为v方向所以不需要翻转
+
+        float3( 1, 1, -1), // +Y ，看向上，右手为+x，上为+z，对应uv是以+x为u轴，所以不需要翻转x轴，向下为+z，所以需要翻转
+        float3( 1, 1, -1), // -Y ，看向下，右手为+x，上为-z，但是对应uv是以+x为u轴，所以不需要翻转x轴，向下为+z，且为v方向-z相反所以需要翻转
+
+        float3(-1,  1, 1), // +Z ，看向后，右手为-x，上为+y，但是对应uv是以x为u轴，所以需要翻转x轴，向下为-y，且为v方向所以不需要翻转
+        float3(-1,  1, 1)  // -Z ，看向前，右手为x，上为+y，但是对应uv是以-x为u轴，所以需要翻转x轴，向下为-y，且为v方向所以不需要翻转
+    };
+
+    return dir * FaceFlips[face];
 }
 
 //==========================================================
@@ -46,11 +98,11 @@ float ShadowPCF_Spot(float2 uv, float compareDepth)
             float2 sampleUV = uv + float2(x, y) * texelSize;
 
             float shadowDepth = LightShadowAtlas.SampleLevel(
-                LinearClampSampler,
+                NearestSampler,
                 sampleUV,
                 0).r;
 
-            visibility += (compareDepth - SHADOW_BIAS <= shadowDepth) ? 1.0 : 0.0;
+            visibility += (compareDepth - CLIP_SHADOW_BIAS <= shadowDepth) && shadowDepth <1.0 ? 1.0 : 0.0;
             sampleCount += 1.0;
         }
     }
@@ -84,11 +136,11 @@ float ShadowPCF_Directional(uint texIndex, float2 uv, float compareDepth)
             float3 sampleUVArray = float3(sampleUV.x,sampleUV.y, (float)0);
 
             float shadowDepth = ParrallelLightShadows[texIndex].SampleLevel(
-                LinearClampSampler,
+                NearestSampler,
                 sampleUVArray,
                 0).r;
 
-            visibility += (compareDepth - SHADOW_BIAS <= shadowDepth) ? 1.0 : 0.0;
+            visibility += (compareDepth - CLIP_SHADOW_BIAS <= shadowDepth) && shadowDepth <1.0 ? 1.0 : 0.0;
             sampleCount += 1.0;
         }
     }
@@ -104,11 +156,11 @@ float ShadowPCF_Cube(uint texIndex, float3 direction, float compareDepth)
 {
     // 
     float shadowDepth = PointLightShadows[texIndex].SampleLevel(
-        LinearClampSampler,
+        NearestSampler,
         direction,
         0).r;
 
-    return (compareDepth - SHADOW_BIAS <= shadowDepth) ? 1.0 : 0.0;
+    return (compareDepth - RAW_SHADOW_BIAS <= shadowDepth) ? 1.0 : 0.0;
 }
 
 //==========================================================
@@ -125,12 +177,12 @@ float ComputeSpotShadow(
     float4 shadowPos = mul(atlas.ViewProj, float4(worldPos, 1.0));
     shadowPos.xyz /= shadowPos.w;
 
-    float2 uv = ClipToUV(shadowPos.xy,NDCToShadowUVScaleBias.xy,NDCToShadowUVScaleBias.wz);
+    float2 uv = ClipToUV(shadowPos.xy);
     uv = uv * atlas.UVScale + atlas.UVBias;
 
     if (any(uv < 0.0) || any(uv > 1.0))
     {
-        return 1.0;
+        return 0.0;
     }
 
     float depth = shadowPos.z;
@@ -162,11 +214,11 @@ float ComputeDirectionalShadow(
     float4 shadowPos = mul(DirectionalLightViewInfos[access.ShadowInfoIndex + cascade].ViewProj, float4(worldPos, 1.0));
 
     shadowPos.xyz /= shadowPos.w;
-    float2 uv = ClipToUV(shadowPos.xy,NDCToShadowUVScaleBias.xy,NDCToShadowUVScaleBias.wz);
+    float2 uv = ClipToUV(shadowPos.xy);
 
     if (any(uv < 0.0) || any(uv > 1.0))
     {
-        return 1.0;
+        return 0.0;
     }
 
     // 
@@ -187,7 +239,7 @@ float ComputePointShadow(
 
     float3 dir = worldPos - lightPos;
     dir = normalize(dir);
-
+    dir = CubeClipToUVW(dir);
     float depth = distance(worldPos,lightPos);
 
     //

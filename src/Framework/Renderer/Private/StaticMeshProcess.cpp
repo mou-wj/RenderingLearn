@@ -62,14 +62,6 @@ namespace Renderer {
                     LOD.IndexBuffer
                     .Buffer.get();
 
-                Batch.CastShadow =
-                    mesh->CastsShadow();
-
-                Batch.bUseForDepthPass =
-                    mesh->IsOpaque();
-
-                Batch.ReverseCulling =
-                    false;
 
                 Batch.LODIndex =
                     static_cast<uint8_t>(

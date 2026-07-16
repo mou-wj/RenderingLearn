@@ -625,10 +625,10 @@ struct StructIncludeShaderParameterTypeInfo
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return T::GetMetaData(); }
 };
 
-template<typename ElementType,typename T>
+template<typename ElementType,typename T, RenderCore::EShaderParameterBaseType InBaseType>
 struct StructNestedBufferShaderParameterTypeInfo
 {
-    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::RDGBuffer_SRV;
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = InBaseType;
     static constexpr uint32_t NumRows = 1;
     static constexpr uint32_t NumColumns = 1;
     static constexpr uint32_t NumElements = 0;
@@ -762,7 +762,7 @@ SHADER_PARAMETER_INTERNAL("",Name,ShaderParameterTypeInfo<ClassType>)
         MemberName, \
         StructIncludeShaderParameterTypeInfo<StructType>)
 template<typename ElementType>
-using RDGStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RenderCore::RenderGraphBufferSRVRef>;
+using RDGStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RenderCore::RenderGraphBufferSRVRef, RenderCore::EShaderParameterBaseType::RDGBuffer_SRV>;
 
 #define SHADER_PARAMETER_RDG_STRUCTURED_BUFFER( \
     ElementType, Name) \
@@ -772,7 +772,7 @@ SHADER_PARAMETER_INTERNAL( \
     RDGStructuredBufferTemplate<ElementType>)
 
 template<typename ElementType>
-using RDGRWStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RenderCore::RenderGraphBufferUAVRef>;
+using RDGRWStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RenderCore::RenderGraphBufferUAVRef, RenderCore::EShaderParameterBaseType::RDGBuffer_UAV>;
 
 #define SHADER_PARAMETER_RDG_RWSTRUCTURED_BUFFER( \
     ElementType, Name) \
@@ -798,6 +798,27 @@ SHADER_PARAMETER_INTERNAL( \
         TEXT(MemberTypeName),\
         MemberName, \
         ShaderParameterTypeInfo<RHI::RHIUnorderedAccessView>)
+
+
+template<typename ElementType>
+using RHIStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RHI::RHIShaderResourceView*, RenderCore::EShaderParameterBaseType::RHI_SRV>;
+
+#define SHADER_PARAMETER_RHI_STRUCTURED_BUFFER( \
+    ElementType, Name) \
+SHADER_PARAMETER_INTERNAL( \
+    "StructuredBuffer<"##TEXT(ElementType)##">",\
+    Name, \
+    RHIStructuredBufferTemplate<ElementType>)
+
+template<typename ElementType>
+using RHIRWStructuredBufferTemplate = StructNestedBufferShaderParameterTypeInfo<ElementType, RHI::RHIUnorderedAccessView*, RenderCore::EShaderParameterBaseType::RHI_UAV>;
+
+#define SHADER_PARAMETER_RHI_RWSTRUCTURED_BUFFER( \
+    ElementType, Name) \
+SHADER_PARAMETER_INTERNAL( \
+    "RWStructuredBuffer<"##TEXT(ElementType)##">",\
+    Name, \
+    RHIRWStructuredBufferTemplate<ElementType>)
 
 BEGIN_SHADER_PARAMETER_STRUCT(A)
     SHADER_PARAMETER(Core::Int2, Int2Parameter)

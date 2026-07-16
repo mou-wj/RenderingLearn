@@ -216,7 +216,9 @@ namespace RenderCore {
                 }
 
                 // 这里只剩 nested
-                if (!(Member.IsNestedStruct() || Member.BaseType == EShaderParameterBaseType::RDGBuffer_SRV))
+                if (!(Member.IsNestedStruct() || Member.BaseType == EShaderParameterBaseType::RDGBuffer_SRV
+                    || Member.BaseType == EShaderParameterBaseType::RHI_SRV || Member.BaseType == EShaderParameterBaseType::RHI_UAV))
+                    
                 {
                     continue;
                 }

@@ -27,6 +27,7 @@ namespace Renderer {
         //获取所有static mesh primitive
 		const auto& views = Views->GetViews();
         for (auto view : views) {
+            UpdateCascadeShadowInfo(Scene,builder, view);
             MeshBatchList DrawMeshBatches;
             std::vector<Engine::StaticMeshProxy*> proxys;
             Scene->ForEachPrimitive([this, &builder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
@@ -66,7 +67,7 @@ namespace Renderer {
                 RHI::RHIRasterizerStateDesc rasterizerDesc;
                 rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
                 rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
-                rasterizerDesc.frontFace = RHI::ERHIFrontFace::CounterClockwise;
+                rasterizerDesc.frontFace = MeshBatch.FrontFace;
                 rasterizerDesc.lineWidth = 1.0f;
                 rasterizerDesc.depthBiasEnable = false;
             
@@ -109,7 +110,6 @@ namespace Renderer {
                 if (shdingMode == EShadingModel::Lit) {
                     //填充材质以及场景信息
                     BuildShaderParameters(Scene, builder, params->pixelParameters.Scene);
-                    UploadSplits(builder, view,&(params->pixelParameters.Scene.LightShadowParameters.SplitBuffer));
                     BuildShaderParameters(MeshBatch.MaterialProxy, builder, params->pixelParameters.Material);
                 }
             

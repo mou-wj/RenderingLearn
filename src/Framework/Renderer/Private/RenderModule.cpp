@@ -103,11 +103,8 @@ namespace Renderer {
         sceneRenderer->SceneTextures.GBufferA = gbuffers[0];
         sceneRenderer->SceneTextures.GBufferB = gbuffers[1];
         sceneRenderer->SceneTextures.GBufferC = gbuffers[2];
-		sceneRenderer->BuildSceneLightShadowMap(builder);
-        for (auto& view : Views->GetViews()) {
-            sceneRenderer->BuildSceneLightCascadeShadowMap(builder, view);
-        }
-        sceneRenderer->UploadShadowMapInfo(builder);
+		sceneRenderer->BuildSceneLightShadowMap(sceneRenderer->Scene,builder);
+        sceneRenderer->UploadShadowMapInfo(sceneRenderer->Scene,builder);
         sceneRenderer->Build(builder);
         
         builder.Execute();

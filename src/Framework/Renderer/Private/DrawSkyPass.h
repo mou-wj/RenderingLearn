@@ -6,6 +6,7 @@
 #include "ShaderCore.h"
 #include "RenderResource.h"
 #include "SceneView.h"
+#include "StaticMeshMaterialShader.h"
 
 namespace Renderer {
     BEGIN_SHADER_PARAMETER_STRUCT(DrawSkyVertexParameters)
@@ -27,6 +28,7 @@ namespace Renderer {
         {
             OutEnvironment.SetDefine("VERTEX_SHADER", 1);
         }
+
 
         static const RenderCore::ShaderParametersMetadata* GetShaderParameterMetadata()
         {

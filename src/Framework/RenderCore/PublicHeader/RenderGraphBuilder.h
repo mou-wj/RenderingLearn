@@ -154,6 +154,12 @@ public:
 		Immediate, // 立即插入一个upload pass
 		Deferred   // 延迟插入upload pass，直到 Execute() 被调用是收集所有的upload buffer，然后统一插入upload pass
     };
+    struct UploadBufferDesc {
+        RenderGraphBufferRef buffer;
+        void* Data;
+		size_t Size;
+    };
+    void AddUploadBuffers(const std::vector<UploadBufferDesc>& desc, EUploadPolicy policy = EUploadPolicy::Deferred);
     void AddUploadBuffer(RenderGraphBufferRef buffer, const void* data, size_t size, EUploadPolicy policy = EUploadPolicy::Deferred);
 
     // Resource Creation (Examples - Add more as needed)

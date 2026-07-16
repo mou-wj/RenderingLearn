@@ -94,7 +94,7 @@ float3 EvaluateSceneLighting(
     ShadingContext Context,
     MaterialData Material)
 {
-    float3 Result = 0.0;
+    float3 Result = 0;
 
     // =====================================================
     // Directional
@@ -122,7 +122,7 @@ float3 EvaluateSceneLighting(
             lightId,
             Context.WorldPosition,
             d);
-        Result += LightShading * visibility;
+        Result +=LightShading * visibility;
 
     }
 
@@ -156,7 +156,7 @@ float3 EvaluateSceneLighting(
         Result += LightShading * visibility;
 
     }
-
+    
 
     // =====================================================
     // Spot
@@ -185,7 +185,7 @@ float3 EvaluateSceneLighting(
         Result += LightShading * visibility;
 
     }
-    
+    //return Result;
     // =====================================================
     // IBL
     // =====================================================

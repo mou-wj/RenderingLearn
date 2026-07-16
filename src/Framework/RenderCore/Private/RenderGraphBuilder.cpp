@@ -32,23 +32,44 @@ namespace RenderCore {
         passConsumer->PassProducers.push_back(pass);
     }
 
-    void RenderGraphBuilder::AddUploadBuffer(RenderGraphBufferRef buffer, const void* data, size_t size,EUploadPolicy policy)
+    void RenderGraphBuilder::AddUploadBuffers(const std::vector<UploadBufferDesc>& desc, EUploadPolicy policy)
     {
         EQueueType queueType = EQueueType::Graphics;
-        if (buffer->IsExternal) {
-            queueType = ExternalBuffers[buffer->GetRHIBuffer()].Tracker->GetLastAccessFence().QueueType;
+        std::vector<PendingBufferUpload> graphicUploads;
+        std::vector<PendingBufferUpload> computeUploads;
+        for (auto& buf : desc) {
+            if (buf.buffer->IsExternal) {
+                queueType = ExternalBuffers[buf.buffer->GetRHIBuffer()].Tracker->GetLastAccessFence().QueueType;
+            }
+            auto mem = Allocator.AllocateBytes(buf.Size, 16);
+            memcpy(mem, buf.Data, buf.Size);
+            PendingBufferUpload bufferUpload;
+            bufferUpload.Buffer = buf.buffer;
+            bufferUpload.Data = mem;
+            bufferUpload.Size = buf.Size;
+            bufferUpload.QueueType = queueType;
+            if (queueType == EQueueType::Graphics) {
+                graphicUploads.push_back(bufferUpload);
+			}
+			else if (queueType == EQueueType::Graphics){
+			   computeUploads.push_back(bufferUpload); 
+            }
         }
-		auto mem = Allocator.AllocateBytes(size, 16);
-        memcpy(mem, data, size);
-        PendingBufferUpload bufferUpload;
-        bufferUpload.Buffer = buffer;
-        bufferUpload.Data = mem;
-		bufferUpload.Size = size;
-        bufferUpload.QueueType = queueType;
         if (policy == EUploadPolicy::Immediate) {
-            AddUploadPass({ bufferUpload }, queueType);
+            AddUploadPass(std::move(graphicUploads), queueType);
+            AddUploadPass(std::move(computeUploads), queueType);
         }
-		PendingBufferUploads.push_back(bufferUpload);
+		PendingBufferUploads.insert(PendingBufferUploads.end(), graphicUploads.begin(), graphicUploads.end());
+        PendingBufferUploads.insert(PendingBufferUploads.end(), computeUploads.begin(), computeUploads.end());
+    }
+
+    void RenderGraphBuilder::AddUploadBuffer(RenderGraphBufferRef buffer, const void* data, size_t size,EUploadPolicy policy)
+    {
+        UploadBufferDesc desc;
+        desc.buffer = buffer;
+        desc.Data = (void*)data;
+        desc.Size = size;
+		AddUploadBuffers({ desc }, policy);
     }
 
     RenderGraphTextureRef RenderGraphBuilder::CreateTexture(const std::string& name, const RenderGraphTextureDesc& desc)

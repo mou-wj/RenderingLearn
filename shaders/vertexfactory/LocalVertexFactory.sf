@@ -84,7 +84,9 @@ VertexFactoryIntermediates GetVertexFactoryIntermediates(VertexFactoryInput Inpu
         World Position
     ---------------------------------------------------------------------------
     */
-    Intermediates.WorldPosition = mul(LocalToWorld, float4(Input.Position.xyz, 1.0)).xyz;
+    float4 worldPosition = mul(LocalToWorld, float4(Input.Position.xyz, 1.0));
+    worldPosition /= worldPosition.w;
+    Intermediates.WorldPosition = worldPosition.xyz;
 
     /*
     ---------------------------------------------------------------------------

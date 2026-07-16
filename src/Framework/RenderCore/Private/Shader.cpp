@@ -11,6 +11,7 @@ Shader::Shader(const ShaderCompiledInitializer& initializer)
 {
     Name = initializer.Type->Name;
     ShaderType = initializer.Type->Frequency;
+    ShaderSourceCode = initializer.Code;
     auto metadata = initializer.Type->RootParametersMetadata;
     if (metadata) {
 		InitShaderBindings(metadata, initializer.ParameterMap);

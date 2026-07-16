@@ -60,14 +60,15 @@ namespace Renderer {
 
         // һ֡��Ⱦ���
         virtual void Build(RenderCore::RenderGraphBuilder& graphBuilder) = 0;
-        void AddClearRenderTargetsPass(RenderCore::RenderGraphBuilder& bulder, RenderCore::RenderTargetBindingSlots& renderTargetBindingSlots);
-        void BuildSceneLightShadowMap(RenderCore::RenderGraphBuilder& graphBuilder);
-        void BuildSceneLightCascadeShadowMap(RenderCore::RenderGraphBuilder& graphBuilder,const Engine::SceneView& view);
-        void UploadShadowMapInfo(RenderCore::RenderGraphBuilder& graphBuilder);
+        static void AddClearRenderTargetsPass(RenderCore::RenderGraphBuilder& bulder, RenderCore::RenderTargetBindingSlots& renderTargetBindingSlots);
+        static void BuildSceneLightShadowMap(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder);
+        
+        static void UploadShadowMapInfo(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder);
     protected:
-        void UploadSplits(RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view,RenderCore::RenderGraphBufferSRV** out);
-        void AddClearShadowMapPass(RenderCore::RenderGraphBuilder& graphBuilder, std::vector<ShadowRenderView>& shadowRenderViews);
-		void BuildLightShadow(RenderCore::RenderGraphBuilder& graphBuilder , std::vector<ShadowRenderView>& shadowRenderViews);
+        static void BuildSceneLightCascadeShadowMap(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view);
+        static void UpdateCascadeShadowInfo(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view);
+        static void AddClearShadowMapPass( RenderCore::RenderGraphBuilder& graphBuilder, std::vector<ShadowRenderView>& shadowRenderViews);
+        static void BuildLightShadow(Renderer::Scene* Scene, RenderCore::RenderGraphBuilder& graphBuilder , std::vector<ShadowRenderView>& shadowRenderViews);
     };
     using SceneRendererSP = std::shared_ptr<SceneRenderer>;
 

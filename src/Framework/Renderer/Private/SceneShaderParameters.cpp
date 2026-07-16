@@ -76,7 +76,7 @@ namespace Renderer {
 
         }
         //Ìî³äÒõÓ°²ÎÊý
-        
+        Out.LightShadowParameters.NearestSampler = RenderCore::GlobalNearestSampler.get();
         auto altasTexture = Scene->GetShadowMapAllocator().GetShadowAtlas();
         auto pointLightShadowTextures = Scene->GetShadowMapAllocator().GetDedicatedPointLightShadowTextures();
         auto parallelLightShadowTextures = Scene->GetShadowMapAllocator().GetDedicatedParallelLightShadowTextures();
@@ -121,7 +121,17 @@ namespace Renderer {
         SRVDesc.Stride = Scene->GetGPUResourceInfo().ShadowResourceInfo.DirectionalLightShadowViewInfoBuffer->GetRHI()->GetDesc().Size;
         SRVDesc.Buffer = rdgB;
         Out.LightShadowParameters.DirectionalLightViewInfos = Builder.CreateBufferSRV("DirectionalLightShadowViewInfosSRV", SRVDesc);
-        Out.LightShadowParameters.NDCToShadowUVScaleBias = RHI::GRHIApi->GetPlatformInfo().NDCToUVScaleBias;
+        
+        auto& SplitBuffer = Scene->GetGPUResourceInfo().ShadowResourceInfo.SplitBuffer;
+        auto splitBuffer = Builder.RegisterExternalBuffer("SplitBuffer", SplitBuffer.get());
+        
+        RenderCore::RenderGraphBufferSRVDesc Desc;
+        Desc.Buffer = splitBuffer;
+        Desc.Format = ERHIFormat::R32_Float;
+        Desc.NumElements = splitBuffer->GetRHIBuffer()->GetDesc().Size / sizeof(float);
+        Desc.Stride = sizeof(float);
+        auto splitBufferSRV = Builder.CreateBufferSRV("SplitBufferSRV", Desc);
+		Out.LightShadowParameters.SplitBuffer = splitBufferSRV;
     }
 
 

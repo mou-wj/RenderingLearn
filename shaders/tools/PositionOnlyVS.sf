@@ -1,0 +1,24 @@
+#include "/Generated/ShaderParameters/PositionOnlyVSParameters.sf"
+struct VSInput
+{
+    float3 Position : POSITION;
+};
+
+struct VSOutput
+{
+    float4 Position : SV_Position;
+    float3 WorldPosition : TEXCOORD0;
+    float4 ClipPosition : TEXCOORD1;
+};
+
+VSOutput MainVS(VSInput In)
+{
+    VSOutput Out;
+    float4 pos = mul(Model, float4(In.Position, 1.0));
+    float4 clipPosition = mul(ViewProjection, pos);
+    pos /= pos.w;
+    Out.WorldPosition = pos.xyz;
+    Out.ClipPosition = clipPosition;
+    Out.Position = clipPosition;
+    return Out;
+}

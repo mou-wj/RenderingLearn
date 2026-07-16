@@ -1,14 +1,8 @@
-#include "/core/ShadingCommon.sf"
 
 #include "/Generated/ShaderParameters/FrustumCullParameters.sf"
 
-struct AABB
-{
-    float3 Min;
-    float3 Max;
-};
 
-bool IsAABBVisible(const AABB box, const float4x4 viewProj)
+bool IsAABBVisible(const AABBParameters box, const float4x4 viewProj)
 {
     // 逐面判断包围盒是否完全被裁剪
     // NOTE: 为了保持简单，这里直接用 SIMD 风格的矩阵乘法
@@ -50,9 +44,9 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
     if (index >= PrimitiveCount)
         return;
 
-    AABB box;
-    box.Min = AABBs[index * 2 + 0].Min;
-    box.Max = AABBs[index * 2 + 0].Max;
+    AABBParameters box;
+    box.Min = AABBs[index].Min;
+    box.Max = AABBs[index].Max;
 
     // 这里 shader 需要一个可读 SRV，按平台语义包裹
     bool visible = IsAABBVisible(box, ViewProjection);

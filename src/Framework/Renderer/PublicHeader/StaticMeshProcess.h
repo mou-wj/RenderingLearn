@@ -49,9 +49,7 @@ namespace Renderer {
         RenderCore::RenderBuffer* IndexBuffer = nullptr;
 
         // 管线状态标志位
-        uint32_t CastShadow : 1;
-        uint32_t bUseForDepthPass : 1;
-        uint32_t ReverseCulling : 1;
+        RHI::ERHIFrontFace FrontFace = RHI::ERHIFrontFace::CounterClockwise;
 
         uint8_t LODIndex = 0;
         uint16_t MeshIdInPrimitive = 0;
@@ -59,9 +57,6 @@ namespace Renderer {
         Core::Mat4 WorldToLocal;
 
         MeshBatch()
-            : CastShadow(1)
-            , bUseForDepthPass(1)
-            , ReverseCulling(0)
         {
 
         }

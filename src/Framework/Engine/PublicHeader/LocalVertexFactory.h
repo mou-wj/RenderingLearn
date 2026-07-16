@@ -6,6 +6,8 @@
 namespace Engine
 {
 
+
+
     BEGIN_SHADER_PARAMETER_STRUCT(LocalVertexFactoryParameters)
         SHADER_PARAMETER(Core::Float4x4, LocalToWorld)
         SHADER_PARAMETER(Core::Float4x4, WorldToLocal)
@@ -29,7 +31,7 @@ namespace Engine
 
 
     //
-    // Mesh Vertex Êý¾ÝÀ´Ô´
+    // Mesh Vertex ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´
     //
     struct LocalVertexFactoryData
     {

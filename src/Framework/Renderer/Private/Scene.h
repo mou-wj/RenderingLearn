@@ -173,9 +173,17 @@ namespace Renderer {
         RenderCore::RenderBufferSP DirectionalLightShadowViewInfoBuffer = nullptr;
         RenderCore::RenderBufferSP SplitBuffer = nullptr;   
     };
+    struct SceneGPUPrimitiveResourceInfo
+    {
+        uint32_t PrimitiveCount = 0;
+        RenderCore::RenderBufferSP PrimitiveInstanceDataBuffer = nullptr;
+        RenderCore::RenderBufferSP PrimitiveBoundsBuffer = nullptr;
+        RenderCore::RenderBufferSP VisibilityFlagsBuffer = nullptr;
+    };
     struct SceneGPUResourceInfo {
         SceneGPULightResourceInfo LightResourceInfo;
         SceneShadowResourceInfo ShadowResourceInfo;
+        SceneGPUPrimitiveResourceInfo PrimitiveResourceInfo;
         ESceneGPUResourceDirtys DirtyFlags = ESceneGPUResourceDirty::None;
     };
 
@@ -243,6 +251,7 @@ namespace Renderer {
     private:
 		friend class SceneRenderer;
         void UpdateGPUResourceIfNeeded();
+        void UpdatePrimitiveGPUResource();
 
         //=========================================
         // Render Thread Storage
@@ -253,6 +262,10 @@ namespace Renderer {
             std::unique_ptr<
             PrimitiveSceneInfo>>
             PrimitiveInfos;
+
+        std::vector<
+            Engine::PrimitiveSceneProxy*>
+            PrimitiveGPUProxyOrder;
 
         SceneAccelerationStructure AccelerationStructure;
 

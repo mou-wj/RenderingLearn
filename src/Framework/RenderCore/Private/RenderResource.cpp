@@ -518,12 +518,16 @@ RenderTextureSP GlobalTestTexture = nullptr;
 RenderTextureSP GlobalEmptyTexture2DArray = nullptr;
 RenderTextureSP GlobalEmptyCubeTexture = nullptr;
 RHI::RHISamplerSP GlobalSampler = nullptr;
+RHI::RHISamplerSP GlobalNearestSampler = nullptr;
  RenderBufferSP GlobalEmptyBuffer = nullptr;
 bool InitGlobalRenderResource() {
     auto rootPath = Core::GetProjectDir();
 	GlobalTestTexture = CreateTexture(rootPath + "/resources/pic/OIP.jpg");
 	RHI::RHISamplerDesc samplerDesc{};
 	GlobalSampler = RHI::GRHIApi->CreateSampler(samplerDesc);
+	RHI::RHISamplerDesc nearestSamplerDesc{};
+	nearestSamplerDesc.filter = ERHIFilter::Nearest;
+	GlobalNearestSampler = RHI::GRHIApi->CreateSampler(nearestSamplerDesc);
 	RHIBufferDesc desc;
 	desc.Usage = ERHIBufferUsageFlag::ShaderResource;
     desc.Size = 1;
@@ -554,6 +558,7 @@ bool InitGlobalRenderResource() {
 void ReleaseGlobalRenderResource() {
 	GlobalTestTexture.reset();
 	GlobalSampler.reset();
+	GlobalNearestSampler.reset();
 	GlobalEmptyBuffer.reset();
 	GlobalEmptyCubeTexture.reset();
 	GlobalEmptyTexture2DArray.reset();

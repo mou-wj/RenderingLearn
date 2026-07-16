@@ -3,6 +3,7 @@
 #include "ShaderCore.h"
 #include "MaterialCore.h"
 #include "LocalVertexFactory.h"
+#include "RHIPipelineStateCache.h"
 using namespace Engine;
 namespace Renderer
 {
@@ -166,14 +167,50 @@ namespace Renderer
         RHI::ERHIShaderFrequency::Compute
     );
     
+
+    /*
+     ===============================================================================
+         PositionOnlyVS
+     ===============================================================================
+     */
+
+    bool PositionOnlyVS::ShouldCompilePermutation(
+        const RenderCore::ShaderPermutationParameters& Parameters)
+    {
+        return true;
+    }
+
+    void PositionOnlyVS::ModifyShaderCompilerEnvironment(
+        const RenderCore::ShaderPermutationParameters& Parameters,
+        RenderCore::ShaderCompilerEnvironment& OutEnvironment)
+    {
+
+    }
+
+
+
+    const RenderCore::ShaderParametersMetadata*
+        PositionOnlyVS::GetShaderParameterMetadata()
+    {
+        return PositionOnlyVSParameters::GetMetaData();
+    }
+
+    IMPLEMENT_GLOBAL_SHADER_TYPE(
+        PositionOnlyVS,
+        "PositionOnlyVS",
+        "/tools/PositionOnlyVS.sf",
+        "MainVS",
+        ERHIShaderFrequency::Vertex
+    )
+
     
     /*
      ===============================================================================
-         StaticMeshMaterialLightShadowPassPS
+         DepthShadowPassPS
      ===============================================================================
      */
     
-    bool StaticMeshMaterialLightShadowPassPS::ShouldCompilePermutation(
+    bool DepthShadowPassPS::ShouldCompilePermutation(
         const RenderCore::ShaderPermutationParameters& Parameters)
     {
         const MeshMaterialShaderPermutationParameters& MeshParams =
@@ -187,15 +224,10 @@ namespace Renderer
         return true;
     }
     
-    void StaticMeshMaterialLightShadowPassPS::ModifyShaderCompilerEnvironment(
+    void DepthShadowPassPS::ModifyShaderCompilerEnvironment(
         const RenderCore::ShaderPermutationParameters& Parameters,
         RenderCore::ShaderCompilerEnvironment& OutEnvironment)
     {
-        const MeshMaterialShaderPermutationParameters& MeshParams =
-            static_cast<const MeshMaterialShaderPermutationParameters&>(Parameters);
-    
-        OutEnvironment.SetDefine("PIXEL_SHADER", 1);
-        Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
         PermutationDomain Domain;
         Domain.SetFromId(Parameters.PermutationId);
         Domain.ModifyCompilationEnvironment(OutEnvironment);
@@ -204,16 +236,37 @@ namespace Renderer
     
     
     const RenderCore::ShaderParametersMetadata*
-        StaticMeshMaterialLightShadowPassPS::GetShaderParameterMetadata()
+        DepthShadowPassPS::GetShaderParameterMetadata()
     {
-        return StaticMeshMaterialGBufferShaderPSParameters::GetMetaData();
+        return DepthShadowPassPSParameters::GetMetaData();
     }
     
-    IMPLEMENT_MESH_MATERIAL_SHADER_TYPE(
-        StaticMeshMaterialLightShadowPassPS,
-        "StaticMeshMaterialLightShadowPassPS",
-        "/material/StaticMeshMaterialLightShadowPassPS.sf",
+    IMPLEMENT_GLOBAL_SHADER_TYPE(
+        DepthShadowPassPS,
+        "DepthShadowPassPS",
+        "/tools/DepthShadowPassPS.sf",
         "MainPS",
         ERHIShaderFrequency::Fragment
     )
+
+
+    RHI::RHIVertexDescState* GetVertexOnlyState() {
+        RHI::RHIVertexDescStateDesc Desc;
+
+        // Ò»¸ö Vertex Buffer
+        Desc.bindings.push_back({
+            .binding = 0,
+            .stride = sizeof(float) * 3,
+            .inputRate = ERHIInputRate::PerVertex
+            });
+
+        // Position
+        Desc.attributes.push_back({
+            .location = 0,
+            .binding = 0,
+            .offset = 0,
+            .format = ERHIFormat::R32G32B32_Float
+            });
+        return RHI::RHIPipelineStateCache::GetOrCreateVertexDescState(Desc);
+    }
 }

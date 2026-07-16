@@ -5,6 +5,12 @@
 #include "LightComponent.h"
 #include "LightSceneProxy.h"
 #include "SceneShaderParameters.h"
+#include "FrustumCullPass.h"
+#include "RenderResource.h"
+#include "RHIPipelineStateCache.h"
+#include "ShaderParameter.h"
+#include "Shader.h"
+#include "RHIApi.h"
 #include <cstring>
 #include <algorithm>
 using namespace Engine;
@@ -365,6 +371,9 @@ namespace Renderer {
                             std::move(
                                 Command
                                 .PrimitiveProxy));
+                    GPUResourceInfo.DirtyFlags |=
+                        ESceneGPUResourceDirty
+                        ::Primitive;
                     break;
                 }
 
@@ -374,6 +383,10 @@ namespace Renderer {
                     PrimitiveInfos.erase(
                         Command
                         .PrimitiveComponent);
+
+                    GPUResourceInfo.DirtyFlags |=
+                        ESceneGPUResourceDirty
+                        ::Primitive;
 
                     break;
                 }
@@ -452,6 +465,13 @@ namespace Renderer {
                     ::SkyLight;
                 break;
             }
+        }
+
+        if (Component->IsA<Engine::PrimitiveComponent>())
+        {
+            GPUResourceInfo.DirtyFlags |=
+                ESceneGPUResourceDirty
+                ::Primitive;
         }
     }
 
@@ -551,15 +571,46 @@ namespace Renderer {
     std::vector<Engine::PrimitiveSceneProxy*> Scene::GatherVisiblePrimitivesGPU(const Engine::SceneView& View) const
     {
         std::vector<Engine::PrimitiveSceneProxy*> Result;
-        Result.reserve(PrimitiveInfos.size());
+        const auto& PrimitiveRes = GPUResourceInfo.PrimitiveResourceInfo;
+        Result.reserve(PrimitiveRes.PrimitiveCount);
 
-        if (AccelerationStructure.IsValid())
+        if (PrimitiveRes.PrimitiveCount == 0)
         {
-            AccelerationStructure.Query(View, Result);
+            return Result;
         }
-        else
+
+        if (!PrimitiveRes.PrimitiveBoundsBuffer ||
+            !PrimitiveRes.VisibilityFlagsBuffer ||
+            PrimitiveGPUProxyOrder.size() < PrimitiveRes.PrimitiveCount)
         {
             return GatherVisiblePrimitivesCPU(View);
+        }
+
+        FrustumCullPassInput PassInput;
+        PassInput.ViewProjection = View.ViewProjectionMatrix;
+        PassInput.PrimitiveCount = PrimitiveRes.PrimitiveCount;
+        PassInput.PrimitiveBoundsBuffer = PrimitiveRes.PrimitiveBoundsBuffer.get();
+        PassInput.VisibilityFlagsBuffer = PrimitiveRes.VisibilityFlagsBuffer.get();
+
+        std::vector<uint32_t> visibilityFlags;
+        if (!ExecuteFrustumCullPass(PassInput, visibilityFlags) ||
+            visibilityFlags.size() < PrimitiveRes.PrimitiveCount)
+        {
+            return GatherVisiblePrimitivesCPU(View);
+        }
+
+        for (uint32_t index = 0; index < PrimitiveRes.PrimitiveCount; ++index)
+        {
+            if (visibilityFlags[index] == 0)
+            {
+                continue;
+            }
+
+            auto* proxy = PrimitiveGPUProxyOrder[index];
+            if (proxy)
+            {
+                Result.push_back(proxy);
+            }
         }
 
         return Result;
@@ -575,6 +626,102 @@ namespace Renderer {
         default:
             return GatherVisiblePrimitivesCPU(View);
         }
+    }
+
+    void Scene::UpdatePrimitiveGPUResource()
+    {
+        auto& PrimitiveRes = GPUResourceInfo.PrimitiveResourceInfo;
+
+        PrimitiveGPUProxyOrder.clear();
+        PrimitiveGPUProxyOrder.reserve(PrimitiveInfos.size());
+
+        std::vector<AABBParameters> BoundsData;
+        BoundsData.reserve(PrimitiveInfos.size());
+        std::vector<ScenePrimitiveInstanceSubParameters> InstanceData;
+        InstanceData.reserve(PrimitiveInfos.size());
+
+        for (const auto& Pair : PrimitiveInfos)
+        {
+            const PrimitiveSceneInfo* Info = Pair.second.get();
+            if (!Info || !Info->bVisible)
+            {
+                continue;
+            }
+
+            Engine::PrimitiveSceneProxy* Proxy = Info->GetProxy();
+            if (!Proxy)
+            {
+                continue;
+            }
+
+            const Core::AABB& Bounds = Proxy->GetBounds().Box;
+            AABBParameters Data;
+            Data.Min = Bounds.Min;
+            Data.Max = Bounds.Max;
+
+            ScenePrimitiveInstanceSubParameters InstanceSubData;
+            InstanceSubData.LocalToWorld = Proxy->GetLocalToWorld();
+
+            PrimitiveGPUProxyOrder.push_back(Proxy);
+            BoundsData.emplace_back(Data);
+            InstanceData.emplace_back(InstanceSubData);
+        }
+
+        PrimitiveRes.PrimitiveCount = static_cast<uint32_t>(BoundsData.size());
+
+        RHI::RHIBufferDesc InstanceDesc;
+        InstanceDesc.Size = std::max<uint64_t>(1ull, static_cast<uint64_t>(InstanceData.size() * sizeof(ScenePrimitiveInstanceSubParameters)));
+        InstanceDesc.Stride = sizeof(ScenePrimitiveInstanceSubParameters);
+        InstanceDesc.Usage =
+            RHI::ERHIBufferUsageFlag::Structured |
+            RHI::ERHIBufferUsageFlag::ShaderResource |
+            RHI::ERHIBufferUsageFlag::TransferDst;
+        InstanceDesc.InitialQueueType = RHI::EQueueType::Compute;
+        PrimitiveRes.PrimitiveInstanceDataBuffer = std::make_shared<RenderCore::RenderBuffer>(InstanceDesc);
+        PrimitiveRes.PrimitiveInstanceDataBuffer->InitRHIResource();
+        if (!InstanceData.empty())
+        {
+            PrimitiveRes.PrimitiveInstanceDataBuffer->UploadData(
+                InstanceData.data(),
+                static_cast<uint32_t>(InstanceData.size() * sizeof(ScenePrimitiveInstanceSubParameters)));
+        }
+
+        RHI::RHIBufferDesc BoundsDesc;
+        BoundsDesc.Size = std::max<uint64_t>(1ull, static_cast<uint64_t>(BoundsData.size() * sizeof(AABBParameters)));
+        BoundsDesc.Stride = sizeof(AABBParameters);
+        BoundsDesc.Usage =
+            RHI::ERHIBufferUsageFlag::Structured |
+            RHI::ERHIBufferUsageFlag::ShaderResource |
+            RHI::ERHIBufferUsageFlag::TransferDst;
+        BoundsDesc.InitialQueueType = RHI::EQueueType::Compute;
+        PrimitiveRes.PrimitiveBoundsBuffer = std::make_shared<RenderCore::RenderBuffer>(BoundsDesc);
+        PrimitiveRes.PrimitiveBoundsBuffer->InitRHIResource();
+        if (!BoundsData.empty())
+        {
+            PrimitiveRes.PrimitiveBoundsBuffer->UploadData(
+                BoundsData.data(),
+                static_cast<uint32_t>(BoundsData.size() * sizeof(AABBParameters)));
+        }
+
+        RHI::RHIBufferDesc VisibilityDesc;
+        VisibilityDesc.Size = std::max<uint64_t>(1ull, static_cast<uint64_t>(PrimitiveRes.PrimitiveCount * sizeof(uint32_t)));
+        VisibilityDesc.Stride = sizeof(uint32_t);
+        VisibilityDesc.Usage =
+            RHI::ERHIBufferUsageFlag::Structured |
+            RHI::ERHIBufferUsageFlag::UnorderedAccess |
+            RHI::ERHIBufferUsageFlag::TransferSrc |
+            RHI::ERHIBufferUsageFlag::TransferDst;
+        VisibilityDesc.InitialQueueType = RHI::EQueueType::Compute;
+        PrimitiveRes.VisibilityFlagsBuffer = std::make_shared<RenderCore::RenderBuffer>(VisibilityDesc);
+        PrimitiveRes.VisibilityFlagsBuffer->InitRHIResource();
+
+        std::vector<uint32_t> ZeroVisibility(PrimitiveRes.PrimitiveCount, 0u);
+        const uint32_t UploadSize = PrimitiveRes.PrimitiveCount > 0 ?
+            PrimitiveRes.PrimitiveCount * sizeof(uint32_t) :
+            sizeof(uint32_t);
+        PrimitiveRes.VisibilityFlagsBuffer->UploadData(
+            ZeroVisibility.empty() ? static_cast<const void*>(&PrimitiveRes.PrimitiveCount) : static_cast<const void*>(ZeroVisibility.data()),
+            UploadSize);
     }
 
 
@@ -771,6 +918,14 @@ namespace Renderer {
             LightRes.SpotLightBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
             LightRes.SpotLightBuffer->InitRHIResource();
             LightRes.SpotLightBuffer->UploadData(GPUData.data(), Desc.Size);
+        }
+
+        if (EnumHasAnyFlags(
+            Dirty,
+            ESceneGPUResourceDirty
+            ::Primitive))
+        {
+            UpdatePrimitiveGPUResource();
         }
         LightRes.IBLSpecularTexture = nullptr;
         LightRes.IBLSpecularTexture = nullptr;

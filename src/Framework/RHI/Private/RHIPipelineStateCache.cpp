@@ -1,6 +1,7 @@
 #include "RHIPipelineStateCache.h"
 #include <functional>
 #include "RHIApi.h"
+#include "HashHelper.hpp"
 
 namespace RHI {
 
@@ -62,6 +63,7 @@ RHIVertexDescState* RHIPipelineStateCache::GetOrCreateVertexDescState(const RHIV
 
 RHIRasterizerState* RHIPipelineStateCache::GetOrCreateRasterizerState(const RHIRasterizerStateDesc& desc) {
     std::lock_guard<std::mutex> lock(s_rasterizerMutex);
+
     size_t hash = HashRasterizerState(desc);
     
     auto it = s_rasterizerCache.find(hash);
@@ -131,6 +133,12 @@ void RHIPipelineStateCache::ClearAll() {
 
 size_t RHIPipelineStateCache::HashGraphicsPipelineDesc(const RHIGraphicsPipelineStateDesc& desc) {
 	size_t hash = 0;
+    if (desc.shaderStages.vertexShader) {
+        HashCombine(hash, (uint64_t)desc.shaderStages.vertexShader);
+    }
+    if (desc.shaderStages.fragmentShader) {
+		HashCombine(hash, (uint64_t)desc.shaderStages.fragmentShader);
+	}
 	hash ^= HashVertexDescState(desc.vertexDescState->GetDesc());
 	hash ^= HashRasterizerState(desc.rasterizerState->GetDesc());
 	hash ^= HashColorBlendState(desc.colorBlendState->GetDesc());
@@ -164,16 +172,16 @@ size_t RHIPipelineStateCache::HashVertexDescState(const RHIVertexDescStateDesc& 
 
 size_t RHIPipelineStateCache::HashRasterizerState(const RHIRasterizerStateDesc& desc) {
     size_t hash = 0;
-    hash ^= std::hash<bool>()(desc.depthClampEnable);
-    hash ^= std::hash<bool>()(desc.rasterizerDiscardEnable);
-    hash ^= std::hash<int>()(static_cast<int>(desc.polygonMode));
-    hash ^= std::hash<int>()(static_cast<int>(desc.cullMode));
-    hash ^= std::hash<int>()(static_cast<int>(desc.frontFace));
-    hash ^= std::hash<bool>()(desc.depthBiasEnable);
-    hash ^= std::hash<float>()(desc.depthBiasConstantFactor);
-    hash ^= std::hash<float>()(desc.depthBiasClamp);
-    hash ^= std::hash<float>()(desc.depthBiasSlopeFactor);
-    hash ^= std::hash<float>()(desc.lineWidth);
+    HashCombine(hash, desc.depthClampEnable);
+    HashCombine(hash, desc.rasterizerDiscardEnable);
+    HashCombine(hash, desc.polygonMode);
+    HashCombine(hash, desc.cullMode);
+    HashCombine(hash, desc.frontFace);
+    HashCombine(hash, desc.depthBiasEnable);
+    HashCombine(hash, desc.depthBiasConstantFactor);
+    HashCombine(hash, desc.depthBiasClamp);
+    HashCombine(hash, desc.depthBiasSlopeFactor);
+    HashCombine(hash, desc.lineWidth);
     return hash;
 }
 

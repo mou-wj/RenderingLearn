@@ -7,7 +7,7 @@
 #include "SceneShaderParameters.h"
 #include "MaterialShaderParameter.h"
 #include "MateiralShader.h"
-#include "ShaderParameter.h"
+#include "GlobalShader.h"
 
 namespace Renderer
 {
@@ -130,26 +130,20 @@ namespace Renderer
         }
     };
 
-    BEGIN_SHADER_PARAMETER_STRUCT(StaticMeshMaterialLightShadowPassPSParameters)
-        SHADER_PARAMETER_STRUCT_REFERENCE(Engine::LocalVertexFactoryParameters, vertexFactoryParameters)
-        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
-    END_SHADER_PARAMETER_STRUCT(StaticMeshMaterialLightShadowPassPSParameters)
+    BEGIN_SHADER_PARAMETER_STRUCT(PositionOnlyVSParameters)
+        SHADER_PARAMETER(Core::Mat4, ViewProjection)
+        SHADER_PARAMETER(Core::Mat4, Model)
+    END_SHADER_PARAMETER_STRUCT(PositionOnlyVSParameters)
+
     /*
-    ===============================================================================
-        StaticMeshMaterialLightShadowPassPS
-    ===============================================================================
-    */
-    class StaticMeshMaterialLightShadowPassPS : public MeshMaterialShader
+   ===============================================================================
+       PositionOnlyVS
+   ===============================================================================
+   */
+    class PositionOnlyVS : public RenderCore::GlobalShader
     {
     public:
-        static constexpr char Macro_DepthStoreMode[] = "DEPTH_STORE_MODE";
-
-        // 2. 定义变体维度（例如 3 种颜色转换模式）
-        using DepthStoreModeDim = RenderCore::FPermutationDimensionEnum<Macro_DepthStoreMode, 2>;
-
-        // 3. 定义变体域（Domain），可以包含多个维度
-        using PermutationDomain = RenderCore::ShaderPermutationDomain<DepthStoreModeDim>;
-        DECLARE_MESH_MATERIAL_SHADER_TYPE(StaticMeshMaterialLightShadowPassPS)
+        DECLARE_GLOBAL_SHADER_TYPE(PositionOnlyVS)
         static bool ShouldCompilePermutation(
             const RenderCore::ShaderPermutationParameters& Parameters);
 
@@ -161,4 +155,38 @@ namespace Renderer
             GetShaderParameterMetadata();
     };
 
+
+    BEGIN_SHADER_PARAMETER_STRUCT(DepthShadowPassPSParameters)
+        SHADER_PARAMETER(Core::Float3, CameraWorldPosition)
+        SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
+    END_SHADER_PARAMETER_STRUCT(DepthShadowPassPSParameters)
+   
+    /*
+   ===============================================================================
+       DepthShadowPassPS
+   ===============================================================================
+   */
+    class DepthShadowPassPS : public RenderCore::GlobalShader
+    {
+    public:
+        static constexpr char Macro_DepthStoreMode[] = "DEPTH_STORE_MODE";
+
+        // 2. 定义变体维度（例如 3 种颜色转换模式）
+        using DepthStoreModeDim = RenderCore::FPermutationDimensionEnum<Macro_DepthStoreMode, 2>;
+
+        // 3. 定义变体域（Domain），可以包含多个维度
+        using PermutationDomain = RenderCore::ShaderPermutationDomain<DepthStoreModeDim>;
+        DECLARE_GLOBAL_SHADER_TYPE(DepthShadowPassPS)
+        static bool ShouldCompilePermutation(
+            const RenderCore::ShaderPermutationParameters& Parameters);
+
+        static void ModifyShaderCompilerEnvironment(
+            const RenderCore::ShaderPermutationParameters& Parameters,
+            RenderCore::ShaderCompilerEnvironment& OutEnvironment);
+
+        static const RenderCore::ShaderParametersMetadata*
+            GetShaderParameterMetadata();
+    };
+
+    RHI::RHIVertexDescState* GetVertexOnlyState();
 }

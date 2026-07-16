@@ -46,12 +46,11 @@ namespace Renderer {
             });
 
     }
-    void SceneRenderer::BuildSceneLightShadowMap(RenderCore::RenderGraphBuilder& builder)
+    void SceneRenderer::BuildSceneLightShadowMap(Renderer::Scene* Scene, RenderCore::RenderGraphBuilder& builder)
     {
         std::vector<ShadowRenderView> shadowRenderViews;
-
         Scene->ForEachLight(
-            [this, &shadowRenderViews,&builder](Engine::LightSceneProxy* light)
+            [&Scene, &shadowRenderViews,&builder](Engine::LightSceneProxy* light)
             {
                 if (!light)
                     return;
@@ -116,6 +115,7 @@ namespace Renderer {
                     view.ViewProjection =
                         proj * viewMat;
                     shadowInfo.ShadowMatrices[0] = view.ViewProjection;
+                    
                     Core::Float4 test = viewMat * Core::Float4(3, 3, 3, 1).Data;
                     Core::Float4 restest = proj * test.Data;
                     float z = restest.z / restest.w;
@@ -152,7 +152,7 @@ namespace Renderer {
                     else {
                         allocation = shadowInfo.Allocation;
                     }
-                    
+
                     
                     static Core::Float3 directions[6] =
                     {
@@ -164,26 +164,18 @@ namespace Renderer {
                         { 0, 0,-1 }
                     };
 
-                    //static Core::Float3 ups[6] =
-                    //{
-                    //    {0,1,0},
-                    //    {0,1,0},
-                    //    {0,0,1},
-                    //    {0,0,-1},
-                    //    {0,1,0},
-                    //    {0,1,0}
-                    //};
                     static Core::Float3 ups[6] =
                     {
-                        { 0,-1,0 }, // +X
-                        { 0,-1,0 }, // -X
+                        { 0,1,0 }, // +X
+                        { 0,1,0 }, // -X
 
                         { 0,0,1 },  // +Y
                         { 0,0,-1 }, // -Y
 
-                        { 0,-1,0 }, // +Z
-                        { 0,-1,0 }  // -Z
+                        { 0,1,0 }, // +Z
+                        { 0,1,0 }  // -Z
                     };
+
                     float radius = pointLight->GetAttenuationRadius();
                     auto proj =
                         Core::PerspectiveRH_ZO(
@@ -212,24 +204,53 @@ namespace Renderer {
 
                         view.ViewProjection =
                             proj * viewMat;
-                        if (RHI::GRHIApi->GetPlatformInfo().NDCToUVScaleBias.y < 0) {
-                            ;
-                            view.ViewProjection = Core::MakeScaleMatrix(Core::Float3(1, -1, 1)) * view.ViewProjection;
-                        }
-                        Core::Float4 test = viewMat * Core::Float4(3, 3, 3, 1).Data;
-                        Core::Float4 restest = proj * test.Data;
 
-                        float z = restest.z / restest.w;
+						// 不能在再翻转，否则会导致裁剪面翻转，导致背面剔除错误
+                        //view.ViewProjection = Core::MakeScaleMatrix(flip) * view.ViewProjection;
+                       
+                        auto clipPos = proj * viewMat * Core::Float4(-1, -1, -1, 1).Data;
+                        Core::Float4 test = view.ViewProjection * Core::Float4(3, 3, 3, 1).Data;
+
+                        float z = test.z / test.w;
                         shadowInfo.ShadowMatrices[i] = view.ViewProjection;
                         view.CameraPos = pointLight->GetPosition();
                         view.wantRawDepth = true;
                         view.RawDepthClearValue = Core::Float4(radius, radius,0,0);
+                        
                         shadowRenderViews.push_back(view);
                     }
                     
                     break;
                 }
+                //---------------------------------------------------
+                // Directional Light (CSM)
+                //---------------------------------------------------
+                case Engine::ELightType::Directional:
+                {
+                    auto* dirLight =
+                        dynamic_cast<Engine::DirectionalLightSceneProxy*>(light);
 
+                    if (!dirLight)
+                        return;
+
+                    constexpr uint32_t CascadeCount = 4;
+                    LightShadowInfo& shadowInfo = Scene->GetLightShadowInfo(light);
+                    ShadowAllocation allocation;
+                    if (!shadowInfo.Allocation.IsValid()) {
+                        allocation = allocator.AllocateDirectionalCSMShadow(
+                            2048,
+                            CascadeCount);
+                        shadowInfo.Allocation = allocation;
+                        if (!allocation.IsValid())
+                            return;
+                    }
+                    else {
+                        allocation = shadowInfo.Allocation;
+                    }
+
+                    shadowInfo.ShadowMatrices.resize(CascadeCount);
+                    break;
+                }
                 default:
                     break;
                 }
@@ -237,15 +258,15 @@ namespace Renderer {
 
         if (!shadowRenderViews.empty())
         {
-            BuildLightShadow(builder, shadowRenderViews);
+            BuildLightShadow(Scene,builder, shadowRenderViews);
         }
     }
-    void SceneRenderer::BuildSceneLightCascadeShadowMap(RenderCore::RenderGraphBuilder& builder, const SceneView& sceneView)
+    void SceneRenderer::BuildSceneLightCascadeShadowMap(Renderer::Scene* Scene, RenderCore::RenderGraphBuilder& builder, const SceneView& sceneView)
     {
         std::vector<ShadowRenderView> shadowRenderViews;
 
         Scene->ForEachLight(
-            [this, &shadowRenderViews,&sceneView,&builder](Engine::LightSceneProxy* light)
+            [Scene, &shadowRenderViews,&sceneView,&builder](Engine::LightSceneProxy* light)
             {
                 if (!light)
                     return;
@@ -272,18 +293,9 @@ namespace Renderer {
                     const std::array<float, 5>& splitDepths = sceneView.splitDepths;
                     
 					LightShadowInfo& shadowInfo = Scene->GetLightShadowInfo(light);
-                    ShadowAllocation allocation;
-                    if (!shadowInfo.Allocation.IsValid()) {
-                        allocation = allocator.AllocateDirectionalCSMShadow(
-                            2048,
-                            CascadeCount);
-						shadowInfo.Allocation = allocation;
-                        if (!allocation.IsValid())
-                            return;
-                    }
-                    else {
-                        allocation = shadowInfo.Allocation;
-                    }
+                    ShadowAllocation allocation = shadowInfo.Allocation;
+                    if (!allocation.IsValid())
+                        return;
 
                     shadowInfo.ShadowMatrices.resize(CascadeCount);
                     
@@ -354,6 +366,10 @@ namespace Renderer {
 
                         view.ViewProjection =
                             proj * lightView;
+						// view.ViewProjection 不能在绘制时翻转uv，否则会导致裁剪面翻转，导致背面剔除错误
+                        //view.ViewProjection = Core::MakeScaleMatrix(Core::Float3(1, 1, 1)) * view.ViewProjection;
+                        Core::Float4 dPosition1 = view.ViewProjection * Core::Float4(0, 0, 0, 1).Data ;
+                        Core::Float4 dPosition2 = view.ViewProjection * Core::Float4(3, 3, 3, 1).Data;
                         shadowInfo.ShadowMatrices[i] = view.ViewProjection;
                         view.CameraPos = lightPos;
                         view.wantRawDepth = false;
@@ -370,16 +386,16 @@ namespace Renderer {
 
         if (!shadowRenderViews.empty())
         {
-            BuildLightShadow(builder, shadowRenderViews);
+            BuildLightShadow(Scene,builder, shadowRenderViews);
         }
     }
-    void SceneRenderer::UploadShadowMapInfo(RenderCore::RenderGraphBuilder& graphBuilder)
+    void SceneRenderer::UploadShadowMapInfo(Renderer::Scene* Scene,RenderCore::RenderGraphBuilder& graphBuilder)
     {
 		auto lightCount = Scene->LightIndexs.size();
         std::vector<LightShadowAccessInfo> lightShadowAccessInfos(lightCount);
         lightShadowAccessInfos.reserve(lightCount);
         std::vector<AtlasShadowTextureAccessInfo> spotShadowAccessInfos;
-        std::vector<DirectionalLightCascadeShadowViewInfo> directionalLightShadowViewInfos;
+
         //
         int atlasIndex = 0, directionalLightShadowViewInfoIndex = 0;
         for (auto& shadowInfo : Scene->GPUResourceInfo.ShadowResourceInfo.LightShadowInfos) {
@@ -402,10 +418,6 @@ namespace Renderer {
 			}
 			else if (shadowInfo.second.Allocation.ShadowType == EShadowType::Directional) {
 				lightShadowAccessInfo.ShadowInfoIndex = directionalLightShadowViewInfoIndex;
-				for (uint32_t i = 0; i < shadowInfo.second.ShadowMatrices.size(); i++) {
-					directionalLightShadowViewInfo.ViewProj = shadowInfo.second.ShadowMatrices[i];
-					directionalLightShadowViewInfos.push_back(directionalLightShadowViewInfo);
-				}
 				directionalLightShadowViewInfoIndex += shadowInfo.second.ShadowMatrices.size();
                 lightShadowAccessInfo.CascadeCount = shadowInfo.second.ShadowMatrices.size();
 			}
@@ -415,7 +427,7 @@ namespace Renderer {
         }
         auto& LightShadowInfoBuffer = Scene->GPUResourceInfo.ShadowResourceInfo.LightShadowInfoBuffer;
         auto& AtlasAccessInfoBuffer = Scene->GPUResourceInfo.ShadowResourceInfo.AtlasAccessInfoBuffer;
-        auto& directionalLightShadowViewInfoBuffer = Scene->GPUResourceInfo.ShadowResourceInfo.DirectionalLightShadowViewInfoBuffer;
+        
         if (LightShadowInfoBuffer == nullptr || LightShadowInfoBuffer->GetRHI()->GetDesc().Size < lightCount * sizeof(LightShadowAccessInfo)) {
             RHI::RHIBufferDesc Desc;
             Desc.Size = lightCount * sizeof(LightShadowAccessInfo);
@@ -440,22 +452,41 @@ namespace Renderer {
             auto bufferUpload = graphBuilder.RegisterExternalBuffer("AtlasAccessInfoBuffer", AtlasAccessInfoBuffer.get());
             graphBuilder.AddUploadBuffer(bufferUpload, spotShadowAccessInfos.data(), spotShadowAccessInfos.size() * sizeof(AtlasShadowTextureAccessInfo));
         }
-		if (directionalLightShadowViewInfoBuffer == nullptr || directionalLightShadowViewInfoBuffer->GetRHI()->GetDesc().Size < directionalLightShadowViewInfos.size() * sizeof(DirectionalLightCascadeShadowViewInfo)) {
-			RHI::RHIBufferDesc Desc;
-			Desc.Size = directionalLightShadowViewInfos.size() * sizeof(DirectionalLightCascadeShadowViewInfo);
-			if (Desc.Size == 0) {
-				Desc.Size = 1;
-			}
-			Desc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
-			directionalLightShadowViewInfoBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
-			directionalLightShadowViewInfoBuffer->InitRHIResource();
-			auto bufferUpload = graphBuilder.RegisterExternalBuffer("DirectionalLightShadowViewInfoBuffer", directionalLightShadowViewInfoBuffer.get());
-			graphBuilder.AddUploadBuffer(bufferUpload, directionalLightShadowViewInfos.data(), directionalLightShadowViewInfos.size() * sizeof(DirectionalLightCascadeShadowViewInfo));
-		}
         
+
     }
-    void SceneRenderer::UploadSplits(RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view,RenderGraphBufferSRV** out)
+    void SceneRenderer::UpdateCascadeShadowInfo(Renderer::Scene* Scene, RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view)
 	{
+        BuildSceneLightCascadeShadowMap(Scene, graphBuilder, view);
+        auto& directionalLightShadowViewInfoBuffer = Scene->GPUResourceInfo.ShadowResourceInfo.DirectionalLightShadowViewInfoBuffer;
+        int directionalLightShadowViewInfoIndex = 0;
+        std::vector<DirectionalLightCascadeShadowViewInfo> directionalLightShadowViewInfos;
+        for (auto& shadowInfo : Scene->GPUResourceInfo.ShadowResourceInfo.LightShadowInfos) {
+            auto index = Scene->LightIndexs[shadowInfo.first];
+            DirectionalLightCascadeShadowViewInfo directionalLightShadowViewInfo;
+            if (shadowInfo.second.Allocation.ShadowType == EShadowType::Directional) {
+                for (uint32_t i = 0; i < shadowInfo.second.ShadowMatrices.size(); i++, directionalLightShadowViewInfoIndex++) {
+                    directionalLightShadowViewInfo.ViewProj = shadowInfo.second.ShadowMatrices[i];
+                    directionalLightShadowViewInfos.push_back(directionalLightShadowViewInfo);
+                }
+            }
+
+        }
+        if (directionalLightShadowViewInfoBuffer == nullptr || directionalLightShadowViewInfoBuffer->GetRHI()->GetDesc().Size < directionalLightShadowViewInfos.size() * sizeof(DirectionalLightCascadeShadowViewInfo)) {
+            RHI::RHIBufferDesc Desc;
+            Desc.Size = directionalLightShadowViewInfos.size() * sizeof(DirectionalLightCascadeShadowViewInfo);
+            if (Desc.Size == 0) {
+                Desc.Size = 1;
+            }
+            Desc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
+            directionalLightShadowViewInfoBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
+            directionalLightShadowViewInfoBuffer->InitRHIResource();
+
+        }
+        auto directLightBufferUpload = graphBuilder.RegisterExternalBuffer("DirectionalLightShadowViewInfoBuffer", directionalLightShadowViewInfoBuffer.get());
+        
+        
+        //To do： 这里后续平行光的级联阴影贴图相关的splitbuffer与视角相关，所以场景中的管理方式也需要修改，
 		auto& SplitBuffer = Scene->GPUResourceInfo.ShadowResourceInfo.SplitBuffer;
 		if (SplitBuffer == nullptr || SplitBuffer->GetRHI()->GetDesc().Size < (view.splitDepths.size() * sizeof(float))) {
 			RHI::RHIBufferDesc Desc;
@@ -466,15 +497,18 @@ namespace Renderer {
 			SplitBuffer->InitRHIResource();
 			
 		}
-        auto bufferUpload = graphBuilder.RegisterExternalBuffer("SplitBuffer", SplitBuffer.get());
-        graphBuilder.AddUploadBuffer(bufferUpload, view.splitDepths.data(), view.splitDepths.size() * sizeof(float), RenderCore::RenderGraphBuilder::EUploadPolicy::Immediate);
-        RenderGraphBufferSRVDesc Desc;
-		Desc.Buffer = bufferUpload;
-		Desc.Format = ERHIFormat::R32_Float;
-		Desc.NumElements = view.splitDepths.size();
-		Desc.Stride = sizeof(float);
-        auto bufferSRV = graphBuilder.CreateBufferSRV("SplitBufferSRV",Desc);
-        *out = bufferSRV;
+        auto splitBufferUpload = graphBuilder.RegisterExternalBuffer("SplitBuffer", SplitBuffer.get());
+		RenderGraphBuilder::UploadBufferDesc uploadDesc;
+        uploadDesc.buffer = directLightBufferUpload;
+        uploadDesc.Data = directionalLightShadowViewInfos.data();
+		uploadDesc.Size = directionalLightShadowViewInfos.size() * sizeof(DirectionalLightCascadeShadowViewInfo);
+        RenderGraphBuilder::UploadBufferDesc uploadDescSplit;
+        uploadDescSplit.buffer = splitBufferUpload;
+        uploadDescSplit.Data = (void*)view.splitDepths.data();
+        uploadDescSplit.Size = view.splitDepths.size() * sizeof(float);
+
+        graphBuilder.AddUploadBuffers({ uploadDesc ,uploadDescSplit }, RenderCore::RenderGraphBuilder::EUploadPolicy::Immediate);
+        
     }
     void SceneRenderer::AddClearShadowMapPass(RenderCore::RenderGraphBuilder& graphBuilder, std::vector<ShadowRenderView>& shadowRenderViews)
     {
@@ -496,33 +530,21 @@ namespace Renderer {
         }
 
     }
-    void SceneRenderer::BuildLightShadow(RenderCore::RenderGraphBuilder& graphBuilder, std::vector<ShadowRenderView>& shadowRenderViews)
+    void SceneRenderer::BuildLightShadow(Renderer::Scene* Scene, RenderCore::RenderGraphBuilder& graphBuilder, std::vector<ShadowRenderView>& shadowRenderViews)
     {
 
         auto vsShaderType =
             ShaderType::GetRegisterMap()
-            [ShaderType::EShaderTypeFlag::MeshMaterial]
-            ["StaticMeshMaterialShaderVS"];
+            [ShaderType::EShaderTypeFlag::Global]
+            ["PositionOnlyVS"];
 
         auto psShaderType =
             ShaderType::GetRegisterMap()
-            [ShaderType::EShaderTypeFlag::MeshMaterial]
-            ["StaticMeshMaterialLightShadowPassPS"];
-
-        auto vfType =
-            VertexFactoryType::GetRegisterMap()
-            ["LocalVertexFactory"];
+            [ShaderType::EShaderTypeFlag::Global]
+            ["DepthShadowPassPS"];
 
         //获取pipeline
-        // 创建光栅化状态
-        RHI::RHIRasterizerStateDesc rasterizerDesc;
-        rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
-        rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
-        rasterizerDesc.frontFace = RHI::ERHIFrontFace::CounterClockwise;
-        rasterizerDesc.lineWidth = 1.0f;
-        rasterizerDesc.depthBiasEnable = false;
 
-        auto rasterizerState = RHIPipelineStateCache::GetOrCreateRasterizerState(rasterizerDesc);
 
         // 创建深度模板状态
         RHI::RHIDepthStencilStateDesc depthStencilDesc;
@@ -536,7 +558,7 @@ namespace Renderer {
         
 
         // 这里可以设置更多管线配置...
-        pipelineDesc.rasterizerState = rasterizerState;
+
 
         pipelineDesc.depthStencilState = depthStencilState;
 
@@ -591,7 +613,7 @@ namespace Renderer {
             }
             MeshBatchList drawMeshBatches;
             std::vector<Engine::StaticMeshProxy*> proxys;
-            Scene->ForEachPrimitive([this, &graphBuilder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
+            Scene->ForEachPrimitive([Scene, &graphBuilder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
                 if (proxy->IsA<Engine::StaticMeshProxy>()) {
                     proxys.push_back(static_cast<Engine::StaticMeshProxy*>(proxy));
                 }
@@ -601,28 +623,26 @@ namespace Renderer {
             bool isFirst = true;
             for (auto& batch : drawMeshBatches)
             {
+                // 创建光栅化状态
+                RHI::RHIRasterizerStateDesc rasterizerDesc;
+                rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
+                rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
+                rasterizerDesc.frontFace = batch.FrontFace;
+                rasterizerDesc.lineWidth = 1.0f;
+                rasterizerDesc.depthBiasEnable = false;
+
+                auto rasterizerState = RHIPipelineStateCache::GetOrCreateRasterizerState(rasterizerDesc);
+                pipelineDesc.rasterizerState = rasterizerState;
+
                 auto vfFlags = batch.VertexFactory->GetVertexFactoryFlags();
-                MeshMaterialShaderKey vsKey;
-                vsKey.ShaderType =
-                    static_cast<MeshMaterialShaderType*>(vsShaderType);
-                vsKey.VF = vfType;
-                vsKey.VertexFactoryFlags = vfFlags;
                 auto vertexShader =
-                    GMeshMaterialShaderMap.GetShader(vsKey);
+                    GShaderMap.GetShader(vsShaderType,0);
                 pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
 
-                MeshMaterialShaderKey psKey;
-                psKey.ShaderType =
-                    static_cast<MeshMaterialShaderType*>(psShaderType);
-                psKey.VF = vfType;
-                psKey.PermutationId = psPermutationId;
-                psKey.VertexFactoryFlags = vfFlags;
-
                 auto pixelShader =
-                    GMeshMaterialShaderMap.GetShader(psKey);
+                    GShaderMap.GetShader(psShaderType, psPermutationId);
                 pipelineDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(pixelShader->GetRHIShader());
-
-                pipelineDesc.vertexDescState = batch.VertexFactory->GetRHIVertexDescState();
+                pipelineDesc.vertexDescState = GetVertexOnlyState();
                 RHI::RHIColorBlendStateDesc blendDesc;
                 // 创建颜色混合状态
                 RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
@@ -638,19 +658,14 @@ namespace Renderer {
                 // 逻辑与你当前 StaticMeshDrawPass 一样
 
                 BEGIN_SHADER_PARAMETER_STRUCT(PassParameters)
-                    SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialShaderVSParameters, vertexParameters)
-                    SHADER_PARAMETER_STRUCT_REFERENCE(StaticMeshMaterialLightShadowPassPSParameters, pixelParameters)
+                    SHADER_PARAMETER_STRUCT_REFERENCE(PositionOnlyVSParameters, vertexParameters)
+                    SHADER_PARAMETER_STRUCT_REFERENCE(DepthShadowPassPSParameters, pixelParameters)
                 END_SHADER_PARAMETER_STRUCT(PassParameters)
 
                 auto* params = graphBuilder.AllocateParameter<PassParameters>();
-                params->vertexParameters.vertexFactoryParameters.CameraWorldPosition = shadowView.CameraPos;
-                params->vertexParameters.vertexFactoryParameters.ViewProjection = shadowView.ViewProjection;
-                params->vertexParameters.vertexFactoryParameters.LocalToWorld = batch.LocalToWorld;
-                params->vertexParameters.vertexFactoryParameters.WorldToLocal = batch.WorldToLocal;
-                params->pixelParameters.vertexFactoryParameters.CameraWorldPosition = shadowView.CameraPos;
-                params->pixelParameters.vertexFactoryParameters.ViewProjection = shadowView.ViewProjection;
-                params->pixelParameters.vertexFactoryParameters.LocalToWorld = batch.LocalToWorld;
-                params->pixelParameters.vertexFactoryParameters.WorldToLocal = batch.WorldToLocal;
+                params->vertexParameters.ViewProjection = shadowView.ViewProjection;
+                params->vertexParameters.Model = batch.LocalToWorld;
+                params->pixelParameters.CameraWorldPosition = shadowView.CameraPos;
                 params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
 
                 params->pixelParameters.renderTargetSlots[0].Texture = shadowView.Allocation.Texture;

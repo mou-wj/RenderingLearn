@@ -538,6 +538,7 @@ extern RENDERCORE_API RenderTextureSP GlobalTestTexture;
 extern RENDERCORE_API RenderTextureSP GlobalEmptyCubeTexture;
 extern RENDERCORE_API RenderTextureSP GlobalEmptyTexture2DArray;
 extern RENDERCORE_API RHI::RHISamplerSP GlobalSampler;
+extern RENDERCORE_API RHI::RHISamplerSP GlobalNearestSampler;
 extern RENDERCORE_API RenderBufferSP GlobalEmptyBuffer;
 RENDERCORE_API bool InitGlobalRenderResource();
 RENDERCORE_API void ReleaseGlobalRenderResource();

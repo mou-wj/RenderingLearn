@@ -20,7 +20,6 @@ enum class EDepthRange {
     NegativeOneToOne
 };
 struct RHIPlatformInfo {
-    Core::Float4 NDCToUVScaleBias;
     EDepthRange DepthRange;
 };
 

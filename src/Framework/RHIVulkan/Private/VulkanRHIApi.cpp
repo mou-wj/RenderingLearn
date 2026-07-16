@@ -190,7 +190,7 @@ void VulkanRHIApi::Shutdown()
 
 const RHIPlatformInfo& VulkanRHIApi::GetPlatformInfo() const
 {
-	static RHIPlatformInfo info{.NDCToUVScaleBias = Core::Float4(0.5,-0.5,0.5,0.5)};
+	static RHIPlatformInfo info{.DepthRange = RHI::EDepthRange::ZeroToOne};
 	return info;
 }
 
