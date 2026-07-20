@@ -23,24 +23,25 @@ namespace Renderer {
         AddClearRenderTargetsPass(builder, renderTargetBindingSlots);
 
         auto sceneEnvMap = Scene->GetGPUResourceInfo().LightResourceInfo.IBLSpecularTexture;
-        //±¾renderer»æÖÆµ½DefferedOutputColor
-        //»ñÈ¡ËùÓÐstatic mesh primitive
+        //ï¿½ï¿½rendererï¿½ï¿½ï¿½Æµï¿½DefferedOutputColor
+        //ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½static mesh primitive
 		const auto& views = Views->GetViews();
         for (auto view : views) {
             UpdateCascadeShadowInfo(Scene,builder, view);
             MeshBatchList DrawMeshBatches;
-            std::vector<Engine::StaticMeshProxy*> proxys;
-            Scene->ForEachPrimitive([this, &builder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
-                if (proxy->IsA<Engine::StaticMeshProxy>()) {
-				proxys.push_back(static_cast<Engine::StaticMeshProxy*>(proxy));
-			    }
-            });
-            StaticMeshDrawBuild(proxys, DrawMeshBatches);
+            StaticMeshDrawBuild(Scene,view, DrawMeshBatches);
             for (auto MeshBatch : DrawMeshBatches) {
                 auto vsfShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::MeshMaterial]["StaticMeshMaterialShaderVS"];
                 auto psfShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::MeshMaterial]["StaticMeshMaterialShaderPS"];
                 auto vfType = VertexFactoryType::GetRegisterMap()["LocalVertexFactory"];
                 auto vfFlags = MeshBatch.VertexFactory->GetVertexFactoryFlags();
+                bool supportInstance = MeshBatch.InstanceDataIds.size() > 1;
+                if (supportInstance) {
+                    LocalVertexFactoryFeatureFlags flags;
+                    flags.PackedFlags= vfFlags;
+					flags.SupportsInstanceData = true;
+                    vfFlags = flags.PackedFlags;
+                }
                 auto shdingMode = MeshBatch.MaterialProxy->GetParent()->GetShadingModel();
                 shdingMode = EShadingModel::Lit;
             
@@ -53,7 +54,7 @@ namespace Renderer {
             
                 auto vertexShader = GMeshMaterialShaderMap.GetShader(vsKey);
             
-                //ÉèÖÃpixel²ÎÊý
+                //ï¿½ï¿½ï¿½ï¿½pixelï¿½ï¿½ï¿½ï¿½
                 MeshMaterialShaderKey psKey;
                 psKey.ShaderType = static_cast<MeshMaterialShaderType*>(psfShaderType);
                 psKey.VF = vfType;
@@ -63,7 +64,7 @@ namespace Renderer {
                 auto pixelShader = GMeshMaterialShaderMap.GetShader(psKey);
             
             
-                // ´´½¨¹âÕ¤»¯×´Ì¬
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¤ï¿½ï¿½×´Ì¬
                 RHI::RHIRasterizerStateDesc rasterizerDesc;
                 rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
                 rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
@@ -77,7 +78,7 @@ namespace Renderer {
             
             
             
-                // ´´½¨Éî¶ÈÄ£°å×´Ì¬
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½×´Ì¬
                 RHI::RHIDepthStencilStateDesc depthStencilDesc;
                 depthStencilDesc.depthTestEnable = true;
                 depthStencilDesc.depthWriteEnable = true;
@@ -85,15 +86,19 @@ namespace Renderer {
             
                 auto depthStencilState = RHIPipelineStateCache::GetOrCreateDepthStencilState(depthStencilDesc);
                 RHI::RHIGraphicsPipelineStateDesc pipelineDesc;
-                // ´´½¨Í¼ÐÎ¹ÜÏß×´Ì¬
+                // ï¿½ï¿½ï¿½ï¿½Í¼ï¿½Î¹ï¿½ï¿½ï¿½×´Ì¬
                 pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
                 pipelineDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(pixelShader->GetRHIShader());
-                // ÕâÀï¿ÉÒÔÉèÖÃ¸ü¶à¹ÜÏßÅäÖÃ...
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½...
                 pipelineDesc.rasterizerState = rasterizerState;
             
                 pipelineDesc.depthStencilState = depthStencilState;
                 pipelineDesc.vertexDescState = MeshBatch.VertexFactory->GetRHIVertexDescState();
-            
+                if (supportInstance) {
+                    LocalVertexFactory* vf = dynamic_cast<LocalVertexFactory*>(MeshBatch.VertexFactory);
+                    pipelineDesc.vertexDescState = vf->GetRHIInstancedVertexDescState();
+                }
+
                 //rendertarget info
                 pipelineDesc.attachmentDesc.colorAttachmentCount = 1;
                 pipelineDesc.attachmentDesc.colorAttachments[0].format = RHI::ERHIFormat::R8G8B8A8_UNorm;
@@ -108,7 +113,7 @@ namespace Renderer {
                 END_SHADER_PARAMETER_STRUCT(PassParameters)
                 auto* params = builder.AllocateParameter<PassParameters>();
                 if (shdingMode == EShadingModel::Lit) {
-                    //Ìî³ä²ÄÖÊÒÔ¼°³¡¾°ÐÅÏ¢
+                    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
                     BuildShaderParameters(Scene, builder, params->pixelParameters.Scene);
                     BuildShaderParameters(MeshBatch.MaterialProxy, builder, params->pixelParameters.Material);
                 }
@@ -116,11 +121,11 @@ namespace Renderer {
 				auto& batch = MeshBatch;
                 auto materialOwner = batch.MaterialProxy->GetParent();
             
-                //ÑÕÉ«»ìºÏ
+                //ï¿½ï¿½É«ï¿½ï¿½ï¿½
                 if (materialOwner->GetBlendMode() == EBlendMode::Opaque)
                 {
                     RHI::RHIColorBlendStateDesc blendDesc;
-                    // ´´½¨ÑÕÉ«»ìºÏ×´Ì¬
+                    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É«ï¿½ï¿½ï¿½×´Ì¬
                     RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
                     blendAttachDesc.blendEnable = false;
                     std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
@@ -130,7 +135,7 @@ namespace Renderer {
                 }
                 else {
                     RHI::RHIColorBlendStateDesc blendDesc;
-                    // ´´½¨ÑÕÉ«»ìºÏ×´Ì¬
+                    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É«ï¿½ï¿½ï¿½×´Ì¬
                     RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
                     blendAttachDesc.blendEnable = true;
                     std::vector<RHI::RHIColorBlendAttachmentDesc> attachments = { blendAttachDesc };
@@ -140,17 +145,19 @@ namespace Renderer {
                 }
                 auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
                 
-                // ²ÎÊý
+                // ï¿½ï¿½ï¿½ï¿½
             
             
                 params->vertexParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
                 params->vertexParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
                 params->vertexParameters.vertexFactoryParameters.LocalToWorld = batch.LocalToWorld;
-                params->vertexParameters.vertexFactoryParameters.WorldToLocal = batch.WorldToLocal;
                 params->pixelParameters.vertexFactoryParameters.CameraWorldPosition = view.CameraWorldPos;
                 params->pixelParameters.vertexFactoryParameters.ViewProjection = view.ViewProjectionMatrix;
                 params->pixelParameters.vertexFactoryParameters.LocalToWorld = batch.LocalToWorld;
-                params->pixelParameters.vertexFactoryParameters.WorldToLocal = batch.WorldToLocal;
+                if (supportInstance) {
+                    params->vertexParameters.vertexFactoryParameters.LocalVFInstanceInfo.InstanceData = batch.InstanceDataBufferSRV;
+                    params->pixelParameters.vertexFactoryParameters.LocalVFInstanceInfo.InstanceData = batch.InstanceDataBufferSRV;
+                }
                 params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
                 params->pixelParameters.renderTargetSlots[0].Texture = SceneTextures.SceneColor;
                 params->pixelParameters.renderTargetSlots[0].Action = ERenderTargetActions::Load_Store;
@@ -158,7 +165,7 @@ namespace Renderer {
                 params->pixelParameters.renderTargetSlots.DepthStencil.DepthAction = ERenderTargetActions::Load_Store;
             
                 // -------------------------------------
-                // Ìí¼Ó pass
+                // ï¿½ï¿½ï¿½ï¿½ pass
                 // -------------------------------------
                 builder.AddPass<PassParameters>(
                     "StaticMeshDrawPass",
@@ -171,14 +178,18 @@ namespace Renderer {
                         PassParameters* materialParams = params;
             
                         cmd.SetGraphicPipelineState(pipeline);
-                        //°ó¶¨vertexfactory
+                        //ï¿½ï¿½vertexfactory
                         batch.VertexFactory->Bind(cmd);
+                        if (supportInstance) {
+                            LocalVertexFactory* vf = dynamic_cast<LocalVertexFactory*>(MeshBatch.VertexFactory);
+                            vf->BindInstanceBuffer(cmd,MeshBatch.InstanceDataBufferAccessor->GetInstanceIdBuffer()->GetRHI(), 0);
+                        }
                         cmd.SetViewport(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height, 0.0f, 1.0f);
                         cmd.SetScissor(view.Viewport.x, view.Viewport.y, view.Viewport.width, view.Viewport.height);
-                        //ÉèÖÃvertex²ÎÊý
+                        //ï¿½ï¿½ï¿½ï¿½vertexï¿½ï¿½ï¿½ï¿½
                         SetShaderParameters(cmd, vertexShader, &params->vertexParameters);
             
-                        //ÉèÖÃpixel²ÎÊý
+                        //ï¿½ï¿½ï¿½ï¿½pixelï¿½ï¿½ï¿½ï¿½
                         SetShaderParameters(cmd, pixelShader, &params->pixelParameters);
                         auto boundRenderTarget = params->pixelParameters.renderTargetSlots.GetBoundRenderTarget();
                         RHIRenderPassInfo passInfo;
@@ -189,9 +200,9 @@ namespace Renderer {
                         passInfo.RenderArea.Width = view.Viewport.width;
                         passInfo.RenderArea.Height = view.Viewport.height;
                         cmd.BeginRenderPass(passInfo);
-                        //»æÖÆ
+                        //ï¿½ï¿½ï¿½ï¿½
                         for (auto element : batch.Elements) {
-                            cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumIndices, element.NumInstances, element.FirstIndex, element.BaseVertexIndex, element.StartInstance);
+                            cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumIndices, batch.InstanceDataIds.size(), element.FirstIndex, element.BaseVertexIndex, batch.StartInstance);
                         }
                         cmd.EndRenderPass();
                     }

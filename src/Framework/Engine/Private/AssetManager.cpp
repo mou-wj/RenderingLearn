@@ -217,9 +217,12 @@ namespace Engine {
                     LOD.VertexBuffers.PositionBuffer.Vertices.assign(data, data + vertexCount * 3);
                     LOD.VertexBuffers.PositionBuffer.NumComponents = 3;
                     LOD.VertexBuffers.PositionBuffer.Valid = true;
-                    Core::Float3 v = Core::Float3(data[0], data[1], data[2]);
-                    Bounds.Box.Min = CORE_MIN(v, Bounds.Box.Min);
-                    Bounds.Box.Max = CORE_MAX(v, Bounds.Box.Max);
+                    for (size_t i = 0; i < vertexCount; ++i)
+                    {
+                        Core::Float3 v = Core::Float3(data[3*i], data[3 * i + 1], data[3 * i + 2]);
+                        Bounds.ExpandBy(v);
+                    }
+
 
                 }
 

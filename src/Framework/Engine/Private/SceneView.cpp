@@ -260,17 +260,11 @@ namespace Engine {
         }
     }
 
-    void SceneViewFamily::BuildAllFrustums()
-    {
-        for (auto& View : Views)
-        {
-            View.BuildFrustum();
-        }
-    }
-    void SceneViewFamily::BuildAllSplitDepths() {
+    void SceneViewFamily::BuildAllViews() {
         for (auto& View : Views)
         {
             View.BuildSplitDepths();
+            View.BuildFrustum();
         }
     }
 

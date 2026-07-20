@@ -149,7 +149,7 @@ namespace App {
         family.Scene = scene;
         family.ClearViews();
         family.AddView(sceneView);
-        family.BuildAllSplitDepths();
+        family.BuildAllViews();
     }
     bool AppViewportClient::
         OnMouseButton(

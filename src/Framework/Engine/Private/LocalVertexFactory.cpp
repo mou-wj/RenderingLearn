@@ -12,7 +12,7 @@ namespace Engine
 
 
         //
-        // ÉèÖÃ Vertex Layout
+        // ï¿½ï¿½ï¿½ï¿½ Vertex Layout
         //
         void LocalVertexFactory::SetData(
             const LocalVertexFactoryData& InData)
@@ -20,59 +20,87 @@ namespace Engine
         Data = InData;
 
         //
-        // Çå¿Õ¾É Streams
+        // ï¿½ï¿½Õ¾ï¿½ Streams
         //
         Streams.clear();
 
         //
-        // ¹¹½¨ Vertex Elements
+        // ï¿½ï¿½ï¿½ï¿½ Vertex Elements
         //
         std::vector<VertexElement> Elements;
 
         //
         // POSITION -> location 0
         //
-        auto AssignComponent = [&Elements,this](const RenderCore::VertexStreamComponent& Component, uint32_t Location) {
+        auto AssignComponent = [&Elements,this](const RenderCore::VertexStreamComponent& Component, uint32_t& Location) {
             if (Component.Buffer != nullptr) {
                 Elements.push_back(
                     AccessStreamComponent(
                         Component,
                         Location));
+                Location++;
             }
 
         };
-        AssignComponent(Data.PositionComponent, 0);
+        uint32_t OptionalLocation = 0;
+        AssignComponent(Data.PositionComponent, OptionalLocation);
         LocalVertexFactoryFeatureFlags flags;
+		
         //
         // UV -> location 1
         //
-        AssignComponent(Data.UVComponent, 1);
+        AssignComponent(Data.UVComponent, OptionalLocation);
         flags.SupportsTexCoord = Data.UVComponent.Buffer != nullptr;
 
 
         //
         // NORMAL -> location 2
         //
-        AssignComponent(Data.NormalComponent, 2);
+        AssignComponent(Data.NormalComponent, OptionalLocation);
         flags.SupportsNormal = Data.NormalComponent.Buffer != nullptr;
         //
         // TANGENT -> location 3
         //
-        AssignComponent(Data.TangentComponent, 3);
+        AssignComponent(Data.TangentComponent, OptionalLocation);
         flags.SupportsTangent = Data.TangentComponent.Buffer != nullptr;
         //
         // COLOR -> location 4
         //
-        AssignComponent(Data.ColorComponent, 4);
+        AssignComponent(Data.ColorComponent, OptionalLocation);
         flags.SupportsVertexColor = Data.ColorComponent.Buffer != nullptr;
         //
-        // ´´½¨ Vulkan VertexInputState
+        // ï¿½ï¿½ï¿½ï¿½ Vulkan VertexInputState
         //
-        InitDeclaration(Elements);
+        InitDeclaration(Elements,&RHIVertexDescState);
         VertexFactoryFlags = flags.PackedFlags;
+        //
+        // Instance ID -> location 5
+        //
+        RenderCore::VertexStreamComponent InstanceComponent;
+        InstanceComponent.Buffer = nullptr;
+        InstanceComponent.InputRate = RHI::ERHIInputRate::PerInstance;
+        InstanceComponent.Format = RHI::ERHIFormat::R32_UInt;
+        InstanceComponent.Stride = sizeof(uint32_t);
+        instanceLocation = OptionalLocation;
+        Elements.push_back(
+            AccessStreamComponent(
+                InstanceComponent,
+                OptionalLocation));
+        //
+        // ï¿½ï¿½ï¿½ï¿½ Vulkan VertexInputState
+        //
+        InitDeclaration(Elements, &RHIInstancedVertexDescState);
+        
+
     }
-
-
+    RHI::RHIVertexDescState* LocalVertexFactory::GetRHIInstancedVertexDescState() const {
+        return RHIInstancedVertexDescState;
+    }
+    void LocalVertexFactory::BindInstanceBuffer(RHI::RHIGraphicCommandList& cmdList, RHI::RHIBuffer* InstanceBuffer, uint32_t Offset) const
+    {
+        if (instanceLocation < Streams.size())
+            cmdList.SetStreamSource(Streams[instanceLocation].Binding, InstanceBuffer, Offset);
+    }
     //
     // Shader Permutation
     //
@@ -82,7 +110,7 @@ namespace Engine
         LocalVertexFactoryFeatureFlags Flags = {};
         Flags.PackedFlags = Parameters.VertexFactoryFlags;
         
-        return Flags.PackedFlags == 3;
+        return Flags.PackedFlags == 3 || Flags.PackedFlags == 19;
         
         /*
            ===========================================================================
@@ -159,9 +187,10 @@ namespace Engine
         */
 
         OutEnvironment.SetDefine(
-            "VF_SUPPORTS_INSTANCE_DATA",
+            "VF_SUPPORTS_INSTANCE",
             Flags.SupportsInstanceData);
 
     }
 
-}
+
+}        

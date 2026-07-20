@@ -184,7 +184,9 @@ namespace Renderer
         const RenderCore::ShaderPermutationParameters& Parameters,
         RenderCore::ShaderCompilerEnvironment& OutEnvironment)
     {
-
+        PermutationDomain domain;
+        domain.SetFromId(Parameters.PermutationId);
+        domain.ModifyCompilationEnvironment(OutEnvironment);
     }
 
 
@@ -250,7 +252,7 @@ namespace Renderer
     )
 
 
-    RHI::RHIVertexDescState* GetVertexOnlyState() {
+    RHI::RHIVertexDescState* GetVertexOnlyState(bool useIntance) {
         RHI::RHIVertexDescStateDesc Desc;
 
         // 一个 Vertex Buffer
@@ -267,6 +269,24 @@ namespace Renderer
             .offset = 0,
             .format = ERHIFormat::R32G32B32_Float
             });
+        if (useIntance) {
+            // 一个 Vertex Buffer
+            Desc.bindings.push_back({
+                .binding = 1,
+                .stride = sizeof(uint32_t),
+                .inputRate = ERHIInputRate::PerInstance
+                });
+
+            // Position
+            Desc.attributes.push_back({
+                .location = 1,
+                .binding = 1,
+                .offset = 0,
+                .format = ERHIFormat::R32_UInt
+                });
+
+
+        }
         return RHI::RHIPipelineStateCache::GetOrCreateVertexDescState(Desc);
     }
 }

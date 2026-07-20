@@ -304,7 +304,7 @@ namespace Engine
 
     void SceneComponent::OnTransformChanged()
     {
-        MarkRenderStateDirty();
+        
     }
 
     void SceneComponent::MarkTransformDirty()
@@ -317,6 +317,7 @@ namespace Engine
         }
 
         OnTransformChanged();
+        MarkRenderStateDirty();
     }
 
     void SceneComponent::UpdateTransformIfDirty() const

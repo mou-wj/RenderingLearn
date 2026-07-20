@@ -51,7 +51,7 @@ namespace RenderCore {
             if (queueType == EQueueType::Graphics) {
                 graphicUploads.push_back(bufferUpload);
 			}
-			else if (queueType == EQueueType::Graphics){
+			else if (queueType == EQueueType::Compute){
 			   computeUploads.push_back(bufferUpload); 
             }
         }

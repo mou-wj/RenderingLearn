@@ -7,6 +7,7 @@
 #include "MaterialCore.h"
 #include "RHIPipelineStateCache.h"
 #include "SceneShaderParameters.h"
+#include "Log.h"
 using namespace RenderCore;
 using namespace Engine;
 namespace Renderer {
@@ -300,7 +301,7 @@ namespace Renderer {
                     shadowInfo.ShadowMatrices.resize(CascadeCount);
                     
                     auto& sceneBound = Scene->GetSceneBounds();
-
+                    float sceneMaxExtent = sceneBound.Sphere.Radius * 2;
                     for (uint32_t i = 0; i < CascadeCount; i++)
                     {
 
@@ -328,8 +329,16 @@ namespace Renderer {
                         auto lightDir =
                             dirLight->GetDirection();
 
+                        Core::Float3 targetDir = Core::Normalize(center);
+                       
+                        auto normalizeLightDir = Core::Normalize(lightDir);
+                        if (targetDir.Length() > 0 && Core::Dot(targetDir, -normalizeLightDir) < 0) {
+                            float centerDis = Core::Distance(center, Core::Float3(0, 0, 0));
+                            sceneMaxExtent += centerDis;
+                        }
+
                         auto lightPos =
-                            center - lightDir * 200.0f;
+                            center - lightDir * sceneMaxExtent;
 
                         auto lightView =
                             Core::LookAtRH(
@@ -350,19 +359,19 @@ namespace Renderer {
                         }
                         //bounds.Min.z -= ExtendNear;
                         //bounds.Min.z -= 10;
-                        auto minz = CORE_MIN(bounds.Min.z, 0);
-                        auto maxz = CORE_MAX(bounds.Max.z, 0);
-                        assert(minz < 0);
-                        
+                        //前面通过调整光源位置，得到的view矩阵一定确定可以看到完整的从视锥体中心到光源的这块区域以及场景，这样
+                        //得到的z一定是负数，且最远的负数越小，最近的直接设置为0，所以投影需要将越大的映射为0，所以线性平行投影映射需要将
+                        //翻转min和max
                         auto proj =
                             Core::OrthoRHBounds_ZO(
                                 bounds.Min.x,
                                 bounds.Max.x,
                                 bounds.Min.y,
                                 bounds.Max.y,
-                                maxz,
-                                minz);
-
+                                0,
+                                bounds.Min.z);
+                        Core::Float4 proj1 = lightView * Core::Float4(0, 0, 0, 1).Data;
+                        Core::Float4 proj2 = lightView * Core::Float4(3, 3, 3, 1).Data;
 
                         view.ViewProjection =
                             proj * lightView;
@@ -506,7 +515,7 @@ namespace Renderer {
         uploadDescSplit.buffer = splitBufferUpload;
         uploadDescSplit.Data = (void*)view.splitDepths.data();
         uploadDescSplit.Size = view.splitDepths.size() * sizeof(float);
-
+		Core::Float4 test = directionalLightShadowViewInfos[0].ViewProj * Core::Float4(3, 3, 3, 1).Data;
         graphBuilder.AddUploadBuffers({ uploadDesc ,uploadDescSplit }, RenderCore::RenderGraphBuilder::EUploadPolicy::Immediate);
         
     }
@@ -612,17 +621,14 @@ namespace Renderer {
                 psPermutationId = 1;
             }
             MeshBatchList drawMeshBatches;
-            std::vector<Engine::StaticMeshProxy*> proxys;
-            Scene->ForEachPrimitive([Scene, &graphBuilder, &proxys](Engine::PrimitiveSceneProxy* proxy) {
-                if (proxy->IsA<Engine::StaticMeshProxy>()) {
-                    proxys.push_back(static_cast<Engine::StaticMeshProxy*>(proxy));
-                }
-                });
-
-            StaticMeshDrawBuild(proxys, drawMeshBatches);
+			SceneView shadowSceneView;
+			shadowSceneView.ViewProjectionMatrix = shadowView.ViewProjection;
+            shadowSceneView.BuildFrustum();
+            StaticMeshDrawBuild(Scene, shadowSceneView, drawMeshBatches);
             bool isFirst = true;
             for (auto& batch : drawMeshBatches)
             {
+
                 // 创建光栅化状态
                 RHI::RHIRasterizerStateDesc rasterizerDesc;
                 rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
@@ -633,16 +639,19 @@ namespace Renderer {
 
                 auto rasterizerState = RHIPipelineStateCache::GetOrCreateRasterizerState(rasterizerDesc);
                 pipelineDesc.rasterizerState = rasterizerState;
-
-                auto vfFlags = batch.VertexFactory->GetVertexFactoryFlags();
-                auto vertexShader =
-                    GShaderMap.GetShader(vsShaderType,0);
+                bool supportInstance = batch.InstanceDataIds.size() > 1;
+                uint32_t vsPermutationId = 0;
+                if (supportInstance) {
+                    vsPermutationId = 1;
+                }
+                //auto vfFlags = batch.VertexFactory->GetVertexFactoryFlags();
+                auto vertexShader = GShaderMap.GetShader(vsShaderType, vsPermutationId);
                 pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
 
                 auto pixelShader =
                     GShaderMap.GetShader(psShaderType, psPermutationId);
                 pipelineDesc.shaderStages.fragmentShader = dynamic_cast<RHI::RHIFragmentShader*>(pixelShader->GetRHIShader());
-                pipelineDesc.vertexDescState = GetVertexOnlyState();
+                pipelineDesc.vertexDescState = GetVertexOnlyState(supportInstance);
                 RHI::RHIColorBlendStateDesc blendDesc;
                 // 创建颜色混合状态
                 RHI::RHIColorBlendAttachmentDesc blendAttachDesc;
@@ -667,7 +676,9 @@ namespace Renderer {
                 params->vertexParameters.Model = batch.LocalToWorld;
                 params->pixelParameters.CameraWorldPosition = shadowView.CameraPos;
                 params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
-
+                if (supportInstance) {
+                    params->vertexParameters.LocalVFInstanceInfo.InstanceData = batch.InstanceDataBufferSRV;
+                }
                 params->pixelParameters.renderTargetSlots[0].Texture = shadowView.Allocation.Texture;
                 params->pixelParameters.renderTargetSlots[0].ArraySlice = shadowView.Allocation.Layer;
                 params->pixelParameters.renderTargetSlots[0].MipIndex = shadowView.Allocation.Mip;
@@ -696,6 +707,9 @@ namespace Renderer {
                         cmd.SetGraphicPipelineState(pipeline);
                         //绑定vertexfactory
                         batch.VertexFactory->Bind(cmd);
+                        if (supportInstance) {
+                            cmd.SetStreamSource(1, batch.InstanceDataBufferAccessor->GetInstanceIdBuffer()->GetRHI(),0);
+                        }
                         // Bind Pipeline
                         //设置vertex参数
                         SetShaderParameters(cmd, vertexShader, &params->vertexParameters);
@@ -729,10 +743,10 @@ namespace Renderer {
                             cmd.DrawIndexed(
                                 batch.IndexBuffer->GetRHI(),
                                 element.NumIndices,
-                                element.NumInstances,
+                                batch.InstanceDataIds.size(),
                                 element.FirstIndex,
                                 element.BaseVertexIndex,
-                                element.StartInstance);
+                                batch.StartInstance);
                         }
                         cmd.EndRenderPass();
                     });

@@ -11,6 +11,7 @@ StaticMeshProxy::StaticMeshProxy(const StaticMeshComponent* InComponent):MeshCom
 {
     LocalToWorld = Core::MakeTranslationMatrix(InComponent->GetLocalLocation());
     WorldToLocal = Core::Inverse(LocalToWorld);
+    ProxyBounds = InComponent->GetBounds();
 }
 
 StaticMeshProxy::~StaticMeshProxy() {}

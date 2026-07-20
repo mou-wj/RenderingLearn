@@ -3,93 +3,279 @@
 #include "StaticMeshComponent.h"
 #include "StaticMeshResources.h"
 #include "StaticMeshProxy.h"
+#include "HashHelper.hpp"
+#include <unordered_map>
+#include <set>
+
+struct MeshBatchKey
+{
+    // PSO鐩稿叧
+    RenderCore::VertexFactory* VertexFactory;
+    Engine::MaterialRenderProxy* MaterialProxy;
+    RenderCore::RenderBuffer* IndexBuffer;
+    RHI::ERHIFrontFace FrontFace;
+    bool operator==(const MeshBatchKey& Other) const
+    {
+        return VertexFactory == Other.VertexFactory &&
+            MaterialProxy == Other.MaterialProxy &&
+            IndexBuffer == Other.IndexBuffer &&
+            FrontFace == Other.FrontFace;
+    }
+};
+
+struct MeshElementKey {
+    // DrawRange
+    uint32_t FirstIndex;
+    uint32_t NumIndices;
+    int32_t BaseVertexIndex;
+    bool operator==(const MeshElementKey& Other) const
+    {
+        return FirstIndex == Other.FirstIndex &&
+            NumIndices == Other.NumIndices &&
+            BaseVertexIndex == Other.BaseVertexIndex;
+    }
+};
+
+
+namespace std
+{
+
+    template<>
+    struct hash<MeshBatchKey>
+    {
+        size_t operator()(const MeshBatchKey& Key) const noexcept
+        {
+            size_t Hash = 0;
+            HashCombine(Hash, Key.VertexFactory);
+            HashCombine(Hash, Key.MaterialProxy);
+            HashCombine(Hash, Key.IndexBuffer);
+            HashCombine(Hash, static_cast<uint32_t>(Key.FrontFace));
+            return Hash;
+        }
+    };
+
+    template<>
+    struct hash<MeshElementKey>
+    {
+        size_t operator()(const MeshElementKey& Key) const noexcept
+        {
+            size_t Hash = 0;
+            HashCombine(Hash, Key.FirstIndex);
+            HashCombine(Hash, Key.NumIndices);
+            HashCombine(Hash, Key.BaseVertexIndex);
+            return Hash;
+        }
+    };
+
+}
 using namespace Engine;
 namespace Renderer {
-	void StaticMeshDrawBuild(const std::vector<Engine::StaticMeshProxy*>& meshs, MeshBatchList& outDrawMeshList)
+
+    
+
+    std::unordered_map<MeshBatchKey,std::unordered_map<MeshElementKey,std::set<uint32_t>>>  GMeshBatchElementMap;
+    std::unordered_map<size_t,Core::Mat4> GTransformMap;
+
+    bool IsSameInstanceSet(
+        const std::vector<uint32_t>& Lhs,
+        const std::set<uint32_t>& Rhs)
+    {
+        if (Lhs.size() != Rhs.size())
+        {
+            return false;
+        }
+
+        auto Iter = Rhs.begin();
+
+        for (uint32_t Id : Lhs)
+        {
+            if (Id != *Iter)
+            {
+                return false;
+            }
+
+            ++Iter;
+        }
+
+        return true;
+    }
+    void BuildMeshBatchFromMap(
+        const std::unordered_map<
+        MeshBatchKey,
+        std::unordered_map<MeshElementKey, std::set<uint32_t>>>& MeshBatchElementMap,
+        MeshBatchList& OutMeshBatchList)
+    {
+        OutMeshBatchList.clear();
+
+        for (const auto& BatchPair : MeshBatchElementMap)
+        {
+            const MeshBatchKey& BatchKey = BatchPair.first;
+            const auto& ElementMap = BatchPair.second;
+
+            MeshBatch Batch;
+
+            //----------------------------------------
+            // Batch State
+            //----------------------------------------
+
+            Batch.VertexFactory = BatchKey.VertexFactory;
+            Batch.MaterialProxy = BatchKey.MaterialProxy;
+            Batch.IndexBuffer = BatchKey.IndexBuffer;
+            Batch.FrontFace = BatchKey.FrontFace;
+
+            //----------------------------------------
+            // Build Elements
+            //----------------------------------------
+
+            bool bFirstElement = true;
+
+            for (const auto& ElementPair : ElementMap)
+            {
+                const MeshElementKey& ElementKey = ElementPair.first;
+                const std::set<uint32_t>& InstanceIds = ElementPair.second;
+
+                MeshBatchElement& Element =
+                    Batch.Elements.emplace_back();
+
+                Element.FirstIndex = ElementKey.FirstIndex;
+                Element.NumIndices = ElementKey.NumIndices;
+                Element.BaseVertexIndex = ElementKey.BaseVertexIndex;
+
+                if (bFirstElement)
+                {
+                    Batch.InstanceDataIds.assign(
+                        InstanceIds.begin(),
+                        InstanceIds.end());
+
+                    bFirstElement = false;
+					Batch.LocalToWorld = GTransformMap[*InstanceIds.begin()];
+                }
+                else
+                {
+                    assert(IsSameInstanceSet(
+                        Batch.InstanceDataIds,
+                        InstanceIds));
+                }
+            }
+
+            OutMeshBatchList.emplace_back(std::move(Batch));
+        }
+    }
+
+    void AllocateInstanceDataIds(Scene* scene, MeshBatchList& OutMeshBatchList) {
+        auto hashInstanceAllocated = [](const std::vector<uint32_t>& ids)->auto {
+            size_t hash = 0;
+            HashCombine(hash, ids.size());
+            for (auto& id : ids) {
+                HashCombine(hash, id);
+            }
+            return hash;
+            };
+        std::unordered_map<size_t, uint32_t> InstanceIdMap;
+        auto instanceDataBlock = scene->GetGPUResourceInfo().PrimitiveResourceInfo.localvertexfactoryinstanceInfo.InstanceBlock;
+        for (auto& Batch : OutMeshBatchList) {
+            auto iter = InstanceIdMap.find(hashInstanceAllocated(Batch.InstanceDataIds));
+            if (iter == InstanceIdMap.end()) {
+                auto offset = instanceDataBlock->AddInstanceIds(Batch.InstanceDataIds);
+                Batch.StartInstance = offset;
+                Batch.InstanceDataBufferAccessor = instanceDataBlock.get();
+                Batch.InstanceDataBufferSRV = instanceDataBlock->GetInstanceDataSRV();
+            }
+            else {
+                Batch.StartInstance = iter->second;
+                Batch.InstanceDataBufferAccessor = instanceDataBlock.get();
+                Batch.InstanceDataBufferSRV = instanceDataBlock->GetInstanceDataSRV();
+            }
+        }
+    }
+
+
+	void StaticMeshDrawBuild(Scene* scene, const Engine::SceneView& view, MeshBatchList& outDrawMeshList)
 	{
-        for (const auto& mesh : meshs) {
-            if (!mesh)
+        std::vector<Engine::StaticMeshProxy*> proxys;
+		auto& StaticMeshProxyInstanceId = scene->GetGPUResourceInfo().PrimitiveResourceInfo.localvertexfactoryinstanceInfo.StaticMeshProxyToInstanceId;
+        auto primitives = scene->GatherVisiblePrimitives(view);
+        for (auto primitive : primitives) {
+            if (primitive->IsA<Engine::StaticMeshProxy>()) {
+                proxys.push_back(static_cast<Engine::StaticMeshProxy*>(primitive));
+            }
+        }
+        GMeshBatchElementMap.clear();
+
+        for (auto* Mesh : proxys)
+        {
+            if (!Mesh)
             {
                 continue;
             }
-            auto staticMesh = mesh->GetStaticMeshComponent()->GetStaticMesh();
-            auto RenderData = staticMesh->GetRenderData();
-            if (RenderData->GetLODCount() == 0)
+
+            auto InstanceIter = StaticMeshProxyInstanceId.find(Mesh);
+            if (InstanceIter == StaticMeshProxyInstanceId.end())
             {
-                return;
+                continue;
             }
 
-            // TODO:
-            // 后续根据 distance/screen size
-            // 选择 LOD
+            const uint32_t InstanceId = InstanceIter->second;
+
+            auto StaticMesh = Mesh->GetStaticMeshComponent()->GetStaticMesh();
+            auto RenderData = StaticMesh->GetRenderData().get();
+
+            if (RenderData->GetLODCount() == 0)
+            {
+                continue;
+            }
+
+            // TODO: 鏍规嵁璺濈閫夋嫨LOD
             const uint32_t LODIndex = 0;
 
             const LODResource& LOD =
-                RenderData->GetLODResource(
-                    LODIndex);
+                RenderData->GetLODResource(LODIndex);
 
-            // 没有 VertexFactory 无法绘制
             if (!LOD.VertexFactory)
             {
-                return;
+                continue;
             }
 
-            for (const SectionInfo& Section :
-                LOD.Sections)
+            for (const SectionInfo& Section : LOD.Sections)
             {
-                // material index invalid
-                auto material = staticMesh->GetMaterial(Section.MaterialIndex);
-                if (!material)
+                auto* Material =
+                    StaticMesh->GetMaterial(Section.MaterialIndex);
+
+                if (!Material)
                 {
                     continue;
                 }
 
-                MeshBatch& Batch =
-                    outDrawMeshList.emplace_back();
+                //----------------------------------------
+                // Batch Key
+                //----------------------------------------
 
-                //------------------------------------------------
-                // Batch-level state
-                //------------------------------------------------
+                MeshBatchKey BatchKey;
+                BatchKey.VertexFactory = LOD.VertexFactory.get();
+                BatchKey.MaterialProxy = Material->GetRenderProxy();
+                BatchKey.IndexBuffer = LOD.IndexBuffer.Buffer.get();
+                BatchKey.FrontFace = RHI::ERHIFrontFace::CounterClockwise;
 
-                Batch.VertexFactory =
-                    LOD.VertexFactory.get();
+                //----------------------------------------
+                // Element Key
+                //----------------------------------------
 
-                Batch.MaterialProxy =
-                    material->GetRenderProxy();
-				Batch.LocalToWorld = mesh->GetLocalToWorld();
-                Batch.WorldToLocal = mesh->GetWorldToLocal();
-                Batch.IndexBuffer =
-                    LOD.IndexBuffer
-                    .Buffer.get();
+                MeshElementKey ElementKey;
+                ElementKey.FirstIndex = Section.FirstIndex;
+                ElementKey.NumIndices = Section.NumIndices;
+                ElementKey.BaseVertexIndex = Section.BaseVertexIndex;
 
+                //----------------------------------------
+                // Add Instance
+                //----------------------------------------
 
-                Batch.LODIndex =
-                    static_cast<uint8_t>(
-                        LODIndex);
+                GMeshBatchElementMap[BatchKey][ElementKey].insert(InstanceId);
 
-                //------------------------------------------------
-                // Element-level draw range
-                //------------------------------------------------
-
-                auto& Element =
-                    Batch.Elements.emplace_back();
-
-                Element.PrimitiveUniformBufferData =
-                    nullptr;
-
-                Element.FirstIndex =
-                    Section.FirstIndex;
-
-                Element.BaseVertexIndex =
-                    Section.BaseVertexIndex;
-
-                Element.NumIndices =
-                    Section.NumIndices;
-
-                Element.NumInstances =
-                    1;
+				GTransformMap[InstanceId] = Mesh->GetLocalToWorld();
             }
         }
+		BuildMeshBatchFromMap(GMeshBatchElementMap, outDrawMeshList);
+		AllocateInstanceDataIds(scene, outDrawMeshList);
 	}
 
 

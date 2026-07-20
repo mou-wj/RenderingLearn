@@ -4,7 +4,12 @@
 #include "StaticMesh.h"
 #include "RenderResource.h"
 #include "StaticMeshProxy.h"
+namespace Engine {
+    class InstanceIdBufferDefferedAccessor;
+}
+
 namespace Renderer {
+    class Scene;
 
     /*
 ===============================================================================
@@ -12,22 +17,13 @@ namespace Renderer {
 ===============================================================================
 */
     struct MeshBatchElement {
-        // 直接持有当前物体在渲染线程对应的常量缓冲区（Uniform Buffer）指针
-        // 用于给 Shader 传递物体的 LocalToWorld 矩阵、自定义裁剪数据等
-        void* PrimitiveUniformBufferData = nullptr;
 
         // 几何绘制区间控制
         uint32_t FirstIndex = 0;
         uint32_t NumIndices = 0;
         int32_t BaseVertexIndex = 0;
-        uint32_t StartInstance = 0;
-        uint32_t NumInstances = 1;
-
-        // 间接绘制命令缓冲（面向 GPU Driven Pipeline 的预留设计）
-        RenderCore::RenderBuffer* IndirectArgsBuffer = nullptr;
-        uint32_t IndirectArgsOffset = 0;
-
-        const void* UserData = nullptr;
+        
+        
     };
 
     using MeshBatchElementList = std::vector<MeshBatchElement>;
@@ -43,18 +39,18 @@ namespace Renderer {
 
         // 核心渲染状态（一个批次内必须严格一致，触发同一个 PSO）
         RenderCore::VertexFactory* VertexFactory = nullptr;
-        const Engine::MaterialRenderProxy * MaterialProxy = nullptr;
+        Engine::MaterialRenderProxy * MaterialProxy = nullptr;
 
         // 几何数据源指针挪到了 Batch 状态层，完美适配你的 RenderCore 资源
         RenderCore::RenderBuffer* IndexBuffer = nullptr;
 
         // 管线状态标志位
         RHI::ERHIFrontFace FrontFace = RHI::ERHIFrontFace::CounterClockwise;
-
-        uint8_t LODIndex = 0;
-        uint16_t MeshIdInPrimitive = 0;
+        uint32_t StartInstance = 0;
+        std::vector<uint32_t> InstanceDataIds;
+		RHI::RHIShaderResourceView* InstanceDataBufferSRV = nullptr;
+        Engine::InstanceIdBufferDefferedAccessor* InstanceDataBufferAccessor = nullptr;
         Core::Mat4 LocalToWorld;
-        Core::Mat4 WorldToLocal;
 
         MeshBatch()
         {
@@ -64,7 +60,7 @@ namespace Renderer {
 
     using MeshBatchList = std::vector<MeshBatch>;
 
-    RENDERER_API void StaticMeshDrawBuild(const std::vector<Engine::StaticMeshProxy*>& meshs, MeshBatchList& outDrawMeshList);
+    RENDERER_API void StaticMeshDrawBuild(Scene* scene,const Engine::SceneView& view, MeshBatchList& outDrawMeshList);
 
 
 }

@@ -81,10 +81,12 @@ namespace Engine
 
         return new StaticMeshProxy(this);
     }
-
+    const Core::BoxSphereBounds& StaticMeshComponent::GetBounds() const {
+        return Bounds;
+    }
     Core::BoxSphereBounds
         StaticMeshComponent::CalcBounds(
-            const FTransform& LocalToWorld) const
+            const Core::Mat4& LocalToWorld)
     {
         if (!Mesh)
         {
@@ -97,8 +99,10 @@ namespace Engine
         {
             return {};
         }
-
-        return Core::BoxSphereBounds();
+        auto bounds = Mesh->GetBounds();
+        bounds.Transform(LocalToWorld);
+		Bounds = bounds;
+        return Bounds;
     }
 
 } // namespace Engine

@@ -115,8 +115,7 @@ namespace Engine {
 
         // 批量更新控制
         void RebuildAllDerivedMatrices();
-        void BuildAllFrustums();
-        void BuildAllSplitDepths();
+        void BuildAllViews();
 
         // 视锥体批量可见性过滤：返回所有能看到这个 AABB 的 View 索引列表
         std::vector<int> FindViewsThatSeeBox(const Core::AABB& Box) const;

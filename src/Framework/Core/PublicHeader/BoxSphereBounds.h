@@ -102,6 +102,32 @@ struct CORE_API BoxSphereBounds {
         Box.SetEmpty();
         Sphere = BoundingSphere();
      }
+
+	void Transform(const Mat4& Transform) {
+		if (Box.IsEmpty()) {
+			SetEmpty();
+			return;
+		}
+
+		const Float3 Center = Box.GetCenter();
+		const Float3 Extent = Box.GetExtent();
+
+		const Float3 NewCenter(
+			Transform(0, 0) * Center.x + Transform(0, 1) * Center.y + Transform(0, 2) * Center.z + Transform(0, 3),
+			Transform(1, 0) * Center.x + Transform(1, 1) * Center.y + Transform(1, 2) * Center.z + Transform(1, 3),
+			Transform(2, 0) * Center.x + Transform(2, 1) * Center.y + Transform(2, 2) * Center.z + Transform(2, 3));
+
+		const Float3 NewExtent(
+			std::fabs(Transform(0, 0)) * Extent.x + std::fabs(Transform(0, 1)) * Extent.y + std::fabs(Transform(0, 2)) * Extent.z,
+			std::fabs(Transform(1, 0)) * Extent.x + std::fabs(Transform(1, 1)) * Extent.y + std::fabs(Transform(1, 2)) * Extent.z,
+			std::fabs(Transform(2, 0)) * Extent.x + std::fabs(Transform(2, 1)) * Extent.y + std::fabs(Transform(2, 2)) * Extent.z);
+
+		Box = AABB(
+			Float3(NewCenter.x - NewExtent.x, NewCenter.y - NewExtent.y, NewCenter.z - NewExtent.z),
+			Float3(NewCenter.x + NewExtent.x, NewCenter.y + NewExtent.y, NewCenter.z + NewExtent.z));
+
+		Sphere = BoundingSphere::FromAABB(Box);
+	}
 };
 
 } // namespace NSCore

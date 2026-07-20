@@ -83,14 +83,6 @@ namespace Renderer {
         SHADER_PARAMETER_RDG_TEXTURE_ARRAY(Texture2DArray, ParrallelLightShadows, 4)//�ȹ̶����4�����ԴͶ����Ӱ
     END_SHADER_PARAMETER_STRUCT(SceneLightShadowParameters)
 
-        BEGIN_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceSubParameters)
-        SHADER_PARAMETER(Core::Float4x4, LocalToWorld)
-    END_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceSubParameters)
-
-    BEGIN_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceParameters)
-        SHADER_PARAMETER_RHI_SRV(StructuredBuffer<ScenePrimitiveInstanceSubParameters>, InstanceData)
-    END_SHADER_PARAMETER_STRUCT(ScenePrimitiveInstanceParameters)
-
 	BEGIN_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightParameters, LightParameters)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightShadowParameters, LightShadowParameters)

@@ -3,6 +3,13 @@
 
 #if VERTEX_SHADER
 
+#if VF_SUPPORTS_INSTANCE
+#include "/Generated/ShaderParameters/LocalVertexFactoryInstanceParameters.sf"
+#endif
+
+
+        
+
 struct VertexFactoryInput
 {
     float4 Position : ATTRIBUTE0;
@@ -21,6 +28,9 @@ struct VertexFactoryInput
 
 #if VF_SUPPORTS_VERTEX_COLOR
     float4 Color : ATTRIBUTE4;
+#endif
+#if VF_SUPPORTS_INSTANCE
+    uint InstanceId : ATTRIBUTE5;
 #endif
 };
 
@@ -79,12 +89,19 @@ VertexFactoryIntermediates GetVertexFactoryIntermediates(VertexFactoryInput Inpu
 {
     VertexFactoryIntermediates Intermediates;
 
+#if VF_SUPPORTS_INSTANCE
+    const uint InstanceDataIndex = Input.InstanceId;
+    const float4x4 LocalToWorldMatrix = InstanceData[InstanceDataIndex].LocalToWorld;
+#else
+    const float4x4 LocalToWorldMatrix = LocalToWorld;
+#endif
+
     /*
     ---------------------------------------------------------------------------
         World Position
     ---------------------------------------------------------------------------
     */
-    float4 worldPosition = mul(LocalToWorld, float4(Input.Position.xyz, 1.0));
+    float4 worldPosition = mul(LocalToWorldMatrix, float4(Input.Position.xyz, 1.0));
     worldPosition /= worldPosition.w;
     Intermediates.WorldPosition = worldPosition.xyz;
 
@@ -116,13 +133,13 @@ VertexFactoryIntermediates GetVertexFactoryIntermediates(VertexFactoryInput Inpu
     ---------------------------------------------------------------------------
     */
 #if VF_SUPPORTS_NORMAL
-    float3 WorldNormal = normalize(mul((float3x3)LocalToWorld, Input.Normal));
+    float3 WorldNormal = normalize(mul((float3x3)LocalToWorldMatrix, Input.Normal));
 #else
     float3 WorldNormal = float3(0,0,1);
 #endif
 
 #if VF_SUPPORTS_TANGENT
-    float3 WorldTangent = normalize(mul((float3x3)LocalToWorld, Input.Tangent.xyz));
+    float3 WorldTangent = normalize(mul((float3x3)LocalToWorldMatrix, Input.Tangent.xyz));
     float3 WorldBitangent = normalize(cross(WorldNormal, WorldTangent) * Input.Tangent.w);
 #else
     float3 WorldTangent = float3(1,0,0);

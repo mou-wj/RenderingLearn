@@ -20,7 +20,7 @@ using namespace Engine;
 namespace Renderer {
 
     SceneRendererSP CreateSceneRenderer() {
-        return std::make_shared<ForwardSceneRenderer>();
+        return std::make_shared<DefferedSceneRenderer>();
     }
 
     RenderModule::RenderModule() = default;
@@ -94,7 +94,7 @@ namespace Renderer {
             auto gbufferText = builder.RegisterExternalTexture(std::string("GBufferTarget") + std::to_string(i), PoolGbufferTarget.get());
             gbuffers.push_back(gbufferText);
         }
-        
+		LocalVertexFactoryInstanceManager::Get().BeginUpdateGPUResources();
         auto sceneRenderer = CreateSceneRenderer();
         sceneRenderer->Scene =  dynamic_cast<Scene*>(Views->Scene);
         sceneRenderer->Views = Views;
@@ -106,7 +106,7 @@ namespace Renderer {
 		sceneRenderer->BuildSceneLightShadowMap(sceneRenderer->Scene,builder);
         sceneRenderer->UploadShadowMapInfo(sceneRenderer->Scene,builder);
         sceneRenderer->Build(builder);
-        
+        LocalVertexFactoryInstanceManager::Get().UpdateGPUResources();
         builder.Execute();
         PoolDepthTarget->MarkUsed(false);
         for (auto gTarget : GbufferTargets) {

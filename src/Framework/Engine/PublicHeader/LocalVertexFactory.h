@@ -1,18 +1,32 @@
 #pragma once
 
 #include "VertexFactory.h"
+#include "EngineExport.h"
 #include "ShaderParameter.h"
+#include "RenderResource.h"
+#include "InstanceDataMgr.h"
 
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 namespace Engine
 {
+    BEGIN_SHADER_PARAMETER_STRUCT(LocalVertexFactoryInstanceSubParameters)
+        SHADER_PARAMETER(Core::Float4x4, LocalToWorld)
+    END_SHADER_PARAMETER_STRUCT(LocalVertexFactoryInstanceSubParameters)
 
+    BEGIN_SHADER_PARAMETER_STRUCT(LocalVertexFactoryInstanceParameters)
+        SHADER_PARAMETER_RHI_STRUCTURED_BUFFER(LocalVertexFactoryInstanceSubParameters, InstanceData)
+    END_SHADER_PARAMETER_STRUCT(LocalVertexFactoryInstanceParameters)
 
 
     BEGIN_SHADER_PARAMETER_STRUCT(LocalVertexFactoryParameters)
         SHADER_PARAMETER(Core::Float4x4, LocalToWorld)
-        SHADER_PARAMETER(Core::Float4x4, WorldToLocal)
         SHADER_PARAMETER(Core::Float4x4, ViewProjection)
         SHADER_PARAMETER(Core::Float3, CameraWorldPosition)
+        SHADER_PARAMETER_STRUCT_REFERENCE(LocalVertexFactoryInstanceParameters, LocalVFInstanceInfo)
     END_SHADER_PARAMETER_STRUCT(LocalVertexFactoryParameters)
 
     union LocalVertexFactoryFeatureFlags
@@ -45,13 +59,15 @@ namespace Engine
     //
     // LocalVertexFactory
     //
-    class LocalVertexFactory : public RenderCore::VertexFactory
+    class ENGINE_API LocalVertexFactory : public RenderCore::VertexFactory
     {
         DECLARE_VERTEX_FACTORY_TYPE(LocalVertexFactory)
     public:
         LocalVertexFactory() = default;
 
         void SetData(const LocalVertexFactoryData& InData);
+        RHI::RHIVertexDescState* GetRHIInstancedVertexDescState() const;
+		void BindInstanceBuffer(RHI::RHIGraphicCommandList& cmdList, RHI::RHIBuffer* InstanceBuffer, uint32_t Offset) const;
 
     public:
 
@@ -62,9 +78,14 @@ namespace Engine
             return LocalVertexFactoryParameters::GetMetaData();
         }
     private:
-
-
+        uint32_t instanceLocation = 0;
+        RHI::RHIVertexDescState* RHIInstancedVertexDescState = nullptr;
         LocalVertexFactoryData Data;
     };
+
+
+    using LocalVertexFactoryInstanceManager = InstanceDataManager<LocalVertexFactoryInstanceSubParameters>;
+    using LocalVertexFactoryInstanceBlock = InstanceDataManager<LocalVertexFactoryInstanceSubParameters>::BlockType;
+    using LocalVertexFactoryInstanceBlockRef = InstanceDataManager<LocalVertexFactoryInstanceSubParameters>::BlockRef;
 
 }

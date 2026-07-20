@@ -1,7 +1,13 @@
 #include "/Generated/ShaderParameters/PositionOnlyVSParameters.sf"
+#if USE_INSTANCE
+#include "/Generated/ShaderParameters/LocalVertexFactoryInstanceParameters.sf"
+#endif
 struct VSInput
 {
     float3 Position : POSITION;
+#if USE_INSTANCE
+    uint InstanceId : ATTRIBUTE1;
+#endif
 };
 
 struct VSOutput
@@ -14,7 +20,13 @@ struct VSOutput
 VSOutput MainVS(VSInput In)
 {
     VSOutput Out;
+
     float4 pos = mul(Model, float4(In.Position, 1.0));
+#if USE_INSTANCE
+    const uint InstanceDataIndex = In.InstanceId;
+    const float4x4 LocalToWorldMatrix = InstanceData[InstanceDataIndex].LocalToWorld;
+    pos = mul(LocalToWorldMatrix, float4(In.Position, 1.0));
+#endif
     float4 clipPosition = mul(ViewProjection, pos);
     pos /= pos.w;
     Out.WorldPosition = pos.xyz;

@@ -28,6 +28,8 @@ enum class ERHIFormat
     B8G8R8A8_SRGB,
     R16G16_Float,
     R16G16B16A16_Float,
+    R16_UInt,
+	R32_UInt,
     R32_Float,
     R32G32_Float,
     R32G32B32_Float,

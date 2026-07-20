@@ -159,7 +159,7 @@ protected:
     // 创建最终 VertexInputState
     //
     void InitDeclaration(
-        const std::vector<VertexElement>& Elements);
+        const std::vector<VertexElement>& Elements, RHI::RHIVertexDescState** OutVertexDescState);
 
 
     std::vector<VertexStream> Streams;

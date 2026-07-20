@@ -32,11 +32,6 @@ namespace Engine {
     public:
         virtual ~SceneInterface() = default;
 
-        enum class ECullingMethod : uint8_t {
-            CPU = 0,
-            GPU = 1
-        };
-
         // -------------------------------------------------------------------------
         // ��Ϸ�߳����ע��ӿ� (ʵ�����ڲ����뽫���װΪ����Ͷ�ݵ� Pending ����)
         // -------------------------------------------------------------------------
@@ -47,11 +42,5 @@ namespace Engine {
         virtual void FlushPendingUpdates() = 0;
         virtual void NotifyComponentChanged(SceneComponent* Component) = 0;
 
-        // -------------------------------------------------------------------------
-        // 剔除查询接口
-        // -------------------------------------------------------------------------
-        virtual std::vector<PrimitiveSceneProxy*> GatherVisiblePrimitivesCPU(const SceneView& View) const = 0;
-        virtual std::vector<PrimitiveSceneProxy*> GatherVisiblePrimitivesGPU(const SceneView& View) const = 0;
-        virtual std::vector<PrimitiveSceneProxy*> GatherVisiblePrimitives(const SceneView& View, ECullingMethod Method) const = 0;
     };
 } // namespace Engine

@@ -5,16 +5,19 @@
 #include "Flags.h"
 #include "ShadowMapAllocator.h"
 #include "BoxSphereBounds.h"
+#include "LocalVertexFactory.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
 #include <vector>
 #include <mutex>
 #include <algorithm>
+#include <cstdint>
 namespace Engine
 {
     class PrimitiveComponent;
     class PrimitiveSceneProxy;
+    class StaticMeshProxy;
 
     class LightComponent;
     class LightSceneProxy;
@@ -22,6 +25,13 @@ namespace Engine
     class SceneView;
 }
 namespace Renderer {
+    static constexpr float SceneDistanceFieldBlockWorldSize = 10.0f;
+    static constexpr uint32_t SceneStaticDistanceFieldTextureSize = 128;
+    static constexpr uint32_t SceneDynamicDistanceFieldTextureSize = 128;
+    static constexpr uint32_t SceneStaticDistanceFieldTextureCount = 30;
+    static constexpr uint32_t SceneDynamicDistanceFieldTextureCount = 15;
+    static constexpr uint32_t SceneDistanceFieldInvalidTextureId = 0xFFFFFFFFu;
+
     //====================================================
     // Primitive Scene Info
     //====================================================
@@ -175,15 +185,46 @@ namespace Renderer {
     };
     struct SceneGPUPrimitiveResourceInfo
     {
+        struct LocalVertexFactoryInstanceInfo
+        {
+            Engine::LocalVertexFactoryInstanceBlockRef InstanceBlock = nullptr;
+            std::unordered_map<Engine::StaticMeshProxy*, uint32_t> StaticMeshProxyToInstanceId;
+        };
+
         uint32_t PrimitiveCount = 0;
-        RenderCore::RenderBufferSP PrimitiveInstanceDataBuffer = nullptr;
         RenderCore::RenderBufferSP PrimitiveBoundsBuffer = nullptr;
         RenderCore::RenderBufferSP VisibilityFlagsBuffer = nullptr;
+        LocalVertexFactoryInstanceInfo localvertexfactoryinstanceInfo;
     };
+
+    struct DynamicDistanceFieldBlockInstanceInfo
+    {
+        Core::Float3 BoundsMin = Core::Float3(0.0f, 0.0f, 0.0f);
+        uint32_t DistanceFieldTextureId = SceneDistanceFieldInvalidTextureId;
+        Core::Float3 BoundsMax = Core::Float3(0.0f, 0.0f, 0.0f);
+        float Padding0 = 0.0f;
+        Core::Float3 TextureCoordTransform = Core::Float3(0.0f, 0.0f, 0.0f);
+        float Padding1 = 0.0f;
+    };
+
+    struct SceneDistanceFieldResourceInfo
+    {
+        uint32_t StaticDistanceFieldBlockCount = 0;
+        uint32_t DynamicDistanceFieldBlockCount = 0;
+
+        RenderCore::RenderBufferSP StaticDistanceFieldIdBuffer = nullptr;
+        RenderCore::RenderTextureSP StaticDistanceFieldTextureArray = nullptr;
+
+        RenderCore::RenderBufferSP DynamicDistanceFieldIdBuffer = nullptr;
+        RenderCore::RenderTextureSP DynamicDistanceFieldTextureArray = nullptr;
+        RenderCore::RenderBufferSP DynamicDistanceFieldInstanceInfoBuffer = nullptr;
+    };
+
     struct SceneGPUResourceInfo {
         SceneGPULightResourceInfo LightResourceInfo;
         SceneShadowResourceInfo ShadowResourceInfo;
         SceneGPUPrimitiveResourceInfo PrimitiveResourceInfo;
+        SceneDistanceFieldResourceInfo DistanceFieldResourceInfo;
         ESceneGPUResourceDirtys DirtyFlags = ESceneGPUResourceDirty::None;
     };
 
@@ -236,9 +277,8 @@ namespace Renderer {
         void FlushPendingUpdates() override;
         void NotifyComponentChanged(Engine::SceneComponent* Component) override;
 
-        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesCPU(const Engine::SceneView& View) const override;
-        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesGPU(const Engine::SceneView& View) const override;
-        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitives(const Engine::SceneView& View, Engine::SceneInterface::ECullingMethod Method) const override;
+
+        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitives(const Engine::SceneView& View) const ;
 
         void ForEachPrimitive(std::function<void(Engine::PrimitiveSceneProxy*)> Visitor);
 
@@ -248,10 +288,16 @@ namespace Renderer {
         ShadowMapAllocator& GetShadowMapAllocator();
         const Core::BoxSphereBounds& GetSceneBounds() const;
         LightShadowInfo& GetLightShadowInfo(Engine::LightSceneProxy* Light);
+
+        void PrecomputeStaticDistanceFieldTextures();
+        void PrecomputeDynamicDistanceFieldTextures();
     private:
+        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesCPU(const Engine::SceneView& View) const;
+        std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesGPU(const Engine::SceneView& View) const;
 		friend class SceneRenderer;
         void UpdateGPUResourceIfNeeded();
         void UpdatePrimitiveGPUResource();
+                void EnsureDistanceFieldResources();
 
         //=========================================
         // Render Thread Storage

@@ -27,6 +27,7 @@
 #include "StaticMeshProcess.h"
 #include "StaticMeshProxy.h"
 #include "../Private/StaticMeshMaterialShader.h"
+#include "../Private/Scene.h"
 #include "EngineGlobal.h"
 using namespace RenderCore;
 using namespace Engine;
@@ -292,7 +293,8 @@ namespace Test {
                 MeshBatchList list;
                 std::vector<Engine::StaticMeshProxy*> meshs;
                 meshs.push_back(dynamic_cast<Engine::StaticMeshProxy*>(meshSceneProxy));
-                Renderer::StaticMeshDrawBuild(meshs, list);
+                Scene* s = dynamic_cast<Scene*>(scene);
+                Renderer::StaticMeshDrawBuild(s, sceneView, list);
                 // -------------------------------------
                 // RDG 构建
                 // -------------------------------------
@@ -338,15 +340,11 @@ namespace Test {
                     params->vertexParameters.vertexFactoryParameters.ViewProjection = Core::Float4x4::Identity();
 					params->vertexParameters.vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
                     params->vertexParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
-					params->vertexParameters.vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
-                    params->vertexParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
                     params->pixelParameters.vertexFactoryParameters.CameraWorldPosition = sceneView.CameraWorldPos;
                     params->pixelParameters.vertexFactoryParameters.ViewProjection = sceneView.ViewProjectionMatrix;
                     params->pixelParameters.vertexFactoryParameters.ViewProjection = Core::Float4x4::Identity();
                     params->pixelParameters.vertexFactoryParameters.LocalToWorld = meshSceneProxy->GetLocalToWorld();
                     params->pixelParameters.vertexFactoryParameters.LocalToWorld = Core::Float4x4::Identity();
-                    params->pixelParameters.vertexFactoryParameters.WorldToLocal = meshSceneProxy->GetWorldToLocal();
-                    params->pixelParameters.vertexFactoryParameters.WorldToLocal = Core::Float4x4::Identity();
                     auto rdgDst = builder.RegisterExternalTexture("DstTex", renderTarget.get());
                     auto depthRdgDst = builder.RegisterExternalTexture("DstDepthTex", depthRenderTarget.get());
                     params->pixelParameters.renderTargetSlots.NumColorRenderTargets = 1;
@@ -389,7 +387,7 @@ namespace Test {
                             cmd.BeginRenderPass(passInfo);
                             //绘制
                             for (auto element : batch.Elements) {
-                                cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumIndices, element.NumInstances, element.FirstIndex, element.BaseVertexIndex, element.StartInstance);
+                                cmd.DrawIndexed(batch.IndexBuffer->GetRHI(), element.NumIndices, batch.InstanceDataIds.size(), element.FirstIndex, element.BaseVertexIndex, batch.StartInstance);
                             }
                             cmd.EndRenderPass();
                         }

@@ -12,6 +12,7 @@ namespace RenderCore {
     void VertexFactory::Bind(RHI::RHIGraphicCommandList& RHICmdList) const
     {
         for (int i = 0; i < Streams.size(); i++) {
+            if( Streams[i].Buffer)
             RHICmdList.SetStreamSource(Streams[i].Binding, Streams[i].Buffer, Streams[i].Offset);
         }
     }
@@ -58,7 +59,7 @@ namespace RenderCore {
         };
 	}
 
-	void VertexFactory::InitDeclaration(const std::vector<VertexElement>& Elements)
+	void VertexFactory::InitDeclaration(const std::vector<VertexElement>& Elements, RHI::RHIVertexDescState** OutVertexDescState)
 	{
         RHI::RHIVertexDescStateDesc Desc;
 
@@ -95,7 +96,7 @@ namespace RenderCore {
         //
         // ´´½¨×îÖÕ VertexInputState
         //
-        RHIVertexDescState = RHIPipelineStateCache::GetOrCreateVertexDescState(Desc);
+        *OutVertexDescState = RHIPipelineStateCache::GetOrCreateVertexDescState(Desc);
 
 	}
 

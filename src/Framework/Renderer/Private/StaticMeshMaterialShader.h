@@ -133,6 +133,7 @@ namespace Renderer
     BEGIN_SHADER_PARAMETER_STRUCT(PositionOnlyVSParameters)
         SHADER_PARAMETER(Core::Mat4, ViewProjection)
         SHADER_PARAMETER(Core::Mat4, Model)
+        SHADER_PARAMETER_STRUCT_REFERENCE(Engine::LocalVertexFactoryInstanceParameters, LocalVFInstanceInfo)
     END_SHADER_PARAMETER_STRUCT(PositionOnlyVSParameters)
 
     /*
@@ -143,6 +144,13 @@ namespace Renderer
     class PositionOnlyVS : public RenderCore::GlobalShader
     {
     public:
+        static constexpr char USE_INSTANCE_MODEL[] = "USE_INSTANCE";
+
+        // 2. 定义变体维度（例如 3 种颜色转换模式）
+        using InstancePermutation = RenderCore::FPermutationDimensionBool<USE_INSTANCE_MODEL>;
+
+        // 3. 定义变体域（Domain），可以包含多个维度
+        using PermutationDomain = RenderCore::ShaderPermutationDomain<InstancePermutation>;
         DECLARE_GLOBAL_SHADER_TYPE(PositionOnlyVS)
         static bool ShouldCompilePermutation(
             const RenderCore::ShaderPermutationParameters& Parameters);
@@ -188,5 +196,5 @@ namespace Renderer
             GetShaderParameterMetadata();
     };
 
-    RHI::RHIVertexDescState* GetVertexOnlyState();
+    RHI::RHIVertexDescState* GetVertexOnlyState(bool useIntance = false);
 }

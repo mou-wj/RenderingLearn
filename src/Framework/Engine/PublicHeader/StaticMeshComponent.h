@@ -61,10 +61,11 @@ namespace Engine
 
         PrimitiveSceneProxy* CreateSceneProxy() const override;
 
-        Core::BoxSphereBounds CalcBounds(
-            const FTransform& LocalToWorld) const override;
+        const Core::BoxSphereBounds& GetBounds() const override;
 
     private:
+        Core::BoxSphereBounds CalcBounds(
+            const Core::Mat4& LocalToWorld) override;
         // CPU-side mesh asset reference
         StaticMesh* Mesh;
 

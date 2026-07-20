@@ -7,7 +7,7 @@
 namespace Engine {
     // PrimitiveComponent implementation
     PrimitiveComponent::PrimitiveComponent()
-        : LocalTransform(), WorldTransform(), Bounds(), Mobility(EMobility::Static),
+        : LocalTransform(Core::Mat4::Identity()), WorldTransform(Core::Mat4::Identity()), Bounds(), Mobility(EMobility::Static),
         bVisible(true), PendingSceneProxy(nullptr), DebugName(nullptr) {
     }
 
@@ -67,7 +67,7 @@ namespace Engine {
         //});
     }
 
-    void PrimitiveComponent::UpdateTransform(const FTransform& NewLocalTransform) {
+    void PrimitiveComponent::UpdateTransform(const Core::Mat4& NewLocalTransform) {
         // Update on GameThread
         LocalTransform = NewLocalTransform;
         UpdateWorldTransform();
@@ -76,7 +76,7 @@ namespace Engine {
         PrimitiveSceneProxy* Proxy = PendingSceneProxy;
         if (Proxy) {
             // Capture a snapshot of world transform for the RenderThread.
-            FTransform WorldSnapshot = WorldTransform;
+            Core::Mat4 WorldSnapshot = WorldTransform;
             //RenderCommand::Enqueue([Proxy, WorldSnapshot]() {
             //    // In real engine: Proxy->SetWorldTransform(WorldSnapshot);
             //    (void)Proxy; (void)WorldSnapshot;
@@ -84,16 +84,17 @@ namespace Engine {
         }
     }
 
-    void PrimitiveComponent::OnTransformUpdated() {
+    void PrimitiveComponent::OnTransformChanged() {
         // Default: nothing. Derived classes may override to react to transform changes.
+        WorldTransform = LocalTransform = GetComponentTransform();
+        Bounds = CalcBounds(WorldTransform);
     }
 
     void PrimitiveComponent::UpdateWorldTransform() {
         // For this lightweight example assume LocalTransform == WorldTransform.
         // In a real engine, compose with parent transforms here.
-        WorldTransform = LocalTransform;
-        Bounds = CalcBounds(WorldTransform);
-        OnTransformUpdated();
+
+        OnTransformChanged();
     }
 
 }

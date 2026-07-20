@@ -2,6 +2,7 @@
 #include "StaticMesh.h"
 #include "PrimitiveSceneProxy.h"
 #include "StaticMeshProxy.h"
+#include "RenderResource.h"
 namespace Engine {
 	void LODResource::InitializeResources() {
         // -----------------------------
@@ -26,7 +27,7 @@ namespace Engine {
 
                 // 假设你RHI有 Upload 接口（没有就替换成 staging）
                 Buffer->UploadData(Data.data(), Desc.Size);
-
+				RenderCore::TransitionBufferImmediate(RHI::GRHIApi,Buffer.get(), RHI::ERHIResourceAccess::VertexOrIndexBuffer, RHI::EQueueType::Graphics);
                 return Buffer;
             };
 
@@ -69,6 +70,7 @@ namespace Engine {
                 IndexBuffer.Indices.data(),
                 Desc.Size
             );
+            RenderCore::TransitionBufferImmediate(RHI::GRHIApi, IndexBuffer.Buffer.get(), RHI::ERHIResourceAccess::VertexOrIndexBuffer, RHI::EQueueType::Graphics);
         }
 
         // -----------------------------

@@ -75,6 +75,7 @@ namespace Renderer {
             Out.LightParameters.EnableIBLMap = 0;
 
         }
+        
         //Ìî³äÒõÓ°²ÎÊý
         Out.LightShadowParameters.NearestSampler = RenderCore::GlobalNearestSampler.get();
         auto altasTexture = Scene->GetShadowMapAllocator().GetShadowAtlas();

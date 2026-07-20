@@ -1,3 +1,6 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include "Scene.h"
 #include "SceneView.h"
 #include "PrimitiveSceneProxy.h"
@@ -11,12 +14,110 @@
 #include "ShaderParameter.h"
 #include "Shader.h"
 #include "RHIApi.h"
+#include "StaticMeshProxy.h"
+#include "LocalVertexFactory.h"
+
 #include <cstring>
 #include <algorithm>
+#include <cmath>
+#include <limits>
+
 using namespace Engine;
 
 
 namespace Renderer {
+
+    namespace
+    {
+        inline bool IntersectsAABB(const Core::AABB& A, const Core::AABB& B)
+        {
+            if (A.IsEmpty() || B.IsEmpty())
+            {
+                return false;
+            }
+
+            return !(A.Max.x < B.Min.x || A.Min.x > B.Max.x ||
+                A.Max.y < B.Min.y || A.Min.y > B.Max.y ||
+                A.Max.z < B.Min.z || A.Min.z > B.Max.z);
+        }
+
+        RHI::RHITextureDesc BuildDistanceFieldTextureArrayDesc(uint32_t arraySize, uint32_t textureSize, const char* debugName)
+        {
+            RHI::RHITextureDesc Desc;
+            Desc.Width = textureSize;
+            Desc.Height = textureSize;
+            Desc.Depth = 1;
+            Desc.MipLevels = 1;
+            Desc.ArraySize = arraySize;
+            Desc.Type = RHI::ERHITextureType::Texture2DArray;
+            Desc.Format = RHI::ERHIFormat::R32_Float;
+            Desc.SampleCount = 1;
+            Desc.InitialQueueType = RHI::EQueueType::Compute;
+            Desc.Usage =
+                RHI::ERHITextureCreateFlag::ShaderResource |
+                RHI::ERHITextureCreateFlag::TransferDest;
+            Desc.DebugName = debugName;
+            return Desc;
+        }
+
+        RHI::RHIBufferDesc BuildStructuredBufferDesc(uint64_t sizeInBytes, uint32_t stride, const char* debugName)
+        {
+            RHI::RHIBufferDesc Desc;
+            Desc.Size = std::max<uint64_t>(1ull, sizeInBytes);
+            Desc.Stride = stride;
+            Desc.InitialQueueType = RHI::EQueueType::Compute;
+            Desc.Usage =
+                RHI::ERHIBufferUsageFlag::Structured |
+                RHI::ERHIBufferUsageFlag::ShaderResource |
+                RHI::ERHIBufferUsageFlag::TransferDst;
+            Desc.DebugName = debugName;
+            return Desc;
+        }
+
+        std::vector<float> BuildDistanceFieldSlice(
+            const Core::AABB& blockBounds,
+            uint32_t textureSize,
+            const std::vector<Core::AABB>& sourceBounds)
+        {
+            std::vector<float> distances(textureSize * textureSize, 1000.0f);
+            if (sourceBounds.empty() || blockBounds.IsEmpty())
+            {
+                return distances;
+            }
+
+            const float sizeX = blockBounds.Max.x - blockBounds.Min.x;
+            const float sizeY = blockBounds.Max.y - blockBounds.Min.y;
+            const float z = (blockBounds.Min.z + blockBounds.Max.z) * 0.5f;
+            const float stepX = textureSize > 1 ? sizeX / static_cast<float>(textureSize - 1) : 0.0f;
+            const float stepY = textureSize > 1 ? sizeY / static_cast<float>(textureSize - 1) : 0.0f;
+
+            for (uint32_t y = 0; y < textureSize; ++y)
+            {
+                const float worldY = blockBounds.Min.y + static_cast<float>(y) * stepY;
+                for (uint32_t x = 0; x < textureSize; ++x)
+                {
+                    const float worldX = blockBounds.Min.x + static_cast<float>(x) * stepX;
+
+                    float minDistance = std::numeric_limits<float>::max();
+                    for (const Core::AABB& source : sourceBounds)
+                    {
+                        const float dx = std::max(std::max(source.Min.x - worldX, 0.0f), worldX - source.Max.x);
+                        const float dy = std::max(std::max(source.Min.y - worldY, 0.0f), worldY - source.Max.y);
+                        const float dz = std::max(std::max(source.Min.z - z, 0.0f), z - source.Max.z);
+                        const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                        if (distance < minDistance)
+                        {
+                            minDistance = distance;
+                        }
+                    }
+
+                    distances[y * textureSize + x] = minDistance;
+                }
+            }
+
+            return distances;
+        }
+    }
 
 
     //====================================================
@@ -114,7 +215,7 @@ namespace Renderer {
             Current.Bounds.Merge(Primitives[Index]->GetBounds());
         }
 
-        if (Count <= 4)
+        if (Count <= 1)
         {
             Current.bLeaf = true;
             return NodeIndex;
@@ -184,6 +285,8 @@ namespace Renderer {
 			ShadowAllocatorDesc{
 				{ 4096, 4096 } // SpotShadowAtlas
 			});
+
+                EnsureDistanceFieldResources();
     }
 
     Scene::~Scene()
@@ -616,29 +719,21 @@ namespace Renderer {
         return Result;
     }
 
-    std::vector<Engine::PrimitiveSceneProxy*> Scene::GatherVisiblePrimitives(const Engine::SceneView& View, Engine::SceneInterface::ECullingMethod Method) const
+    std::vector<Engine::PrimitiveSceneProxy*> Scene::GatherVisiblePrimitives(const Engine::SceneView& View) const
     {
-        switch (Method)
-        {
-        case Engine::SceneInterface::ECullingMethod::GPU:
-            return GatherVisiblePrimitivesGPU(View);
-        case Engine::SceneInterface::ECullingMethod::CPU:
-        default:
-            return GatherVisiblePrimitivesCPU(View);
-        }
+        return GatherVisiblePrimitivesCPU(View);
     }
 
     void Scene::UpdatePrimitiveGPUResource()
     {
         auto& PrimitiveRes = GPUResourceInfo.PrimitiveResourceInfo;
+        auto& LocalVFInfo = PrimitiveRes.localvertexfactoryinstanceInfo;
 
         PrimitiveGPUProxyOrder.clear();
         PrimitiveGPUProxyOrder.reserve(PrimitiveInfos.size());
 
         std::vector<AABBParameters> BoundsData;
         BoundsData.reserve(PrimitiveInfos.size());
-        std::vector<ScenePrimitiveInstanceSubParameters> InstanceData;
-        InstanceData.reserve(PrimitiveInfos.size());
 
         for (const auto& Pair : PrimitiveInfos)
         {
@@ -659,32 +754,13 @@ namespace Renderer {
             Data.Min = Bounds.Min;
             Data.Max = Bounds.Max;
 
-            ScenePrimitiveInstanceSubParameters InstanceSubData;
-            InstanceSubData.LocalToWorld = Proxy->GetLocalToWorld();
-
             PrimitiveGPUProxyOrder.push_back(Proxy);
             BoundsData.emplace_back(Data);
-            InstanceData.emplace_back(InstanceSubData);
         }
 
         PrimitiveRes.PrimitiveCount = static_cast<uint32_t>(BoundsData.size());
 
-        RHI::RHIBufferDesc InstanceDesc;
-        InstanceDesc.Size = std::max<uint64_t>(1ull, static_cast<uint64_t>(InstanceData.size() * sizeof(ScenePrimitiveInstanceSubParameters)));
-        InstanceDesc.Stride = sizeof(ScenePrimitiveInstanceSubParameters);
-        InstanceDesc.Usage =
-            RHI::ERHIBufferUsageFlag::Structured |
-            RHI::ERHIBufferUsageFlag::ShaderResource |
-            RHI::ERHIBufferUsageFlag::TransferDst;
-        InstanceDesc.InitialQueueType = RHI::EQueueType::Compute;
-        PrimitiveRes.PrimitiveInstanceDataBuffer = std::make_shared<RenderCore::RenderBuffer>(InstanceDesc);
-        PrimitiveRes.PrimitiveInstanceDataBuffer->InitRHIResource();
-        if (!InstanceData.empty())
-        {
-            PrimitiveRes.PrimitiveInstanceDataBuffer->UploadData(
-                InstanceData.data(),
-                static_cast<uint32_t>(InstanceData.size() * sizeof(ScenePrimitiveInstanceSubParameters)));
-        }
+
 
         RHI::RHIBufferDesc BoundsDesc;
         BoundsDesc.Size = std::max<uint64_t>(1ull, static_cast<uint64_t>(BoundsData.size() * sizeof(AABBParameters)));
@@ -722,6 +798,261 @@ namespace Renderer {
         PrimitiveRes.VisibilityFlagsBuffer->UploadData(
             ZeroVisibility.empty() ? static_cast<const void*>(&PrimitiveRes.PrimitiveCount) : static_cast<const void*>(ZeroVisibility.data()),
             UploadSize);
+
+        std::vector<Engine::LocalVertexFactoryInstanceSubParameters> SubParameters;
+        SubParameters.reserve(PrimitiveGPUProxyOrder.size());
+        LocalVFInfo.StaticMeshProxyToInstanceId.clear();
+
+        for (Engine::PrimitiveSceneProxy* Proxy : PrimitiveGPUProxyOrder)
+        {
+            if (!Proxy)
+            {
+                continue;
+            }
+
+            Engine::StaticMeshProxy* StaticMeshProxy = Proxy->Cast<Engine::StaticMeshProxy>();
+            if (!StaticMeshProxy)
+            {
+                continue;
+            }
+
+            Engine::LocalVertexFactoryInstanceSubParameters Param;
+            Param.LocalToWorld = StaticMeshProxy->GetLocalToWorld();
+
+            const uint32_t InstanceId = static_cast<uint32_t>(SubParameters.size());
+            SubParameters.push_back(Param);
+            LocalVFInfo.StaticMeshProxyToInstanceId.emplace(StaticMeshProxy, InstanceId);
+        }
+
+        auto& InstanceManager = Engine::LocalVertexFactoryInstanceManager::Get();
+        if (LocalVFInfo.InstanceBlock)
+        {
+            InstanceManager.RemoveInstanceBlock(LocalVFInfo.InstanceBlock);
+            LocalVFInfo.InstanceBlock.reset();
+        }
+
+        if (!SubParameters.empty())
+        {
+            LocalVFInfo.InstanceBlock = InstanceManager.CreateInstanceBlock("ScenePrimitiveLocalVFInstances");
+            LocalVFInfo.InstanceBlock->AddSubParameters(SubParameters);
+        }
+
+        InstanceManager.UpdateGPUResources();
+    }
+
+    void Scene::EnsureDistanceFieldResources()
+    {
+        auto& DFRes = GPUResourceInfo.DistanceFieldResourceInfo;
+
+        if (!DFRes.StaticDistanceFieldTextureArray)
+        {
+            auto StaticTexDesc = BuildDistanceFieldTextureArrayDesc(
+                SceneStaticDistanceFieldTextureCount,
+                SceneStaticDistanceFieldTextureSize,
+                "SceneStaticDistanceFieldTextureArray");
+            DFRes.StaticDistanceFieldTextureArray = std::make_shared<RenderCore::RenderTexture>(StaticTexDesc);
+            DFRes.StaticDistanceFieldTextureArray->InitRHIResource();
+        }
+
+        if (!DFRes.DynamicDistanceFieldTextureArray)
+        {
+            auto DynamicTexDesc = BuildDistanceFieldTextureArrayDesc(
+                SceneDynamicDistanceFieldTextureCount,
+                SceneDynamicDistanceFieldTextureSize,
+                "SceneDynamicDistanceFieldTextureArray");
+            DFRes.DynamicDistanceFieldTextureArray = std::make_shared<RenderCore::RenderTexture>(DynamicTexDesc);
+            DFRes.DynamicDistanceFieldTextureArray->InitRHIResource();
+        }
+
+        if (!DFRes.StaticDistanceFieldIdBuffer)
+        {
+            auto Desc = BuildStructuredBufferDesc(
+                static_cast<uint64_t>(SceneStaticDistanceFieldTextureCount) * sizeof(uint32_t),
+                sizeof(uint32_t),
+                "SceneStaticDistanceFieldIdBuffer");
+            DFRes.StaticDistanceFieldIdBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
+            DFRes.StaticDistanceFieldIdBuffer->InitRHIResource();
+        }
+
+        if (!DFRes.DynamicDistanceFieldIdBuffer)
+        {
+            auto Desc = BuildStructuredBufferDesc(
+                static_cast<uint64_t>(SceneDynamicDistanceFieldTextureCount) * sizeof(uint32_t),
+                sizeof(uint32_t),
+                "SceneDynamicDistanceFieldIdBuffer");
+            DFRes.DynamicDistanceFieldIdBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
+            DFRes.DynamicDistanceFieldIdBuffer->InitRHIResource();
+        }
+
+        if (!DFRes.DynamicDistanceFieldInstanceInfoBuffer)
+        {
+            auto Desc = BuildStructuredBufferDesc(
+                static_cast<uint64_t>(SceneDynamicDistanceFieldTextureCount) * sizeof(DynamicDistanceFieldBlockInstanceInfo),
+                sizeof(DynamicDistanceFieldBlockInstanceInfo),
+                "SceneDynamicDistanceFieldInstanceInfoBuffer");
+            DFRes.DynamicDistanceFieldInstanceInfoBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
+            DFRes.DynamicDistanceFieldInstanceInfoBuffer->InitRHIResource();
+        }
+    }
+
+    void Scene::PrecomputeStaticDistanceFieldTextures()
+    {
+        EnsureDistanceFieldResources();
+        auto& DFRes = GPUResourceInfo.DistanceFieldResourceInfo;
+
+        std::vector<uint32_t> blockToTextureId(SceneStaticDistanceFieldTextureCount, SceneDistanceFieldInvalidTextureId);
+        uint32_t staticBlockCount = 0;
+
+        if (!SceneBounds.Box.IsEmpty())
+        {
+            const float blockSize = SceneDistanceFieldBlockWorldSize;
+
+            const int32_t minX = static_cast<int32_t>(std::floor(SceneBounds.Box.Min.x / blockSize));
+            const int32_t minY = static_cast<int32_t>(std::floor(SceneBounds.Box.Min.y / blockSize));
+            const int32_t minZ = static_cast<int32_t>(std::floor(SceneBounds.Box.Min.z / blockSize));
+
+            const int32_t maxX = static_cast<int32_t>(std::floor(SceneBounds.Box.Max.x / blockSize));
+            const int32_t maxY = static_cast<int32_t>(std::floor(SceneBounds.Box.Max.y / blockSize));
+            const int32_t maxZ = static_cast<int32_t>(std::floor(SceneBounds.Box.Max.z / blockSize));
+
+            for (int32_t z = minZ; z <= maxZ && staticBlockCount < SceneStaticDistanceFieldTextureCount; ++z)
+            {
+                for (int32_t y = minY; y <= maxY && staticBlockCount < SceneStaticDistanceFieldTextureCount; ++y)
+                {
+                    for (int32_t x = minX; x <= maxX && staticBlockCount < SceneStaticDistanceFieldTextureCount; ++x)
+                    {
+                        Core::AABB blockBounds;
+                        blockBounds.Min = Core::Float3(
+                            static_cast<float>(x) * blockSize,
+                            static_cast<float>(y) * blockSize,
+                            static_cast<float>(z) * blockSize);
+                        blockBounds.Max = Core::Float3(
+                            blockBounds.Min.x + blockSize,
+                            blockBounds.Min.y + blockSize,
+                            blockBounds.Min.z + blockSize);
+
+                        std::vector<Core::AABB> intersectedStaticPrimitives;
+                        for (const auto& pair : PrimitiveInfos)
+                        {
+                            const PrimitiveSceneInfo* info = pair.second.get();
+                            if (!info || !info->bVisible)
+                            {
+                                continue;
+                            }
+
+                            Engine::PrimitiveSceneProxy* proxy = info->GetProxy();
+                            if (!proxy || !proxy->HasStaticGeometry())
+                            {
+                                continue;
+                            }
+
+                            const Core::AABB primitiveBounds = proxy->GetBounds().Box;
+                            if (IntersectsAABB(blockBounds, primitiveBounds))
+                            {
+                                intersectedStaticPrimitives.push_back(primitiveBounds);
+                            }
+                        }
+
+                        if (intersectedStaticPrimitives.empty())
+                        {
+                            continue;
+                        }
+
+                        blockToTextureId[staticBlockCount] = staticBlockCount;
+                        auto sliceData = BuildDistanceFieldSlice(
+                            blockBounds,
+                            SceneStaticDistanceFieldTextureSize,
+                            intersectedStaticPrimitives);
+
+                        DFRes.StaticDistanceFieldTextureArray->UploadData(
+                            sliceData.data(),
+                            0,
+                            staticBlockCount);
+                        ++staticBlockCount;
+                    }
+                }
+            }
+        }
+
+        DFRes.StaticDistanceFieldBlockCount = staticBlockCount;
+        DFRes.StaticDistanceFieldIdBuffer->UploadData(
+            blockToTextureId.data(),
+            static_cast<uint32_t>(blockToTextureId.size() * sizeof(uint32_t)));
+    }
+
+    void Scene::PrecomputeDynamicDistanceFieldTextures()
+    {
+        EnsureDistanceFieldResources();
+        auto& DFRes = GPUResourceInfo.DistanceFieldResourceInfo;
+
+        std::vector<uint32_t> blockToTextureId(SceneDynamicDistanceFieldTextureCount, SceneDistanceFieldInvalidTextureId);
+        std::vector<DynamicDistanceFieldBlockInstanceInfo> instanceInfos(
+            SceneDynamicDistanceFieldTextureCount,
+            DynamicDistanceFieldBlockInstanceInfo{});
+
+        uint32_t dynamicBlockCount = 0;
+        for (const auto& pair : PrimitiveInfos)
+        {
+            if (dynamicBlockCount >= SceneDynamicDistanceFieldTextureCount)
+            {
+                break;
+            }
+
+            const PrimitiveSceneInfo* info = pair.second.get();
+            if (!info || !info->bVisible)
+            {
+                continue;
+            }
+
+            Engine::PrimitiveSceneProxy* proxy = info->GetProxy();
+            if (!proxy || !proxy->IsDynamic())
+            {
+                continue;
+            }
+
+            const Core::AABB primitiveBounds = proxy->GetBounds().Box;
+            if (primitiveBounds.IsEmpty())
+            {
+                continue;
+            }
+
+            blockToTextureId[dynamicBlockCount] = dynamicBlockCount;
+
+            DynamicDistanceFieldBlockInstanceInfo& instance = instanceInfos[dynamicBlockCount];
+            instance.BoundsMin = primitiveBounds.Min;
+            instance.BoundsMax = primitiveBounds.Max;
+            instance.DistanceFieldTextureId = dynamicBlockCount;
+
+            const float extentX = primitiveBounds.Max.x - primitiveBounds.Min.x;
+            const float extentY = primitiveBounds.Max.y - primitiveBounds.Min.y;
+            const float extentZ = primitiveBounds.Max.z - primitiveBounds.Min.z;
+            instance.TextureCoordTransform = Core::Float3(
+                extentX > 1e-4f ? 1.0f / extentX : 0.0f,
+                extentY > 1e-4f ? 1.0f / extentY : 0.0f,
+                extentZ > 1e-4f ? 1.0f / extentZ : 0.0f);
+
+            std::vector<Core::AABB> sourceBounds;
+            sourceBounds.push_back(primitiveBounds);
+            auto sliceData = BuildDistanceFieldSlice(
+                primitiveBounds,
+                SceneDynamicDistanceFieldTextureSize,
+                sourceBounds);
+
+            DFRes.DynamicDistanceFieldTextureArray->UploadData(
+                sliceData.data(),
+                0,
+                dynamicBlockCount);
+
+            ++dynamicBlockCount;
+        }
+
+        DFRes.DynamicDistanceFieldBlockCount = dynamicBlockCount;
+        DFRes.DynamicDistanceFieldIdBuffer->UploadData(
+            blockToTextureId.data(),
+            static_cast<uint32_t>(blockToTextureId.size() * sizeof(uint32_t)));
+        DFRes.DynamicDistanceFieldInstanceInfoBuffer->UploadData(
+            instanceInfos.data(),
+            static_cast<uint32_t>(instanceInfos.size() * sizeof(DynamicDistanceFieldBlockInstanceInfo)));
     }
 
 
@@ -926,6 +1257,8 @@ namespace Renderer {
             ::Primitive))
         {
             UpdatePrimitiveGPUResource();
+            PrecomputeStaticDistanceFieldTextures();
+            PrecomputeDynamicDistanceFieldTextures();
         }
         LightRes.IBLSpecularTexture = nullptr;
         LightRes.IBLSpecularTexture = nullptr;

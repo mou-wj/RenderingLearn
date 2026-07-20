@@ -30,8 +30,8 @@ namespace Engine {
 		
 		// ------------------ Spatial (GameThread only) ------------------
 	protected:
-		FTransform LocalTransform;          // local transform
-		FTransform WorldTransform;          // cached world transform (derived)
+		Core::Mat4 LocalTransform;          // local transform
+		Core::Mat4 WorldTransform;          // cached world transform (derived)
 		Core::BoxSphereBounds Bounds;            // bounds used for frustum culling
 		EMobility Mobility;                 // mobility hint
 
@@ -64,13 +64,14 @@ namespace Engine {
 		virtual void MarkRenderStateDirty();
 
 		// Update transform from GameThread and notify RenderThread (lightweight update).
-		virtual void UpdateTransform(const FTransform& NewLocalTransform);
+		virtual void UpdateTransform(const Core::Mat4& NewLocalTransform);
 
 		// Called when transform / bounds were updated on GameThread.
-		virtual void OnTransformUpdated();
+		virtual void OnTransformChanged() override;
 
+		virtual const Core::BoxSphereBounds& GetBounds() const = 0;
 		// Calculate bounds (derived must implement to provide frustum culling bounds).
-		virtual Core::BoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const = 0;
+		virtual Core::BoxSphereBounds CalcBounds(const Core::Mat4& LocalToWorld) = 0;
 
 		// Quick GameThread-only visibility query.
 		bool IsVisible() const;
