@@ -18,7 +18,7 @@ namespace SlateRHIRenderer {
 
 	}
     uint64_t frameCount = 0;
-	void SlateRHIRenderer::Render(Slate::Window* window) {
+	void SlateRHIRenderer::Render(SlateCore::Window* window) {
         
         CreateViewport(window);
         auto slateViewport = Viewports[window];
@@ -31,7 +31,7 @@ namespace SlateRHIRenderer {
         frameCount++;
 		//�����������ݻ��Ƶ�presentTexture��
 		auto windowWidget = window->GetRootWidgets(); 
-        std::vector<Slate::Widget*> widgets;
+        std::vector<SlateCore::Widget*> widgets;
         widgets.push_back(windowWidget);
         auto computeTransitionContex = RHI::GRHIApi->GetQueue(EQueueType::Compute)->AcquireCommandContext();
         RHIComputeCommandList computeTransitionCmd(dynamic_cast<RHIComputeContex*>(computeTransitionContex));
@@ -54,8 +54,8 @@ namespace SlateRHIRenderer {
         std::vector<RenderCore::RenderTexture*> renderTextures;
         bool hasCompute = false;
         for (auto& widget : widgets) {
-            if (widget->IsA<Slate::SlateViewport>()) {
-                auto slateW = widget->Cast<Slate::SlateViewport>();
+            if (widget->IsA<SlateCore::SlateViewport>()) {
+                auto slateW = widget->Cast<SlateCore::SlateViewport>();
                 auto widgetTeture = static_cast<RenderCore::RenderTexture*>(slateW->GetViewportRenderTargetTexture());
                 auto lastQueue = widgetTeture->GetTracker().GetLastAccessFence().QueueType;
 				auto value = widgetTeture->GetTracker().GetLastAccessFence().Value;
@@ -80,8 +80,8 @@ namespace SlateRHIRenderer {
         //blit texture
 
         for (auto& widget : widgets) {
-            if (widget->IsA<Slate::SlateViewport>()) {
-                auto slateW = widget->Cast<Slate::SlateViewport>();
+            if (widget->IsA<SlateCore::SlateViewport>()) {
+                auto slateW = widget->Cast<SlateCore::SlateViewport>();
                 auto widgetTeture = static_cast<RenderCore::RenderTexture*>(slateW->GetViewportRenderTargetTexture());
                 auto texDesc = widgetTeture->GetRHI()->GetDesc();
                 RHI::RHIBlitTextureDesc blit{};
@@ -137,7 +137,7 @@ namespace SlateRHIRenderer {
 
 	
 
-	void SlateRHIRenderer::CreateViewport(Slate::Window* window)
+	void SlateRHIRenderer::CreateViewport(SlateCore::Window* window)
 	{
         if (Viewports.find(window) == Viewports.end()) {
             WindowViewportInfo viewportInfo;

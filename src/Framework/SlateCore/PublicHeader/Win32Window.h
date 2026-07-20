@@ -4,9 +4,9 @@
 #include <windows.h>
 #include <string>
 
-namespace Slate {
+namespace SlateCore {
 
-    class SLATE_API Win32Window : public Window
+    class SLATECORE_API Win32Window : public Window
     {
     public:
         Win32Window(int width, int height, const std::string& title);
@@ -36,7 +36,7 @@ namespace Slate {
             WPARAM wParam,
             LPARAM lParam);
 
-        Slate::EKey TranslateKey(
+        SlateCore::EKey TranslateKey(
             WPARAM key) const;
     };
 #endif

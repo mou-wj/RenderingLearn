@@ -150,7 +150,7 @@ public:
     void InitSwapchain()
     {
         // 
-        Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RenderGraphBuildTest");
+        Window = SlateCore::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RenderGraphBuildTest");
         Window->Show();
         // 创建交换链
         void* windowHandle = Window->GetNativeHandle(); // 获取窗口句柄的函数
@@ -350,7 +350,7 @@ private:
     RenderGraphTextureDesc texDesc;
     RHI::RHIComputePipelineStateSP ComputePipelineState;
     RHI::RHISwapchainSP Swapchain;
-    Slate::WindowSP Window;
+    SlateCore::WindowSP Window;
     RenderCore::Shader* blitTextureShader0;
     RenderTextureSP randomTex;
 };

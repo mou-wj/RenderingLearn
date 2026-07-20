@@ -1,5 +1,5 @@
 #include "Window.h"
-namespace Slate {
+namespace SlateCore {
 
 
     WindowSP WindowFactory::CreateWindowSP(int w, int h, const std::string& title) {

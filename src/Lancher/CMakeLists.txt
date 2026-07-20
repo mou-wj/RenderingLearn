@@ -10,5 +10,5 @@ file(GLOB_RECURSE MODULE_SOURCES
 )
 
 add_executable(Langcher ${HEADERS} ${MODULE_SOURCES})
-target_link_libraries(Langcher PRIVATE Engine Slate Application Core RHIVulkan)
+target_link_libraries(Langcher PRIVATE Engine SlateCore Application Core RHIVulkan)
 target_include_directories(Langcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

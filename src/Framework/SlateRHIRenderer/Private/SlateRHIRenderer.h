@@ -10,7 +10,7 @@ namespace SlateRHIRenderer {
 
 	struct ViewportDrawItem
 	{
-		Slate::SlateViewport* Viewport;
+		SlateCore::SlateViewport* Viewport;
 		int X, Y;
 		int Width, Height;
 	};
@@ -21,15 +21,15 @@ namespace SlateRHIRenderer {
 
 	};
 
-	class SlateRHIRenderer : public Slate::SlateRenderer {
+	class SlateRHIRenderer : public SlateCore::SlateRenderer {
 	public:
 		SlateRHIRenderer();
 		~SlateRHIRenderer() override;
-		virtual void Render(Slate::Window* window) override;
-		void CreateViewport(Slate::Window* window) override;
+		virtual void Render(SlateCore::Window* window) override;
+		void CreateViewport(SlateCore::Window* window) override;
 	private:
 
-		std::map<Slate::Window*, WindowViewportInfo> Viewports;
+		std::map<SlateCore::Window*, WindowViewportInfo> Viewports;
 	};
 
 

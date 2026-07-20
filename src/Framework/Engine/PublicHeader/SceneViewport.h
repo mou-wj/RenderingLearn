@@ -4,7 +4,7 @@
 #include "Math.hpp"
 namespace Engine {
     // Engine/SceneViewport.h
-    class ENGINE_API SceneViewport final : public Viewport,public Slate::SlateViewport
+    class ENGINE_API SceneViewport final : public Viewport,public SlateCore::SlateViewport
     {
     public:
         SceneViewport(
@@ -28,23 +28,23 @@ namespace Engine {
     public:
         // Input
         bool OnMouseMove(
-            const Slate::MouseMoveEvent&
+            const SlateCore::MouseMoveEvent&
             Event) override;
 
         bool OnMouseButton(
-            const Slate::MouseButtonEvent&
+            const SlateCore::MouseButtonEvent&
             Event) override;
 
         bool OnMouseWheel(
-            const Slate::MouseWheelEvent&
+            const SlateCore::MouseWheelEvent&
             Event) override;
 
         bool OnKeyDown(
-            const Slate::KeyEvent&
+            const SlateCore::KeyEvent&
             Event) override;
 
         bool OnKeyUp(
-            const Slate::KeyEvent&
+            const SlateCore::KeyEvent&
             Event) override;
 
         bool OnFocusReceived()

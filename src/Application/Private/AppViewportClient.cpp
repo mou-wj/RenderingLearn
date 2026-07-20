@@ -153,17 +153,17 @@ namespace App {
     }
     bool AppViewportClient::
         OnMouseButton(
-            const Slate::MouseButtonEvent&
+            const SlateCore::MouseButtonEvent&
             Event)
     {
         const bool pressed =
             Event.Event ==
-            Slate::EInputEvent
+            SlateCore::EInputEvent
             ::Pressed;
 
         switch (Event.Button)
         {
-            case Slate::EMouseButton
+            case SlateCore::EMouseButton
             ::Right:
             {
                 bRightMouseDown =
@@ -172,7 +172,7 @@ namespace App {
                 return true;
             }
 
-            case Slate::EMouseButton
+            case SlateCore::EMouseButton
             ::Middle:
             {
                 bMiddleMouseDown =
@@ -187,7 +187,7 @@ namespace App {
 
     bool AppViewportClient::
         OnMouseMove(
-            const Slate::MouseMoveEvent&
+            const SlateCore::MouseMoveEvent&
             Event)
     {
         constexpr float
@@ -274,7 +274,7 @@ namespace App {
     }
     bool AppViewportClient::
         OnMouseWheel(
-            const Slate::MouseWheelEvent&
+            const SlateCore::MouseWheelEvent&
             Event)
     {
         constexpr float

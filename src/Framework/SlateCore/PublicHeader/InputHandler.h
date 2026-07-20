@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace Slate
+namespace SlateCore
 {
     enum class EInputEvent
     {
@@ -90,7 +90,7 @@ namespace Slate
         ModifierKeys Modifiers;
     };
 
-    class SLATE_API InputHandler
+    class SLATECORE_API InputHandler
     {
     public:
         virtual ~InputHandler();

@@ -1,9 +1,9 @@
 #pragma once 
 #include "Window.h"
 #include "SlateRenderer.h"
-namespace Slate {
+namespace SlateCore {
 
-    class SLATE_API ApplicationBase
+    class SLATECORE_API ApplicationBase
     {
     public:
         virtual ~ApplicationBase() = default;

@@ -3,7 +3,7 @@
 #include "TypeIDCast.h"
 #include "InputHandler.h"
 
-namespace Slate
+namespace SlateCore
 {
     struct WidgetGeometry
     {

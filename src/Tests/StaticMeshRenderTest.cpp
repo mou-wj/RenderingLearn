@@ -137,7 +137,7 @@ namespace Test {
         void InitSwapchain()
         {
             // 
-            Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIRenderTriangleTest");
+            Window = SlateCore::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIRenderTriangleTest");
             Window->Show();
             // 创建交换链
             void* windowHandle = Window->GetNativeHandle(); // 获取窗口句柄的函数
@@ -465,7 +465,7 @@ namespace Test {
     private:
         RenderGraphTextureDesc texDesc;
         RHI::RHISwapchainSP Swapchain;
-        Slate::WindowSP Window;
+        SlateCore::WindowSP Window;
         RenderCore::Shader* blitTextureShader0;
         std::shared_ptr<StaticMeshAsset> staticMeshAsset;
         StaticMeshComponent* staticMeshComponent;

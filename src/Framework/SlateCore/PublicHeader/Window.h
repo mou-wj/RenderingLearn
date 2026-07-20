@@ -5,13 +5,13 @@
 #include <Math.hpp>
 #include <SlateViewport.h>
 
-namespace Slate {
+namespace SlateCore {
 
     // 事件回调类型
     using WindowCloseCallback = std::function<void()>;
     using WindowResizeCallback = std::function<void(int width, int height)>;
 
-    class SLATE_API Window 
+    class SLATECORE_API Window
     {
     public:
         virtual ~Window() = default;
@@ -49,7 +49,7 @@ namespace Slate {
 	using WindowSP = std::shared_ptr<Window>;
 
 
-    class SLATE_API WindowFactory {
+    class SLATECORE_API WindowFactory {
     public:
         WindowFactory() = delete;
         static WindowSP CreateWindowSP(int w, int h, const std::string& title);

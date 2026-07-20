@@ -38,10 +38,10 @@ void Application::Shutdown()
 }
 
 // 创建窗口
-Slate::WindowSP Application::CreateWindowSP(int Width, int Height, const char* Title)
+SlateCore::WindowSP Application::CreateWindowSP(int Width, int Height, const char* Title)
 {
     // 这里假设你有具体 Window 派生类，例如 Win32Window / GLFWWindow
-    Slate::WindowSP NewWindow = Slate::WindowFactory::CreateWindowSP(Width, Height, Title);
+    SlateCore::WindowSP NewWindow = SlateCore::WindowFactory::CreateWindowSP(Width, Height, Title);
     NewWindow->Initialize(); // 初始化 OS 窗口
     NewWindow->Show();
     NewWindow->SetResizeCallback([this](int W, int H) {

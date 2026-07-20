@@ -1,7 +1,7 @@
 #include "Win32Window.h"
 #ifdef _WIN32
 #include <Windowsx.h>
-namespace Slate {
+namespace SlateCore {
 
 
 
@@ -252,47 +252,47 @@ namespace Slate {
             wParam,
             lParam);
     }
-    Slate::EKey
+    SlateCore::EKey
         Win32Window::TranslateKey(
             WPARAM key) const
     {
         switch (key)
         {
         case 'W':
-            return Slate::EKey::W;
+            return SlateCore::EKey::W;
 
         case 'A':
-            return Slate::EKey::A;
+            return SlateCore::EKey::A;
 
         case 'S':
-            return Slate::EKey::S;
+            return SlateCore::EKey::S;
 
         case 'D':
-            return Slate::EKey::D;
+            return SlateCore::EKey::D;
 
         case 'Q':
-            return Slate::EKey::Q;
+            return SlateCore::EKey::Q;
 
         case 'E':
-            return Slate::EKey::E;
+            return SlateCore::EKey::E;
 
         case VK_SHIFT:
-            return Slate::EKey::Shift;
+            return SlateCore::EKey::Shift;
 
         case VK_CONTROL:
-            return Slate::EKey::Ctrl;
+            return SlateCore::EKey::Ctrl;
 
         case VK_MENU:
-            return Slate::EKey::Alt;
+            return SlateCore::EKey::Alt;
 
         case VK_SPACE:
-            return Slate::EKey::Space;
+            return SlateCore::EKey::Space;
 
         case VK_ESCAPE:
-            return Slate::EKey::Escape;
+            return SlateCore::EKey::Escape;
         }
 
-        return Slate::EKey::Unknown;
+        return SlateCore::EKey::Unknown;
     }
 
     bool Win32Window::RouteInputMessage(
@@ -309,7 +309,7 @@ namespace Slate {
         {
         case WM_MOUSEMOVE:
         {
-            Slate::MouseMoveEvent event;
+            SlateCore::MouseMoveEvent event;
 
             event.X =
                 GET_X_LPARAM(lParam);
@@ -354,7 +354,7 @@ namespace Slate {
 
         case WM_MOUSEWHEEL:
         {
-            Slate::MouseWheelEvent event;
+            SlateCore::MouseWheelEvent event;
 
             event.Delta =
                 static_cast<float>(
@@ -389,7 +389,7 @@ namespace Slate {
         case WM_RBUTTONUP:
         case WM_MBUTTONUP:
         {
-            Slate::MouseButtonEvent event;
+            SlateCore::MouseButtonEvent event;
 
             event.X =
                 GET_X_LPARAM(lParam);
@@ -401,9 +401,9 @@ namespace Slate {
                 (msg == WM_LBUTTONDOWN ||
                     msg == WM_RBUTTONDOWN ||
                     msg == WM_MBUTTONDOWN)
-                ? Slate::EInputEvent
+                ? SlateCore::EInputEvent
                 ::Pressed
-                : Slate::EInputEvent
+                : SlateCore::EInputEvent
                 ::Released;
 
             switch (msg)
@@ -411,21 +411,21 @@ namespace Slate {
             case WM_LBUTTONDOWN:
             case WM_LBUTTONUP:
                 event.Button =
-                    Slate::EMouseButton
+                    SlateCore::EMouseButton
                     ::Left;
                 break;
 
             case WM_RBUTTONDOWN:
             case WM_RBUTTONUP:
                 event.Button =
-                    Slate::EMouseButton
+                    SlateCore::EMouseButton
                     ::Right;
                 break;
 
             case WM_MBUTTONDOWN:
             case WM_MBUTTONUP:
                 event.Button =
-                    Slate::EMouseButton
+                    SlateCore::EMouseButton
                     ::Middle;
                 break;
             }
@@ -438,14 +438,14 @@ namespace Slate {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
         {
-            Slate::KeyEvent event;
+            SlateCore::KeyEvent event;
 
             event.Key =
                 TranslateKey(
                     wParam);
 
             event.Event =
-                Slate::EInputEvent
+                SlateCore::EInputEvent
                 ::Pressed;
 
             return RootWidget
@@ -456,14 +456,14 @@ namespace Slate {
         case WM_KEYUP:
         case WM_SYSKEYUP:
         {
-            Slate::KeyEvent event;
+            SlateCore::KeyEvent event;
 
             event.Key =
                 TranslateKey(
                     wParam);
 
             event.Event =
-                Slate::EInputEvent
+                SlateCore::EInputEvent
                 ::Released;
 
             return RootWidget

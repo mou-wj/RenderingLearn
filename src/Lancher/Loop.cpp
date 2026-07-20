@@ -3,7 +3,7 @@
 #include "ApplicationBase.h"
 #include "Engine.h"
 #include "Timer.h"
-using namespace Slate;
+using namespace SlateCore;
 void Loop::Init() {
 	Core::ModuleManager::Get().LoadModule("RHIVulkan");
 	Core::ModuleManager::Get().LoadModule("Renderer");

@@ -236,7 +236,7 @@ private:
     RHI::RHIGraphicsPipelineState* TriangleGraphicsPipelineState;
     RHI::RHIVertexDescState* VertexDescState;
     RHI::RHISwapchainSP Swapchain;
-    Slate::WindowSP Window;
+    SlateCore::WindowSP Window;
     int WindiwWidth = 512;
     int WindowHeight = 512;
     int FrameWidth = 0;
@@ -463,7 +463,7 @@ private:
     void CreateSwapchain(RHI::RHIApi* api)
 	{
         // 
-        Window = Slate::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIRenderTriangleTest");
+        Window = SlateCore::WindowFactory::CreateWindowSP(WindiwWidth, WindowHeight, "RHIRenderTriangleTest");
         Window->Show();
         // 创建交换链
 		void* windowHandle = Window->GetNativeHandle(); // 获取窗口句柄的函数

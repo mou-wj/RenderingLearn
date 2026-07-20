@@ -1,7 +1,7 @@
 
 
 # Target name (change as needed per module)
-set(TARGET_NAME Slate)
+set(TARGET_NAME SlateCore)
 
 # Generic file variable names so this template is reusable for other libraries.
 # Place your public headers in PublicHeader/ and private sources/headers in Private/

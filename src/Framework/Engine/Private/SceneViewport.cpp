@@ -103,7 +103,7 @@ namespace Engine{
         //RenderTarget = nullptr;
     }
     bool SceneViewport::OnMouseMove(
-        const Slate::MouseMoveEvent&
+        const SlateCore::MouseMoveEvent&
         Event)
     {
         return Client
@@ -113,7 +113,7 @@ namespace Engine{
     }
 
     bool SceneViewport::OnMouseButton(
-        const Slate::MouseButtonEvent&
+        const SlateCore::MouseButtonEvent&
         Event)
     {
         return Client
@@ -123,7 +123,7 @@ namespace Engine{
     }
 
     bool SceneViewport::OnMouseWheel(
-        const Slate::MouseWheelEvent&
+        const SlateCore::MouseWheelEvent&
         Event)
     {
         return Client
@@ -133,7 +133,7 @@ namespace Engine{
     }
 
     bool SceneViewport::OnKeyDown(
-        const Slate::KeyEvent&
+        const SlateCore::KeyEvent&
         Event)
     {
         return Client
@@ -143,7 +143,7 @@ namespace Engine{
     }
 
     bool SceneViewport::OnKeyUp(
-        const Slate::KeyEvent&
+        const SlateCore::KeyEvent&
         Event)
     {
         return Client

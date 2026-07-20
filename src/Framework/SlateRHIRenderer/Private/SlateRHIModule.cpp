@@ -21,7 +21,7 @@ namespace SlateRHIRenderer {
         return bLoaded;
     }
 
-    Slate::SlateRenderer* SlateRHIRendererModule::CreateSlateRenderer()
+    SlateCore::SlateRenderer* SlateRHIRendererModule::CreateSlateRenderer()
     {
         // UE 风格：只创建一次
         if (!Renderer)

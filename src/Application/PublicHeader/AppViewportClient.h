@@ -22,15 +22,15 @@ namespace App {
         void Draw(Engine::Viewport* InViewport) override;
     public:
         bool OnMouseButton(
-            const Slate::MouseButtonEvent&
+            const SlateCore::MouseButtonEvent&
             Event) override;
 
         bool OnMouseMove(
-            const Slate::MouseMoveEvent&
+            const SlateCore::MouseMoveEvent&
             Event) override;
 
         bool OnMouseWheel(
-            const Slate::MouseWheelEvent&
+            const SlateCore::MouseWheelEvent&
             Event) override;
     private:
         void BuildSceneViews(Engine::Viewport* InViewport, Engine::SceneViewFamily& OutViews);

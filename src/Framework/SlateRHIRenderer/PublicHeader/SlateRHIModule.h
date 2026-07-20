@@ -1,7 +1,7 @@
 #pragma once
 #include "SlateRenderer.h"
 namespace SlateRHIRenderer {
-    class SLATERHIRENDERER_API SlateRHIRendererModule final : public Slate::SlateRendererModule
+    class SLATERHIRENDERER_API SlateRHIRendererModule final : public SlateCore::SlateRendererModule
     {
     public:
         SlateRHIRendererModule();
@@ -9,13 +9,13 @@ namespace SlateRHIRenderer {
         virtual void ShutdownModule() override;
         virtual bool IsLoaded() const override;
 
-        virtual Slate::SlateRenderer* CreateSlateRenderer() override;
+        virtual SlateCore::SlateRenderer* CreateSlateRenderer() override;
 
     private:
         bool bLoaded = false;
 
         // Module 内部持有
-        Slate::SlateRenderer* Renderer;
+        SlateCore::SlateRenderer* Renderer;
     };
 
     extern SLATERHIRENDERER_API SlateRHIRendererModule* GSlateRHIRendererModule;

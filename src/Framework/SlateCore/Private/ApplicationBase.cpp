@@ -1,5 +1,5 @@
 #include "ApplicationBase.h"
-namespace Slate{
+namespace SlateCore {
 	ApplicationBase* CurApplication = nullptr;
 	ApplicationBase* ApplicationBase::GetApplication() {
 		return CurApplication;

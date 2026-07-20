@@ -1,6 +1,6 @@
 #include "InputHandler.h"
 
-namespace Slate
+namespace SlateCore
 {
     InputHandler::~InputHandler() = default;
 

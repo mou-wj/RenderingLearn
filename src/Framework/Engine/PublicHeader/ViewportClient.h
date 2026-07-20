@@ -3,7 +3,7 @@
 #include "InputHandler.h"
 namespace Engine {
     // Engine/ViewportClient.h
-    class ENGINE_API ViewportClient : public Slate::InputHandler
+    class ENGINE_API ViewportClient : public SlateCore::InputHandler
     {
     public:
         virtual ~ViewportClient() = default;

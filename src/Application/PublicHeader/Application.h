@@ -6,7 +6,7 @@
 #include "AppViewportClient.h"
 namespace App {
 
-    class APPLICATION_API Application : public Slate::ApplicationBase
+    class APPLICATION_API Application : public SlateCore::ApplicationBase
     {
     public:
         Application();
@@ -18,13 +18,13 @@ namespace App {
         void Shutdown() override;
 
         // Window 管理
-        Slate::WindowSP CreateWindowSP(int Width, int Height, const char* Title);
+        SlateCore::WindowSP CreateWindowSP(int Width, int Height, const char* Title);
 
         // 帧同步
         void TickFrame() override;
 
     protected:
-        Slate::WindowSP Window;
+        SlateCore::WindowSP Window;
         std::unique_ptr<Engine::SceneViewport> MainViewport;
         std::unique_ptr<AppViewportClient> ViewportClient;
 		bool QuitFlag = false;
