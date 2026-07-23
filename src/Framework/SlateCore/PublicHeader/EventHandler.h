@@ -90,10 +90,10 @@ namespace SlateCore
         ModifierKeys Modifiers;
     };
 
-    class SLATECORE_API InputHandler
+    class SLATECORE_API EventHandler
     {
     public:
-        virtual ~InputHandler();
+        virtual ~EventHandler();
 
     public:
         virtual bool OnMouseMove(

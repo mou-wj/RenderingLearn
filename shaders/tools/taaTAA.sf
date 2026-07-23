@@ -1,0 +1,28 @@
+#include "/Generated/ShaderParameters/TAAParameters.sf"
+
+[numthreads(8, 8, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    uint2 pix = DispatchThreadID.xy;
+    uint2 dim = uint2((uint)Resolution.x, (uint)Resolution.y);
+
+    if (pix.x >= dim.x || pix.y >= dim.y)
+    {
+        return;
+    }
+
+    float4 currentColor = CurrentColor.Load(int3(int2(pix), 0));
+    float2 velocity = Velocity.Load(int3(int2(pix), 0)).xy;
+
+    float2 historyUV = (float2(pix) + 0.5f) / float2(dim) - velocity;
+    historyUV = saturate(historyUV);
+    int2 historyPix = int2(historyUV * float2(dim));
+    historyPix = clamp(historyPix, int2(0, 0), int2(dim) - int2(1, 1));
+
+    float4 historyColor = HistoryColor.Load(int3(historyPix, 0));
+
+    float blend = saturate(BlendFactor);
+    float4 outColor = lerp(currentColor, historyColor, blend);
+
+    OutputColor[pix] = outColor;
+}

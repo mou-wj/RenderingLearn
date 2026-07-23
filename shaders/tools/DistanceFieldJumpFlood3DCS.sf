@@ -1,0 +1,96 @@
+#include "/Generated/ShaderParameters/DistanceFieldJumpFlood3DParameters.sf"
+
+static const float INVALID_SEED = -1.0;
+
+bool IsInsideGrid(int3 p)
+{
+    return p.x >= 0 && p.y >= 0 && p.z >= 0 &&
+           p.x < GridResolution.x && p.y < GridResolution.y && p.z < GridResolution.z;
+}
+
+bool IsValidSeed(float4 seed)
+{
+    return seed.w > 0.5;
+}
+
+float SeedDistanceSq(float3 voxel, float3 seedVoxel)
+{
+    float3 d = voxel - seedVoxel;
+    return dot(d, d);
+}
+
+[numthreads(4, 4, 4)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    int3 p = int3(DispatchThreadID.xyz);
+    if (!IsInsideGrid(p))
+    {
+        return;
+    }
+
+    if (bInitializeFromMask != 0)
+    {
+        float surface = SurfaceMaskTexture.Load(int4(p, 0)).r;
+        if (surface > 0.5)
+        {
+            OutputSeedTexture[p] = float4(float3(p), 1.0);
+        }
+        else
+        {
+            OutputSeedTexture[p] = float4(INVALID_SEED, INVALID_SEED, INVALID_SEED, 0.0);
+        }
+
+        if (bFinalizeDistance != 0)
+        {
+            OutputDistanceTexture[p] = 0.0;
+        }
+        return;
+    }
+
+    float4 centerSeed = InputSeedTexture.Load(int4(p, 0));
+    float4 bestSeed = centerSeed;
+    float bestDistSq = IsValidSeed(bestSeed) ? SeedDistanceSq(float3(p), bestSeed.xyz) : 3.402823e+38;
+
+    int step = max(1, int(JumpStep));
+    for (int z = -1; z <= 1; ++z)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            for (int x = -1; x <= 1; ++x)
+            {
+                int3 q = p + int3(x, y, z) * step;
+                if (!IsInsideGrid(q))
+                {
+                    continue;
+                }
+
+                float4 candidateSeed = InputSeedTexture.Load(int4(q, 0));
+                if (!IsValidSeed(candidateSeed))
+                {
+                    continue;
+                }
+
+                float candidateDistSq = SeedDistanceSq(float3(p), candidateSeed.xyz);
+                if (candidateDistSq < bestDistSq)
+                {
+                    bestDistSq = candidateDistSq;
+                    bestSeed = candidateSeed;
+                }
+            }
+        }
+    }
+
+    OutputSeedTexture[p] = bestSeed;
+
+    if (bFinalizeDistance != 0)
+    {
+        if (IsValidSeed(bestSeed))
+        {
+            OutputDistanceTexture[p] = sqrt(bestDistSq);
+        }
+        else
+        {
+            OutputDistanceTexture[p] = 65535.0;
+        }
+    }
+}

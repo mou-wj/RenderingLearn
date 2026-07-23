@@ -1,0 +1,122 @@
+#include "/Generated/ShaderParameters/DistanceFieldVoxelizeParameters.sf"
+
+float3 ToVoxel(float3 worldPos)
+{
+    float4 p = mul(WorldToVoxel, float4(worldPos, 1.0));
+    return p.xyz;
+}
+
+float PointTriangleDistanceSq(float3 p, float3 a, float3 b, float3 c)
+{
+    float3 ab = b - a;
+    float3 ac = c - a;
+    float3 ap = p - a;
+
+    float d1 = dot(ab, ap);
+    float d2 = dot(ac, ap);
+    if (d1 <= 0.0 && d2 <= 0.0)
+    {
+        return dot(ap, ap);
+    }
+
+    float3 bp = p - b;
+    float d3 = dot(ab, bp);
+    float d4 = dot(ac, bp);
+    if (d3 >= 0.0 && d4 <= d3)
+    {
+        return dot(bp, bp);
+    }
+
+    float vc = d1 * d4 - d3 * d2;
+    if (vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0)
+    {
+        float v = d1 / (d1 - d3);
+        float3 proj = a + v * ab;
+        return dot(p - proj, p - proj);
+    }
+
+    float3 cp = p - c;
+    float d5 = dot(ab, cp);
+    float d6 = dot(ac, cp);
+    if (d6 >= 0.0 && d5 <= d6)
+    {
+        return dot(cp, cp);
+    }
+
+    float vb = d5 * d2 - d1 * d6;
+    if (vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0)
+    {
+        float w = d2 / (d2 - d6);
+        float3 proj = a + w * ac;
+        return dot(p - proj, p - proj);
+    }
+
+    float va = d3 * d6 - d5 * d4;
+    if (va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0)
+    {
+        float3 bc = c - b;
+        float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        float3 proj = b + w * bc;
+        return dot(p - proj, p - proj);
+    }
+
+    float3 n = cross(ab, ac);
+    float nLenSq = dot(n, n);
+    if (nLenSq <= 1e-8)
+    {
+        return min(dot(ap, ap), min(dot(bp, bp), dot(cp, cp)));
+    }
+
+    float dist = dot(p - a, n) / sqrt(nLenSq);
+    return dist * dist;
+}
+
+int3 ClampVoxelIndex(int3 id)
+{
+    id.x = clamp(id.x, 0, GridResolution.x - 1);
+    id.y = clamp(id.y, 0, GridResolution.y - 1);
+    id.z = clamp(id.z, 0, GridResolution.z - 1);
+    return id;
+}
+
+[numthreads(64, 1, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    const uint triId = DispatchThreadID.x;
+    if (triId >= PrimitiveCount)
+    {
+        return;
+    }
+
+    const uint idx0 = IndexBuffer[triId * 3 + 0];
+    const uint idx1 = IndexBuffer[triId * 3 + 1];
+    const uint idx2 = IndexBuffer[triId * 3 + 2];
+
+    const float3 v0 = ToVoxel(VertexBuffer[idx0].Position);
+    const float3 v1 = ToVoxel(VertexBuffer[idx1].Position);
+    const float3 v2 = ToVoxel(VertexBuffer[idx2].Position);
+
+    const float3 triMin = floor(min(v0, min(v1, v2)));
+    const float3 triMax = ceil(max(v0, max(v1, v2)));
+
+    const int3 minCell = ClampVoxelIndex(int3(triMin));
+    const int3 maxCell = ClampVoxelIndex(int3(triMax));
+
+    // Mark voxel as occupied when center is close enough to triangle surface.
+    const float occupyThresholdSq = 0.75 * 0.75;
+    for (int z = minCell.z; z <= maxCell.z; ++z)
+    {
+        for (int y = minCell.y; y <= maxCell.y; ++y)
+        {
+            for (int x = minCell.x; x <= maxCell.x; ++x)
+            {
+                const float3 voxelCenter = float3(x + 0.5, y + 0.5, z + 0.5);
+                const float distSq = PointTriangleDistanceSq(voxelCenter, v0, v1, v2);
+                if (distSq <= occupyThresholdSq)
+                {
+                    OutputSDFTexture[int3(x, y, z)] = 0.0;
+                }
+            }
+        }
+    }
+}

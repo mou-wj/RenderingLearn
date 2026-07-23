@@ -4,6 +4,13 @@
 #include "ApplicationBase.h"
 #include "SceneViewport.h"
 #include "AppViewportClient.h"
+#include "SlateWidget.h"
+#include "ImMainWindow.h"
+namespace ImGUISlate {
+    class ImSlateRenderer;
+    class ImWidget;
+}
+
 namespace App {
 
     class APPLICATION_API Application : public SlateCore::ApplicationBase
@@ -12,21 +19,23 @@ namespace App {
         Application();
         virtual ~Application();
 
-        // ÉúÃüÖÜÆÚ
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         bool Initialize() override;
         bool RequestExit() override;
         void Shutdown() override;
 
-        // Window ¹ÜÀí
-        SlateCore::WindowSP CreateWindowSP(int Width, int Height, const char* Title);
+        // Window ï¿½ï¿½ï¿½ï¿½
+        std::shared_ptr<ImGUISlate::ImMainWindow> CreateWindowSP(int Width, int Height, const char* Title);
 
-        // Ö¡Í¬²½
+        // Ö¡Í¬ï¿½ï¿½
         void TickFrame() override;
 
     protected:
-        SlateCore::WindowSP Window;
-        std::unique_ptr<Engine::SceneViewport> MainViewport;
-        std::unique_ptr<AppViewportClient> ViewportClient;
+        std::shared_ptr<ImGUISlate::ImMainWindow> Window;
+        std::unique_ptr<SlateCore::SlateWidget> SceneSlateWidget;
+        std::unique_ptr<Engine::SceneViewport> SceneMainViewport;
+        std::unique_ptr<AppViewportClient> SceneViewportClient;
+		std::unique_ptr<ImGUISlate::ImWidget> ImGuiWidget;
 		bool QuitFlag = false;
     };
 

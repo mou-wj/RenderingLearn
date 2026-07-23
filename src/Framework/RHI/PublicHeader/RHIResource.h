@@ -673,7 +673,26 @@ struct RHIBoundRenderTargets
             Dimensions.x = size.x;
             Dimensions.y = size.y;
         }
-    
+        for (uint8_t i = 0; i < NumColorAttachments; ++i)
+        {
+            const auto& att = ColorAttachments[i];
+            if (att.Texture)
+            {
+                Core::Int3 size = att.Texture->GetMipSize(att.MipIndex);
+                if (size.x != Dimensions.x || size.y != Dimensions.y) {
+                    assert(0);
+                }
+            }
+        }
+
+        // 2. fallback depth
+        if (DepthStencil.Texture)
+        {
+            auto size = DepthStencil.Texture->GetMipSize(DepthStencil.MipIndex);
+            if (size.x != Dimensions.x || size.y != Dimensions.y) {
+                assert(0);
+            }
+        }
     }
 
 };

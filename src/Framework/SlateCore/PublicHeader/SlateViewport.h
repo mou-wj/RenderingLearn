@@ -1,5 +1,6 @@
 #pragma once
 #include "Widget.h"
+#include <memory>
 namespace SlateCore {
 
     class SLATECORE_API SlateViewport : public Widget

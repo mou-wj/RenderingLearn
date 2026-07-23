@@ -37,8 +37,8 @@ target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
 )
-
-target_link_libraries(${TARGET_NAME} PUBLIC SlateCore Deps::Vulkan)
+find_package(OpenGL REQUIRED)
+target_link_libraries(${TARGET_NAME} PUBLIC SlateCore OpenGL::GL)
 
 # Position independent code for shared libs
 set_target_properties(${TARGET_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -47,11 +47,14 @@ string(TOUPPER "${TARGET_NAME}" TARGET_NAME_UPPER)
 if (WIN32)
   target_compile_definitions(${TARGET_NAME}
     PRIVATE ${TARGET_NAME_UPPER}_API=__declspec\(dllexport\)
+    IMGUI_API=__declspec\(dllexport\)
     INTERFACE ${TARGET_NAME_UPPER}_API=__declspec\(dllimport\)
+    IMGUI_API=__declspec\(dllimport\)
   )
 else()
   target_compile_definitions(${TARGET_NAME_UPPER}
     INTERFACE ${TARGET_NAME_UPPER}_API=__attribute__\(\(visibility\(\"default\"\)\)\)
+    IMGUI_API=__attribute__\(\(visibility\(\"default\"\)\)\)
   )
 endif()
 

@@ -494,6 +494,20 @@ struct ShaderParameterTypeInfo<Core::Int2>
 
     static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
 };
+template<>
+struct ShaderParameterTypeInfo<Core::Int3>
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Int32;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 3;
+    static constexpr uint32_t NumElements = 0;
+    static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+    static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+    using TAlignedType = Core::Int3;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+};
 
 template<>
 struct ShaderParameterTypeInfo<float>

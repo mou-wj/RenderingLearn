@@ -1,7 +1,9 @@
 #pragma once
 
 #include "TypeIDCast.h"
-#include "InputHandler.h"
+#include "EventHandler.h"
+#include "PlatformSurfaceOwner.h"
+#include <memory>
 
 namespace SlateCore
 {
@@ -10,8 +12,8 @@ namespace SlateCore
         float X = 0;
         float Y = 0;
 
-        float Width = 0;
-        float Height = 0;
+        float Width = 100;
+        float Height = 100;
     };
 
     enum class EVisibility
@@ -21,7 +23,7 @@ namespace SlateCore
         Collapsed
     };
 
-    class Widget : public InputHandler
+    class Widget : public EventHandler
     {
         DECLARE_TYPE_ID_BASE_TYPE(Widget)
 
@@ -39,7 +41,11 @@ namespace SlateCore
             float width,
             float height)
         {
-            SetSize(width, height);
+            SetGeometry(
+                Geometry.X,
+                Geometry.Y,
+                width,
+                height);
         }
 
         virtual bool HitTest(
@@ -63,33 +69,33 @@ namespace SlateCore
         }
 
     public:
-        void SetPosition(
-            float x,
-            float y)
-        {
-            Geometry.X = x;
-            Geometry.Y = y;
-        }
-
-        void SetSize(
-            float width,
-            float height)
-        {
-            Geometry.Width = width;
-            Geometry.Height = height;
-        }
-
         void SetGeometry(
             float x,
             float y,
             float width,
             float height)
         {
+            bool posChanged = false;
+            if (x != Geometry.X || y != Geometry.Y) {
+                posChanged = true;
+            }
             Geometry.X = x;
             Geometry.Y = y;
+            if (posChanged) {
+                OnSetPosition(x, y);
+            }
 
+
+			bool sizeChanged = false;
+            if (width != Geometry.Width || height != Geometry.Height) {
+                sizeChanged = true;
+            }
             Geometry.Width = width;
             Geometry.Height = height;
+            if (sizeChanged) {
+                OnSetSize(width, height);
+            }
+
         }
 
         const WidgetGeometry&
@@ -101,8 +107,11 @@ namespace SlateCore
         void SetVisibility(
             EVisibility visibility)
         {
+            if (Visibility == visibility)
+                return;
             Visibility =
                 visibility;
+            OnVisibilityChanged();
         }
 
         EVisibility
@@ -116,5 +125,35 @@ namespace SlateCore
 
         EVisibility Visibility =
             EVisibility::Visible;
+        virtual void OnVisibilityChanged()
+        {
+        }
+        virtual void OnSetSize(float width, float height)
+        {
+        }
+        virtual void OnSetPosition(float x, float y)
+        {
+        }
+    };
+    class PlatformSurface;
+    class SLATECORE_API NativeWidget : public Widget, public PlatformSurfaceOwner
+    {
+    public:
+        explicit NativeWidget(PlatformSurfaceOwner* parentOwner = nullptr);
+        virtual ~NativeWidget() override;
+
+        void SetParentOwnerSource(PlatformSurfaceOwner* parentOwner);
+        PlatformSurfaceOwner* GetParentOwnerSource() const;
+
+        void SetNativeHandle(void* nativeHandle);
+
+        bool HasParentNativeRelationship() const;
+        void* GetParentNativeHandle() const;
+        void* GetNativeHandle() const override;
+    protected:
+        bool InitializeOwnedSurface();
+        PlatformSurface* GetOwnedSurface() const override;
+        void* NativeHandle = nullptr;
+        std::unique_ptr<PlatformSurface> OwnedSurface;
     };
 }

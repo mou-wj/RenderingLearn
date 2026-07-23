@@ -18,19 +18,27 @@ namespace SlateRHIRenderer {
 
 	}
     uint64_t frameCount = 0;
-	void SlateRHIRenderer::Render(SlateCore::Window* window) {
+	void SlateRHIRenderer::Render(SlateCore::SlateWidget* slateWidget) {
+        if (!slateWidget)
+        {
+            return;
+        }
         
-        CreateViewport(window);
-        auto slateViewport = Viewports[window];
+        CreateViewport(slateWidget);
+        auto slateViewport = Viewports[slateWidget];
 		auto rhiSwapchain = slateViewport.SwapchainRHI;
 		auto slot = rhiSwapchain->AcquireNextSlot();
 		auto backTexture = slot.Texture;
         if (backTexture == nullptr) { return; }
-        LOG_INFO("render frame: %u",frameCount);
-        LOG_INFO("duration time %f s", Core::Timer::GetGlobalInstance().GetDelta());
+        //LOG_INFO("render frame: %u",frameCount);
+        //LOG_INFO("duration time %f s", Core::Timer::GetGlobalInstance().GetDelta());
         frameCount++;
 		//�����������ݻ��Ƶ�presentTexture��
-		auto windowWidget = window->GetRootWidgets(); 
+		auto* windowWidget = static_cast<SlateCore::Widget*>(slateWidget->GetViewportChild());
+        if (!windowWidget)
+        {
+            return;
+        }
         std::vector<SlateCore::Widget*> widgets;
         widgets.push_back(windowWidget);
         auto computeTransitionContex = RHI::GRHIApi->GetQueue(EQueueType::Compute)->AcquireCommandContext();
@@ -84,6 +92,8 @@ namespace SlateRHIRenderer {
                 auto slateW = widget->Cast<SlateCore::SlateViewport>();
                 auto widgetTeture = static_cast<RenderCore::RenderTexture*>(slateW->GetViewportRenderTargetTexture());
                 auto texDesc = widgetTeture->GetRHI()->GetDesc();
+                auto backWidth = backTexture->GetDesc().Width;
+                auto backHeight = backTexture->GetDesc().Height;
                 RHI::RHIBlitTextureDesc blit{};
                 blit.SrcRegion.Width = texDesc.Width;
                 blit.SrcRegion.Height = texDesc.Height;
@@ -137,24 +147,29 @@ namespace SlateRHIRenderer {
 
 	
 
-	void SlateRHIRenderer::CreateViewport(SlateCore::Window* window)
+	void SlateRHIRenderer::CreateViewport(SlateCore::SlateWidget* slateWidget)
 	{
-        if (Viewports.find(window) == Viewports.end()) {
+        if (!slateWidget) {
+            return;
+        }
+
+        const int width = slateWidget->GetGeometry().Width;
+        const int height = slateWidget->GetGeometry().Height;
+
+        if (Viewports.find(slateWidget) == Viewports.end()) {
             WindowViewportInfo viewportInfo;
-            auto windowHandle = window->GetNativeHandle();
-            auto framebufferSize = window->GetFramebufferSize();
-            viewportInfo.SwapchainRHI = GRHIApi->CreateSwapchain(windowHandle, framebufferSize.x, framebufferSize.y, ERHIFormat::R8G8B8A8_UNorm);
-            Viewports[window] = viewportInfo;
-            Viewports[window].Width = framebufferSize.x;
-            Viewports[window].Height = framebufferSize.y;
+            auto windowHandle = slateWidget->GetNativeHandle();
+            viewportInfo.SwapchainRHI = GRHIApi->CreateSwapchain(windowHandle, width, height, ERHIFormat::R8G8B8A8_UNorm);
+            Viewports[slateWidget] = viewportInfo;
+            Viewports[slateWidget].Width = width;
+            Viewports[slateWidget].Height = height;
         }
         else {
-            auto& viewportInfo = Viewports[window];
-            auto framebufferSize = window->GetFramebufferSize();
-            if (viewportInfo.Width != framebufferSize.x || viewportInfo.Height != framebufferSize.y) {
-                viewportInfo.SwapchainRHI->Resize(framebufferSize.x, framebufferSize.y);
-                viewportInfo.Width = framebufferSize.x;
-                viewportInfo.Height = framebufferSize.y;
+            auto& viewportInfo = Viewports[slateWidget];
+            if (viewportInfo.Width != width || viewportInfo.Height != height) {
+                viewportInfo.SwapchainRHI->Resize(width, height);
+                viewportInfo.Width = width;
+                viewportInfo.Height = height;
             }
         }
 

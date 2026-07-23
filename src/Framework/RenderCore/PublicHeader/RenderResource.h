@@ -283,8 +283,8 @@ struct RENDERCORE_API PoolRenderTargetDesc
 
             (Usage & rhs.Usage) == rhs.Usage &&
 
-            Width >= rhs.Width &&
-            Height >= rhs.Height &&
+            Width == rhs.Width &&
+            Height == rhs.Height &&
             Depth >= rhs.Depth &&
 
             MipLevels >= rhs.MipLevels &&

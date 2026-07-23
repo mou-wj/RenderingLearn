@@ -4,6 +4,7 @@
 #include "RHIResource.h"
 #include "RHICommandContex.h"
 #include "Window.h"
+#include "SlateWidget.h"
 #include <map>
 namespace SlateRHIRenderer {
 
@@ -25,11 +26,11 @@ namespace SlateRHIRenderer {
 	public:
 		SlateRHIRenderer();
 		~SlateRHIRenderer() override;
-		virtual void Render(SlateCore::Window* window) override;
-		void CreateViewport(SlateCore::Window* window) override;
+		virtual void Render(SlateCore::SlateWidget* slateWidget) override;
+		void CreateViewport(SlateCore::SlateWidget* slateWidget) override;
 	private:
 
-		std::map<SlateCore::Window*, WindowViewportInfo> Viewports;
+		std::map<SlateCore::SlateWidget*, WindowViewportInfo> Viewports;
 	};
 
 

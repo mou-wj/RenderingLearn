@@ -1,50 +1,50 @@
-#include "InputHandler.h"
+#include "EventHandler.h"
 
 namespace SlateCore
 {
-    InputHandler::~InputHandler() = default;
+    EventHandler::~EventHandler() = default;
 
-    bool InputHandler::OnMouseMove(
+    bool EventHandler::OnMouseMove(
         const MouseMoveEvent&)
     {
         return false;
     }
 
-    bool InputHandler::OnMouseButton(
+    bool EventHandler::OnMouseButton(
         const MouseButtonEvent&)
     {
         return false;
     }
 
-    bool InputHandler::OnMouseWheel(
+    bool EventHandler::OnMouseWheel(
         const MouseWheelEvent&)
     {
         return false;
     }
 
-    bool InputHandler::OnKeyDown(
+    bool EventHandler::OnKeyDown(
         const KeyEvent&)
     {
         return false;
     }
 
-    bool InputHandler::OnKeyUp(
+    bool EventHandler::OnKeyUp(
         const KeyEvent&)
     {
         return false;
     }
 
-    bool InputHandler::OnFocusReceived()
+    bool EventHandler::OnFocusReceived()
     {
         return false;
     }
 
-    bool InputHandler::OnFocusLost()
+    bool EventHandler::OnFocusLost()
     {
         return false;
     }
 
-    bool InputHandler::OnResize(
+    bool EventHandler::OnResize(
         uint32_t,
         uint32_t)
     {

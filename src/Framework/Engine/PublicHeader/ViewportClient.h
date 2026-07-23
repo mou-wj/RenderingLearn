@@ -1,20 +1,20 @@
 #pragma once
 #include "Viewport.h"
-#include "InputHandler.h"
+#include "EventHandler.h"
 namespace Engine {
     // Engine/ViewportClient.h
-    class ENGINE_API ViewportClient : public SlateCore::InputHandler
+    class ENGINE_API ViewportClient : public SlateCore::EventHandler
     {
     public:
         virtual ~ViewportClient() = default;
 
-        // ºËÐÄ£ºÈÃ Client Ìî³ä ViewFamily
+        // ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ Client ï¿½ï¿½ï¿½ ViewFamily
         virtual void Draw(Viewport* InViewport) = 0;
 
         // Resize Í¨Öª
         virtual void OnViewportResized(int Width, int Height) {}
 
-        // ÊäÈë£¨ÒÔºó¿ÉÀ©Õ¹£©
+        // ï¿½ï¿½ï¿½ë£¨ï¿½Ôºï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½
         virtual void Tick(float DeltaTime) {}
     };
 

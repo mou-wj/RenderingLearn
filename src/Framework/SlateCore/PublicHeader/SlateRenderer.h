@@ -1,14 +1,14 @@
 #pragma once
 #include "Module.h"
 #include "SlateViewport.h"
-#include "Window.h"
+#include "SlateWidget.h"
 namespace SlateCore {
 
     class SLATECORE_API SlateRenderer {
     public:
         virtual ~SlateRenderer() = default;
-        virtual void Render(Window* window) = 0;
-        virtual void CreateViewport(Window* window) = 0;
+        virtual void Render(SlateWidget* slateWidget) = 0;
+        virtual void CreateViewport(SlateWidget* slateWidget) = 0;
 
     };
 	using SlateRendererSP = std::shared_ptr<SlateRenderer>;

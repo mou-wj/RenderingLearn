@@ -41,6 +41,8 @@ namespace Engine {
         virtual void RemoveLight(LightComponent* Component) = 0;
         virtual void FlushPendingUpdates() = 0;
         virtual void NotifyComponentChanged(SceneComponent* Component) = 0;
+        // Called externally to process pending global distance field block updates.
+        virtual bool UpdateGlobalDistanceFieldIfNeeded() = 0;
 
     };
 } // namespace Engine

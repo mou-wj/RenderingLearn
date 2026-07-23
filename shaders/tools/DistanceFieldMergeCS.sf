@@ -1,0 +1,24 @@
+#include "/Generated/ShaderParameters/DistanceFieldMergeParameters.sf"
+
+[numthreads(4, 4, 4)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    const int3 dst = int3(DispatchThreadID.xyz);
+    if (dst.x >= OutputResolution.x || dst.y >= OutputResolution.y || dst.z >= OutputResolution.z)
+    {
+        return;
+    }
+
+    float3 dstCoord = (float3(dst) + 0.5) / float3(OutputResolution);
+    float4 sourcePos = mul(OutputToSource, float4(dstCoord, 1.0));
+    float3 sourceCoord = sourcePos.xyz;
+
+    if (any(sourceCoord < 0.0) || any(sourceCoord > 1.0))
+    {
+        return;
+    }
+
+    float sampledSDF = InputSDFTexture.SampleLevel(InputSDFSampler, sourceCoord, 0).r;
+    float oldSDF = OutputSDFTexture[dst];
+    OutputSDFTexture[dst] = min(oldSDF, sampledSDF);
+}
