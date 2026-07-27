@@ -132,11 +132,14 @@ public:
     void InitRHIResource() override;
     void ReleaseRHIResource() override;
     void UploadData(const void* data, uint32_t mipIndex ,uint32_t arraySlice,uint32_t planeSlice = 0);
+    void UploadData(const void* data, const RHI::RHIUpdateTextureRegion& updateRegion);
     void ReadData(void* data, uint32_t mipIndex, uint32_t arraySlice, uint32_t planeSlice = 0);
     void GenerateMipMaps();
     RHI::RHITexture* GetRHI() const { return Texture.get(); }
     RenderTextureTracker& GetTracker() { return Tracker; }
     TextureViewCache& GetViewCache() { return ViewCache; }
+
+
 private:
     TextureViewCache ViewCache;
     RenderTextureTracker Tracker;
@@ -545,4 +548,7 @@ RENDERCORE_API void ReleaseGlobalRenderResource();
 
 RENDERCORE_API RenderTextureSP CreateTexture(const std::string& Path);
 RENDERCORE_API void SaveTexture(RenderTexture* texture,const std::string& Path,uint32_t array,uint32_t mip);
+
+RENDERCORE_API RenderTextureSP Create3DTexture(uint32_t width, uint32_t height, uint32_t depth, RHI::ERHIFormat format, RHI::ERHITextureCreateFlags usage, const char* debugName);
+
 } // namespace RenderCore

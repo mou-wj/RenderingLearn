@@ -19,6 +19,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${BINARY_DIR}")
 message("INSTALLDIR: ${INSTALL_DIR}/${CONFIG}")
 add_compile_definitions(
 DEBUG_INFO=1
+NOMINMAX
 )
 
 add_subdirectory(src)

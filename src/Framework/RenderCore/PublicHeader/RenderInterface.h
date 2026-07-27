@@ -21,7 +21,7 @@ public:
     virtual void BeginRender(Engine::SceneViewFamily* sceneViewCollection) = 0;
     virtual Engine::SceneInterface* AllocateScene() = 0;
     virtual void PreComputeIBL(RenderTexture* InHDRTexture,RenderTexture* OutDiffuseIBL,RenderTexture* OutSpecularIBL) = 0;
-    virtual bool PreComputePrimitiveSDF(Engine::PrimitiveComponent* PrimitiveComponent) = 0;
+    
 private:
 
 

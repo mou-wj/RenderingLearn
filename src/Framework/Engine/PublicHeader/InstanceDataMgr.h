@@ -87,4 +87,4 @@ namespace Engine
     };
 }
 
-#include "InstanceDataMgr.ini"
+#include "InstanceDataMgr.inl"

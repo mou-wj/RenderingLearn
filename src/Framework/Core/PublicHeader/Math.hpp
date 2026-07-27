@@ -491,6 +491,10 @@ namespace Core {
     using Int3 = Vec3<int>;
     using Int4 = Vec4<int>;
 
+    using UInt2 = Vec2<unsigned int>;
+    using UInt3 = Vec3<unsigned int>;
+    using UInt4 = Vec4<unsigned int>;
+
     using Float2 = Vec2<float>;
     using Float3 = Vec3<float>;
     using Float4 = Vec4<float>;

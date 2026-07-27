@@ -1,5 +1,6 @@
 #include "EngineModule.h"
 #include "IEngine.h"
+#include "DistanceFieldMgr.h"
 namespace Engine {
 
     std::unique_ptr<Engine> EngineObj;
@@ -14,6 +15,7 @@ namespace Engine {
     {
         EngineObj = std::make_unique<IEngine>();
         EngineObj->Init();
+        GDistanceFieldMgr.Initialize();
 
         isLoaded = true;
     }
@@ -25,6 +27,7 @@ namespace Engine {
             EngineObj->Shutdown();
             EngineObj.reset();
         }
+        GDistanceFieldMgr.Release();
         isLoaded = false;
     }
 

@@ -53,6 +53,68 @@ struct CORE_API AABB {
 	// Center and extent
 	Float3 GetCenter() const { return Float3((Min.x+Max.x)*0.5f, (Min.y+Max.y)*0.5f, (Min.z+Max.z)*0.5f); }
 	Float3 GetExtent() const { return Float3((Max.x-Min.x)*0.5f, (Max.y-Min.y)*0.5f, (Max.z-Min.z)*0.5f); }
+	// 计算点到 AABB 的最近距离
+	float Distance(const Float3& Position) const
+	{
+		return std::sqrt(DistanceSquared(Position));
+	}
+
+	// 通常优先计算平方距离，避免不必要的开方（视工程需要，本处提供平方版本）
+	float DistanceSquared(const Float3& Position) const
+	{
+		float sqDist = 0.0f;
+
+		// 遍历 X, Y, Z 三个轴
+		// 轴 X
+		if (Position.x < Min.x)
+		{
+			float diff = Min.x - Position.x;
+			sqDist += diff * diff;
+		}
+		else if (Position.x > Max.x)
+		{
+			float diff = Position.x - Max.x;
+			sqDist += diff * diff;
+		}
+
+		// 轴 Y
+		if (Position.y < Min.y)
+		{
+			float diff = Min.y - Position.y;
+			sqDist += diff * diff;
+		}
+		else if (Position.y > Max.y)
+		{
+			float diff = Position.y - Max.y;
+			sqDist += diff * diff;
+		}
+
+		// 轴 Z
+		if (Position.z < Min.z)
+		{
+			float diff = Min.z - Position.z;
+			sqDist += diff * diff;
+		}
+		else if (Position.z > Max.z)
+		{
+			float diff = Position.z - Max.z;
+			sqDist += diff * diff;
+		}
+
+		return sqDist;
+	}
+	bool Intersects(const AABB& Other) const
+	{
+		return !(Max.x < Other.Min.x || Min.x > Other.Max.x ||
+			Max.y < Other.Min.y || Min.y > Other.Max.y ||
+			Max.z < Other.Min.z || Min.z > Other.Max.z);
+	}
+	bool Contains(const AABB& Other) const
+	{
+		return Other.Min.x >= Min.x && Other.Max.x <= Max.x &&
+			Other.Min.y >= Min.y && Other.Max.y <= Max.y &&
+			Other.Min.z >= Min.z && Other.Max.z <= Max.z;
+	}
 };
 
 // Bounding sphere
@@ -69,6 +131,33 @@ struct CORE_API BoundingSphere {
 		Float3 e = Box.GetExtent();
 		float r = std::sqrt(e.x*e.x + e.y*e.y + e.z*e.z);
 		return BoundingSphere(c, r);
+	}
+	bool Intersects(const BoundingSphere& Other) const
+	{
+		const Float3 Delta = Center - Other.Center;
+
+		float DistanceSquared =
+			Delta.x * Delta.x +
+			Delta.y * Delta.y +
+			Delta.z * Delta.z;
+
+		float RadiusSum = Radius + Other.Radius;
+
+		return DistanceSquared <= RadiusSum * RadiusSum;
+	}
+
+	bool Contains(const BoundingSphere& Other) const
+	{
+		const Float3 Delta = Other.Center - Center;
+
+		float Distance =
+			std::sqrt(
+				Delta.x * Delta.x +
+				Delta.y * Delta.y +
+				Delta.z * Delta.z);
+
+
+		return Distance + Other.Radius <= Radius;
 	}
 };
 
@@ -127,6 +216,16 @@ struct CORE_API BoxSphereBounds {
 			Float3(NewCenter.x + NewExtent.x, NewCenter.y + NewExtent.y, NewCenter.z + NewExtent.z));
 
 		Sphere = BoundingSphere::FromAABB(Box);
+	}
+	bool Intersects(const BoxSphereBounds& Other) const
+	{
+		return Box.Intersects(Other.Box);
+	}
+
+
+	bool Contains(const BoxSphereBounds& Other) const
+	{
+		return Box.Contains(Other.Box);
 	}
 };
 

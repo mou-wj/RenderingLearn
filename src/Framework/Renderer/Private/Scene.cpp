@@ -16,7 +16,8 @@
 #include "RHIApi.h"
 #include "StaticMeshProxy.h"
 #include "LocalVertexFactory.h"
-
+#include "StaticMeshComponent.h"
+#include "DistanceFieldMgr.h"
 #include <cstring>
 #include <algorithm>
 #include <cmath>
@@ -26,108 +27,6 @@ using namespace Engine;
 
 
 namespace Renderer {
-
-    namespace
-    {
-        constexpr int32_t GDistanceFieldBlockCoordBias = 1048576;
-
-        inline int64_t EncodeBlockCoordToKey(int32_t x, int32_t y, int32_t z)
-        {
-            const int64_t bx = static_cast<int64_t>(x + GDistanceFieldBlockCoordBias) & 0x1FFFFF;
-            const int64_t by = static_cast<int64_t>(y + GDistanceFieldBlockCoordBias) & 0x1FFFFF;
-            const int64_t bz = static_cast<int64_t>(z + GDistanceFieldBlockCoordBias) & 0x1FFFFF;
-            return (bx << 42) | (by << 21) | bz;
-        }
-
-        inline bool IntersectsAABB(const Core::AABB& A, const Core::AABB& B)
-        {
-            if (A.IsEmpty() || B.IsEmpty())
-            {
-                return false;
-            }
-
-            return !(A.Max.x < B.Min.x || A.Min.x > B.Max.x ||
-                A.Max.y < B.Min.y || A.Min.y > B.Max.y ||
-                A.Max.z < B.Min.z || A.Min.z > B.Max.z);
-        }
-
-        RHI::RHITextureDesc BuildDistanceFieldTextureArrayDesc(uint32_t arraySize, uint32_t textureSize, const char* debugName)
-        {
-            RHI::RHITextureDesc Desc;
-            Desc.Width = textureSize;
-            Desc.Height = textureSize;
-            Desc.Depth = 1;
-            Desc.MipLevels = 1;
-            Desc.ArraySize = arraySize;
-            Desc.Type = RHI::ERHITextureType::Texture2DArray;
-            Desc.Format = RHI::ERHIFormat::R32_Float;
-            Desc.SampleCount = 1;
-            Desc.InitialQueueType = RHI::EQueueType::Compute;
-            Desc.Usage =
-                RHI::ERHITextureCreateFlag::ShaderResource |
-                RHI::ERHITextureCreateFlag::TransferDest;
-            Desc.DebugName = debugName;
-            return Desc;
-        }
-
-        RHI::RHIBufferDesc BuildStructuredBufferDesc(uint64_t sizeInBytes, uint32_t stride, const char* debugName)
-        {
-            RHI::RHIBufferDesc Desc;
-            Desc.Size = std::max<uint64_t>(1ull, sizeInBytes);
-            Desc.Stride = stride;
-            Desc.InitialQueueType = RHI::EQueueType::Compute;
-            Desc.Usage =
-                RHI::ERHIBufferUsageFlag::Structured |
-                RHI::ERHIBufferUsageFlag::ShaderResource |
-                RHI::ERHIBufferUsageFlag::TransferDst;
-            Desc.DebugName = debugName;
-            return Desc;
-        }
-
-        std::vector<float> BuildDistanceFieldSlice(
-            const Core::AABB& blockBounds,
-            uint32_t textureSize,
-            const std::vector<Core::AABB>& sourceBounds)
-        {
-            std::vector<float> distances(textureSize * textureSize, 1000.0f);
-            if (sourceBounds.empty() || blockBounds.IsEmpty())
-            {
-                return distances;
-            }
-
-            const float sizeX = blockBounds.Max.x - blockBounds.Min.x;
-            const float sizeY = blockBounds.Max.y - blockBounds.Min.y;
-            const float z = (blockBounds.Min.z + blockBounds.Max.z) * 0.5f;
-            const float stepX = textureSize > 1 ? sizeX / static_cast<float>(textureSize - 1) : 0.0f;
-            const float stepY = textureSize > 1 ? sizeY / static_cast<float>(textureSize - 1) : 0.0f;
-
-            for (uint32_t y = 0; y < textureSize; ++y)
-            {
-                const float worldY = blockBounds.Min.y + static_cast<float>(y) * stepY;
-                for (uint32_t x = 0; x < textureSize; ++x)
-                {
-                    const float worldX = blockBounds.Min.x + static_cast<float>(x) * stepX;
-
-                    float minDistance = std::numeric_limits<float>::max();
-                    for (const Core::AABB& source : sourceBounds)
-                    {
-                        const float dx = std::max(std::max(source.Min.x - worldX, 0.0f), worldX - source.Max.x);
-                        const float dy = std::max(std::max(source.Min.y - worldY, 0.0f), worldY - source.Max.y);
-                        const float dz = std::max(std::max(source.Min.z - z, 0.0f), z - source.Max.z);
-                        const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-                        if (distance < minDistance)
-                        {
-                            minDistance = distance;
-                        }
-                    }
-
-                    distances[y * textureSize + x] = minDistance;
-                }
-            }
-
-            return distances;
-        }
-    }
 
 
     //====================================================
@@ -295,431 +194,14 @@ namespace Renderer {
 			ShadowAllocatorDesc{
 				{ 4096, 4096 } // SpotShadowAtlas
 			});
-
-                StaticTextureIdToBlockCoord.resize(SceneStaticDistanceFieldTextureCount, Core::Int3(0, 0, 0));
-                StaticTextureIdUsed.resize(SceneStaticDistanceFieldTextureCount, 0);
-                StaticTextureRefCount.resize(SceneStaticDistanceFieldTextureCount, 0u);
-
-                DynamicTextureIdUsed.resize(SceneDynamicDistanceFieldTextureCount, 0);
-                DynamicBlockToTextureIdCPU.resize(SceneDynamicDistanceFieldTextureCount, SceneDistanceFieldInvalidTextureId);
-                DynamicInstanceInfosCPU.resize(SceneDynamicDistanceFieldTextureCount, DynamicDistanceFieldBlockInstanceInfo{});
-
-                bGlobalDistanceFieldUpdatePending = true;
-                bDynamicDistanceFieldBuffersDirty = true;
-
-                EnsureDistanceFieldResources();
+         
+            EnsureDistanceFieldResources();
     }
 
     Scene::~Scene()
     {
     }
 
-    int64_t Scene::EncodeBlockKey(int32_t X, int32_t Y, int32_t Z)
-    {
-        return EncodeBlockCoordToKey(X, Y, Z);
-    }
-
-    std::vector<int64_t> Scene::BuildBlockKeysFromBounds(const Core::AABB& Bounds) const
-    {
-        std::vector<int64_t> Keys;
-        if (Bounds.IsEmpty())
-        {
-            return Keys;
-        }
-
-        const float blockSize = SceneDistanceFieldBlockWorldSize;
-        const int32_t minX = static_cast<int32_t>(std::floor(Bounds.Min.x / blockSize));
-        const int32_t minY = static_cast<int32_t>(std::floor(Bounds.Min.y / blockSize));
-        const int32_t minZ = static_cast<int32_t>(std::floor(Bounds.Min.z / blockSize));
-        const int32_t maxX = static_cast<int32_t>(std::floor(Bounds.Max.x / blockSize));
-        const int32_t maxY = static_cast<int32_t>(std::floor(Bounds.Max.y / blockSize));
-        const int32_t maxZ = static_cast<int32_t>(std::floor(Bounds.Max.z / blockSize));
-
-        const int64_t totalCount = static_cast<int64_t>(maxX - minX + 1) *
-            static_cast<int64_t>(maxY - minY + 1) *
-            static_cast<int64_t>(maxZ - minZ + 1);
-        if (totalCount <= 0)
-        {
-            return Keys;
-        }
-
-        Keys.reserve(static_cast<size_t>(std::min<int64_t>(totalCount, SceneStaticDistanceFieldTextureCount)));
-        for (int32_t z = minZ; z <= maxZ; ++z)
-        {
-            for (int32_t y = minY; y <= maxY; ++y)
-            {
-                for (int32_t x = minX; x <= maxX; ++x)
-                {
-                    Keys.push_back(EncodeBlockKey(x, y, z));
-                }
-            }
-        }
-
-        return Keys;
-    }
-
-    bool Scene::AllocateStaticTextureSlotForBlock(int64_t BlockKey, const Core::Int3& BlockCoord, uint32_t& OutTextureId)
-    {
-        auto existingIt = StaticBlockKeyToTextureId.find(BlockKey);
-        if (existingIt != StaticBlockKeyToTextureId.end())
-        {
-            OutTextureId = existingIt->second;
-            return true;
-        }
-
-        for (uint32_t textureId = 0; textureId < SceneStaticDistanceFieldTextureCount; ++textureId)
-        {
-            if (StaticTextureIdUsed[textureId] != 0)
-            {
-                continue;
-            }
-
-            StaticTextureIdUsed[textureId] = 1;
-            StaticTextureRefCount[textureId] = 0;
-            StaticTextureIdToBlockCoord[textureId] = BlockCoord;
-            StaticBlockKeyToTextureId.emplace(BlockKey, textureId);
-            StaticBlockKeyToCoord[BlockKey] = BlockCoord;
-            OutTextureId = textureId;
-            return true;
-        }
-
-        return false;
-    }
-
-    void Scene::MarkStaticDistanceFieldDirtyByBounds(const Core::AABB& Bounds)
-    {
-        auto keys = BuildBlockKeysFromBounds(Bounds);
-        for (int64_t blockKey : keys)
-        {
-            auto it = StaticBlockKeyToTextureId.find(blockKey);
-            if (it != StaticBlockKeyToTextureId.end())
-            {
-                PendingStaticTextureUpdateIds.insert(it->second);
-            }
-        }
-
-        if (!PendingStaticTextureUpdateIds.empty())
-        {
-            bGlobalDistanceFieldUpdatePending = true;
-        }
-    }
-
-    void Scene::RegisterPrimitiveDistanceField(Engine::PrimitiveSceneProxy* Proxy)
-    {
-        if (!Proxy)
-        {
-            return;
-        }
-
-        const Core::AABB bounds = Proxy->GetBounds().Box;
-        if (bounds.IsEmpty())
-        {
-            return;
-        }
-
-        EnsureDistanceFieldResources();
-
-        if (Proxy->IsDynamic())
-        {
-            uint32_t textureId = SceneDistanceFieldInvalidTextureId;
-            auto existingIt = DynamicPrimitiveToTextureId.find(Proxy);
-            if (existingIt != DynamicPrimitiveToTextureId.end())
-            {
-                textureId = existingIt->second;
-            }
-            else
-            {
-                for (uint32_t id = 0; id < SceneDynamicDistanceFieldTextureCount; ++id)
-                {
-                    if (DynamicTextureIdUsed[id] != 0)
-                    {
-                        continue;
-                    }
-
-                    DynamicTextureIdUsed[id] = 1;
-                    textureId = id;
-                    DynamicPrimitiveToTextureId.emplace(Proxy, id);
-                    break;
-                }
-            }
-
-            if (textureId == SceneDistanceFieldInvalidTextureId)
-            {
-                return;
-            }
-
-            DynamicBlockToTextureIdCPU[textureId] = textureId;
-            DynamicDistanceFieldBlockInstanceInfo& instance = DynamicInstanceInfosCPU[textureId];
-            instance.BoundsMin = bounds.Min;
-            instance.BoundsMax = bounds.Max;
-            instance.DistanceFieldTextureId = textureId;
-
-            const float extentX = bounds.Max.x - bounds.Min.x;
-            const float extentY = bounds.Max.y - bounds.Min.y;
-            const float extentZ = bounds.Max.z - bounds.Min.z;
-            instance.TextureCoordTransform = Core::Float3(
-                extentX > 1e-4f ? 1.0f / extentX : 0.0f,
-                extentY > 1e-4f ? 1.0f / extentY : 0.0f,
-                extentZ > 1e-4f ? 1.0f / extentZ : 0.0f);
-
-            // Fallback data upload from bounds until per-primitive local distance field texture API is available.
-            std::vector<Core::AABB> sourceBounds;
-            sourceBounds.push_back(bounds);
-            auto sliceData = BuildDistanceFieldSlice(
-                bounds,
-                SceneDynamicDistanceFieldTextureSize,
-                sourceBounds);
-            GPUResourceInfo.DistanceFieldResourceInfo.DynamicDistanceFieldTextureArray->UploadData(
-                sliceData.data(),
-                0,
-                textureId);
-
-            bDynamicDistanceFieldBuffersDirty = true;
-            return;
-        }
-
-        if (!Proxy->HasStaticGeometry())
-        {
-            return;
-        }
-
-        std::vector<uint32_t> touchedTextureIds;
-        const float blockSize = SceneDistanceFieldBlockWorldSize;
-        const int32_t minX = static_cast<int32_t>(std::floor(bounds.Min.x / blockSize));
-        const int32_t minY = static_cast<int32_t>(std::floor(bounds.Min.y / blockSize));
-        const int32_t minZ = static_cast<int32_t>(std::floor(bounds.Min.z / blockSize));
-        const int32_t maxX = static_cast<int32_t>(std::floor(bounds.Max.x / blockSize));
-        const int32_t maxY = static_cast<int32_t>(std::floor(bounds.Max.y / blockSize));
-        const int32_t maxZ = static_cast<int32_t>(std::floor(bounds.Max.z / blockSize));
-
-        for (int32_t z = minZ; z <= maxZ; ++z)
-        {
-            for (int32_t y = minY; y <= maxY; ++y)
-            {
-                for (int32_t x = minX; x <= maxX; ++x)
-                {
-                    const int64_t blockKey = EncodeBlockKey(x, y, z);
-                    const Core::Int3 blockCoord(x, y, z);
-
-                    uint32_t textureId = SceneDistanceFieldInvalidTextureId;
-                    if (!AllocateStaticTextureSlotForBlock(blockKey, blockCoord, textureId))
-                    {
-                        continue;
-                    }
-
-                    ++StaticTextureRefCount[textureId];
-                    touchedTextureIds.push_back(textureId);
-                    PendingStaticTextureUpdateIds.insert(textureId);
-                }
-            }
-        }
-
-        if (!touchedTextureIds.empty())
-        {
-            StaticPrimitiveToTextureIds[Proxy] = std::move(touchedTextureIds);
-            StaticPrimitiveBoundsCache[Proxy] = bounds;
-            bGlobalDistanceFieldUpdatePending = true;
-        }
-    }
-
-    void Scene::UnregisterPrimitiveDistanceField(Engine::PrimitiveSceneProxy* Proxy)
-    {
-        if (!Proxy)
-        {
-            return;
-        }
-
-        auto dynamicIt = DynamicPrimitiveToTextureId.find(Proxy);
-        if (dynamicIt != DynamicPrimitiveToTextureId.end())
-        {
-            const uint32_t textureId = dynamicIt->second;
-            DynamicPrimitiveToTextureId.erase(dynamicIt);
-            if (textureId < DynamicTextureIdUsed.size())
-            {
-                DynamicTextureIdUsed[textureId] = 0;
-                DynamicBlockToTextureIdCPU[textureId] = SceneDistanceFieldInvalidTextureId;
-                DynamicInstanceInfosCPU[textureId] = DynamicDistanceFieldBlockInstanceInfo{};
-                bDynamicDistanceFieldBuffersDirty = true;
-            }
-        }
-
-        auto staticIt = StaticPrimitiveToTextureIds.find(Proxy);
-        if (staticIt != StaticPrimitiveToTextureIds.end())
-        {
-            for (uint32_t textureId : staticIt->second)
-            {
-                if (textureId >= StaticTextureRefCount.size())
-                {
-                    continue;
-                }
-
-                if (StaticTextureRefCount[textureId] > 0)
-                {
-                    --StaticTextureRefCount[textureId];
-                }
-
-                PendingStaticTextureUpdateIds.insert(textureId);
-
-                if (StaticTextureRefCount[textureId] == 0 && StaticTextureIdUsed[textureId] != 0)
-                {
-                    const Core::Int3 coord = StaticTextureIdToBlockCoord[textureId];
-                    const int64_t blockKey = EncodeBlockKey(coord.x, coord.y, coord.z);
-                    StaticBlockKeyToTextureId.erase(blockKey);
-                    StaticBlockKeyToCoord.erase(blockKey);
-                    StaticTextureIdUsed[textureId] = 0;
-                }
-            }
-
-            StaticPrimitiveToTextureIds.erase(staticIt);
-            StaticPrimitiveBoundsCache.erase(Proxy);
-            bGlobalDistanceFieldUpdatePending = true;
-        }
-    }
-
-    void Scene::UploadStaticDistanceFieldIdBuffer()
-    {
-        auto& DFRes = GPUResourceInfo.DistanceFieldResourceInfo;
-        std::vector<uint32_t> blockToTextureId(SceneStaticDistanceFieldTextureCount, SceneDistanceFieldInvalidTextureId);
-        uint32_t blockCount = 0;
-
-        for (uint32_t textureId = 0; textureId < SceneStaticDistanceFieldTextureCount; ++textureId)
-        {
-            if (StaticTextureIdUsed[textureId] == 0 || StaticTextureRefCount[textureId] == 0)
-            {
-                continue;
-            }
-
-            blockToTextureId[textureId] = textureId;
-            ++blockCount;
-        }
-
-        DFRes.StaticDistanceFieldBlockCount = blockCount;
-        DFRes.StaticDistanceFieldIdBuffer->UploadData(
-            blockToTextureId.data(),
-            static_cast<uint32_t>(blockToTextureId.size() * sizeof(uint32_t)));
-    }
-
-    void Scene::UploadDynamicDistanceFieldBuffers()
-    {
-        auto& DFRes = GPUResourceInfo.DistanceFieldResourceInfo;
-
-        uint32_t blockCount = 0;
-        for (uint32_t textureId = 0; textureId < SceneDynamicDistanceFieldTextureCount; ++textureId)
-        {
-            if (DynamicTextureIdUsed[textureId] != 0)
-            {
-                ++blockCount;
-            }
-        }
-
-        DFRes.DynamicDistanceFieldBlockCount = blockCount;
-        DFRes.DynamicDistanceFieldIdBuffer->UploadData(
-            DynamicBlockToTextureIdCPU.data(),
-            static_cast<uint32_t>(DynamicBlockToTextureIdCPU.size() * sizeof(uint32_t)));
-        DFRes.DynamicDistanceFieldInstanceInfoBuffer->UploadData(
-            DynamicInstanceInfosCPU.data(),
-            static_cast<uint32_t>(DynamicInstanceInfosCPU.size() * sizeof(DynamicDistanceFieldBlockInstanceInfo)));
-    }
-
-    void Scene::RefreshDynamicDistanceFieldBuffersIfNeeded()
-    {
-        if (!bDynamicDistanceFieldBuffersDirty)
-        {
-            return;
-        }
-
-        EnsureDistanceFieldResources();
-        UploadDynamicDistanceFieldBuffers();
-        bDynamicDistanceFieldBuffersDirty = false;
-    }
-
-    bool Scene::UpdateGlobalDistanceFieldIfNeeded()
-    {
-        if (!bGlobalDistanceFieldUpdatePending)
-        {
-            return false;
-        }
-
-        EnsureDistanceFieldResources();
-        auto& DFRes = GPUResourceInfo.DistanceFieldResourceInfo;
-
-        std::vector<float> emptySlice(SceneStaticDistanceFieldTextureSize * SceneStaticDistanceFieldTextureSize, 1000.0f);
-
-        for (uint32_t textureId : PendingStaticTextureUpdateIds)
-        {
-            if (textureId >= SceneStaticDistanceFieldTextureCount)
-            {
-                continue;
-            }
-
-            if (StaticTextureIdUsed[textureId] == 0 || StaticTextureRefCount[textureId] == 0)
-            {
-                DFRes.StaticDistanceFieldTextureArray->UploadData(
-                    emptySlice.data(),
-                    0,
-                    textureId);
-                continue;
-            }
-
-            const Core::Int3 blockCoord = StaticTextureIdToBlockCoord[textureId];
-            Core::AABB blockBounds;
-            const float blockSize = SceneDistanceFieldBlockWorldSize;
-            blockBounds.Min = Core::Float3(
-                static_cast<float>(blockCoord.x) * blockSize,
-                static_cast<float>(blockCoord.y) * blockSize,
-                static_cast<float>(blockCoord.z) * blockSize);
-            blockBounds.Max = Core::Float3(
-                blockBounds.Min.x + blockSize,
-                blockBounds.Min.y + blockSize,
-                blockBounds.Min.z + blockSize);
-
-            std::vector<Core::AABB> intersectedStaticPrimitives;
-            for (const auto& pair : PrimitiveInfos)
-            {
-                const PrimitiveSceneInfo* info = pair.second.get();
-                if (!info || !info->bVisible)
-                {
-                    continue;
-                }
-
-                Engine::PrimitiveSceneProxy* proxy = info->GetProxy();
-                if (!proxy || proxy->IsDynamic() || !proxy->HasStaticGeometry())
-                {
-                    continue;
-                }
-
-                const Core::AABB primitiveBounds = proxy->GetBounds().Box;
-                if (IntersectsAABB(blockBounds, primitiveBounds))
-                {
-                    intersectedStaticPrimitives.push_back(primitiveBounds);
-                }
-            }
-
-            if (intersectedStaticPrimitives.empty())
-            {
-                DFRes.StaticDistanceFieldTextureArray->UploadData(
-                    emptySlice.data(),
-                    0,
-                    textureId);
-                continue;
-            }
-
-            auto sliceData = BuildDistanceFieldSlice(
-                blockBounds,
-                SceneStaticDistanceFieldTextureSize,
-                intersectedStaticPrimitives);
-            DFRes.StaticDistanceFieldTextureArray->UploadData(
-                sliceData.data(),
-                0,
-                textureId);
-        }
-
-        UploadStaticDistanceFieldIdBuffer();
-
-        PendingStaticTextureUpdateIds.clear();
-        bGlobalDistanceFieldUpdatePending = false;
-        return true;
-    }
 
     void Scene::AddPrimitive(
         Engine::PrimitiveComponent*
@@ -904,10 +386,6 @@ namespace Renderer {
                                 .PrimitiveProxy));
 
                     PrimitiveSceneInfo* addedInfo = PrimitiveInfos[Command.PrimitiveComponent].get();
-                    if (addedInfo)
-                    {
-                        RegisterPrimitiveDistanceField(addedInfo->GetProxy());
-                    }
                     GPUResourceInfo.DirtyFlags |=
                         ESceneGPUResourceDirty
                         ::Primitive;
@@ -918,10 +396,6 @@ namespace Renderer {
                 RemovePrimitive:
                 {
                     auto existingIt = PrimitiveInfos.find(Command.PrimitiveComponent);
-                    if (existingIt != PrimitiveInfos.end() && existingIt->second)
-                    {
-                        UnregisterPrimitiveDistanceField(existingIt->second->GetProxy());
-                    }
 
                     PrimitiveInfos.erase(
                         Command
@@ -1015,26 +489,66 @@ namespace Renderer {
             GPUResourceInfo.DirtyFlags |=
                 ESceneGPUResourceDirty
                 ::Primitive;
+        }
+    }
 
-            auto* primitiveComponent = static_cast<Engine::PrimitiveComponent*>(Component);
-            auto infoIt = PrimitiveInfos.find(primitiveComponent);
-            if (infoIt != PrimitiveInfos.end() && infoIt->second)
-            {
-                Engine::PrimitiveSceneProxy* proxy = infoIt->second->GetProxy();
-                if (proxy)
-                {
-                    if (proxy->IsDynamic())
-                    {
-                        RegisterPrimitiveDistanceField(proxy);
-                    }
-                    else if (proxy->HasStaticGeometry())
-                    {
-                        UnregisterPrimitiveDistanceField(proxy);
-                        RegisterPrimitiveDistanceField(proxy);
-                    }
+    bool Scene::UpdateGlobalDistanceFieldIfNeeded()
+    {
+        if ( EnumHasAnyFlags(GPUResourceInfo.DirtyFlags, ESceneGPUResourceDirty::GlobalDistanceField)) {
+            //收集静态网格信息，更新距离场
+            DistanceFieldMergePassInput Input;
+            Core::AABB AffectBox;
+
+            for (auto& primitive : PrimitiveInfos) {
+				if(primitive.second->GetProxy()->IsA<StaticMeshProxy>()){
+                    
+                    StaticMeshProxy* StaticMeshProxyIns = primitive.second->GetProxy()->Cast<StaticMeshProxy>();
+                    auto renderData = StaticMeshProxyIns->GetStaticMeshComponent()->GetStaticMesh()->GetRenderData();
+                    auto allocation = renderData->LODResources[0].DistanceFieldData.Allocation;
+                    DistanceFieldSourceParameters Source;
+                    Source.LocalToWorld = StaticMeshProxyIns->GetLocalToWorld();
+                    Source.WorldToLocal = StaticMeshProxyIns->GetWorldToLocal();
+                    Core::UInt3 Offset(allocation.X, allocation.Y, allocation.Z);
+                    Core::UInt3 Size(allocation.SizeX, allocation.SizeY, allocation.SizeZ);
+                    Source.Offset = Offset;
+                    Source.InputResolution = Size;
+                    auto localBound = renderData->Bounds;
+                    auto bound = StaticMeshProxyIns->GetBounds();
+                    Core::Float3 boundMin,boundMax;
+                    boundMin = localBound.Box.Min;
+                    boundMax = localBound.Box.Max;
+                    Source.BoundsMax = boundMax;
+                    Source.BoundsMin = boundMin;
+                    AffectBox.Merge(bound.Box);
+                    Input.sourceParams.emplace_back(Source);
                 }
             }
+            if (Input.sourceParams.empty()) {
+                return false;
+            }
+            //收集需要更新的globaldistancefield 区域id
+            std::vector<uint32_t> affectBlockIDs;
+            GPUResourceInfo.DistanceFieldResourceInfo.StaticDistanceField.GetBlocksInsideBounds(AffectBox, affectBlockIDs);
+            for (auto& id : affectBlockIDs) {
+                const auto block = GPUResourceInfo.DistanceFieldResourceInfo.StaticDistanceField.GetBlock(id);
+				if (block) {
+					DistanceFieldOutParameters Out;
+					Out.Offset = Core::Int3(block->Allocation.X, block->Allocation.Y, block->Allocation.Z);
+					Out.BoundsMin = block->Bounds.Min;
+					Out.BoundsMax = block->Bounds.Max;
+					Input.outputParams.emplace_back(Out);
+				}
+            }
+            if (!Input.outputParams.empty()) {
+                return false;
+            }
+
+            Input.InputSDFTexture = Engine::GDistanceFieldMgr.GetAtlas().GetAtlasTexture();
+            Input.OutputSDFTexture = GPUResourceInfo.DistanceFieldResourceInfo.StaticDistanceField.GetAtlas().GetAtlasTexture();
+            ExecuteDistanceFieldMergePass(Input);
+
         }
+        return false;
     }
 
     void Scene::ForEachPrimitive(
@@ -1254,9 +768,11 @@ namespace Renderer {
         const uint32_t UploadSize = PrimitiveRes.PrimitiveCount > 0 ?
             PrimitiveRes.PrimitiveCount * sizeof(uint32_t) :
             sizeof(uint32_t);
-        PrimitiveRes.VisibilityFlagsBuffer->UploadData(
-            ZeroVisibility.empty() ? static_cast<const void*>(&PrimitiveRes.PrimitiveCount) : static_cast<const void*>(ZeroVisibility.data()),
-            UploadSize);
+        if (!ZeroVisibility.empty()) {
+            PrimitiveRes.VisibilityFlagsBuffer->UploadData(static_cast<const void*>(ZeroVisibility.data()),
+                UploadSize);
+        }
+
 
         std::vector<Engine::LocalVertexFactoryInstanceSubParameters> SubParameters;
         SubParameters.reserve(PrimitiveGPUProxyOrder.size());
@@ -1302,93 +818,10 @@ namespace Renderer {
     void Scene::EnsureDistanceFieldResources()
     {
         auto& DFRes = GPUResourceInfo.DistanceFieldResourceInfo;
-        bool bNeedUploadStaticIds = false;
-        bool bNeedUploadDynamicBuffers = false;
-
-        if (!DFRes.StaticDistanceFieldTextureArray)
-        {
-            auto StaticTexDesc = BuildDistanceFieldTextureArrayDesc(
-                SceneStaticDistanceFieldTextureCount,
-                SceneStaticDistanceFieldTextureSize,
-                "SceneStaticDistanceFieldTextureArray");
-            DFRes.StaticDistanceFieldTextureArray = std::make_shared<RenderCore::RenderTexture>(StaticTexDesc);
-            DFRes.StaticDistanceFieldTextureArray->InitRHIResource();
-        }
-
-        if (!DFRes.DynamicDistanceFieldTextureArray)
-        {
-            auto DynamicTexDesc = BuildDistanceFieldTextureArrayDesc(
-                SceneDynamicDistanceFieldTextureCount,
-                SceneDynamicDistanceFieldTextureSize,
-                "SceneDynamicDistanceFieldTextureArray");
-            DFRes.DynamicDistanceFieldTextureArray = std::make_shared<RenderCore::RenderTexture>(DynamicTexDesc);
-            DFRes.DynamicDistanceFieldTextureArray->InitRHIResource();
-        }
-
-        if (!DFRes.StaticDistanceFieldIdBuffer)
-        {
-            auto Desc = BuildStructuredBufferDesc(
-                static_cast<uint64_t>(SceneStaticDistanceFieldTextureCount) * sizeof(uint32_t),
-                sizeof(uint32_t),
-                "SceneStaticDistanceFieldIdBuffer");
-            DFRes.StaticDistanceFieldIdBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
-            DFRes.StaticDistanceFieldIdBuffer->InitRHIResource();
-            bNeedUploadStaticIds = true;
-        }
-
-        if (!DFRes.DynamicDistanceFieldIdBuffer)
-        {
-            auto Desc = BuildStructuredBufferDesc(
-                static_cast<uint64_t>(SceneDynamicDistanceFieldTextureCount) * sizeof(uint32_t),
-                sizeof(uint32_t),
-                "SceneDynamicDistanceFieldIdBuffer");
-            DFRes.DynamicDistanceFieldIdBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
-            DFRes.DynamicDistanceFieldIdBuffer->InitRHIResource();
-            bNeedUploadDynamicBuffers = true;
-        }
-
-        if (!DFRes.DynamicDistanceFieldInstanceInfoBuffer)
-        {
-            auto Desc = BuildStructuredBufferDesc(
-                static_cast<uint64_t>(SceneDynamicDistanceFieldTextureCount) * sizeof(DynamicDistanceFieldBlockInstanceInfo),
-                sizeof(DynamicDistanceFieldBlockInstanceInfo),
-                "SceneDynamicDistanceFieldInstanceInfoBuffer");
-            DFRes.DynamicDistanceFieldInstanceInfoBuffer = std::make_shared<RenderCore::RenderBuffer>(Desc);
-            DFRes.DynamicDistanceFieldInstanceInfoBuffer->InitRHIResource();
-            bNeedUploadDynamicBuffers = true;
-        }
-
-        if (bNeedUploadStaticIds)
-        {
-            UploadStaticDistanceFieldIdBuffer();
-        }
-
-        if (bNeedUploadDynamicBuffers)
-        {
-            UploadDynamicDistanceFieldBuffers();
-        }
+        DFRes.StaticDistanceField.Initialize();
     }
 
-    void Scene::PrecomputeStaticDistanceFieldTextures()
-    {
-        PendingStaticTextureUpdateIds.clear();
-        for (uint32_t textureId = 0; textureId < SceneStaticDistanceFieldTextureCount; ++textureId)
-        {
-            if (StaticTextureIdUsed[textureId] != 0)
-            {
-                PendingStaticTextureUpdateIds.insert(textureId);
-            }
-        }
-        bGlobalDistanceFieldUpdatePending = true;
-        UpdateGlobalDistanceFieldIfNeeded();
-    }
-
-    void Scene::PrecomputeDynamicDistanceFieldTextures()
-    {
-        bDynamicDistanceFieldBuffersDirty = true;
-        RefreshDynamicDistanceFieldBuffersIfNeeded();
-    }
-
+    
 
     void Scene::UpdateGPUResourceIfNeeded()
     {
@@ -1591,7 +1024,6 @@ namespace Renderer {
             ::Primitive))
         {
             UpdatePrimitiveGPUResource();
-            RefreshDynamicDistanceFieldBuffersIfNeeded();
         }
         LightRes.IBLSpecularTexture = nullptr;
         LightRes.IBLSpecularTexture = nullptr;

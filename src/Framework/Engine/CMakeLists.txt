@@ -8,7 +8,7 @@ set(TARGET_NAME Engine)
 file(GLOB_RECURSE PUBLIC_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader/*.ini"
+    "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader/*.inl"
 )
 
 file(GLOB_RECURSE PRIVATE_HEADERS

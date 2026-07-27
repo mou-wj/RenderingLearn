@@ -56,6 +56,15 @@ void RenderTexture::ReleaseRHIResource() {
     RenderResource::ReleaseRHIResource();
 }
 void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arraySlice, uint32_t planeSlice) {
+	RHI::RHIUpdateTextureRegion updateRegion;
+	updateRegion.arraySlice = arraySlice;
+	updateRegion.mipLevel = mipIndex;
+	updateRegion.width = Desc.Width >> mipIndex;
+	updateRegion.height = Desc.Height >> mipIndex;
+	updateRegion.depth = Desc.Depth >> mipIndex;
+	UploadData(data, updateRegion);
+}
+void RenderTexture::UploadData(const void* data, const RHI::RHIUpdateTextureRegion& updateRegion) {
 	auto lastQueueType = GetTracker().GetLastAccessFence().QueueType;
 	auto* queue = GRHIApi->GetQueue(lastQueueType);
 	auto* ctx = queue->AcquireCommandContext();
@@ -63,13 +72,13 @@ void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arr
 	cmd.SetImmediate(true);
 	cmd.Begin();
 	RHI::RHISubresourceRange range;
-	range.ArraySlice = arraySlice;
-    range.MipIndex = mipIndex;
+	range.ArraySlice = updateRegion.arraySlice;
+	range.MipIndex = updateRegion.mipLevel;
 	range.PlaneSlice = 0;
 	auto lastAccess = GetTracker().GetSubresourceAccess(range);
 	if (lastAccess != ERHIResourceAccess::TransferDest) {
 		std::vector<RHI::RHITransitionInfo> infos;
-		infos.emplace_back(Texture.get(), lastAccess, ERHIResourceAccess::TransferDest,lastQueueType,lastQueueType);
+		infos.emplace_back(Texture.get(), lastAccess, ERHIResourceAccess::TransferDest, lastQueueType, lastQueueType);
 		char* transitionMem = new char[RHI::G_RHITransition_TotalSize];
 		auto* transition = new(transitionMem) RHI::RHITransition();
 		GRHIApi->RHICreateTransition(transition, RHI::RHITransitionCreateInfo(RHI::ERHITransitionCreateFlags::None, std::move(infos)));
@@ -80,11 +89,7 @@ void RenderTexture::UploadData(const void* data, uint32_t mipIndex, uint32_t arr
 		GRHIApi->RHIReleaseTransition(transition);
 		delete[] transitionMem;
 	}
-	RHI::RHIUpdateTextureRegion updateRegion;
-	updateRegion.arraySlice = arraySlice;
-	updateRegion.mipLevel = mipIndex;
-	updateRegion.width = Desc.Width >> mipIndex;
-    updateRegion.height = Desc.Height >> mipIndex;
+
 
 	GRHIApi->UpdateTexture(cmd, Texture.get(), data, updateRegion);
 	cmd.End();
@@ -838,6 +843,23 @@ void TransientResourceAllocator::GarbageCollect()
 			++itBuf;
 		}
 	}
+}
+
+RenderTextureSP Create3DTexture(uint32_t width, uint32_t height, uint32_t depth, RHI::ERHIFormat format, RHI::ERHITextureCreateFlags usage, const char* debugName) {
+	RHI::RHITextureDesc desc;
+	desc.Width = width;
+	desc.Height = height;
+	desc.Depth = depth;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = format;
+	desc.Type = RHI::ERHITextureType::Texture3D;
+	desc.SampleCount = 1;
+	desc.Usage = usage;
+	desc.DebugName = debugName;
+	RenderTextureSP texture = std::make_shared<RenderTexture>(desc);
+	texture->InitRHIResource();
+	return texture;
 }
 
 } // namespace RenderCore

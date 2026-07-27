@@ -6,6 +6,7 @@
 #include "ShadowMapAllocator.h"
 #include "BoxSphereBounds.h"
 #include "LocalVertexFactory.h"
+#include "GlobalDistanceField.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
@@ -152,6 +153,7 @@ namespace Renderer {
         SkyLight = 1 << 4,
         Primitive = 1 << 5,
 
+        GlobalDistanceField = 1 << 6,
         AllLight =
         DirectionalLight |
         PointLight |
@@ -197,27 +199,10 @@ namespace Renderer {
         LocalVertexFactoryInstanceInfo localvertexfactoryinstanceInfo;
     };
 
-    struct DynamicDistanceFieldBlockInstanceInfo
-    {
-        Core::Float3 BoundsMin = Core::Float3(0.0f, 0.0f, 0.0f);
-        uint32_t DistanceFieldTextureId = SceneDistanceFieldInvalidTextureId;
-        Core::Float3 BoundsMax = Core::Float3(0.0f, 0.0f, 0.0f);
-        float Padding0 = 0.0f;
-        Core::Float3 TextureCoordTransform = Core::Float3(0.0f, 0.0f, 0.0f);
-        float Padding1 = 0.0f;
-    };
 
     struct SceneDistanceFieldResourceInfo
     {
-        uint32_t StaticDistanceFieldBlockCount = 0;
-        uint32_t DynamicDistanceFieldBlockCount = 0;
-
-        RenderCore::RenderBufferSP StaticDistanceFieldIdBuffer = nullptr;
-        RenderCore::RenderTextureSP StaticDistanceFieldTextureArray = nullptr;
-
-        RenderCore::RenderBufferSP DynamicDistanceFieldIdBuffer = nullptr;
-        RenderCore::RenderTextureSP DynamicDistanceFieldTextureArray = nullptr;
-        RenderCore::RenderBufferSP DynamicDistanceFieldInstanceInfoBuffer = nullptr;
+        GlobalDistanceField StaticDistanceField;//静态对象的全局距离场，更新频率低
     };
 
     struct SceneGPUResourceInfo {
@@ -290,9 +275,6 @@ namespace Renderer {
         const Core::BoxSphereBounds& GetSceneBounds() const;
         LightShadowInfo& GetLightShadowInfo(Engine::LightSceneProxy* Light);
 
-        // Legacy full rebuild entry points kept for compatibility.
-        void PrecomputeStaticDistanceFieldTextures();
-        void PrecomputeDynamicDistanceFieldTextures();
     private:
         std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesCPU(const Engine::SceneView& View) const;
         std::vector<Engine::PrimitiveSceneProxy*> GatherVisiblePrimitivesGPU(const Engine::SceneView& View) const;
@@ -300,16 +282,6 @@ namespace Renderer {
         void UpdateGPUResourceIfNeeded();
         void UpdatePrimitiveGPUResource();
         void EnsureDistanceFieldResources();
-
-        void RegisterPrimitiveDistanceField(Engine::PrimitiveSceneProxy* Proxy);
-        void UnregisterPrimitiveDistanceField(Engine::PrimitiveSceneProxy* Proxy);
-        void MarkStaticDistanceFieldDirtyByBounds(const Core::AABB& Bounds);
-        void RefreshDynamicDistanceFieldBuffersIfNeeded();
-        void UploadStaticDistanceFieldIdBuffer();
-        void UploadDynamicDistanceFieldBuffers();
-        std::vector<int64_t> BuildBlockKeysFromBounds(const Core::AABB& Bounds) const;
-        bool AllocateStaticTextureSlotForBlock(int64_t BlockKey, const Core::Int3& BlockCoord, uint32_t& OutTextureId);
-        static int64_t EncodeBlockKey(int32_t X, int32_t Y, int32_t Z);
 
         //=========================================
         // Render Thread Storage
@@ -352,20 +324,6 @@ namespace Renderer {
         ShadowMapAllocator ShadowMapAllocator;
         Core::BoxSphereBounds SceneBounds;
 
-        std::unordered_map<int64_t, Core::Int3> StaticBlockKeyToCoord;
-        std::unordered_map<int64_t, uint32_t> StaticBlockKeyToTextureId;
-        std::vector<Core::Int3> StaticTextureIdToBlockCoord;
-        std::vector<uint8_t> StaticTextureIdUsed;
-        std::vector<uint32_t> StaticTextureRefCount;
-        std::unordered_map<Engine::PrimitiveSceneProxy*, std::vector<uint32_t>> StaticPrimitiveToTextureIds;
-        std::unordered_map<Engine::PrimitiveSceneProxy*, Core::AABB> StaticPrimitiveBoundsCache;
-        std::unordered_set<uint32_t> PendingStaticTextureUpdateIds;
-        bool bGlobalDistanceFieldUpdatePending = false;
 
-        std::unordered_map<Engine::PrimitiveSceneProxy*, uint32_t> DynamicPrimitiveToTextureId;
-        std::vector<uint8_t> DynamicTextureIdUsed;
-        std::vector<uint32_t> DynamicBlockToTextureIdCPU;
-        std::vector<DynamicDistanceFieldBlockInstanceInfo> DynamicInstanceInfosCPU;
-        bool bDynamicDistanceFieldBuffersDirty = false;
     };
 } // namespace Renderer

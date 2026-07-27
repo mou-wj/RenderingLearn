@@ -16,7 +16,6 @@
 #include "StaticMesh.h"
 #include "StaticMeshResources.h"
 #include "PrimitiveComponent.h"
-#include "geometryprocess/DistanceFieldProcess.h"
 #include "Shape.h"
 #include "GBufferInfo.h"
 #include "Common.h"
@@ -29,76 +28,7 @@ using namespace Engine;
 
 namespace Renderer {
 
-    namespace
-    {
-        constexpr int32_t GLocalSDFResolution = 64;
 
-        void FillTexture3D(RenderCore::RenderTexture* texture, float fillValue)
-        {
-            if (!texture || !texture->GetRHI())
-            {
-                return;
-            }
-
-            const auto& desc = texture->GetRHI()->GetDesc();
-            const size_t voxelCount =
-                static_cast<size_t>(desc.Width) *
-                static_cast<size_t>(desc.Height) *
-                static_cast<size_t>(desc.Depth);
-            std::vector<float> initData(voxelCount, fillValue);
-            texture->UploadData(initData.data(), 0, 0);
-        }
-
-        Core::Float4x4 BuildWorldToVoxel(const Core::AABB& bounds, const Core::Int3& resolution)
-        {
-            Core::Float4x4 m = Core::Float4x4::Identity();
-            if (bounds.IsEmpty())
-            {
-                return m;
-            }
-
-            const float sizeX = CORE_MAX(bounds.Max.x - bounds.Min.x, 1e-4f);
-            const float sizeY = CORE_MAX(bounds.Max.y - bounds.Min.y, 1e-4f);
-            const float sizeZ = CORE_MAX(bounds.Max.z - bounds.Min.z, 1e-4f);
-
-            const float sx = static_cast<float>(CORE_MAX(1, resolution.x - 1)) / sizeX;
-            const float sy = static_cast<float>(CORE_MAX(1, resolution.y - 1)) / sizeY;
-            const float sz = static_cast<float>(CORE_MAX(1, resolution.z - 1)) / sizeZ;
-
-            m(0, 0) = sx;
-            m(1, 1) = sy;
-            m(2, 2) = sz;
-            m(0, 3) = -bounds.Min.x * sx;
-            m(1, 3) = -bounds.Min.y * sy;
-            m(2, 3) = -bounds.Min.z * sz;
-            return m;
-        }
-
-        std::shared_ptr<RenderCore::RenderBuffer> CreateStructuredBufferFromCPU(
-            const void* data,
-            uint64_t elementCount,
-            uint32_t stride,
-            const char* debugName)
-        {
-            RHI::RHIBufferDesc desc;
-            desc.Size = CORE_MAX(1ull, elementCount * static_cast<uint64_t>(stride));
-            desc.Stride = stride;
-            desc.Usage =
-                RHI::ERHIBufferUsageFlag::Structured |
-                RHI::ERHIBufferUsageFlag::ShaderResource |
-                RHI::ERHIBufferUsageFlag::TransferDst;
-            desc.InitialQueueType = RHI::EQueueType::Compute;
-            desc.DebugName = debugName;
-
-            auto buffer = std::make_shared<RenderCore::RenderBuffer>(desc);
-            buffer->InitRHIResource();
-            if (data && elementCount > 0)
-            {
-                buffer->UploadData(data, static_cast<uint32_t>(elementCount * static_cast<uint64_t>(stride)));
-            }
-            return buffer;
-        }
-    }
 
     SceneRendererSP CreateSceneRenderer() {
         return std::make_shared<DefferedSceneRenderer>();
@@ -188,6 +118,7 @@ namespace Renderer {
         sceneRenderer->UploadShadowMapInfo(sceneRenderer->Scene,builder);
         sceneRenderer->Build(builder);
         LocalVertexFactoryInstanceManager::Get().UpdateGPUResources();
+        sceneRenderer->Scene->UpdateGlobalDistanceFieldIfNeeded();
         builder.Execute();
         PoolDepthTarget->MarkUsed(false);
         for (auto gTarget : GbufferTargets) {
@@ -345,88 +276,6 @@ namespace Renderer {
         //SaveTexture(GlobalIBLLutTexture.get(), "IBLLut.png",0,0);
     }
 
-    bool RenderModule::PreComputePrimitiveSDF(Engine::PrimitiveComponent* PrimitiveComponent)
-    {
-        if (!PrimitiveComponent)
-        {
-            return false;
-        }
-
-        auto* staticMeshComponent = dynamic_cast<Engine::StaticMeshComponent*>(PrimitiveComponent);
-        if (!staticMeshComponent)
-        {
-            return false;
-        }
-
-        Engine::StaticMesh* staticMesh = staticMeshComponent->GetStaticMesh();
-        if (!staticMesh)
-        {
-            return false;
-        }
-
-        std::shared_ptr<Engine::StaticMeshRenderData> renderData = staticMesh->GetRenderData();
-        if (!renderData || renderData->GetLODCount() == 0)
-        {
-            return false;
-        }
-
-        const Engine::LODResource& lod0 = renderData->GetLODResource(0);
-        const std::vector<float>& positions = lod0.VertexBuffers.PositionBuffer.Vertices;
-        const std::vector<uint32_t>& indices = lod0.IndexBuffer.Indices;
-        const uint32_t numPositionComponents = lod0.VertexBuffers.PositionBuffer.NumComponents;
-
-        if (positions.empty() || indices.size() < 3 || numPositionComponents != 3)
-        {
-            return false;
-        }
-
-        if (!renderData->EnsureSDFPrecomputeTextures(static_cast<uint32_t>(GLocalSDFResolution)))
-        {
-            return false;
-        }
-
-        RenderCore::RenderTexture* surfaceMaskTexture = renderData->GetSDFSurfaceMaskTexture3D();
-        RenderCore::RenderTexture* outputSDFTexture = renderData->GetSDFTexture3D();
-        if (!surfaceMaskTexture || !outputSDFTexture)
-        {
-            return false;
-        }
-
-        FillTexture3D(surfaceMaskTexture, 1.0f);
-
-        auto vertexBuffer = CreateStructuredBufferFromCPU(
-            positions.data(),
-            positions.size() / 3,
-            sizeof(float) * 3,
-            "StaticMeshSDFVertexBuffer");
-        auto indexBuffer = CreateStructuredBufferFromCPU(
-            indices.data(),
-            indices.size(),
-            sizeof(uint32_t),
-            "StaticMeshSDFIndexBuffer");
-
-        DistanceFieldVoxelizePassInput voxelizeInput;
-        voxelizeInput.VertexBuffer = vertexBuffer.get();
-        voxelizeInput.VertexCount = static_cast<uint32_t>(positions.size() / 3);
-        voxelizeInput.IndexBuffer = indexBuffer.get();
-        voxelizeInput.IndexCount = static_cast<uint32_t>(indices.size());
-        voxelizeInput.PrimitiveCount = static_cast<uint32_t>(indices.size() / 3);
-        voxelizeInput.GridResolution = Core::Int3(GLocalSDFResolution, GLocalSDFResolution, GLocalSDFResolution);
-        voxelizeInput.WorldToVoxel = BuildWorldToVoxel(renderData->Bounds.Box, voxelizeInput.GridResolution);
-        voxelizeInput.OutputSDFTexture = surfaceMaskTexture;
-
-        if (!ExecuteDistanceFieldVoxelizePass(voxelizeInput))
-        {
-            return false;
-        }
-
-        DistanceFieldJumpFlood3DPassInput jumpFloodInput;
-        jumpFloodInput.SurfaceMaskTexture = surfaceMaskTexture;
-        jumpFloodInput.OutputDistanceTexture = outputSDFTexture;
-        jumpFloodInput.GridResolution = Core::Int3(GLocalSDFResolution, GLocalSDFResolution, GLocalSDFResolution);
-
-        return ExecuteDistanceFieldJumpFlood3DPass(jumpFloodInput);
-    }
 
 	IMPLEMENT_SIMPLE_MODULE(RenderModule, "Renderer");
 

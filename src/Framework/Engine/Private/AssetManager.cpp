@@ -1,6 +1,7 @@
 #include "AssetManager.h"
 #include "EngineGlobal.h"
 #include "RenderInterface.h"
+#include "DistanceFieldMgr.h"
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_gltf.h"
 #include <fstream>
@@ -274,8 +275,10 @@ namespace Engine {
                 LOD.Sections.push_back(section);
             }
             LOD.InitializeResources();
+			
             RenderData->AddLOD(std::move(LOD));
         }
+        GDistanceFieldMgr.BuildMeshDistanceField(*RenderData.get());
         for (auto materil : Materials) {
 			staticMesh->AddMaterial(materil);
         }

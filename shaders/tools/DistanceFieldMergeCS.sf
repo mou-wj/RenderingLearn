@@ -1,24 +1,56 @@
 #include "/Generated/ShaderParameters/DistanceFieldMergeParameters.sf"
 
-[numthreads(4, 4, 4)]
-void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+bool IsInsideSource(DistanceFieldSourceParameters SourceData, float3 WorldPosition)
 {
-    const int3 dst = int3(DispatchThreadID.xyz);
-    if (dst.x >= OutputResolution.x || dst.y >= OutputResolution.y || dst.z >= OutputResolution.z)
+    return all(WorldPosition >= SourceData.BoundsMin) && all(WorldPosition <= SourceData.BoundsMax);
+}
+
+
+float3 WorldToSourceUV(DistanceFieldSourceParameters SourceData, float3 WorldPosition)
+{
+    float3 LocalPosition = mul(SourceData.WorldToLocal, float4(WorldPosition,1.0)).xyz;
+    return (LocalPosition - SourceData.BoundsMin) / (SourceData.BoundsMax - SourceData.BoundsMin);
+}
+
+
+float SampleSourceSDF(DistanceFieldSourceParameters SourceData, float3 WorldPosition)
+{
+    float3 LocalUVW = WorldToSourceUV(SourceData, WorldPosition);
+    float3 AtlasUVW = (float3(SourceData.Offset) + LocalUVW * float3(SourceData.InputResolution)) / float3(InputAtlasResolution);
+    return InputSDFTexture.SampleLevel(InputSDFSampler, AtlasUVW, 0);
+}
+
+
+[numthreads(8,8,8)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupID : SV_GroupID)
+{
+    uint BlockId = GroupID.z;
+    if(BlockId >= OutputCount) return;
+
+    DistanceFieldOutParameters Out = Output[BlockId];
+
+    uint3 LocalVoxel = DispatchThreadID.xyz;
+    if(any(LocalVoxel >= OutputResolution)) return;
+    float3 OutputVoxelSize =
+        (Out.BoundsMax - Out.BoundsMin) /
+        float3(OutputResolution);
+    float3 WorldPosition = Out.BoundsMin + (float3(LocalVoxel) + 0.5) * OutputVoxelSize;
+
+    float Distance = 1000.0;
+
+    for(uint i = 0; i < SourceCount; i++)
     {
-        return;
+        DistanceFieldSourceParameters SourceData = Source[i];
+
+        if(!IsInsideSource(SourceData, WorldPosition))
+            continue;
+
+        float SourceDistance = SampleSourceSDF(SourceData, WorldPosition);
+
+        Distance = min(Distance, SourceDistance);
     }
 
-    float3 dstCoord = (float3(dst) + 0.5) / float3(OutputResolution);
-    float4 sourcePos = mul(OutputToSource, float4(dstCoord, 1.0));
-    float3 sourceCoord = sourcePos.xyz;
+    uint3 AtlasPosition = uint3(Out.Offset) + LocalVoxel;
 
-    if (any(sourceCoord < 0.0) || any(sourceCoord > 1.0))
-    {
-        return;
-    }
-
-    float sampledSDF = InputSDFTexture.SampleLevel(InputSDFSampler, sourceCoord, 0).r;
-    float oldSDF = OutputSDFTexture[dst];
-    OutputSDFTexture[dst] = min(oldSDF, sampledSDF);
+    OutputSDFTexture[AtlasPosition] = Distance;
 }

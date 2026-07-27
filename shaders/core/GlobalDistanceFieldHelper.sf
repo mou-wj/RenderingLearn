@@ -1,0 +1,173 @@
+
+#include "/Generated/ShaderParameters/SceneGlobalDistanceFieldParameters.sf"
+
+
+
+uint GlobalDistanceFieldCalculateBlockId(int3 BlockCoord)
+{
+    return BlockCoord.x +
+           BlockCoord.y * GlobalDistanceFieldGridSize.x +
+           BlockCoord.z * GlobalDistanceFieldGridSize.x * GlobalDistanceFieldGridSize.y;
+}
+
+
+
+bool GlobalDistanceFieldGetBlock(
+    int3 BlockCoord,
+    out GlobalDistanceFieldBlockIndex OutBlock)
+{
+    OutBlock.Valid = 0;
+    OutBlock.AtlasX = 0;
+    OutBlock.AtlasY = 0;
+    OutBlock.AtlasZ = 0;
+
+
+    if(any(BlockCoord < 0))
+    {
+        return false;
+    }
+
+
+    if(any(BlockCoord >= int3(GlobalDistanceFieldGridSize)))
+    {
+        return false;
+    }
+
+
+    uint BlockId =
+        GlobalDistanceFieldCalculateBlockId(BlockCoord);
+
+
+    OutBlock =
+        AllocateBlockIndexInfos[BlockId];
+
+
+    return OutBlock.Valid != 0;
+}
+
+
+
+int3 GlobalDistanceFieldWorldToBlock(
+    float3 WorldPosition)
+{
+    float3 LocalPosition =
+        WorldPosition -
+        GlobalDistanceFieldCenter;
+
+
+    return int3(
+        floor(LocalPosition / BlockSize));
+}
+
+
+
+float3 GlobalDistanceFieldGetBlockLocalUV(
+    float3 WorldPosition,
+    int3 BlockCoord)
+{
+    float3 BlockMin =
+        GlobalDistanceFieldCenter +
+        float3(BlockCoord) *
+        BlockSize;
+
+
+    return
+        (WorldPosition - BlockMin)
+        /
+        BlockSize;
+}
+
+
+
+float3 GlobalDistanceFieldGetAtlasUV(
+    float3 LocalUV,
+    GlobalDistanceFieldBlockIndex Block)
+{
+    float3 AtlasVoxelPosition =
+        float3(
+            Block.AtlasX,
+            Block.AtlasY,
+            Block.AtlasZ)
+        +
+        LocalUV /
+        DistanceFieldVoxelSize;
+
+
+    return
+        AtlasVoxelPosition /
+        float3(GlobalDistanceFieldAtlasResolution);
+}
+
+
+
+float SampleGlobalDistanceField(
+    float3 WorldPosition)
+{
+    int3 BlockCoord =
+        GlobalDistanceFieldWorldToBlock(
+            WorldPosition);
+
+
+    GlobalDistanceFieldBlockIndex Block;
+
+
+    if(!GlobalDistanceFieldGetBlock(
+        BlockCoord,
+        Block))
+    {
+        return 100000.0;
+    }
+
+
+    float3 LocalUV =
+        GlobalDistanceFieldGetBlockLocalUV(
+            WorldPosition,
+            BlockCoord);
+
+
+
+    float3 AtlasUV =
+        GlobalDistanceFieldGetAtlasUV(
+            LocalUV,
+            Block);
+
+
+
+    return GlobalDistanceFieldAtlas.SampleLevel(
+        DistanceSampler,
+        AtlasUV,
+        0).r;
+}
+
+float TraceDistanceField(
+    float3 Origin,
+    float3 Direction)
+{
+    float DistanceTravel = 0;
+
+
+    for(int i=0;i<64;i++)
+    {
+        float3 P =
+            Origin +
+            Direction * DistanceTravel;
+
+
+        float SDF =
+            SampleGlobalDistanceField(P);
+
+
+        if(SDF < HitThreshold)
+        {
+            return DistanceTravel;
+        }
+
+
+        DistanceTravel += max(
+            SDF * 0.8,
+            DistanceFieldVoxelSize * 0.5);
+    }
+
+
+    return -1;
+}

@@ -510,6 +510,21 @@ struct ShaderParameterTypeInfo<Core::Int3>
 };
 
 template<>
+struct ShaderParameterTypeInfo<Core::UInt3>
+{
+    static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::UInt32;
+    static constexpr uint32_t NumRows = 1;
+    static constexpr uint32_t NumColumns = 3;
+    static constexpr uint32_t NumElements = 0;
+    static constexpr uint32_t Alignment = 0; // 资源通常不占 ConstantBuffer 空间
+    static constexpr bool bIsStoredInConstantBuffer = false; // 关键：标记为非 CBuffer 成员
+
+    using TAlignedType = Core::UInt3;
+
+    static const RenderCore::ShaderParametersMetadata* GetStructMetadata() { return nullptr; }
+};
+
+template<>
 struct ShaderParameterTypeInfo<float>
 {
     static constexpr RenderCore::EShaderParameterBaseType BaseType = RenderCore::EShaderParameterBaseType::Float32;
@@ -660,7 +675,7 @@ struct StructNestedBufferShaderParameterTypeInfo
 
 #define STRUCT_OFFSET(StructType, Member) offsetof(StructType, Member)
 // Begin shader parameter struct
-#define BEGIN_SHADER_PARAMETER_STRUCT(StructClass) struct StructClass{ \
+#define BEGIN_SHADER_PARAMETER_STRUCT(StructClass) struct  StructClass{ \
     struct FirstIdType{}; \
     using PrevMemberIdType = FirstIdType; \
     using ThisStructType = StructClass; \

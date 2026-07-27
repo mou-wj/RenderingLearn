@@ -1,6 +1,7 @@
 #pragma once
 #include "ShaderParameter.h"
 #include "Math.hpp"
+#include "GlobalDistanceField.h"
 #include "EngineExport.h"
 namespace RenderCore {
 	class RenderGraphBuilder;
@@ -82,6 +83,20 @@ namespace Renderer {
 		SHADER_PARAMETER_RDG_TEXTURE_ARRAY(TextureCube, PointLightShadows, 8)//�ȹ̶����8�����ԴͶ����Ӱ
         SHADER_PARAMETER_RDG_TEXTURE_ARRAY(Texture2DArray, ParrallelLightShadows, 4)//�ȹ̶����4�����ԴͶ����Ӱ
     END_SHADER_PARAMETER_STRUCT(SceneLightShadowParameters)
+
+    //距离场参数
+    BEGIN_SHADER_PARAMETER_STRUCT(SceneGlobalDistanceFieldParameters)
+        SHADER_PARAMETER_SAMPLER(DistanceSampler)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture3D, GlobalDistanceFieldAtlas)
+        SHADER_PARAMETER_RHI_STRUCTURED_BUFFER(GlobalDistanceFieldBlockIndex, AllocateBlockIndexInfos)
+        SHADER_PARAMETER(Core::Float3, GlobalDistanceFieldCenter)
+        SHADER_PARAMETER(Core::Float3, BlockSize)
+        SHADER_PARAMETER(Core::UInt3, GlobalDistanceFieldGridSize)
+        SHADER_PARAMETER(float, DistanceFieldVoxelSize)
+        // Atlas尺寸
+        SHADER_PARAMETER(Core::UInt3, GlobalDistanceFieldAtlasResolution)
+    END_SHADER_PARAMETER_STRUCT(SceneGlobalDistanceFieldParameters)
+
 
 	BEGIN_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightParameters, LightParameters)

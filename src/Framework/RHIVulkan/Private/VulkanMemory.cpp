@@ -169,7 +169,7 @@ bool VulkanMemoryManager::Allocate(const VkMemoryRequirements& memReqs, VkMemory
     }
 
     // Allocate new block
-    auto newBlock = std::make_unique<VulkanMemoryBlock>(device_, typeIndex, max(DEFAULT_BLOCK_SIZE, memReqs.size), (props & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0);
+    auto newBlock = std::make_unique<VulkanMemoryBlock>(device_, typeIndex, std::max(DEFAULT_BLOCK_SIZE, memReqs.size), (props & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0);
     bool success = newBlock->Allocate(memReqs.size, memReqs.alignment, outAlloc);
     if (!success)
         return false;

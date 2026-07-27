@@ -5,7 +5,7 @@
 #include "RHIApi.h"
 #include "Common.h"
 
-namespace Renderer {
+namespace Engine {
 
     IMPLEMENT_GLOBAL_SHADER_TYPE(
         DistanceFieldVoxelizeCS,
@@ -15,13 +15,7 @@ namespace Renderer {
         RHI::ERHIShaderFrequency::Compute
     );
 
-    IMPLEMENT_GLOBAL_SHADER_TYPE(
-        DistanceFieldMergeCS,
-        "DistanceFieldMergeCS",
-        "/tools/DistanceFieldMergeCS.sf",
-        "MainCS",
-        RHI::ERHIShaderFrequency::Compute
-    );
+
 
     IMPLEMENT_GLOBAL_SHADER_TYPE(
         DistanceFieldJumpFlood3DCS,
@@ -185,101 +179,6 @@ namespace Renderer {
         return true;
     }
 
-    bool ExecuteDistanceFieldMergePass(const DistanceFieldMergePassInput& Input)
-    {
-        if (!Input.InputSDFTexture || !Input.OutputSDFTexture)
-        {
-            return false;
-        }
-
-        if (Input.OutputResolution.x <= 0 || Input.OutputResolution.y <= 0 || Input.OutputResolution.z <= 0)
-        {
-            return false;
-        }
-
-        auto* shader = GetGlobalComputeShader("DistanceFieldMergeCS");
-        if (!shader)
-        {
-            return false;
-        }
-
-        auto* computeShader = dynamic_cast<RHI::RHIComputeShader*>(shader->GetRHIShader());
-        if (!computeShader)
-        {
-            return false;
-        }
-
-        const auto& inputDesc = Input.InputSDFTexture->GetRHI()->GetDesc();
-        const auto& outputDesc = Input.OutputSDFTexture->GetRHI()->GetDesc();
-
-        RHI::RHITexSRVCreateInfo inputSRVDesc;
-        inputSRVDesc.Format = inputDesc.Format;
-        inputSRVDesc.ArraySize = inputDesc.ArraySize;
-
-        RHI::RHITexUAVCreateInfo outputUAVDesc;
-        outputUAVDesc.Format = outputDesc.Format;
-        outputUAVDesc.ArraySize = outputDesc.ArraySize;
-
-        auto* inputSRV = Input.InputSDFTexture->GetViewCache().GetOrCreateSRV(Input.InputSDFTexture->GetRHI(), inputSRVDesc);
-        auto* outputUAV = Input.OutputSDFTexture->GetViewCache().GetOrCreateUAV(Input.OutputSDFTexture->GetRHI(), outputUAVDesc);
-
-        if (!inputSRV || !outputUAV)
-        {
-            return false;
-        }
-
-        RenderCore::TransitionTextureImmediate(
-            RHI::GRHIApi,
-            Input.InputSDFTexture,
-            RHI::ERHIResourceAccess::SRV,
-            RHI::EQueueType::Compute);
-
-        RenderCore::TransitionTextureImmediate(
-            RHI::GRHIApi,
-            Input.OutputSDFTexture,
-            RHI::ERHIResourceAccess::UAV,
-            RHI::EQueueType::Compute);
-
-        auto* computeQueue = RHI::GRHIApi->GetQueue(RHI::EQueueType::Compute);
-        auto* computeContext = computeQueue->AcquireCommandContext();
-        auto* computeContextCasted = dynamic_cast<RHI::RHIComputeContex*>(computeContext);
-        if (!computeContextCasted)
-        {
-            return false;
-        }
-
-        RHI::RHIComputeCommandList cmd(computeContextCasted);
-        cmd.SetImmediate(true);
-        cmd.Begin();
-
-        RHI::RHIComputePipelineStateDesc computeDesc;
-        computeDesc.computeShader = computeShader;
-        auto* pipelineState = RHI::RHIPipelineStateCache::GetOrCreateComputePipelineState(computeDesc);
-        cmd.SetComputePipelineState(pipelineState);
-
-        DistanceFieldMergeParameters params;
-        params.SourceToOutput = Input.SourceToOutput;
-        params.OutputToSource = Input.OutputToSource;
-        params.OutputResolution = Input.OutputResolution;
-        params.InputSDFTexture = inputSRV;
-        params.OutputSDFTexture = outputUAV;
-        params.InputSDFSampler = RenderCore::GlobalSampler.get();
-
-        SetShaderParameters(cmd, shader, &params);
-
-        const uint32_t groupX = (static_cast<uint32_t>(Input.OutputResolution.x) + 3u) / 4u;
-        const uint32_t groupY = (static_cast<uint32_t>(Input.OutputResolution.y) + 3u) / 4u;
-        const uint32_t groupZ = (static_cast<uint32_t>(Input.OutputResolution.z) + 3u) / 4u;
-        cmd.Dispatch(groupX, groupY, groupZ);
-
-        cmd.End();
-
-        auto fence = computeQueue->ExecuteContext(computeContext);
-        Input.InputSDFTexture->GetTracker().UpdateLastAccessFence(fence);
-        Input.OutputSDFTexture->GetTracker().UpdateLastAccessFence(fence);
-
-        return true;
-    }
 
     bool ExecuteDistanceFieldJumpFlood3DPass(const DistanceFieldJumpFlood3DPassInput& Input)
     {
