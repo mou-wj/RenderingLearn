@@ -160,7 +160,8 @@ namespace Engine
             uint32_t AtlasResolutionX,
             uint32_t AtlasResolutionY,
             uint32_t AtlasResolutionZ,
-            uint32_t BlockResolution);
+            uint32_t BlockResolution,
+            RHI::ERHITextureCreateFlags usage = RHI::ERHITextureCreateFlag::ShaderResource | RHI::ERHITextureCreateFlag::TransferDest);
 
 
 

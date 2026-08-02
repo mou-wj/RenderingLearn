@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <set>
 #include "Common.h"
 #include "BoxSphereBounds.h"
 
@@ -133,7 +134,7 @@ namespace Core
 
         const Primitive& GetPrimitive(uint32_t Index) const
         {
-            return (*Primitives)[PrimitiveIndices[Index]];
+            return (*Primitives)[Index];
         }
 
         const std::vector<Primitive>& GetPrimitives() const
@@ -153,9 +154,9 @@ namespace Core
 
         float ClosestDistance(const Float3& Position) const;
 
-        void RayIntersect(const Ray& Ray, std::vector<uint32_t>& IntersectPrimitiveIds) const;
+        void RayIntersect(const Ray& Ray, std::set<uint32_t>& IntersectPrimitiveIds) const;
 
-        void GetPrimitiveIdsInsideBounds(const BoxSphereBounds& Box, std::vector<uint32_t>& OutPrimitiveIds) const;
+        void GetPrimitiveIdsInsideBounds(const BoxSphereBounds& Box, std::set<uint32_t>& OutPrimitiveIds) const;
 
     protected:
 
@@ -174,9 +175,9 @@ namespace Core
         void RayIntersectNode(
             uint32_t NodeIndex,
             const Ray& Ray,
-            std::vector<uint32_t>& OutPrimitiveIds) const;
+            std::set<uint32_t>& OutPrimitiveIds) const;
 
-        void QueryBoundsRecursive(uint32_t NodeIndex, const BoxSphereBounds& Box, std::vector<uint32_t>& OutPrimitiveIds) const;
+        void QueryBoundsRecursive(uint32_t NodeIndex, const BoxSphereBounds& Box, std::set<uint32_t>& OutPrimitiveIds) const;
     protected:
 
 

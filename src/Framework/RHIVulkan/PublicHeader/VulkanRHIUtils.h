@@ -17,6 +17,8 @@ namespace RHIVulkan {
 
     VkImageViewType TransformViewTypeFrom(ERHITextureType type);
 
+    VkImageViewType TransformViewTypeFrom(ERHITextureViewType type);
+
     VkImageAspectFlags GetImageAspectFlags(VkFormat format);
 
     VkDescriptorType TransformDescriptorTypeFrom(RenderCore::SPIRVCompiledBinaryResultPacker::ESPIRVShaderResourceType type);

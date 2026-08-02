@@ -15,7 +15,8 @@ namespace Engine
         uint32_t InAtlasResolutionX,
         uint32_t InAtlasResolutionY,
         uint32_t InAtlasResolutionZ,
-        uint32_t InBlockResolution)
+        uint32_t InBlockResolution,
+        RHI::ERHITextureCreateFlags usage)
     {
         Release();
 
@@ -72,7 +73,7 @@ namespace Engine
 
         NextAllocationId = 0;
 
-        AtlasTexture = RenderCore::Create3DTexture(InAtlasResolutionX, InAtlasResolutionY, InAtlasResolutionZ, RHI::ERHIFormat::R32_Float, RHI::ERHITextureCreateFlag::ShaderResource | RHI::ERHITextureCreateFlag::TransferDest, "DistanceFieldAtlas");
+        AtlasTexture = RenderCore::Create3DTexture(InAtlasResolutionX, InAtlasResolutionY, InAtlasResolutionZ, RHI::ERHIFormat::R32_Float, usage , "DistanceFieldAtlas");
         return true;
     }
 
@@ -246,7 +247,14 @@ namespace Engine
     void DistanceFieldAtlas::UploadData(
         const DistanceFieldAllocation& Allocation,
         const float* Data) {
-
+        RHI::RHIUpdateTextureRegion uploadReion;
+        uploadReion.xOffset = Allocation.X;
+        uploadReion.yOffset = Allocation.Y;
+        uploadReion.zOffset = Allocation.Z;
+        uploadReion.width = Allocation.SizeX;
+		uploadReion.height = Allocation.SizeY;
+        uploadReion.depth = Allocation.SizeZ;
+        AtlasTexture->UploadData(Data, uploadReion);
     }
 
 

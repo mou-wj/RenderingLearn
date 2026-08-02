@@ -174,6 +174,7 @@ namespace Renderer {
             SpecEnvUAVDesc.Format = OutSpecularIBL->GetRHI()->GetDesc().Format;
             SpecEnvUAVDesc.ArraySize = OutSpecularIBL->GetRHI()->GetDesc().ArraySize;
 			SpecEnvUAVDesc.FirstMipSlice = mip;
+            SpecEnvUAVDesc.ViewType = RHI::ERHITextureViewType::TextureView2DArray;
             auto specuav = OutSpecularIBL->GetViewCache().GetOrCreateUAV(OutSpecularIBL->GetRHI(), SpecEnvUAVDesc);
             
             params.EnvironmentMapParameter.OutputSpecularParam.OutputSpecularTexture = specuav;
@@ -195,6 +196,7 @@ namespace Renderer {
         RHI::RHITexUAVCreateInfo DifEnvUAVDesc;
         DifEnvUAVDesc.Format = OutDiffuseIBL->GetRHI()->GetDesc().Format;
         DifEnvUAVDesc.ArraySize = OutDiffuseIBL->GetRHI()->GetDesc().ArraySize;
+        DifEnvUAVDesc.ViewType = RHI::ERHITextureViewType::TextureView2DArray;
         auto difuav = OutDiffuseIBL->GetViewCache().GetOrCreateUAV(OutDiffuseIBL->GetRHI(), DifEnvUAVDesc);
         params.EnvironmentMapParameter.OutputDiffuseParam.OutputDiffuseTexture = difuav;
         RenderCore::Shader* shader = GShaderMap.GetShader(shaderType, 1);

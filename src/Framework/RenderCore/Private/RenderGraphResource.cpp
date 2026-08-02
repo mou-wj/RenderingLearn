@@ -28,6 +28,7 @@ void RenderGraphResource::SetRHIResource(RHI::RHIResource* resource)
 RenderGraphTexture::RenderGraphTexture(const std::string& name, const RenderGraphTextureDesc& desc)
     : RenderGraphResource(name, RenderGraphResourceType::Texture), desc(desc)
 {
+    tracker.Initialize(desc.ArraySize, desc.MipLevels, 1);
 }
 
 RenderGraphTexture::~RenderGraphTexture()

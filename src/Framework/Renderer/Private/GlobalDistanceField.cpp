@@ -52,6 +52,7 @@ namespace Renderer
 
     bool ExecuteDistanceFieldMergePass(const DistanceFieldMergePassInput& Input)
     {
+        
         if (!Input.InputSDFTexture || !Input.OutputSDFTexture)
         {
             return false;
@@ -100,7 +101,7 @@ namespace Renderer
             Input.OutputSDFTexture,
             RHI::ERHIResourceAccess::UAV,
             RHI::EQueueType::Compute);
-
+        
         auto* computeQueue = RHI::GRHIApi->GetQueue(RHI::EQueueType::Compute);
         auto* computeContext = computeQueue->AcquireCommandContext();
         auto* computeContextCasted = dynamic_cast<RHI::RHIComputeContex*>(computeContext);
@@ -129,16 +130,29 @@ namespace Renderer
         RenderCore::TransientBufferDesc bufferDesc;
         bufferDesc.Stride = sizeof(DistanceFieldSourceParameters);
         bufferDesc.Size = Input.sourceParams.size() * bufferDesc.Stride;
-        auto buffer = RenderCore::GTransientResourceAllocator.AllocateBuffer(bufferDesc, 0, 0);
+        bufferDesc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
+        auto buffer = RenderCore::GTransientResourceAllocator.AllocateBuffer(bufferDesc, 0, 1);
+
+		RenderCore::TransitionResource(GRHIApi, cmd, buffer->GetRHI(), RHI::ERHIResourceAccess::Unknown, RHI::ERHIResourceAccess::TransferDest, RHI::EQueueType::Graphics, RHI::EQueueType::Compute);
+		RHIUpdateBufferRegion updateRegion;
+        updateRegion.size = bufferDesc.Size;
+        GRHIApi->UpdateBuffer(cmd, buffer->GetRHI(), Input.sourceParams.data(), updateRegion);
+        RenderCore::TransitionResource(GRHIApi, cmd, buffer->GetRHI(), RHI::ERHIResourceAccess::TransferDest, RHI::ERHIResourceAccess::SRV, RHI::EQueueType::Compute, RHI::EQueueType::Compute);
+        
         RHI::RHIBufferSRVCreateInfo srvDesc;
         srvDesc.Stride = sizeof(DistanceFieldSourceParameters);
         srvDesc.NumElements = Input.sourceParams.size();
-
         auto srcsrv = buffer->GetViewCache().GetOrCreateSRV(buffer->GetRHI(), srvDesc);
 
         bufferDesc.Stride = sizeof(DistanceFieldOutParameters);
         bufferDesc.Size = Input.outputParams.size() * bufferDesc.Stride;
-        auto outbuffer = RenderCore::GTransientResourceAllocator.AllocateBuffer(bufferDesc, 0, 0);
+        auto outbuffer = RenderCore::GTransientResourceAllocator.AllocateBuffer(bufferDesc, 0, 1);
+
+        RenderCore::TransitionResource(GRHIApi, cmd, outbuffer->GetRHI(), RHI::ERHIResourceAccess::Unknown, RHI::ERHIResourceAccess::TransferDest, RHI::EQueueType::Graphics, RHI::EQueueType::Compute);
+        updateRegion.size = bufferDesc.Size;
+        GRHIApi->UpdateBuffer(cmd, outbuffer->GetRHI(), Input.outputParams.data(), updateRegion);
+        RenderCore::TransitionResource(GRHIApi, cmd, outbuffer->GetRHI(), RHI::ERHIResourceAccess::TransferDest, RHI::ERHIResourceAccess::SRV, RHI::EQueueType::Compute, RHI::EQueueType::Compute);
+
 
         srvDesc.Stride = sizeof(DistanceFieldOutParameters);
         srvDesc.NumElements = Input.outputParams.size();
@@ -153,9 +167,6 @@ namespace Renderer
         auto inputSrcDesc = Input.InputSDFTexture->GetRHI()->GetDesc();
         Core::UInt3 InputAtlasResolution = Core::UInt3(inputSrcDesc.Width, inputSrcDesc.Height, inputSrcDesc.Depth);
         params.InputAtlasResolution = InputAtlasResolution;
-        //params.SourceToOutput = Input.SourceToOutput;
-        //params.OutputToSource = Input.OutputToSource;
-        //params.OutputResolution = Input.OutputResolution;
         params.InputSDFTexture = Input.InputSDFTexture->GetRHI();
         auto outputTexUAV = Input.OutputSDFTexture->GetViewCache().GetOrCreateUAV(Input.OutputSDFTexture->GetRHI(), outputUAVDesc);
         params.OutputSDFTexture = outputTexUAV;
@@ -163,9 +174,9 @@ namespace Renderer
 
         SetShaderParameters(cmd, shader, &params);
 
-        const uint32_t groupX = (static_cast<uint32_t>(OutputResolution.x) + 3u) / 4u;
-        const uint32_t groupY = (static_cast<uint32_t>(OutputResolution.y) + 3u) / 4u;
-        const uint32_t groupZ = (static_cast<uint32_t>(OutputResolution.z) + 3u) / 4u;
+        const uint32_t groupX = (static_cast<uint32_t>(OutputResolution.x)) / 8u;
+        const uint32_t groupY = (static_cast<uint32_t>(OutputResolution.y)) / 8u;
+        const uint32_t groupZ = (static_cast<uint32_t>(OutputResolution.z)) / 8u;
         cmd.Dispatch(groupX, groupY, groupZ);
 
         cmd.End();
@@ -173,7 +184,12 @@ namespace Renderer
         auto fence = computeQueue->ExecuteContext(computeContext);
         Input.InputSDFTexture->GetTracker().UpdateLastAccessFence(fence);
         Input.OutputSDFTexture->GetTracker().UpdateLastAccessFence(fence);
-
+        
+        RenderCore::TransitionTextureImmediate(
+            RHI::GRHIApi,
+            Input.OutputSDFTexture,
+            RHI::ERHIResourceAccess::SRV,
+            RHI::EQueueType::Compute);
         return true;
     }
 
@@ -190,9 +206,11 @@ namespace Renderer
     {
         if (IsInitialized) { return true; }
         IsInitialized = true;
-
+        Bounds.Min = Core::Float3(-100, -100, -100);
+        Bounds.Max = Core::Float3(100, 100, 100);
         Atlas = std::make_unique<Engine::DistanceFieldAtlas>();
-        Atlas->Initialize(256, 256, 256, 64);
+        RHI::ERHITextureCreateFlags usage = RHI::ERHITextureCreateFlag::ShaderResource | RHI::ERHITextureCreateFlag::TransferDest | RHI::ERHITextureCreateFlag::UAV;
+        Atlas->Initialize(256, 256, 256, 64, usage);
         GridSizeX = GridSizeY = GridSizeZ = 40;
         BlockIndexBufferCPU.resize(GridSizeX * GridSizeY * GridSizeZ);
         RHI::RHIBufferDesc bufferDesc;
@@ -253,19 +271,21 @@ namespace Renderer
         int32_t& Y,
         int32_t& Z) const
     {
+        Core::Float3 delta = Position - Bounds.Min;
+
         X =
             static_cast<int32_t>(
-                std::floor(Position.x / BlockWorldSize));
+                std::floor(delta.x / BlockWorldSize));
 
 
         Y =
             static_cast<int32_t>(
-                std::floor(Position.y / BlockWorldSize));
+                std::floor(delta.y / BlockWorldSize));
 
 
         Z =
             static_cast<int32_t>(
-                std::floor(Position.z / BlockWorldSize));
+                std::floor(delta.z / BlockWorldSize));
     }
 
 
@@ -280,7 +300,7 @@ namespace Renderer
             Y * BlockWorldSize,
             Z * BlockWorldSize);
 
-
+        Min += Bounds.Min;
 
         Core::Float3 Max =
             Min +

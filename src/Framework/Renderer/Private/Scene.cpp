@@ -494,7 +494,9 @@ namespace Renderer {
 
     bool Scene::UpdateGlobalDistanceFieldIfNeeded()
     {
-        if ( EnumHasAnyFlags(GPUResourceInfo.DirtyFlags, ESceneGPUResourceDirty::GlobalDistanceField)) {
+        static bool FirstInit = false;
+        if ( EnumHasAnyFlags(GPUResourceInfo.DirtyFlags, ESceneGPUResourceDirty::GlobalDistanceField) || FirstInit == false) {
+            FirstInit = true;
             //收集静态网格信息，更新距离场
             DistanceFieldMergePassInput Input;
             Core::AABB AffectBox;
@@ -526,6 +528,8 @@ namespace Renderer {
             if (Input.sourceParams.empty()) {
                 return false;
             }
+            GlobalDistanceFieldBlockClipMap clipMap;
+            auto suc = GPUResourceInfo.DistanceFieldResourceInfo.StaticDistanceField.Allocate(AffectBox, clipMap);
             //收集需要更新的globaldistancefield 区域id
             std::vector<uint32_t> affectBlockIDs;
             GPUResourceInfo.DistanceFieldResourceInfo.StaticDistanceField.GetBlocksInsideBounds(AffectBox, affectBlockIDs);
@@ -539,7 +543,7 @@ namespace Renderer {
 					Input.outputParams.emplace_back(Out);
 				}
             }
-            if (!Input.outputParams.empty()) {
+            if (Input.outputParams.empty()) {
                 return false;
             }
 

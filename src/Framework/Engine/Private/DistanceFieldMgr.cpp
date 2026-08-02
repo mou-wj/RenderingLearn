@@ -463,7 +463,12 @@ namespace Engine
         return true;
     }
 
-
+    Core::Float3 RandomSeed(Core::Float3 center, float radius) {
+        float randomx = center.x + radius * (rand() % 1000 / 1000.0f - 0.5f);
+        float randomy = center.y + radius * (rand() % 1000 / 1000.0f - 0.5f);
+		float randomz = center.z + radius * (rand() % 1000 / 1000.0f - 0.5f);
+        return Core::Float3(randomx, randomy, randomz);
+    }
 
     void DistanceFieldManager::GenerateDistanceSlice(DistanceFieldData& Data, uint32_t Z, const DistanceFieldBVH& BVH)
     {
@@ -488,15 +493,59 @@ namespace Engine
 
 
                 Data.Distance[Index] = BVH.ClosestDistance(Position);
+                float radius = BVH.GetRootNode().Bounds.Sphere.Radius;
+				float randomRange = radius * 0.01f;
                 Core::Ray Hit;
                 Hit.Origin = Position;
-				Core::Float3 center = BVH.GetRootNode().Bounds.Box.GetCenter();
+                Core::Float3 center = BVH.GetRootNode().Bounds.Box.GetCenter();
+				center = RandomSeed(center, randomRange);
                 Hit.Direction = center - Hit.Origin;
                 Hit.Direction = Core::Normalize(Hit.Direction);
-                std::vector<uint32_t> intersectIds;
+                std::set<uint32_t> intersectIds;
                 BVH.RayIntersect(Hit, intersectIds);
-                if (intersectIds.size() == 1) {
-                    Data.Distance[Index] = -Data.Distance[Index];
+                float positiveDis = Data.Distance[Index];
+                if (intersectIds.size() % 2 == 1) {
+                    Data.Distance[Index] = -positiveDis;
+                }
+                if (intersectIds.size() == 0) {
+                    int i = 10;
+                    
+                }
+                if (intersectIds.size() > 2) {
+                    std::set<float> hitDistences;
+                    for (auto id : intersectIds) {
+                        auto pri = BVH.GetPrimitive(id);
+                        float dis = 0;
+                        bool sc = DistanceFieldTriangleBVHTraits::RayIntersect(BVH.GetPrimitive(id), Hit, dis);
+                        if (hitDistences.empty()) {
+							hitDistences.insert(dis);
+                        }
+                        else {
+                            bool ignore = false;
+                            for (auto rDis : hitDistences) {
+                                if (abs(dis - rDis) < 0.00001) {
+                                    ignore = true;
+                                    break;
+                                }
+                            }
+                            if (!ignore) {
+                                hitDistences.insert(dis);
+                            }
+                        }
+                        
+
+                        
+                    }
+                    if (hitDistences.size() > 2) {
+                        Data.Distance[Index] = -positiveDis;
+                    }
+                    if (hitDistences.size() % 2 == 1) {
+                        Data.Distance[Index] = -positiveDis;
+                    }
+                    else {
+                        Data.Distance[Index] = -positiveDis;
+                    }
+                    
                 }
             }
         }
@@ -599,7 +648,7 @@ namespace Engine
 
 
 
-                std::vector<uint32_t> PrimitiveIds;
+                std::set<uint32_t> PrimitiveIds;
 
 
                 BVH.GetPrimitiveIdsInsideBounds(

@@ -325,6 +325,7 @@ public:
         RHI::RHITextureSP InTexture)
         : Desc(InDesc)
     {
+		Tracker.Initialize(InDesc.ArraySize, InDesc.MipLevels, 1);
         TargetTexture = InTexture;
     }
 
@@ -436,6 +437,7 @@ public:
         : Desc(InDesc)
         , TransientTexture(std::move(InTransientTexture))
     {
+        Tracker.Initialize(InDesc.ArraySize, InDesc.MipLevels, 1);
     }
     ~PooledTransientRenderTarget()
     {

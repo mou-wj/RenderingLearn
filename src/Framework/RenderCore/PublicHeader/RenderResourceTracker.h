@@ -63,6 +63,11 @@ public:
         return (it != SubStates.end()) ? it->second : WholeState;
     }
 
+    bool IsWholeStateOnly() const
+    {
+        return !bUseSubresource;
+    }
+
 private:
     struct SubresourceKey
     {
@@ -104,9 +109,58 @@ protected:
 // 纹理资源追踪
 class RenderTextureTracker : public RenderResourceTrackerBase {
 public:
+    void Initialize(uint32_t numLayer, uint32_t numMip, uint32_t numPlane) {
+		NumLayer = numLayer;
+		NumMip = numMip;
+		NumPlane = numPlane;
+		SubresourceAccess.SetWhole(RHI::ERHIResourceAccess::Unknown);
+    }
+    struct NeededTransientSubInfo {
+        RHI::RHISubresourceRange range;
+        RHI::ERHIResourceAccess currenAccess;
+    };
+    std::vector<NeededTransientSubInfo> GetNeededTransientSubInfo(RHI::ERHIResourceAccess dstAccess,uint32_t firstLayer, uint32_t numLayer, uint32_t firstMip, uint32_t numMip, uint32_t firstPlane = 0, uint32_t numPlane = 1) {
+        std::vector<NeededTransientSubInfo> results;
+
+        const bool isWholeResource = firstLayer == 0
+            && numLayer == NumLayer
+            && firstMip == 0
+            && numMip == NumMip
+            && firstPlane == 0
+            && numPlane == NumPlane;
+
+        if (isWholeResource && SubresourceAccess.IsWholeStateOnly()) {
+            const RHI::ERHIResourceAccess currentAccess = SubresourceAccess.Get(RHI::RHISubresourceRange{});
+            if (currentAccess != dstAccess) {
+                results.push_back({ RHI::RHISubresourceRange{}, currentAccess });
+            }
+            return results;
+        }
+
+        for (uint32_t plane = firstPlane; plane < firstPlane + numPlane; ++plane) {
+            for (uint32_t layer = firstLayer; layer < firstLayer + numLayer; ++layer) {
+                for (uint32_t mip = firstMip; mip < firstMip + numMip; ++mip) {
+                    RHI::RHISubresourceRange range(mip, layer, plane);
+                    const RHI::ERHIResourceAccess currentAccess = SubresourceAccess.Get(range);
+                    if (currentAccess != dstAccess) {
+                        results.push_back({ range, currentAccess });
+                    }
+                }
+            }
+        }
+
+        return results;
+    }
+
     // 更新子资源访问控制
     void UpdateSubresourceAccess(const RHI::RHISubresourceRange& range, RHI::ERHIResourceAccess access) {
-		SubresourceAccess.SetSubresource(range, access);
+        if (range.ArraySlice == 0 && range.MipIndex == 0 && range.PlaneSlice == 0
+			&& NumLayer == 1 && NumMip == 1 && NumPlane == 1
+            ) {
+            SubresourceAccess.SetWhole(access);
+            return;
+        }
+        SubresourceAccess.SetSubresource(range, access);
     }
     // 获取子资源访问控制
     RHI::ERHIResourceAccess GetSubresourceAccess(const RHI::RHISubresourceRange& range) const {
@@ -114,6 +168,9 @@ public:
     }
 private:
     TextureSubresourceStateContainer<RHI::ERHIResourceAccess> SubresourceAccess;
+    uint32_t NumLayer = 1;
+    uint32_t NumMip = 1;
+	uint32_t NumPlane = 1;
 };
 
 // 缓冲区资源追踪

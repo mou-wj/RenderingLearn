@@ -232,7 +232,7 @@ namespace Renderer
 		}
 
         const Core::Float3& GetCenter() const {
-            return Center;
+            return Bounds.GetCenter();
         }
 
         const Engine::DistanceFieldAtlas& GetAtlas() const {
@@ -313,8 +313,7 @@ namespace Renderer
 
         std::unordered_map<uint32_t, GlobalDistanceFieldBlock> Blocks;
 
-        Core::Float3 Center; // World Space
-
+        Core::AABB Bounds;
         bool IsInitialized = false;
 
     };
@@ -323,14 +322,21 @@ namespace Renderer
         SHADER_PARAMETER(Core::Float4x4, LocalToWorld)
         SHADER_PARAMETER(Core::Float4x4, WorldToLocal)
         SHADER_PARAMETER(Core::UInt3, Offset)
+        SHADER_PARAMETER(float,Padding0)
         SHADER_PARAMETER(Core::UInt3, InputResolution)
+        SHADER_PARAMETER(float, Padding1)
         SHADER_PARAMETER(Core::Float3, BoundsMin)
+        SHADER_PARAMETER(float, Padding2)
         SHADER_PARAMETER(Core::Float3, BoundsMax)
+        SHADER_PARAMETER(float, Padding3)
     END_SHADER_PARAMETER_STRUCT(DistanceFieldSourceParameters)
     BEGIN_SHADER_PARAMETER_STRUCT(DistanceFieldOutParameters)
         SHADER_PARAMETER(Core::Int3, Offset)
+        SHADER_PARAMETER(float, Padding0)
         SHADER_PARAMETER(Core::Float3, BoundsMin)
+        SHADER_PARAMETER(float, Padding1)
         SHADER_PARAMETER(Core::Float3, BoundsMax)
+        SHADER_PARAMETER(float, Padding2)
     END_SHADER_PARAMETER_STRUCT(DistanceFieldOutParameters)
     struct DistanceFieldMergePassInput
     {

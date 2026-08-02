@@ -209,7 +209,16 @@ enum class ERHIShaderFrequency
         Texture2DArray,
         TextureCubeArray
     };
-
+    enum class ERHITextureViewType
+    {
+		Derived = 0,// 由纹理类型推导
+        TextureView1D,
+        TextureView2D,
+        TextureView3D,
+        TextureViewCube,
+        TextureView2DArray,
+        TextureViewCubeArray
+    };
     // 纹理用途标志（可组合使用）
     enum class ERHITextureCreateFlag : uint32_t
     {
@@ -519,6 +528,7 @@ enum class ERHIShaderFrequency
         uint32_t FirstArraySlice = 0;
         uint32_t ArraySize = 1;
         ERHIFormat Format = ERHIFormat::Unknown;
+        ERHITextureViewType ViewType = ERHITextureViewType::Derived;
         uint64_t CalculateHash() const
         {
             uint64_t h = 0;
@@ -528,6 +538,7 @@ enum class ERHIShaderFrequency
             HashCombine(h, FirstArraySlice);
             HashCombine(h, ArraySize);
             HashCombine(h, static_cast<uint32_t>(Format));
+            HashCombine(h, static_cast<uint32_t>(ViewType));
 
             return h;
         }
@@ -564,6 +575,7 @@ enum class ERHIShaderFrequency
         uint32_t FirstArraySlice = 0;
         uint32_t ArraySize = 1;
         ERHIFormat Format = ERHIFormat::Unknown;
+		ERHITextureViewType ViewType = ERHITextureViewType::Derived;
         uint64_t CalculateHash() const
         {
             uint64_t h = 0;
@@ -573,6 +585,7 @@ enum class ERHIShaderFrequency
             HashCombine(h, FirstArraySlice);
             HashCombine(h, ArraySize);
             HashCombine(h, static_cast<uint32_t>(Format));
+			HashCombine(h, static_cast<uint32_t>(ViewType));
 
             return h;
         }
@@ -583,7 +596,8 @@ enum class ERHIShaderFrequency
                 MipCount == rhs.MipCount &&
                 FirstArraySlice == rhs.FirstArraySlice &&
                 ArraySize == rhs.ArraySize &&
-                Format == rhs.Format;
+                Format == rhs.Format &&
+                ViewType == rhs.ViewType;
         }
         RHITexUAVCreateInfo& operator=(const RHITexUAVCreateInfo& rhs)
         {
@@ -594,6 +608,7 @@ enum class ERHIShaderFrequency
                 FirstArraySlice = rhs.FirstArraySlice;
                 ArraySize = rhs.ArraySize;
                 Format = rhs.Format;
+				ViewType = rhs.ViewType;
             }
             return *this;
         }

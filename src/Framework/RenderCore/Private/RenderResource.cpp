@@ -35,7 +35,9 @@ bool RenderResource::IsInitialized() const {
 }
 
 // RenderTexture
-RenderTexture::RenderTexture(const RHI::RHITextureDesc& inDesc) : Desc(inDesc) {}
+RenderTexture::RenderTexture(const RHI::RHITextureDesc& inDesc) : Desc(inDesc) {
+	Tracker.Initialize(Desc.ArraySize, Desc.MipLevels, 1);
+}
 RenderTexture::~RenderTexture()
 {
 	if (Texture) {
@@ -75,6 +77,13 @@ void RenderTexture::UploadData(const void* data, const RHI::RHIUpdateTextureRegi
 	range.ArraySlice = updateRegion.arraySlice;
 	range.MipIndex = updateRegion.mipLevel;
 	range.PlaneSlice = 0;
+	if (range.MipIndex == 0 && Desc.MipLevels == 1) {
+        range.MipIndex = RHISubresourceRange::kAllSubresources;
+	}
+    if (range.ArraySlice == 0 && Desc.ArraySize == 1) {
+		range.ArraySlice = RHISubresourceRange::kAllSubresources;
+    }
+	range.PlaneSlice = RHISubresourceRange::kAllSubresources;
 	auto lastAccess = GetTracker().GetSubresourceAccess(range);
 	if (lastAccess != ERHIResourceAccess::TransferDest) {
 		std::vector<RHI::RHITransitionInfo> infos;

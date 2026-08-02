@@ -2,7 +2,10 @@
 #include "/Generated/ShaderParameters/SceneShaderParameters.sf"
 #include "/Generated/ShaderParameters/SceneLightParameters.sf"
 #include "/core/ShadowParametersHelper.sf"
+#if DISTANCE_FIELD
 
+
+#endif
 
 
 

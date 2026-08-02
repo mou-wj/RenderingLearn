@@ -433,10 +433,14 @@ void VulkanShaderResourceView::CreateTextureView(
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = texture->GetImage();
-    viewInfo.viewType =
-        (LayerCount > 1) ?
-        VK_IMAGE_VIEW_TYPE_2D_ARRAY :
-        VK_IMAGE_VIEW_TYPE_2D;
+    VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+    if (SRVInfo.ViewType == ERHITextureViewType::Derived) {
+        viewType = TransformViewTypeFrom(texture->GetDesc().Type);
+    }
+    else {
+        viewType = TransformViewTypeFrom(SRVInfo.ViewType);
+    }
+    viewInfo.viewType = viewType;
 
     viewInfo.format = Format;
 
@@ -582,10 +586,14 @@ void VulkanUnorderedAccessView::CreateTextureView(
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = texture->GetImage();
-    viewInfo.viewType =
-        (LayerCount > 1) ?
-        VK_IMAGE_VIEW_TYPE_2D_ARRAY :
-        VK_IMAGE_VIEW_TYPE_2D;
+	VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+    if (UAVInfo.ViewType == ERHITextureViewType::Derived) {
+		viewType = TransformViewTypeFrom(texture->GetDesc().Type);
+    }
+    else {
+        viewType = TransformViewTypeFrom(UAVInfo.ViewType);
+    }
+    viewInfo.viewType = viewType;
 
     viewInfo.format = Format;
 

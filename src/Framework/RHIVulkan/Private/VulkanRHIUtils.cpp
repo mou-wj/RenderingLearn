@@ -161,6 +161,28 @@ namespace RHIVulkan {
         return VK_IMAGE_VIEW_TYPE_2D; // 默认类型
     }
 
+    VkImageViewType TransformViewTypeFrom(ERHITextureViewType type)
+    {
+        switch (type) {
+        case ERHITextureViewType::TextureView1D:
+            return VK_IMAGE_VIEW_TYPE_1D;
+        case ERHITextureViewType::TextureView2D:
+            return VK_IMAGE_VIEW_TYPE_2D;
+        case ERHITextureViewType::TextureView3D:
+            return VK_IMAGE_VIEW_TYPE_3D;
+        case ERHITextureViewType::TextureViewCube:
+            return VK_IMAGE_VIEW_TYPE_CUBE;
+        case ERHITextureViewType::TextureView2DArray:
+            return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        case ERHITextureViewType::TextureViewCubeArray:
+            return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+        default:
+            break;
+        }
+        LOG_ERROR("Invalid texture type: {}", static_cast<int>(type));
+        return VK_IMAGE_VIEW_TYPE_2D; // 默认类型
+    }
+
     VkImageAspectFlags GetImageAspectFlags(VkFormat format)
     {
         switch (format)

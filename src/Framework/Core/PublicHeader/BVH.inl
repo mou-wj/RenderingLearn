@@ -290,7 +290,7 @@ void BVH<Primitive,Traits>::ClosestDistanceRecursive(
 template<typename Primitive, typename Traits>
 void BVH<Primitive, Traits>::RayIntersect(
     const Ray& Ray,
-    std::vector<uint32_t>& IntersectPrimitiveIds) const
+    std::set<uint32_t>& IntersectPrimitiveIds) const
 {
     IntersectPrimitiveIds.clear();
 
@@ -308,7 +308,7 @@ template<typename Primitive, typename Traits>
 void BVH<Primitive, Traits>::RayIntersectNode(
     uint32_t NodeIndex,
     const Ray& Ray,
-    std::vector<uint32_t>& OutPrimitiveIds) const
+    std::set<uint32_t>& OutPrimitiveIds) const
 {
     const BVHNode& Node = Nodes[NodeIndex];
 
@@ -331,7 +331,7 @@ void BVH<Primitive, Traits>::RayIntersectNode(
                 PrimitiveIndices[InternalIndex];
             float dis = 0;
             if (Traits::RayIntersect((*Primitives)[PrimitiveId], Ray, dis)) {
-                OutPrimitiveIds.push_back(
+                OutPrimitiveIds.insert(
                     PrimitiveId);
             }
 
@@ -354,7 +354,7 @@ void BVH<Primitive, Traits>::RayIntersectNode(
 }
 
 template<typename Primitive, typename Traits>
-void BVH<Primitive, Traits>::GetPrimitiveIdsInsideBounds(const BoxSphereBounds& Box, std::vector<uint32_t>& OutPrimitiveIds) const
+void BVH<Primitive, Traits>::GetPrimitiveIdsInsideBounds(const BoxSphereBounds& Box, std::set<uint32_t>& OutPrimitiveIds) const
 {
     OutPrimitiveIds.clear();
 
@@ -368,7 +368,7 @@ void BVH<Primitive, Traits>::GetPrimitiveIdsInsideBounds(const BoxSphereBounds& 
 
 
 template<typename Primitive, typename Traits>
-void BVH<Primitive, Traits>::QueryBoundsRecursive(uint32_t NodeIndex, const BoxSphereBounds& Box, std::vector<uint32_t>& OutPrimitiveIds) const
+void BVH<Primitive, Traits>::QueryBoundsRecursive(uint32_t NodeIndex, const BoxSphereBounds& Box, std::set<uint32_t>& OutPrimitiveIds) const
 {
     const BVHNode& Node = Nodes[NodeIndex];
 
@@ -385,7 +385,7 @@ void BVH<Primitive, Traits>::QueryBoundsRecursive(uint32_t NodeIndex, const BoxS
         {
             uint32_t PrimitiveIndex = PrimitiveIndices[Node.FirstPrimitive + i];
 
-            OutPrimitiveIds.push_back(PrimitiveIndex);
+            OutPrimitiveIds.insert(PrimitiveIndex);
         }
 
         return;
