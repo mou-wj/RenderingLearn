@@ -141,7 +141,8 @@ enum class ERHIResourceType
     Sampler,
     // ...可扩展
     ShaderResourceView,
-    UnorderedAccessView
+    UnorderedAccessView,
+    RayTracingAccelerationStructure
 };
 
 

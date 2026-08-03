@@ -2,11 +2,11 @@
 #include "Log.h"
 #include <assert.h>
 
-// »ù´¡Èë¿Úº¯Êý£¨Í¨¹ý¶¯Ì¬¿âÖ±½Óµ¼³ö£©
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úºï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½Ì¬ï¿½ï¿½Ö±ï¿½Óµï¿½ï¿½ï¿½ï¿½ï¿½
 #define VK_EXPORTED_FUNC_LIST(V) \
     V(vkGetInstanceProcAddr)
 
-// ÊµÀý¼¶±ðº¯Êý£¨Í¨¹ý vkGetInstanceProcAddr ¼ÓÔØ£©
+// Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ vkGetInstanceProcAddr ï¿½ï¿½ï¿½Ø£ï¿½
 #define VK_INSTANCE_FUNC_LIST(V) \
     V(vkCreateInstance) \
     V(vkDestroyInstance) \
@@ -31,7 +31,7 @@
     V(vkCreateDebugUtilsMessengerEXT) \
     V(vkDestroyDebugUtilsMessengerEXT)
 
-// Éè±¸¼¶±ðº¯Êý£¨Í¨¹ý vkGetDeviceProcAddr ¼ÓÔØ£¬Ð§ÂÊ×î¸ß£©
+// ï¿½è±¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ vkGetDeviceProcAddr ï¿½ï¿½ï¿½Ø£ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ß£ï¿½
 #define VK_DEVICE_FUNC_LIST(V) \
     V(vkDestroyDevice) \
     V(vkGetDeviceQueue) \
@@ -70,7 +70,15 @@
     V(vkDestroyPipelineLayout) \
     V(vkCreateGraphicsPipelines) \
     V(vkCreateComputePipelines) \
+        V(vkCreateRayTracingPipelinesKHR) \
+        V(vkGetRayTracingShaderGroupHandlesKHR) \
     V(vkDestroyPipeline) \
+        V(vkCreateAccelerationStructureKHR) \
+        V(vkDestroyAccelerationStructureKHR) \
+        V(vkGetAccelerationStructureBuildSizesKHR) \
+        V(vkCmdBuildAccelerationStructuresKHR) \
+        V(vkGetAccelerationStructureDeviceAddressKHR) \
+        V(vkGetBufferDeviceAddress) \
     V(vkCreateRenderPass) \
     V(vkDestroyRenderPass) \
     V(vkCreateFramebuffer) \
@@ -100,6 +108,12 @@
     V(vkCmdPipelineBarrier) \
     V(vkCmdBeginRenderPass)\
     V(vkCmdEndRenderPass) \
+        V(vkCmdCopyAccelerationStructureKHR) \
+        V(vkCmdCopyAccelerationStructureToMemoryKHR) \
+        V(vkCmdCopyMemoryToAccelerationStructureKHR) \
+        V(vkCmdWriteAccelerationStructuresPropertiesKHR) \
+        V(vkCmdTraceRaysKHR) \
+        V(vkCmdTraceRaysIndirectKHR) \
     V(vkCreateFence) \
     V(vkDestroyFence) \
     V(vkGetFenceStatus) \
@@ -120,7 +134,7 @@
     V(vkAcquireNextImageKHR) \
     V(vkQueuePresentKHR) \
     V(vkGetDeviceFaultInfoEXT)\
-    V(vkSetDebugUtilsObjectNameEXT) // ¶ÔÓ¦ SetDebugName
+    V(vkSetDebugUtilsObjectNameEXT) // ï¿½ï¿½Ó¦ SetDebugName
 
 #define DECLARE_PFN(name) static PFN_##name name = nullptr;
 
@@ -143,17 +157,17 @@ using namespace Core;
 namespace VKFunc {
 
     bool InitializeLoader() {
-        // 1. ¼ÓÔØ¶¯Ì¬¿â (LoadLibrary/dlopen) Âß¼­Ê¡ÂÔ...
+        // 1. ï¿½ï¿½ï¿½Ø¶ï¿½Ì¬ï¿½ï¿½ (LoadLibrary/dlopen) ï¿½ß¼ï¿½Ê¡ï¿½ï¿½...
 #if defined(_WIN32)
         vulkanLib = LoadLibraryA("vulkan-1.dll");
 #elif defined(__linux__) || defined(__APPLE__)
         vulkanLib = dlopen("vulkan-1.so", RTLD_LAZY);
 #endif
-        // 2. ¼ÓÔØµ¼³öµÄ»ù´¡º¯Êý
+        // 2. ï¿½ï¿½ï¿½Øµï¿½ï¿½ï¿½ï¿½Ä»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 #define LOAD_EXPORTED(name) name = (PFN_##name)GetProcAddress(vulkanLib, #name);
         VK_EXPORTED_FUNC_LIST(LOAD_EXPORTED)
 #undef LOAD_EXPORTED
-        //3. Ô¤¼ÓÔØÈ«¾Ö½Ó¿Ú
+        //3. Ô¤ï¿½ï¿½ï¿½ï¿½È«ï¿½Ö½Ó¿ï¿½
        vkEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)
             vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties");
 
@@ -223,7 +237,7 @@ namespace VKFunc {
         }
 #endif
     }
-    // ´úÀíº¯Êý£º¸ºÔð¼ÓÔØ²¢µ÷ÓÃ´´½¨º¯Êý
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø²ï¿½ï¿½ï¿½ï¿½Ã´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     bool CreateDebugUtilsMessengerEXT(VkInstance instance,
         const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
         VkDebugUtilsMessengerEXT* pDebugMessenger) {
@@ -235,7 +249,7 @@ namespace VKFunc {
         return false;
     }
 
-    // ´úÀíº¯Êý£º¸ºÔð¼ÓÔØ²¢µ÷ÓÃÏú»Ùº¯Êý
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ùºï¿½ï¿½ï¿½
     void DestroyDebugUtilsMessengerEXT(VkInstance instance,
         VkDebugUtilsMessengerEXT debugMessenger) {
         if (vkDestroyDebugUtilsMessengerEXT) {
@@ -340,8 +354,8 @@ namespace VKFunc {
             if (result != VK_SUCCESS) {
                 fprintf(stderr, "[ERROR] vkDeviceWaitIdle failed with code: %d\n", result);
                 if (result == VK_ERROR_DEVICE_LOST) {
-                    // Ç¿ÖÆ´¥·¢¶Ïµã£¨Windows ÏÂ¿ÉÓÃ __debugbreak()£¬Linux ÏÂÓÃ raise(SIGTRAP) »òÖ±½Ó assert£©
-                    assert(false && "GPU ±ÀÀ££ºDevice Lost ·¢ÉúÔÚÁËÕâ´Î WaitIdle Ö®Ç°£¡");
+                    // Ç¿ï¿½Æ´ï¿½ï¿½ï¿½ï¿½Ïµã£¨Windows ï¿½Â¿ï¿½ï¿½ï¿½ __debugbreak()ï¿½ï¿½Linux ï¿½ï¿½ï¿½ï¿½ raise(SIGTRAP) ï¿½ï¿½Ö±ï¿½ï¿½ assertï¿½ï¿½
+                    assert(false && "GPU ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Device Lost ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ WaitIdle Ö®Ç°ï¿½ï¿½");
                 }
             }
         }
@@ -608,8 +622,67 @@ namespace VKFunc {
         return res == VK_SUCCESS;
     }
 
+    bool CreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR* pCreateInfos, VkPipeline* pPipelines) {
+#ifdef DEBUG_INFO
+        if (!device || !pCreateInfos || !pPipelines) return false;
+#endif
+        VkResult res = vkCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, nullptr, pPipelines);
+#ifdef DEBUG_INFO
+        if (res != VK_SUCCESS) { LOG_ERROR("VK: CreateRayTracingPipelinesKHR failed: %d", res); }
+#endif
+        return res == VK_SUCCESS;
+    }
+    
+    bool GetRayTracingShaderGroupHandlesKHR(VkDevice device, VkPipeline pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData) {
+#ifdef DEBUG_INFO
+        if (!device || !pipeline || !pData) return false;
+#endif
+        VkResult res = vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData);
+#ifdef DEBUG_INFO
+        if (res != VK_SUCCESS) { LOG_ERROR("VK: GetRayTracingShaderGroupHandlesKHR failed: %d", res); }
+#endif
+        return res == VK_SUCCESS;
+    }
+
     void DestroyPipeline(VkDevice device, VkPipeline pipeline) {
         if (device && pipeline) vkDestroyPipeline(device, pipeline, nullptr);
+    }
+
+    bool CreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo, VkAccelerationStructureKHR* pAccelerationStructure) {
+#ifdef DEBUG_INFO
+        if (!device || !pCreateInfo || !pAccelerationStructure) return false;
+#endif
+        VkResult res = vkCreateAccelerationStructureKHR(device, pCreateInfo, nullptr, pAccelerationStructure);
+#ifdef DEBUG_INFO
+        if (res != VK_SUCCESS) { LOG_ERROR("VK: CreateAccelerationStructureKHR failed: %d", res); }
+#endif
+        return res == VK_SUCCESS;
+    }
+
+    void DestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure) {
+        if (device && accelerationStructure) vkDestroyAccelerationStructureKHR(device, accelerationStructure, nullptr);
+    }
+
+    void GetAccelerationStructureBuildSizesKHR(VkDevice device, VkAccelerationStructureBuildTypeKHR buildType, const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo, const uint32_t* pMaxPrimitiveCounts, VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
+        if (device && pBuildInfo && pMaxPrimitiveCounts && pSizeInfo) {
+            vkGetAccelerationStructureBuildSizesKHR(device, buildType, pBuildInfo, pMaxPrimitiveCounts, pSizeInfo);
+        }
+    }
+
+    void CmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos) {
+        if (commandBuffer && pInfos && ppBuildRangeInfos) {
+            vkCmdBuildAccelerationStructuresKHR(commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
+        }
+    }
+
+    VkDeviceAddress GetAccelerationStructureDeviceAddressKHR(VkDevice device, const VkAccelerationStructureDeviceAddressInfoKHR* pInfo) {
+        if (!device || !pInfo) return 0;
+        return vkGetAccelerationStructureDeviceAddressKHR(device, pInfo);
+    }
+
+    VkDeviceAddress GetBufferDeviceAddress(VkDevice device, const VkBufferDeviceAddressInfo* pInfo) {
+        if (!device || !pInfo) return 0;
+        return vkGetBufferDeviceAddress(device, pInfo);
     }
 
     //---
@@ -701,7 +774,7 @@ namespace VKFunc {
         if (commandBuffer) vkResetCommandBuffer(commandBuffer, flags);
     }
 
-    // Ö¸ÁîÂ¼ÖÆ½Ó¿Ú (¾ù°üº¬»ù±¾µÄ¿Õ¼ì²é)
+    // Ö¸ï¿½ï¿½Â¼ï¿½Æ½Ó¿ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿Õ¼ï¿½ï¿½)
     void CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) {
         if (commandBuffer && pipeline) vkCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline);
     }
@@ -768,6 +841,48 @@ namespace VKFunc {
     {
         if (commandBuffer) vkCmdEndRenderPass(commandBuffer);
     }
+
+        void CmdCopyAccelerationStructureKHR(VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureInfoKHR* pInfo)
+        {
+                if (commandBuffer && pInfo) {
+                        vkCmdCopyAccelerationStructureKHR(commandBuffer, pInfo);
+                }
+        }
+
+        void CmdCopyAccelerationStructureToMemoryKHR(VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo)
+        {
+                if (commandBuffer && pInfo) {
+                        vkCmdCopyAccelerationStructureToMemoryKHR(commandBuffer, pInfo);
+                }
+        }
+
+        void CmdCopyMemoryToAccelerationStructureKHR(VkCommandBuffer commandBuffer, const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo)
+        {
+                if (commandBuffer && pInfo) {
+                        vkCmdCopyMemoryToAccelerationStructureKHR(commandBuffer, pInfo);
+                }
+        }
+
+        void CmdWriteAccelerationStructuresPropertiesKHR(VkCommandBuffer commandBuffer, uint32_t accelerationStructureCount, const VkAccelerationStructureKHR* pAccelerationStructures, VkQueryType queryType, VkQueryPool queryPool, uint32_t firstQuery)
+        {
+                if (commandBuffer && pAccelerationStructures && queryPool) {
+                        vkCmdWriteAccelerationStructuresPropertiesKHR(commandBuffer, accelerationStructureCount, pAccelerationStructures, queryType, queryPool, firstQuery);
+                }
+        }
+
+        void CmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth)
+        {
+                if (commandBuffer && pRaygenShaderBindingTable && pMissShaderBindingTable && pHitShaderBindingTable && pCallableShaderBindingTable) {
+                        vkCmdTraceRaysKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
+                }
+        }
+
+        void CmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable, VkDeviceAddress indirectDeviceAddress)
+        {
+                if (commandBuffer && pRaygenShaderBindingTable && pMissShaderBindingTable && pHitShaderBindingTable && pCallableShaderBindingTable) {
+                        vkCmdTraceRaysIndirectKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress);
+                }
+        }
     //----
     bool CreateFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo, VkFence* pFence) {
 #ifdef DEBUG_INFO

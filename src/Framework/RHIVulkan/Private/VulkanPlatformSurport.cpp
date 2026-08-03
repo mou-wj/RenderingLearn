@@ -117,16 +117,6 @@ namespace RHIVulkan{
     std::vector<const char*> VulkanPlatformSupport::GetPlatformWantedDeviceExtentions()
     {
         std::vector<const char*> res;
-#ifdef _WIN32
-        res.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-        //res.push_back("VK_EXT_device_fault");
-#elif defined(__APPLE__)
-        res.push_back(VK_KHR_METAL_SURFACE_EXTENSION_NAME);
-#elif defined(__linux__)
-        res.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
-#else
-        
-#endif
         //
         res.push_back("VK_KHR_maintenance1");
         return res;

@@ -10,6 +10,7 @@
 #include "ThreadInfo.h"
 #include "VulkanQueue.h"
 #include <algorithm> // for std::max
+#include <cstring>
 using namespace Core;
 namespace RHIVulkan{
 
@@ -373,6 +374,404 @@ void VulkanBuffer::DetachView(VulkanViewBase* view)
     {
         views.erase(it);
     }
+}
+
+static bool CreateRawBuffer(
+    VulkanDevice* device,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags memoryProps,
+    VkBuffer& outBuffer,
+    VulkanAllocation& outAllocation)
+{
+    if (!device || size == 0)
+    {
+        return false;
+    }
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkDevice vkDevice = device->GetHandle();
+    if (!VKFunc::CreateBuffer(vkDevice, &bufferInfo, &outBuffer))
+    {
+        return false;
+    }
+
+    VkMemoryRequirements memRequirements{};
+    VKFunc::GetBufferMemoryRequirements(vkDevice, outBuffer, &memRequirements);
+
+    if (!device->GetMemoryManager()->Allocate(memRequirements, memoryProps, outAllocation))
+    {
+        VKFunc::DestroyBuffer(vkDevice, outBuffer);
+        outBuffer = VK_NULL_HANDLE;
+        return false;
+    }
+
+    outAllocation.SetBufferHandle(outBuffer);
+
+    if (!VKFunc::BindBufferMemory(vkDevice, outBuffer, outAllocation.GetMemory(), outAllocation.GetOffset()))
+    {
+        device->GetMemoryManager()->Free(outAllocation);
+        outAllocation = VulkanAllocation{};
+        VKFunc::DestroyBuffer(vkDevice, outBuffer);
+        outBuffer = VK_NULL_HANDLE;
+        return false;
+    }
+
+    return true;
+}
+
+VulkanRayTracingGeometry::VulkanRayTracingGeometry(VulkanDevice* device, const RHIRayTracingGeometryDesc& Desc) : Device(device)
+{
+    SetGeometryDesc(Desc);
+}
+
+VulkanRayTracingGeometry::~VulkanRayTracingGeometry()
+{
+    DestroyAccelerationStructure();
+}
+
+void VulkanRayTracingGeometry::DestroyAccelerationStructure()
+{
+    if (Device && AccelerationStructure != VK_NULL_HANDLE)
+    {
+        VKFunc::DestroyAccelerationStructureKHR(Device->GetHandle(), AccelerationStructure);
+        AccelerationStructure = VK_NULL_HANDLE;
+        DeviceAddress = 0;
+    }
+    DestroyStorageBuffer();
+}
+
+void VulkanRayTracingGeometry::DestroyStorageBuffer()
+{
+    if (!Device)
+    {
+        return;
+    }
+
+    if (StorageBuffer != VK_NULL_HANDLE)
+    {
+        Device->EnqueueBufferForDeletion(StorageBuffer);
+        StorageBuffer = VK_NULL_HANDLE;
+    }
+
+    if (StorageAllocation.GetMemory() != VK_NULL_HANDLE)
+    {
+        Device->GetMemoryManager()->Free(StorageAllocation);
+        StorageAllocation = VulkanAllocation{};
+    }
+}
+
+void VulkanRayTracingGeometry::SetGeometryDesc(const RHIRayTracingGeometryDesc& Desc)
+{
+    GeometryDesc = Desc;
+    DestroyAccelerationStructure();
+
+    if (!Device || !GeometryDesc.VertexBuffer || !GeometryDesc.IndexBuffer)
+    {
+        return;
+    }
+
+    VulkanBuffer* vertexBuffer = static_cast<VulkanBuffer*>(GeometryDesc.VertexBuffer);
+    VulkanBuffer* indexBuffer = static_cast<VulkanBuffer*>(GeometryDesc.IndexBuffer);
+    if (!vertexBuffer || !indexBuffer || GeometryDesc.IndexCount < 3 || GeometryDesc.VertexCount == 0)
+    {
+        return;
+    }
+
+    VkBufferDeviceAddressInfo vertexAddressInfo{};
+    vertexAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    vertexAddressInfo.buffer = vertexBuffer->GetHandle();
+
+    VkBufferDeviceAddressInfo indexAddressInfo{};
+    indexAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    indexAddressInfo.buffer = indexBuffer->GetHandle();
+
+    VkAccelerationStructureGeometryTrianglesDataKHR trianglesData{};
+    trianglesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+    trianglesData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    trianglesData.vertexData.deviceAddress = VKFunc::GetBufferDeviceAddress(Device->GetHandle(), &vertexAddressInfo);
+    trianglesData.vertexStride = GeometryDesc.VertexStride;
+    trianglesData.maxVertex = GeometryDesc.VertexCount - 1;
+    trianglesData.indexType = indexBuffer->GetDesc().Stride == 4 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+    trianglesData.indexData.deviceAddress = VKFunc::GetBufferDeviceAddress(Device->GetHandle(), &indexAddressInfo);
+    trianglesData.transformData.deviceAddress = 0;
+
+    GeometryInfo = {};
+    GeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    GeometryInfo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    GeometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    GeometryInfo.geometry.triangles = trianglesData;
+
+    const uint32_t primitiveCount = GeometryDesc.IndexCount / 3;
+    BuildRangeInfo = {};
+    BuildRangeInfo.primitiveCount = primitiveCount;
+    BuildRangeInfo.primitiveOffset = 0;
+    BuildRangeInfo.firstVertex = 0;
+    BuildRangeInfo.transformOffset = 0;
+
+    VkBuildAccelerationStructureFlagsKHR buildFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    if (GeometryDesc.AllowUpdate)
+    {
+        buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+    }
+    if (GeometryDesc.AllowCompaction)
+    {
+        buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+    }
+
+    VkAccelerationStructureBuildGeometryInfoKHR buildInfo{};
+    buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    buildInfo.flags = buildFlags;
+    buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    buildInfo.geometryCount = 1;
+    buildInfo.pGeometries = &GeometryInfo;
+
+    VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
+    sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    VKFunc::GetAccelerationStructureBuildSizesKHR(
+        Device->GetHandle(),
+        VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+        &buildInfo,
+        &primitiveCount,
+        &sizeInfo);
+
+    SizeInfo.ResultSize = sizeInfo.accelerationStructureSize;
+    SizeInfo.BuildScratchSize = sizeInfo.buildScratchSize;
+    SizeInfo.UpdateScratchSize = sizeInfo.updateScratchSize;
+
+    if (!CreateRawBuffer(
+        Device,
+        SizeInfo.ResultSize,
+        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        StorageBuffer,
+        StorageAllocation))
+    {
+        return;
+    }
+
+    VkAccelerationStructureCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    createInfo.buffer = StorageBuffer;
+    createInfo.offset = 0;
+    createInfo.size = SizeInfo.ResultSize;
+    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+
+    if (!VKFunc::CreateAccelerationStructureKHR(Device->GetHandle(), &createInfo, &AccelerationStructure))
+    {
+        DestroyStorageBuffer();
+        return;
+    }
+
+    VkAccelerationStructureDeviceAddressInfoKHR addressInfo{};
+    addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    addressInfo.accelerationStructure = AccelerationStructure;
+    DeviceAddress = VKFunc::GetAccelerationStructureDeviceAddressKHR(Device->GetHandle(), &addressInfo);
+}
+
+
+VulkanRayTracingInstance::VulkanRayTracingInstance(VulkanDevice* device, const RHIRayTracingInstancesDesc& Instances) : Device(device)
+{
+    SetInstancesDesc(Instances);
+}
+
+VulkanRayTracingInstance::~VulkanRayTracingInstance()
+{
+    DestroyAccelerationStructure();
+}
+
+void VulkanRayTracingInstance::DestroyAccelerationStructure()
+{
+    if (Device && AccelerationStructure != VK_NULL_HANDLE)
+    {
+        VKFunc::DestroyAccelerationStructureKHR(Device->GetHandle(), AccelerationStructure);
+        AccelerationStructure = VK_NULL_HANDLE;
+        DeviceAddress = 0;
+    }
+    DestroyInstanceBuffer();
+    DestroyStorageBuffer();
+}
+
+void VulkanRayTracingInstance::DestroyStorageBuffer()
+{
+    if (!Device)
+    {
+        return;
+    }
+
+    if (StorageBuffer != VK_NULL_HANDLE)
+    {
+        Device->EnqueueBufferForDeletion(StorageBuffer);
+        StorageBuffer = VK_NULL_HANDLE;
+    }
+
+    if (StorageAllocation.GetMemory() != VK_NULL_HANDLE)
+    {
+        Device->GetMemoryManager()->Free(StorageAllocation);
+        StorageAllocation = VulkanAllocation{};
+    }
+}
+
+void VulkanRayTracingInstance::DestroyInstanceBuffer()
+{
+    if (!Device)
+    {
+        return;
+    }
+
+    if (InstanceBuffer != VK_NULL_HANDLE)
+    {
+        Device->EnqueueBufferForDeletion(InstanceBuffer);
+        InstanceBuffer = VK_NULL_HANDLE;
+    }
+
+    if (InstanceAllocation.GetMemory() != VK_NULL_HANDLE)
+    {
+        Device->GetMemoryManager()->Free(InstanceAllocation);
+        InstanceAllocation = VulkanAllocation{};
+    }
+}
+
+void VulkanRayTracingInstance::SetInstancesDesc(const RHIRayTracingInstancesDesc& Desc)
+{
+
+    auto& Instances = Desc.Instances;
+    DestroyAccelerationStructure();
+
+    if (!Device || Instances.empty())
+    {
+        return;
+    }
+
+    std::vector<VkAccelerationStructureInstanceKHR> vkInstances;
+    vkInstances.reserve(Instances.size());
+
+    for (const RHIRayTracingInstanceDesc& instance : Instances)
+    {
+        VkAccelerationStructureInstanceKHR vkInstance{};
+        vkInstance.instanceCustomIndex = instance.InstanceID;
+        vkInstance.mask = instance.Mask;
+        vkInstance.instanceShaderBindingTableRecordOffset = 0;
+        vkInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+
+        for (uint32_t row = 0; row < 3; ++row)
+        {
+            for (uint32_t col = 0; col < 4; ++col)
+            {
+                vkInstance.transform.matrix[row][col] = instance.Transform(row, col);
+            }
+        }
+
+        auto* vkGeometry = dynamic_cast<VulkanRayTracingGeometry*>(instance.Geometry);
+        vkInstance.accelerationStructureReference = vkGeometry ? vkGeometry->GetDeviceAddress() : 0;
+        vkInstances.push_back(vkInstance);
+    }
+
+    const VkDeviceSize instanceBufferSize = sizeof(VkAccelerationStructureInstanceKHR) * vkInstances.size();
+    if (!CreateRawBuffer(
+        Device,
+        instanceBufferSize,
+        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        InstanceBuffer,
+        InstanceAllocation))
+    {
+        return;
+    }
+
+    void* mapped = nullptr;
+    if (!VKFunc::MapMemory(Device->GetHandle(), InstanceAllocation.GetMemory(), InstanceAllocation.GetOffset(), instanceBufferSize, 0, &mapped) || mapped == nullptr)
+    {
+        DestroyInstanceBuffer();
+        return;
+    }
+
+    memcpy(mapped, vkInstances.data(), static_cast<size_t>(instanceBufferSize));
+    VKFunc::UnmapMemory(Device->GetHandle(), InstanceAllocation.GetMemory());
+
+    VkBufferDeviceAddressInfo instanceAddressInfo{};
+    instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    instanceAddressInfo.buffer = InstanceBuffer;
+
+    GeometryInfo = {};
+    GeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    GeometryInfo.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    GeometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    GeometryInfo.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    GeometryInfo.geometry.instances.arrayOfPointers = VK_FALSE;
+    GeometryInfo.geometry.instances.data.deviceAddress = VKFunc::GetBufferDeviceAddress(Device->GetHandle(), &instanceAddressInfo);
+
+    const uint32_t primitiveCount = static_cast<uint32_t>(Instances.size());
+    BuildRangeInfo = {};
+    BuildRangeInfo.primitiveCount = primitiveCount;
+    BuildRangeInfo.primitiveOffset = 0;
+    BuildRangeInfo.firstVertex = 0;
+    BuildRangeInfo.transformOffset = 0;
+
+    VkAccelerationStructureBuildGeometryInfoKHR buildInfo{};
+    buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    buildInfo.geometryCount = 1;
+    buildInfo.pGeometries = &GeometryInfo;
+
+    VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
+    sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    VKFunc::GetAccelerationStructureBuildSizesKHR(
+        Device->GetHandle(),
+        VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+        &buildInfo,
+        &primitiveCount,
+        &sizeInfo);
+
+    SizeInfo.ResultSize = sizeInfo.accelerationStructureSize;
+    SizeInfo.BuildScratchSize = sizeInfo.buildScratchSize;
+    SizeInfo.UpdateScratchSize = sizeInfo.updateScratchSize;
+
+    if (!CreateRawBuffer(
+        Device,
+        SizeInfo.ResultSize,
+        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        StorageBuffer,
+        StorageAllocation))
+    {
+        DestroyInstanceBuffer();
+        return;
+    }
+
+    VkAccelerationStructureCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    createInfo.buffer = StorageBuffer;
+    createInfo.offset = 0;
+    createInfo.size = SizeInfo.ResultSize;
+    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+
+    if (!VKFunc::CreateAccelerationStructureKHR(Device->GetHandle(), &createInfo, &AccelerationStructure))
+    {
+        DestroyInstanceBuffer();
+        DestroyStorageBuffer();
+        return;
+    }
+
+    VkAccelerationStructureDeviceAddressInfoKHR addressInfo{};
+    addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    addressInfo.accelerationStructure = AccelerationStructure;
+    DeviceAddress = VKFunc::GetAccelerationStructureDeviceAddressKHR(Device->GetHandle(), &addressInfo);
 }
 
 VulkanShaderResourceView::VulkanShaderResourceView(VulkanDevice* device,

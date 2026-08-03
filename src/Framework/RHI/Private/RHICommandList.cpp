@@ -262,14 +262,48 @@ void RHICommandSetRayTracingPipelineState::Execute(RHICommandListBase& cmdList)
     }
 }
 
-void RHICommandSetShaderTable::Execute(RHICommandListBase& cmdList)
+RHICommandSetRayTracingAccelerationStructure::RHICommandSetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure)
+    : AccelerationStructure(accelerationStructure)
+{
+}
+
+void RHICommandSetRayTracingAccelerationStructure::Execute(RHICommandListBase& cmdList)
 {
     auto* graphicContext = dynamic_cast<RHIGraphicContex*>(cmdList.GetContext());
     if (graphicContext)
     {
-        graphicContext->SetShaderTable();
+        graphicContext->SetRayTracingAccelerationStructure(AccelerationStructure);
     }
 }
+
+RHICommandBuildAccelerationStructure::RHICommandBuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)
+    : AccelerationStructure(accelerationStructure)
+{
+}
+
+void RHICommandBuildAccelerationStructure::Execute(RHICommandListBase& cmdList)
+{
+    auto* graphicContext = dynamic_cast<RHIGraphicContex*>(cmdList.GetContext());
+    if (graphicContext)
+    {
+        graphicContext->BuildAccelerationStructure(AccelerationStructure);
+    }
+}
+
+RHICommandUpdateAccelerationStructure::RHICommandUpdateAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)
+    : AccelerationStructure(accelerationStructure)
+{
+}
+
+void RHICommandUpdateAccelerationStructure::Execute(RHICommandListBase& cmdList)
+{
+    auto* graphicContext = dynamic_cast<RHIGraphicContex*>(cmdList.GetContext());
+    if (graphicContext)
+    {
+        graphicContext->UpdateAccelerationStructure(AccelerationStructure);
+    }
+}
+
 
 RHICommandListBase::RHICommandListBase(RHIContextBase* context)
     : Context(context)
@@ -426,10 +460,21 @@ void RHIGraphicCommandList::SetRayTracingPipelineState(RHIRayTracingPipelineStat
     AddCommand<RHICommandSetRayTracingPipelineState>(pipelineState);
 }
 
-void RHIGraphicCommandList::SetShaderTable()
+void RHIGraphicCommandList::SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure)
 {
-    AddCommand<RHICommandSetShaderTable>();
+    AddCommand<RHICommandSetRayTracingAccelerationStructure>(accelerationStructure);
 }
+
+void RHIGraphicCommandList::BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)
+{
+    AddCommand<RHICommandBuildAccelerationStructure>(accelerationStructure);
+}
+
+void RHIGraphicCommandList::UpdateAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)
+{
+    AddCommand<RHICommandUpdateAccelerationStructure>(accelerationStructure);
+}
+
 
 void RHIGraphicCommandList::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
 {

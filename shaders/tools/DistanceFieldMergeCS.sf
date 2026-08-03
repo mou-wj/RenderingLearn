@@ -1,23 +1,24 @@
 #include "/Generated/ShaderParameters/DistanceFieldMergeParameters.sf"
 
-bool IsInsideSource(DistanceFieldSourceParameters SourceData, float3 WorldPosition)
-{
-    return all(WorldPosition >= SourceData.BoundsMin) && all(WorldPosition <= SourceData.BoundsMax);
-}
-
-
-float3 WorldToSourceUV(DistanceFieldSourceParameters SourceData, float3 WorldPosition)
-{
-    float3 LocalPosition = mul(SourceData.WorldToLocal, float4(WorldPosition,1.0)).xyz;
-    return (LocalPosition - SourceData.BoundsMin) / (SourceData.BoundsMax - SourceData.BoundsMin);
-}
 
 
 float SampleSourceSDF(DistanceFieldSourceParameters SourceData, float3 WorldPosition)
 {
-    float3 LocalUVW = WorldToSourceUV(SourceData, WorldPosition);
-    float3 AtlasUVW = (float3(SourceData.Offset) + LocalUVW * float3(SourceData.InputResolution)) / float3(InputAtlasResolution);
-    return InputSDFTexture.SampleLevel(InputSDFSampler, AtlasUVW, 0);
+    float3 LocalPosition = mul(SourceData.WorldToLocal, float4(WorldPosition,1.0)).xyz;
+    float3 BoundsSize = SourceData.BoundsMax - SourceData.BoundsMin;
+    float3 LocalUVW = (LocalPosition - SourceData.BoundsMin) / BoundsSize;
+
+    if(all(LocalPosition >= SourceData.BoundsMin) && all(LocalPosition <= SourceData.BoundsMax))
+    {
+        float3 AtlasUVW = (float3(SourceData.Offset) + LocalUVW * float3(SourceData.InputResolution)) / float3(InputAtlasResolution);
+        return InputSDFTexture.SampleLevel(InputSDFSampler, AtlasUVW, 0);
+    }
+
+    float3 CenterLocal = (SourceData.BoundsMin + SourceData.BoundsMax) * 0.5;
+    float3 CenterUVW = (CenterLocal - SourceData.BoundsMin) / BoundsSize;
+    float3 CenterAtlasUVW = (float3(SourceData.Offset) + CenterUVW * float3(SourceData.InputResolution)) / float3(InputAtlasResolution);
+    float CenterDistance = InputSDFTexture.SampleLevel(InputSDFSampler, CenterAtlasUVW, 0);
+    return CenterDistance + length(LocalPosition - CenterLocal);
 }
 
 
@@ -39,9 +40,6 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupID : SV_Gro
         for(uint i = 0; i < SourceCount; i++)
         {
             DistanceFieldSourceParameters SourceData = Source[i];
-
-            if(!IsInsideSource(SourceData, WorldPosition))
-                continue;
 
             float SourceDistance = SampleSourceSDF(SourceData, WorldPosition);
 

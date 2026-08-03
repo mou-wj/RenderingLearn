@@ -761,6 +761,23 @@ namespace RHIVulkan {
         VulkanGraphicsPipelineState* Pipeline;
     };
 
+    class VulkanRayTracingPipelineDescriptorState
+        : public VulkanCommonPipelineDescriptorState
+    {
+    public:
+        VulkanRayTracingPipelineDescriptorState(
+            VulkanDevice* device,
+            VulkanRayTracingPipeline* pipeline,
+            VulkanCommandContext* context)
+            : VulkanCommonPipelineDescriptorState(device, pipeline, context)
+            , Pipeline(pipeline)
+        {
+            pipelineBindingPoint = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
+        }
+    private:
+        VulkanRayTracingPipeline* Pipeline;
+    };
+
     class VulkanPendingComputeState
     {
     public:
@@ -1163,6 +1180,256 @@ namespace RHIVulkan {
 		VulkanCommandContext* Context = nullptr;
     };
 
+    class VulkanPendingRayTracingState
+    {
+    public:
+        VulkanPendingRayTracingState(VulkanDevice* device, VulkanCommandContext* context)
+            : Device(device)
+            , Context(context)
+        {
+        }
 
+        void Reset()
+        {
+            CurrentPipeline = nullptr;
+            CurrentAccelerationStructure = nullptr;
+            ScratchBuffer.reset();
+            ScratchBufferSize = 0;
+        }
+
+        void SetPipeline(VulkanRayTracingPipeline* pipeline)
+        {
+            CurrentPipeline = pipeline;
+            auto it = States.find(pipeline);
+            if (it == States.end())
+            {
+                auto state = std::make_unique<VulkanRayTracingPipelineDescriptorState>(
+                    Device, pipeline, Context);
+                CurrentState = state.get();
+                States[pipeline] = std::move(state);
+            }
+            else
+            {
+                CurrentState = it->second.get();
+            }
+        }
+
+        // �� VulkanPendingGfxState ��
+//--------------------------------------------------------
+// ʹ�� ShaderFrequency + parameterId ���� Texture
+//--------------------------------------------------------
+        void SetTexture(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanTexture* texture)
+        {
+            if (!CurrentState)
+                return;
+
+            uint32_t setIndex = 0;
+            uint32_t binding = 0;
+            if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
+            {
+                CurrentState->SetTexture(setIndex, binding, elementId, texture);
+            }
+        }
+
+        //--------------------------------------------------------
+        // ʹ�� ShaderFrequency + parameterId ���� sampler
+        //--------------------------------------------------------
+        void SetSampler(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanSampler* sampler)
+        {
+            if (!CurrentState)
+                return;
+            uint32_t setIndex = 0;
+            uint32_t binding = 0;
+            if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
+            {
+                CurrentState->SetSampler(setIndex, binding, elementId, sampler);
+            }
+        }
+
+        //--------------------------------------------------------
+        // ʹ�� ShaderFrequency + parameterId ���� SRV
+        //--------------------------------------------------------
+        void SetSRV(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanShaderResourceView* srv)
+        {
+            if (!CurrentState)
+                return;
+
+            uint32_t setIndex = 0;
+            uint32_t binding = 0;
+            if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
+            {
+                CurrentState->SetSRV(setIndex, binding, elementId, srv);
+            }
+        }
+
+        //--------------------------------------------------------
+        // ʹ�� ShaderFrequency + parameterId ���� UAV
+        //--------------------------------------------------------
+        void SetUAV(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanUnorderedAccessView* uav)
+        {
+            if (!CurrentState)
+                return;
+
+            uint32_t setIndex = 0;
+            uint32_t binding = 0;
+            if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
+            {
+                CurrentState->SetUAV(setIndex, binding, elementId, uav);
+            }
+        }
+
+        //--------------------------------------------------------
+        // ʹ�� ShaderFrequency + parameterId ���� UniformBuffer
+        //--------------------------------------------------------
+        void SetUniformBuffer(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanBuffer* uniformBuffer)
+        {
+            if (!CurrentState)
+                return;
+
+            uint32_t setIndex = 0;
+            uint32_t binding = 0;
+            if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
+            {
+                CurrentState->MarkUiformBufferUseExternal(frequency, setIndex, binding);
+                CurrentState->SetUniformBuffer(setIndex, binding, elementId, uniformBuffer->GetHandle(), 0, uniformBuffer->GetSize());
+            }
+        }
+        void SetShaderParameter(ERHIShaderFrequency frequency, uint32_t BufferIndex, uint32_t BaseIndex, uint32_t NumBytes, const void* NewValue) {
+            if (!CurrentState)
+                return;
+            CurrentState->SetPackedGlobalParameter(frequency, BufferIndex, BaseIndex, NumBytes, NewValue);
+        }
+
+        void SetAccelerationStructure(VulkanRayTracingInstance* accelerationStructure)
+        {
+            CurrentAccelerationStructure = accelerationStructure;
+        }
+
+        bool HasPipeline() const
+        {
+            return CurrentPipeline != nullptr;
+        }
+
+        bool HasAccelerationStructure() const
+        {
+            return CurrentAccelerationStructure != nullptr;
+        }
+
+        void PrepareForTraceRays(VulkanCommandBuffer* cmd)
+        {
+            if (!cmd || !CurrentPipeline)
+            {
+                return;
+            }
+
+            VKFunc::CmdBindPipeline(
+                cmd->GetHandle(),
+                VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                CurrentPipeline->GetHandle());
+        }
+
+        void BuildAccelerationStructure(VulkanCommandBuffer* cmd, RHIRayTracingAccelerationStructure* accelerationStructure, bool bUpdate)
+        {
+            if (!cmd || !accelerationStructure || !Device)
+            {
+                return;
+            }
+
+            VulkanRayTracingGeometry* blas = dynamic_cast<VulkanRayTracingGeometry*>(accelerationStructure);
+            VulkanRayTracingInstance* tlas = dynamic_cast<VulkanRayTracingInstance*>(accelerationStructure);
+            if (!blas && !tlas)
+            {
+                return;
+            }
+
+            VkAccelerationStructureBuildGeometryInfoKHR buildInfo{};
+            buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+            buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            buildInfo.mode = bUpdate ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+            buildInfo.geometryCount = 1;
+
+            const VkAccelerationStructureBuildRangeInfoKHR* pRangeInfo = nullptr;
+            VkDeviceSize requiredScratchSize = 0;
+
+            if (blas)
+            {
+                buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+                buildInfo.dstAccelerationStructure = blas->GetHandle();
+                buildInfo.srcAccelerationStructure = bUpdate ? blas->GetHandle() : VK_NULL_HANDLE;
+                buildInfo.pGeometries = &blas->GetGeometryInfo();
+                pRangeInfo = &blas->GetBuildRangeInfo();
+                requiredScratchSize = bUpdate ? blas->GetSizeInfo().UpdateScratchSize : blas->GetSizeInfo().BuildScratchSize;
+            }
+            else
+            {
+                buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+                buildInfo.dstAccelerationStructure = tlas->GetHandle();
+                buildInfo.srcAccelerationStructure = bUpdate ? tlas->GetHandle() : VK_NULL_HANDLE;
+                buildInfo.pGeometries = &tlas->GetGeometryInfo();
+                pRangeInfo = &tlas->GetBuildRangeInfo();
+                requiredScratchSize = bUpdate ? tlas->GetSizeInfo().UpdateScratchSize : tlas->GetSizeInfo().BuildScratchSize;
+            }
+
+            if (requiredScratchSize == 0 || !pRangeInfo)
+            {
+                return;
+            }
+
+            EnsureScratchBuffer(requiredScratchSize);
+            if (!ScratchBuffer)
+            {
+                return;
+            }
+
+            VkBufferDeviceAddressInfo addressInfo{};
+            addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+            addressInfo.buffer = ScratchBuffer->GetHandle();
+            buildInfo.scratchData.deviceAddress = VKFunc::GetBufferDeviceAddress(Device->GetHandle(), &addressInfo);
+            if (buildInfo.scratchData.deviceAddress == 0)
+            {
+                return;
+            }
+
+            const VkAccelerationStructureBuildRangeInfoKHR* buildRangeInfos[] = { pRangeInfo };
+            VKFunc::CmdBuildAccelerationStructuresKHR(
+                cmd->GetHandle(),
+                1,
+                &buildInfo,
+                buildRangeInfos);
+        }
+
+    private:
+        void EnsureScratchBuffer(VkDeviceSize requiredSize)
+        {
+            if (ScratchBuffer && ScratchBufferSize >= requiredSize)
+            {
+                return;
+            }
+
+            RHIBufferDesc desc{};
+            desc.Size = requiredSize;
+            desc.Stride = 0;
+            desc.Usage = ERHIBufferUsageFlag::RawBuffer |
+                ERHIBufferUsageFlag::UnorderedAccess |
+                ERHIBufferUsageFlag::ShaderResource |
+                ERHIBufferUsageFlag::TransferSrc |
+                ERHIBufferUsageFlag::TransferDst;
+            desc.bCPUAccessible = false;
+            desc.InitialQueueType = EQueueType::Graphics;
+
+            ScratchBuffer = std::make_shared<VulkanBuffer>(Device, desc);
+            ScratchBufferSize = requiredSize;
+        }
+
+    private:
+        VulkanDevice* Device = nullptr;
+        VulkanCommandContext* Context = nullptr;
+        VulkanRayTracingPipeline* CurrentPipeline = nullptr;
+        VulkanRayTracingPipelineDescriptorState* CurrentState = nullptr;
+        VulkanRayTracingInstance* CurrentAccelerationStructure = nullptr;
+        std::unordered_map<VulkanRayTracingPipeline*, std::unique_ptr<VulkanRayTracingPipelineDescriptorState>> States;
+        std::shared_ptr < VulkanBuffer> ScratchBuffer;
+        VkDeviceSize ScratchBufferSize = 0;
+    };
 
 }

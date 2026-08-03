@@ -92,7 +92,104 @@ public:
     explicit RHIUnorderedAccessView(RHIViewableResource* Resource)
         : RHIResourceView(Resource),RHIResource(ERHIResourceType::UnorderedAccessView) {}
 };
+struct RayTracingAccelerationStructureSizeInfo
+{
+    uint64_t ResultSize = 0;
+    uint64_t BuildScratchSize = 0;
+    uint64_t UpdateScratchSize = 0;
+};
+enum class ERayTracingAccelerationStructureType {
+    BottomLevel,
+    TopLevel
+};
 
+class RHI_API RHIRayTracingAccelerationStructure : public RHIResource
+{
+public:
+    RHIRayTracingAccelerationStructure() : RHIResource(ERHIResourceType::RayTracingAccelerationStructure) {}
+
+    const RayTracingAccelerationStructureSizeInfo& GetSizeInfo() const { return SizeInfo; }
+
+    virtual ERayTracingAccelerationStructureType GetType() const = 0;
+protected:
+    RayTracingAccelerationStructureSizeInfo SizeInfo;
+
+};
+struct RHIRayTracingGeometryDesc
+{
+    RHIBuffer* VertexBuffer = nullptr;
+    RHIBuffer* IndexBuffer = nullptr;
+
+    uint32_t VertexStride = 0;
+
+    uint32_t VertexCount = 0;
+    uint32_t IndexCount = 0;
+
+    bool AllowUpdate = false;
+    bool AllowCompaction = false;
+};
+class RHI_API RHIRayTracingGeometry : public RHIRayTracingAccelerationStructure
+{
+public:
+    RHIRayTracingGeometry()
+        : RHIRayTracingAccelerationStructure()
+    {
+    }
+
+    virtual ~RHIRayTracingGeometry() = default;
+
+    virtual void SetGeometryDesc(
+        const RHIRayTracingGeometryDesc& Desc) = 0;
+
+    const RHIRayTracingGeometryDesc& GetGeometryDesc() const
+    {
+        return GeometryDesc;
+    }
+    virtual ERayTracingAccelerationStructureType GetType() const {
+        return ERayTracingAccelerationStructureType::BottomLevel;
+    }
+
+protected:
+    RHIRayTracingGeometryDesc GeometryDesc;
+};
+struct RHIRayTracingInstanceDesc
+{
+    RHIRayTracingGeometry* Geometry = nullptr;
+
+    Core::Float4x4 Transform;
+
+    uint32_t InstanceID = 0;
+
+    uint8_t Mask = 0xff;
+
+};
+struct RHIRayTracingInstancesDesc
+{
+    std::vector<RHIRayTracingInstanceDesc> Instances;
+};
+class RHI_API RHIRayTracingInstance : public RHIRayTracingAccelerationStructure
+{
+public:
+    RHIRayTracingInstance()
+        : RHIRayTracingAccelerationStructure()
+    {
+    }
+
+    virtual ~RHIRayTracingInstance() = default;
+
+    virtual void SetInstancesDesc(
+        const RHIRayTracingInstancesDesc& Instances) = 0;
+
+    const RHIRayTracingInstancesDesc& GetInstancesDesc() const
+    {
+        return Instances;
+    }
+    virtual ERayTracingAccelerationStructureType GetType() const {
+        return ERayTracingAccelerationStructureType::TopLevel;
+    }
+protected:
+    RHIRayTracingInstancesDesc Instances;
+};
 
 class RHIStagingBuffer
 {
@@ -211,9 +308,16 @@ public:
     }
     virtual ~RHITaskShader() = default;
 };
+class RHI_API RHIRayTracingShader : public RHIShader
+{
+public:
+	RHIRayTracingShader() {
+	}
+	virtual ~RHIRayTracingShader() = default;
+};
 
 // 光线追踪管线着色器
-class RHI_API RHIRayGenShader : public RHIShader
+class RHI_API RHIRayGenShader : public RHIRayTracingShader
 {
 public:
     RHIRayGenShader() {
@@ -223,7 +327,7 @@ public:
     virtual ~RHIRayGenShader() = default;
 };
 
-class RHI_API RHICloseHitShader : public RHIShader
+class RHI_API RHICloseHitShader : public RHIRayTracingShader
 {
 public:
     RHICloseHitShader() {
@@ -233,7 +337,7 @@ public:
     virtual ~RHICloseHitShader() = default;
 };
 
-class RHI_API RHIMissShader : public RHIShader
+class RHI_API RHIMissShader : public RHIRayTracingShader
 {
 public:
     RHIMissShader() {
@@ -243,7 +347,7 @@ public:
     virtual ~RHIMissShader() = default;
 };
 
-class RHI_API RHIAnyHitShader : public RHIShader
+class RHI_API RHIAnyHitShader : public RHIRayTracingShader
 {
 public:
     RHIAnyHitShader() {
@@ -253,7 +357,7 @@ public:
     virtual ~RHIAnyHitShader() = default;
 };
 
-class RHI_API RHIIntersectionShader : public RHIShader
+class RHI_API RHIIntersectionShader : public RHIRayTracingShader
 {
 public:
     RHIIntersectionShader() {
@@ -263,7 +367,7 @@ public:
     virtual ~RHIIntersectionShader() = default;
 };
 
-class RHI_API RHICallableShader : public RHIShader
+class RHI_API RHICallableShader : public RHIRayTracingShader
 {
 public:
     RHICallableShader() {
@@ -350,6 +454,8 @@ using RHIBufferSP = std::shared_ptr<RHIBuffer>;
 using RHIStagingBufferSP = std::shared_ptr<RHIStagingBuffer>;
 using RHIShaderResourceViewSP = std::shared_ptr<RHIShaderResourceView>;
 using RHIUnorderedAccessViewSP = std::shared_ptr<RHIUnorderedAccessView>;
+using RHIRayTracingGeometrySP = std::shared_ptr<RHIRayTracingGeometry>;
+using RHIRayTracingInstanceSP = std::shared_ptr<RHIRayTracingInstance>;
 
 using RHIShaderSP = std::shared_ptr<RHIShader>;
 using RHIVertexShaderSP = std::shared_ptr<RHIVertexShader>;
@@ -479,7 +585,6 @@ protected:
 // Compute Pipeline
 struct RHI_API RHIComputePipelineStateDesc
 {
-    EQueueType InitialQueueType = EQueueType::Compute;
     RHIComputeShader* computeShader;// 指向Compute Shader
     // 可扩展Compute管线特有参数
 };
@@ -498,8 +603,11 @@ protected:
 // RayTracing Pipeline
 struct RHI_API RHIRayTracingPipelineStateDesc
 {
-    EQueueType InitialQueueType = EQueueType::Graphics;
-    // 可扩展RayTracing管线特有参数
+    std::vector<RHIRayTracingShader*> RayGenTable;
+    std::vector<RHIRayTracingShader*> MissTable;
+    std::vector<RHIRayTracingShader*> HitGroupTable;
+    std::vector<RHIRayTracingShader*> CallableTable;
+    std::vector<RHIRayTracingShader*> IntersectTable;
 };
 
 class RHI_API RHIRayTracingPipelineState : public RHIResource

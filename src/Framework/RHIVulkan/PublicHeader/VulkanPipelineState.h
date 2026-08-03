@@ -247,6 +247,7 @@ public:
     ~VulkanRayTracingPipeline();
 
 private:
+    PipelineLayoutInfo BuildPipelineLayoutInfo(const RHIRayTracingPipelineStateDesc& pipelineDesc);
     VkRayTracingPipelineCreateInfoKHR createInfo; // Vulkan-specific create info
 
     void CreatePipeline() override;

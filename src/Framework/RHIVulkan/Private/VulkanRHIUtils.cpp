@@ -326,6 +326,16 @@ namespace RHIVulkan {
         if (EnumHasAnyFlags(Flags, ERHIBufferUsageFlag::TransferDst | ERHIBufferUsageFlag::Staging))
             usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
+        if (EnumHasAnyFlags(Flags,
+            ERHIBufferUsageFlag::RawBuffer |
+            ERHIBufferUsageFlag::Structured |
+            ERHIBufferUsageFlag::ShaderResource |
+            ERHIBufferUsageFlag::UnorderedAccess |
+            ERHIBufferUsageFlag::Indirect))
+        {
+            usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        }
+
         return usage;
     }
 

@@ -58,9 +58,27 @@ namespace RHI
         // ========================
         // RayTracing �ӿ�
         // ========================
-        virtual void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) = 0;
-        virtual void SetShaderTable() = 0;
-        virtual void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) = 0;
+        virtual void SetBatchedShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& parameter) = 0;
+        virtual void SetRayTracingPipelineState(
+            RHIRayTracingPipelineState* pipelineState) = 0;
+
+
+        virtual void SetRayTracingAccelerationStructure(
+            RHIRayTracingInstance* accelerationStructure) = 0;
+
+
+        virtual void BuildAccelerationStructure(
+            RHIRayTracingAccelerationStructure* accelerationStructure) = 0;
+
+
+        virtual void UpdateAccelerationStructure(
+            RHIRayTracingAccelerationStructure* accelerationStructure) = 0;
+
+
+        virtual void TraceRays(
+            uint32_t width,
+            uint32_t height,
+            uint32_t depth = 1) = 0;
     };
 
 

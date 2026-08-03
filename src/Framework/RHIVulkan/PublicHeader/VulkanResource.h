@@ -239,6 +239,63 @@ private:
     std::vector<VulkanViewBase*> views;
 };
 
+class VulkanRayTracingGeometry : public RHIRayTracingGeometry
+{
+public:
+    explicit VulkanRayTracingGeometry(VulkanDevice* device, const RHIRayTracingGeometryDesc& Desc);
+    ~VulkanRayTracingGeometry() override;
+
+    void SetGeometryDesc(const RHIRayTracingGeometryDesc& Desc) override;
+
+    VkAccelerationStructureKHR GetHandle() const { return AccelerationStructure; }
+    VkDeviceAddress GetDeviceAddress() const { return DeviceAddress; }
+    const VkAccelerationStructureGeometryKHR& GetGeometryInfo() const { return GeometryInfo; }
+    const VkAccelerationStructureBuildRangeInfoKHR& GetBuildRangeInfo() const { return BuildRangeInfo; }
+
+private:
+    void DestroyAccelerationStructure();
+    void DestroyStorageBuffer();
+
+private:
+    VulkanDevice* Device = nullptr;
+    VkBuffer StorageBuffer = VK_NULL_HANDLE;
+    VulkanAllocation StorageAllocation;
+    VkAccelerationStructureKHR AccelerationStructure = VK_NULL_HANDLE;
+    VkDeviceAddress DeviceAddress = 0;
+    VkAccelerationStructureGeometryKHR GeometryInfo{};
+    VkAccelerationStructureBuildRangeInfoKHR BuildRangeInfo{};
+};
+
+class VulkanRayTracingInstance : public RHIRayTracingInstance
+{
+public:
+    explicit VulkanRayTracingInstance(VulkanDevice* device, const RHIRayTracingInstancesDesc& Instances);
+    ~VulkanRayTracingInstance() override;
+
+    void SetInstancesDesc(const RHIRayTracingInstancesDesc& Instances) override;
+
+    VkAccelerationStructureKHR GetHandle() const { return AccelerationStructure; }
+    VkDeviceAddress GetDeviceAddress() const { return DeviceAddress; }
+    const VkAccelerationStructureGeometryKHR& GetGeometryInfo() const { return GeometryInfo; }
+    const VkAccelerationStructureBuildRangeInfoKHR& GetBuildRangeInfo() const { return BuildRangeInfo; }
+
+private:
+    void DestroyAccelerationStructure();
+    void DestroyStorageBuffer();
+    void DestroyInstanceBuffer();
+
+private:
+    VulkanDevice* Device = nullptr;
+    VkBuffer StorageBuffer = VK_NULL_HANDLE;
+    VulkanAllocation StorageAllocation;
+    VkBuffer InstanceBuffer = VK_NULL_HANDLE;
+    VulkanAllocation InstanceAllocation;
+    VkAccelerationStructureKHR AccelerationStructure = VK_NULL_HANDLE;
+    VkDeviceAddress DeviceAddress = 0;
+    VkAccelerationStructureGeometryKHR GeometryInfo{};
+    VkAccelerationStructureBuildRangeInfoKHR BuildRangeInfo{};
+};
+
 // --------------------------------------------------
 // Vulkan Shader Resource View
 // --------------------------------------------------

@@ -195,11 +195,26 @@ namespace RHI {
         void Execute(RHICommandListBase& cmdList) override;
     };
 
-    struct RHI_API RHICommandSetShaderTable : public RHICommandBase
+    struct RHI_API RHICommandSetRayTracingAccelerationStructure : public RHICommandBase
     {
+        RHIRayTracingInstance* AccelerationStructure = nullptr;
+        explicit RHICommandSetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure);
         void Execute(RHICommandListBase& cmdList) override;
     };
 
+    struct RHI_API RHICommandBuildAccelerationStructure : public RHICommandBase
+    {
+        RHIRayTracingAccelerationStructure* AccelerationStructure = nullptr;
+        explicit RHICommandBuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
+    struct RHI_API RHICommandUpdateAccelerationStructure : public RHICommandBase
+    {
+        RHIRayTracingAccelerationStructure* AccelerationStructure = nullptr;
+        explicit RHICommandUpdateAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
 
 
     // -----------------------------
@@ -285,7 +300,9 @@ namespace RHI {
         void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
         void EndRenderPass();
         void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState);
-        void SetShaderTable();
+        void SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure);
+        void BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure);
+        void UpdateAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure);
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1);
     };
 

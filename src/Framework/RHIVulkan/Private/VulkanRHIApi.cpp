@@ -497,6 +497,16 @@ RHIUnorderedAccessViewSP VulkanRHIApi::CreateBufferUnorderedAccessView(
 	return DynamicPtrCast(std::make_shared<VulkanUnorderedAccessView>(Device, Buffer, Desc), RHIUnorderedAccessView);
 }
 
+RHIRayTracingGeometrySP VulkanRHIApi::CreateRayTracingGeometry(const RHIRayTracingGeometryDesc& desc)
+{
+	return DynamicPtrCast(std::make_shared<VulkanRayTracingGeometry>(Device, desc), RHIRayTracingGeometry);
+}
+
+RHIRayTracingInstanceSP VulkanRHIApi::CreateRayTracingInstance(const RHIRayTracingInstancesDesc& desc)
+{
+	return DynamicPtrCast(std::make_shared<VulkanRayTracingInstance>(Device, desc), RHIRayTracingInstance);
+}
+
 // 创建 StagingBuffer
 RHIStagingBufferSP VulkanRHIApi::CreateStagingBuffer(uint32_t size)
 {
@@ -901,6 +911,9 @@ std::vector<const char*> VulkanRHIApi::GetWantedDeviceLayers() {
 std::vector<const char*> VulkanRHIApi::GetWantedDeviceExtensions() {
 	std::vector<const char*> wantExtensions = VulkanPlatformSupport::GetPlatformWantedDeviceExtentions();
 	wantExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME); // 交换链扩展
+	wantExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    wantExtensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+    wantExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
     std::vector<const char*> res;
 	// 检查是否支持
 	uint32_t extensionCount = 0;

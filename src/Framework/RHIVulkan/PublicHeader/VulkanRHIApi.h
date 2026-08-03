@@ -39,6 +39,8 @@ public:
 
     RHIUnorderedAccessViewSP CreateBufferUnorderedAccessView(
         RHIBuffer* Buffer, const RHIBufferUAVCreateInfo& Desc) override;
+    RHIRayTracingGeometrySP CreateRayTracingGeometry(const RHIRayTracingGeometryDesc& desc) override;
+    RHIRayTracingInstanceSP CreateRayTracingInstance(const RHIRayTracingInstancesDesc& desc) override;
 
     // 创建 StagingBuffer
     RHIStagingBufferSP CreateStagingBuffer(uint32_t size) override;

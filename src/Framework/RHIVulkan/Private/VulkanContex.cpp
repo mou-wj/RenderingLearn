@@ -102,7 +102,7 @@ void VulkanCommandContext::CopyTexture(RHITexture* src, RHITexture* dst, const R
     };
 
     // =========================
-    // Dst£¨ÄãÏÖÔÚÉè¼ÆÊÇ¡°¶ÔÆë copy¡±£¬ËùÒÔ offset ÏàÍ¬£©
+    // Dstï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç¡ï¿½ï¿½ï¿½ï¿½ï¿½ copyï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ offset ï¿½ï¿½Í¬ï¿½ï¿½
     // =========================
     region.dstSubresource.aspectMask = vkDst->GetAspectFlags();
     region.dstSubresource.mipLevel = copyDesc.DstMipIndex;
@@ -153,19 +153,19 @@ void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const R
     VkImage dstImage = vkDst->GetImage();
 
     // =========================
-    // Layout »ñÈ¡£¨×¢Òâ¶ÔÏó±ðÈ¡´í£©
+    // Layout ï¿½ï¿½È¡ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
     // =========================
     auto srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
     auto dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
     // =========================
-    // »ù±¾Ð£Ñé£¨½¨Òé±£Áô£©
+    // ï¿½ï¿½ï¿½ï¿½Ð£ï¿½é£¨ï¿½ï¿½ï¿½é±£ï¿½ï¿½ï¿½ï¿½
     // =========================
 
 
     // =========================
-    // VkImageBlit ¹¹½¨
+    // VkImageBlit ï¿½ï¿½ï¿½ï¿½
     // =========================
     VkImageBlit region{};
 
@@ -206,7 +206,7 @@ void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const R
     };
 
     // =========================
-    // Filter Ó³Éä
+    // Filter Ó³ï¿½ï¿½
     // =========================
     VkFilter vkFilter = VK_FILTER_LINEAR;
     switch (blitDesc.Filter)
@@ -223,7 +223,7 @@ void VulkanCommandContext::BlitTexture(RHITexture* src, RHITexture* dst, const R
     }
 
     // =========================
-    // Ìá½»ÃüÁî
+    // ï¿½á½»ï¿½ï¿½ï¿½ï¿½
     // =========================
     auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
 
@@ -341,12 +341,14 @@ VulkanGraphicContext::VulkanGraphicContext(VulkanDevice* device, VulkanQueue* qu
     : VulkanCommandContext(device, queue)
 {
     PendingGfx = new VulkanPendingGfxState(device, this);
+    PendingRayTracing = new VulkanPendingRayTracingState(device, this);
     LooseUniformDataUploader = new VulkanLooseUniformDataUploader(device);
 }
 
 VulkanGraphicContext::~VulkanGraphicContext()
 {
     delete PendingGfx;
+    delete PendingRayTracing;
     delete LooseUniformDataUploader;
 }
 
@@ -482,27 +484,149 @@ void VulkanGraphicContext::DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCou
     }
 }
 
-void VulkanGraphicContext::SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState)
+void VulkanGraphicContext::SetBatchedShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& parameter)
 {
+    if (!PendingRayTracing)
+    {
+        return;
+    }
+
+    auto shaderType = shader->GetShaderType();
+
+    for (const auto& uniformParam : parameter.UniformParameters)
+    {
+
+        const uint8_t* valuePtr = parameter.Data.data() + uniformParam.Offset;
+        switch (shaderType)
+        {
+        case RHI::ERHIShaderFrequency::RayGen:
+        case RHI::ERHIShaderFrequency::ClosestHit:
+        case RHI::ERHIShaderFrequency::Miss:
+        case RHI::ERHIShaderFrequency::AnyHit:
+        case RHI::ERHIShaderFrequency::Intersection:
+        case RHI::ERHIShaderFrequency::Callable:
+            PendingRayTracing->SetShaderParameter(shaderType, uniformParam.BufferIndex, uniformParam.BaseIndex, uniformParam.Size, valuePtr);
+            break;
+        default:
+            break;
+        }
+    }
+
+    for (const auto& resourceParam : parameter.ResourceParameters)
+    {
+        const bool isRayTracingStage =
+            shaderType == RHI::ERHIShaderFrequency::RayGen
+            || shaderType == RHI::ERHIShaderFrequency::ClosestHit
+            || shaderType == RHI::ERHIShaderFrequency::Miss
+            || shaderType == RHI::ERHIShaderFrequency::AnyHit
+            || shaderType == RHI::ERHIShaderFrequency::Intersection
+            || shaderType == RHI::ERHIShaderFrequency::Callable;
+
+        if (!isRayTracingStage)
+        {
+            continue;
+        }
+
+        switch (resourceParam.Type)
+        {
+        case RHIShaderResourceParameter::EType::Texture:
+            PendingRayTracing->SetTexture(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanTexture*>(resourceParam.GetResourceAs<RHITexture>()));
+            break;
+        case RHIShaderResourceParameter::EType::SRV:
+            PendingRayTracing->SetSRV(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanShaderResourceView*>(resourceParam.GetResourceAs<RHIShaderResourceView>()));
+            break;
+        case RHIShaderResourceParameter::EType::UAV:
+            PendingRayTracing->SetUAV(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanUnorderedAccessView*>(resourceParam.GetResourceAs<RHIUnorderedAccessView>()));
+            break;
+        case RHIShaderResourceParameter::EType::Sampler:
+            PendingRayTracing->SetSampler(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanSampler*>(resourceParam.GetResourceAs<RHISampler>()));
+            break;
+        case RHIShaderResourceParameter::EType::UniformBuffer:
+            PendingRayTracing->SetUniformBuffer(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanBuffer*>(resourceParam.GetResourceAs<RHIBuffer>()));
+            break;
+        default:
+            break;
+        }
+    }
 }
 
-void VulkanGraphicContext::SetShaderTable()
+void VulkanGraphicContext::SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState)
 {
+    if (!PendingRayTracing)
+    {
+        return;
+    }
+
+    auto vkPipeline = dynamic_cast<VulkanRayTracingPipeline*>(pipelineState);
+    PendingRayTracing->SetPipeline(vkPipeline);
+}
+
+void VulkanGraphicContext::SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure)
+{
+    if (!PendingRayTracing)
+    {
+        return;
+    }
+
+    auto vkAccelerationStructure = dynamic_cast<VulkanRayTracingInstance*>(accelerationStructure);
+    PendingRayTracing->SetAccelerationStructure(vkAccelerationStructure);
+}
+
+void VulkanGraphicContext::BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)
+{
+    if (!PendingRayTracing || !accelerationStructure)
+    {
+        return;
+    }
+
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+    PendingRayTracing->BuildAccelerationStructure(commandBuffer, accelerationStructure, false);
+}
+
+void VulkanGraphicContext::UpdateAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)
+{
+    if (!PendingRayTracing || !accelerationStructure)
+    {
+        return;
+    }
+
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+    PendingRayTracing->BuildAccelerationStructure(commandBuffer, accelerationStructure, true);
 }
 
 void VulkanGraphicContext::TraceRays(uint32_t width, uint32_t height, uint32_t depth)
 {
-    VkCommandBuffer commandBuffer = commandBufferManager->GetActiveCommandBuffer()->GetHandle();
+    if (!PendingRayTracing || !PendingRayTracing->HasPipeline())
+    {
+        return;
+    }
+
+    auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
+    PendingRayTracing->PrepareForTraceRays(commandBuffer);
+
     VkStridedDeviceAddressRegionKHR raygenShaderBindingTable = {};
     VkStridedDeviceAddressRegionKHR missShaderBindingTable = {};
     VkStridedDeviceAddressRegionKHR hitShaderBindingTable = {};
     VkStridedDeviceAddressRegionKHR callableShaderBindingTable = {};
+
+    VKFunc::CmdTraceRaysKHR(
+        commandBuffer->GetHandle(),
+        &raygenShaderBindingTable,
+        &missShaderBindingTable,
+        &hitShaderBindingTable,
+        &callableShaderBindingTable,
+        width,
+        height,
+        depth);
 }
 
 void VulkanGraphicContext::InnerBegin()
 {
     if (PendingGfx) {
         PendingGfx->Reset();
+    }
+    if (PendingRayTracing) {
+        PendingRayTracing->Reset();
     }
 }
 

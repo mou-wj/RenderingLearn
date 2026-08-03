@@ -21,6 +21,7 @@ enum class EDepthRange {
 };
 struct RHIPlatformInfo {
     EDepthRange DepthRange;
+    bool EnableRayTracing;
 };
 
 class RHI_API RHIApi
@@ -50,6 +51,8 @@ public:
 
     virtual RHIUnorderedAccessViewSP CreateBufferUnorderedAccessView(
         RHIBuffer* Buffer, const RHIBufferUAVCreateInfo& Desc) = 0;
+    virtual RHIRayTracingGeometrySP CreateRayTracingGeometry(const RHIRayTracingGeometryDesc& desc) = 0;
+    virtual RHIRayTracingInstanceSP CreateRayTracingInstance(const RHIRayTracingInstancesDesc& desc) = 0;
         
 
     // ���� StagingBuffer

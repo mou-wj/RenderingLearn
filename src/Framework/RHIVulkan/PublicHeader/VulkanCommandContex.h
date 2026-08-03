@@ -86,15 +86,27 @@ public:
     void DrawIndexed(RHIBuffer* indexBuffer, uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0) override;
     void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo) override;
     void EndRenderPass() override;
+
+    void SetBatchedShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& parameter) override;
     void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) override;
-    void SetShaderTable() override;
-    void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) override;
+
+    virtual void SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure) override;
+
+
+    virtual void BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure) override;
+
+
+    virtual void UpdateAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure) override;
+
+
+    virtual void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1) override;
 
 protected:
 private:
     void InnerBegin() override;
     friend class VulkanCommandContext;
     VulkanPendingGfxState* PendingGfx = nullptr;
+    VulkanPendingRayTracingState* PendingRayTracing = nullptr;
     VulkanLooseUniformDataUploader* LooseUniformDataUploader = nullptr;
 };
 
