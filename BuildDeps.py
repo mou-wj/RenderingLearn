@@ -76,6 +76,44 @@ def compute_cmake_args(meta: Dict[str, Any]) -> Tuple[List[str], Dict[str, str]]
         
     return args, env
 
+def has_existing_install_dir(install_prefix: Path) -> bool:
+    return install_prefix.exists() and any(install_prefix.iterdir())
+
+def clone_remote_source(meta: Dict[str, Any], src_dir: Path) -> bool:
+    src_info = meta.get("source", {})
+    if not src_info.get("git"):
+        raise ValueError(f"Missing source.git for dependency: {meta['name']}")
+
+    if run([
+        "git", "clone", "--depth=1", "--single-branch",
+        "--branch", src_info.get("branch", "main"),
+        src_info["git"], str(src_dir)
+    ]) != 0:
+        return False
+
+    for extra in src_info.get("extra_repos", []):
+        extra_path = src_dir / extra["path"]
+        if run([
+            "git", "clone", "--depth=1", "--single-branch",
+            "--branch", extra["branch"],
+            extra["git"], str(extra_path)
+        ]) != 0:
+            return False
+
+    return True
+
+
+def handle_remote_source_imported(meta: Dict[str, Any]) -> bool:
+    src_dir = DEPS_DIR / meta["name"]
+
+    if not src_dir.exists():
+        if not clone_remote_source(meta, src_dir):
+            return False
+
+    install_remote_source_imported_files(meta, src_dir)
+    return True
+
+
 def cmake_build_and_install(meta: Dict[str, Any]) -> bool:
     name = meta["name"]
     src_dir = DEPS_DIR / name
@@ -88,10 +126,14 @@ def cmake_build_and_install(meta: Dict[str, Any]) -> bool:
     success = True
     for cfg in configs:
         cfg_build_dir = build_root / cfg
-        cfg_build_dir.mkdir(parents=True, exist_ok=True)
-        
         # 从 layout 获取安装前缀
         install_prefix = get_layout_path(meta, "root", cfg)
+
+        if has_existing_install_dir(install_prefix):
+            print(f"[skip] {name} ({cfg}) already installed at {install_prefix}")
+            continue
+
+        cfg_build_dir.mkdir(parents=True, exist_ok=True)
         
         gen_args, env = compute_cmake_args(meta)
         
@@ -119,6 +161,15 @@ def cmake_build_and_install(meta: Dict[str, Any]) -> bool:
             
     return success
 
+def handle_remote_source_prebuild(meta: Dict[str, Any]) -> bool:
+    src_dir = DEPS_DIR / meta["name"]
+
+    if not src_dir.exists():
+        if not clone_remote_source(meta, src_dir):
+            return False
+
+    return cmake_build_and_install(meta)
+
 # ---- 拓扑排序 (保持不变) ----
 def topological_sort(all_meta: List[Dict[str, Any]]) -> List[str]:
     graph = {m["name"]: set(m.get("dependencies", [])) for m in all_meta}
@@ -139,6 +190,271 @@ def topological_sort(all_meta: List[Dict[str, Any]]) -> List[str]:
         raise RuntimeError("Cycle or missing dependency detected!")
     return order
 
+def append_remote_source_prebuild_find_entries(lines: List[str], meta: Dict[str, Any]):
+    name = meta["name"]
+    lines.append(f"# [{name}]")
+
+    for cfg in ["Debug", "Release"]:
+        root_path = str(get_layout_path(meta, "root", cfg)).replace("\\", "/")
+        lines.append(f"if(CMAKE_BUILD_TYPE STREQUAL \"{cfg}\")")
+        lines.append(f"  list(APPEND CMAKE_PREFIX_PATH \"{root_path}\")")
+        lines.append("endif()")
+
+    lines.append("")
+
+def _normalize_define_list(defines: List[str]) -> List[str]:
+    return [define for define in defines if define]
+
+def _normalize_path_list(root: Path, entries: List[str]) -> List[str]:
+    return [str(root / Path(entry)).replace("\\", "/") for entry in entries if entry]
+
+def _normalize_path_mode(info: Dict[str, Any]) -> str:
+    return str(info.get("PathMode", "relative")).strip().lower()
+
+def _ensure_suffix(path_text: str, suffix: str) -> str:
+    if not suffix:
+        return path_text
+    if Path(path_text).suffix:
+        return path_text
+    return path_text + suffix
+
+def _resolve_system_path_entry(entry: str, suffix: str) -> Path:
+    raw_entry = expand_placeholders(entry).replace("${SYSTEM_PATH}", "")
+    raw_entry = raw_entry.replace("\\", "/").lstrip("/\\")
+    if not raw_entry:
+        raise ValueError(f"Invalid SYSTEM_PATH entry: {entry}")
+
+    candidate_text = _ensure_suffix(raw_entry, suffix)
+    candidate = Path(candidate_text)
+
+    system_paths = [Path(path_text.strip('"')) for path_text in os.environ.get("PATH", "").split(os.pathsep) if path_text.strip()]
+    for system_dir in system_paths:
+        direct_candidate = system_dir / candidate
+        if direct_candidate.exists():
+            return direct_candidate
+
+        name_candidate = system_dir / candidate.name
+        if name_candidate.exists():
+            return name_candidate
+
+    if candidate.is_absolute():
+        return candidate
+
+    return candidate
+
+def _resolve_manual_path_entry(entry: str, root: Path, suffix: str, path_mode: str) -> Path:
+    normalized_mode = path_mode.strip().lower()
+    if normalized_mode in {"absolute", "absolite", "system_path"}:
+        if "${SYSTEM_PATH}" in entry or normalized_mode == "system_path":
+            return _resolve_system_path_entry(entry, suffix)
+
+        expanded = expand_placeholders(entry).replace("\\", "/")
+        expanded = _ensure_suffix(expanded, suffix)
+        return Path(expanded)
+
+    expanded = expand_placeholders(entry).replace("\\", "/")
+    expanded = _ensure_suffix(expanded, suffix)
+    return root / Path(expanded)
+
+def _append_imported_location_properties(
+    lines: List[str],
+    info: Dict[str, Any],
+    property_name: str,
+    root_release: Path,
+    root_debug: Path,
+    default_suffix: str,
+    path_mode: str = "relative",
+):
+    release_paths = []
+    debug_paths = []
+
+    for entry in info.get("release", []):
+        if entry:
+            resolved = _resolve_manual_path_entry(entry, root_release, default_suffix, path_mode)
+            release_paths.append(str(resolved).replace("\\", "/"))
+
+    for entry in info.get("debug", []):
+        if entry:
+            resolved = _resolve_manual_path_entry(entry, root_debug, default_suffix, path_mode)
+            debug_paths.append(str(resolved).replace("\\", "/"))
+
+    if release_paths:
+        lines.append(f"    set_target_properties({property_name[0]} PROPERTIES {property_name[1]} \"{release_paths[0]}\")")
+    if debug_paths:
+        lines.append(f"    set_target_properties({property_name[0]} PROPERTIES {property_name[2]} \"{debug_paths[0]}\")")
+
+def _normalize_imported_path_list(root: Path, entries: List[str]) -> List[str]:
+    normalized = []
+    for entry in entries or []:
+        if not entry:
+            continue
+        expanded = expand_placeholders(entry).replace("\\", "/")
+        if os.path.isabs(expanded):
+            normalized.append(Path(expanded).as_posix())
+        else:
+            normalized.append(str((root / Path(expanded))).replace("\\", "/"))
+    return normalized
+
+
+def _copy_imported_entries(src_root: Path, target_root: Path, entries: List[str]) -> None:
+    for entry in entries or []:
+        if not entry:
+            continue
+
+        src_path = src_root / Path(entry)
+        if not src_path.exists():
+            raise FileNotFoundError(f"Imported file not found: {src_path}")
+
+        target_path = target_root / Path(entry)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, target_path)
+
+
+def install_remote_source_imported_files(meta: Dict[str, Any], src_dir: Path) -> None:
+    import_info = meta.get("import_info", {})
+
+    for cfg in ["Debug", "Release"]:
+        include_root = get_layout_path(meta, "include", cfg)
+        source_root = get_layout_path(meta, "source", cfg)
+        include_root.mkdir(parents=True, exist_ok=True)
+        source_root.mkdir(parents=True, exist_ok=True)
+
+        _copy_imported_entries(src_dir, include_root, import_info.get("headers", []))
+        _copy_imported_entries(src_dir, source_root, import_info.get("sources", []))
+
+
+def append_remote_source_imported_find_entries(lines: List[str], meta: Dict[str, Any]):
+    name = meta["name"]
+    safe_name = name.replace("-", "_").replace(".", "_").upper()
+    import_info = meta.get("import_info", {})
+
+    release_root = get_layout_path(meta, "root", "Release")
+    debug_root = get_layout_path(meta, "root", "Debug")
+    release_include_root = get_layout_path(meta, "include", "Release")
+    debug_include_root = get_layout_path(meta, "include", "Debug")
+    release_source_root = get_layout_path(meta, "source", "Release")
+    debug_source_root = get_layout_path(meta, "source", "Debug")
+
+    header_entries = _normalize_imported_path_list(release_include_root, import_info.get("headers", []))
+    source_entries = _normalize_imported_path_list(release_source_root, import_info.get("sources", []))
+
+    release_root_str = str(release_root).replace("\\", "/")
+    debug_root_str = str(debug_root).replace("\\", "/")
+    include_dir_release_str = str(release_include_root).replace("\\", "/")
+    include_dir_debug_str = str(debug_include_root).replace("\\", "/")
+
+    lines.append(f"# [{name}]")
+    lines.append(f"set({safe_name}_SOURCE_ROOT \"{release_root_str}\")")
+    lines.append(f"set({safe_name}_INCLUDE_DIR \"{include_dir_release_str}\")")
+    lines.append("if(CMAKE_BUILD_TYPE STREQUAL \"Debug\")")
+    lines.append(f"  set({safe_name}_SOURCE_ROOT \"{debug_root_str}\")")
+    lines.append(f"  set({safe_name}_INCLUDE_DIR \"{include_dir_debug_str}\")")
+    lines.append("endif()")
+
+    if header_entries:
+        lines.append(f"set({safe_name}_HEADER_FILES")
+        for header in header_entries:
+            lines.append(f'  "{header}"')
+        lines.append(")")
+    else:
+        lines.append(f"set({safe_name}_HEADER_FILES)")
+
+    if source_entries:
+        lines.append(f"set({safe_name}_SOURCE_FILES")
+        for source in source_entries:
+            lines.append(f'  "{source}"')
+        lines.append(")")
+    else:
+        lines.append(f"set({safe_name}_SOURCE_FILES)")
+
+    lines.append("")
+
+
+def append_manual_find_entries(lines: List[str], meta: Dict[str, Any]):
+    name = meta["name"]
+    safe_name = name.replace("-", "_").replace(".", "_").upper()
+    manual = meta.get("manual_info", {})
+    common_defines = _normalize_define_list(manual.get("common_defines", []))
+
+    lines.append(f"# [{name}]")
+
+    root_release = get_layout_path(meta, "root", "Release")
+    root_debug = get_layout_path(meta, "root", "Debug")
+    include_dirs = _normalize_path_list(root_release, manual.get("include_dirs", []))
+    all_runtime_release: List[str] = []
+    all_runtime_debug: List[str] = []
+
+    for component_name, info in manual.get("components", {}).items():
+        target_name = f"Deps::{name}::{component_name}"
+        lib_info = info.get("lib", {})
+        runtime_info = info.get("runtime", {})
+        lib_path_mode = _normalize_path_mode(lib_info)
+        runtime_path_mode = _normalize_path_mode(runtime_info)
+        has_linkable_lib = any(entry for entry in lib_info.get("debug", []) + lib_info.get("release", []))
+        has_runtime_lib = any(entry for entry in runtime_info.get("debug", []) + runtime_info.get("release", []))
+        if has_linkable_lib:
+            lines.append(f"if(NOT TARGET {target_name})")
+            importedType = "STATIC"
+            if has_runtime_lib:
+                importedType = "SHARED"
+            lines.append(f"  add_library({target_name} {importedType} IMPORTED)")
+
+            if include_dirs:
+                joined = ";".join(include_dirs)
+                lines.append(f"  set_target_properties({target_name} PROPERTIES INTERFACE_INCLUDE_DIRECTORIES \"{joined}\")")
+
+            if common_defines:
+                joined_defines = ";".join(common_defines)
+                lines.append(f"  set_target_properties({target_name} PROPERTIES INTERFACE_COMPILE_DEFINITIONS \"{joined_defines}\")")
+
+            lib_property = (
+                target_name,
+                "IMPORTED_IMPLIB_RELEASE" if sys.platform.startswith("win") else "IMPORTED_LOCATION_RELEASE",
+                "IMPORTED_IMPLIB_DEBUG" if sys.platform.startswith("win") else "IMPORTED_LOCATION_DEBUG",
+            )
+            _append_imported_location_properties(lines, lib_info, lib_property, root_release, root_debug, ".lib" if sys.platform.startswith("win") else ".a", lib_path_mode)
+
+            if has_runtime_lib:
+                runtime_property = (
+                    target_name,
+                    "IMPORTED_LOCATION_RELEASE",
+                    "IMPORTED_LOCATION_DEBUG",
+                )
+                _append_imported_location_properties(lines, runtime_info, runtime_property, root_release, root_debug, ".dll" if sys.platform.startswith("win") else ".so", runtime_path_mode)
+
+            dependencies = [dep for dep in info.get("dependencies", []) if dep]
+            if dependencies:
+                joined_dependencies = ";".join(dependencies)
+                lines.append(f"  set_target_properties({target_name} PROPERTIES INTERFACE_LINK_LIBRARIES \"{joined_dependencies}\")")
+
+            lines.append("endif()")
+
+        for entry in runtime_info.get("release", []):
+            if entry:
+                suffix = ".dll" if sys.platform.startswith("win") else ".so"
+                resolved = _resolve_manual_path_entry(entry, root_release, suffix, runtime_path_mode)
+                all_runtime_release.append(str(resolved).replace("\\", "/"))
+        for entry in runtime_info.get("debug", []):
+            if entry:
+                suffix = ".dll" if sys.platform.startswith("win") else ".so"
+                resolved = _resolve_manual_path_entry(entry, root_debug, suffix, runtime_path_mode)
+                all_runtime_debug.append(str(resolved).replace("\\", "/"))
+
+    if all_runtime_release or all_runtime_debug:
+        joined_release = ";".join(all_runtime_release)
+        joined_debug = ";".join(all_runtime_debug)
+        joined = ";".join(include_dirs)
+        lines.append(f"set({safe_name}_INCLUDE_DIRS \"{joined}\")")
+        lines.append(f"set({safe_name}_DLLS_RELEASE \"{joined_release}\")")
+        lines.append(f"set({safe_name}_DLLS_DEBUG \"{joined_debug}\")")
+        lines.append(f"if(CMAKE_BUILD_TYPE STREQUAL \"Debug\")")
+        lines.append(f"  set({safe_name}_DLLS \"{joined_debug}\")")
+        lines.append(f"else()")
+        lines.append(f"  set({safe_name}_DLLS \"{joined_release}\")")
+        lines.append(f"endif()")
+
+    lines.append("")
+
 # ---- 生成 Find3rdsGenerated.cmake ----
 def generate_cmake_find_file(processed_meta: List[Dict[str, Any]]):
     lines = [
@@ -147,91 +463,14 @@ def generate_cmake_find_file(processed_meta: List[Dict[str, Any]]):
     ]
     
     for meta in processed_meta:
-        name = meta["name"]
-        safe_name = name.replace("-", "_").replace(".", "_").upper()
-        config_type = meta.get("config_type", "cmake_config")
-        
-        lines.append(f"# [{name}]")
-        
-        # 处理不同编译配置下的路径
-        configs = ["Debug", "Release"]
-        for cfg in configs:
-            root_path = str(get_layout_path(meta, "root", cfg)).replace("\\", "/")
-            lines.append(f"if(CMAKE_BUILD_TYPE STREQUAL \"{cfg}\")")
-            
-            if config_type == "cmake_config":
-                # 模式1: 标准 CMake Config 模式
-                lines.append(f"  list(APPEND CMAKE_PREFIX_PATH \"{root_path}\")")
-            
-            elif config_type == "manual":
-                # 模式2: 手动定义 Target 模式
-                manual = meta.get("manual_info", {})
-                for comp_name, info in manual.get("components", {}).items():
-                    target_name = f"Deps::{name}"
-                    lines.append(f"  if(NOT TARGET {target_name})")
-                    lines.append(f"    add_library({target_name} INTERFACE IMPORTED)")
-                    # Include（以root为根）
-                    include_dirs = info.get("include_dirs", [])
-                    if include_dirs:
-                        inc_full = [str(get_layout_path(meta, "root", cfg) / Path(inc)).replace("\\", "/") for inc in include_dirs if inc]
-                        joined = ";".join(inc_full)
-                        lines.append(f"    set_target_properties({target_name} PROPERTIES INTERFACE_INCLUDE_DIRECTORIES \"{joined}\")")
-                    # Libs（以root为根，自动加后缀）
-                    libs = info.get("libs", {}).get(cfg.lower(), [])
-                    if libs:
-                        for lib in libs:
-                            if lib:
-                                # 自动加平台后缀
-                                if sys.platform.startswith("win"):
-                                    lib_name = lib if lib.lower().endswith(".lib") else lib + ".lib"
-                                else:
-                                    lib_name = lib if lib.lower().endswith(".a") else lib + ".a"
-                                lib_path = str(get_layout_path(meta, "root", cfg) / Path(lib_name)).replace("\\", "/")
-                                lines.append(f"    target_link_libraries({target_name} INTERFACE \"{lib_path}\")")
-                    # DLLs（仅收集路径，不生成库目标）
-                    dlls = info.get("dlls", [])
-                    dll_rel_paths = []
-                    dll_dbg_paths = []
-                    if dlls:
-                        for dll_item in dlls:
-                            if isinstance(dll_item, dict):
-                                dll_rel_name = dll_item.get("release") or dll_item.get("name") or ""
-                                dll_dbg_name = dll_item.get("debug") or dll_item.get("release") or dll_item.get("name") or ""
-                            else:
-                                dll_rel_name = dll_dbg_name = dll_item
-                            # 跳过都为空的情况
-                            if not dll_rel_name and not dll_dbg_name:
-                                continue
-                            if sys.platform.startswith("win"):
-                                if dll_rel_name:
-                                    dll_rel_name = dll_rel_name if dll_rel_name.lower().endswith(".dll") else dll_rel_name + ".dll"
-                                if dll_dbg_name:
-                                    dll_dbg_name = dll_dbg_name if dll_dbg_name.lower().endswith(".dll") else dll_dbg_name + ".dll"
-                            else:
-                                if dll_rel_name:
-                                    dll_rel_name = dll_rel_name if dll_rel_name.lower().endswith(".so") else dll_rel_name + ".so"
-                                if dll_dbg_name:
-                                    dll_dbg_name = dll_dbg_name if dll_dbg_name.lower().endswith(".so") else dll_dbg_name + ".so"
-                            if dll_rel_name:
-                                dll_rel_paths.append(str(get_layout_path(meta, "root", "Release") / Path(dll_rel_name)).replace("\\", "/"))
-                            if dll_dbg_name:
-                                dll_dbg_paths.append(str(get_layout_path(meta, "root", "Debug") / Path(dll_dbg_name)).replace("\\", "/"))
-                    # 生成变量，供用户手动处理
-                    # 生成统一变量，自动根据 CMAKE_BUILD_TYPE 选择
-                    if dll_rel_paths or dll_dbg_paths:
-                        joined_rel = ";".join(dll_rel_paths)
-                        joined_dbg = ";".join(dll_dbg_paths)
-                        lines.append(f"    set({safe_name}_DLLS_RELEASE \"{joined_rel}\")")
-                        lines.append(f"    set({safe_name}_DLLS_DEBUG \"{joined_dbg}\")")
-                        lines.append(f"    if(CMAKE_BUILD_TYPE STREQUAL \"Debug\")")
-                        lines.append(f"      set({safe_name}_DLLS \"{joined_dbg}\")")
-                        lines.append(f"    else()")
-                        lines.append(f"      set({safe_name}_DLLS \"{joined_rel}\")")
-                        lines.append(f"    endif()")
-                    lines.append(f"  endif()")
-            
-            lines.append("endif()")
-        lines.append("")
+        lib_type = meta.get("type", "")
+
+        if lib_type == "remote_source_prebuild":
+            append_remote_source_prebuild_find_entries(lines, meta)
+        elif lib_type == "remote_source_imported":
+            append_remote_source_imported_find_entries(lines, meta)
+        elif lib_type == "manual":
+            append_manual_find_entries(lines, meta)
 
     with open(CMAKE_OUTPUT / "Find3rdsGenerated.cmake", "w") as f:
         f.write("\n".join(lines))
@@ -250,23 +489,15 @@ def main():
         ignore = meta.get("ignore", False)
         if ignore: 
             continue
-        lib_type = meta.get("type", "source")
+        lib_type = meta.get("type", "remote_source_prebuild")
         print(f"\n>>> Processing: {name} ({lib_type})")
         
-        if lib_type == "source":
-            src_dir = DEPS_DIR / name
-            # 1. Clone
-            if not src_dir.exists():
-                src_info = meta.get("source", {})
-                run(["git", "clone", "--depth=1","--single-branch","--branch", src_info.get("branch", "main"), src_info["git"], str(src_dir)])
-                # 2. Extra Repos (SPIRV-Tools)
-                for extra in src_info.get("extra_repos", []):
-                    extra_path = src_dir / extra["path"]
-                    run(["git", "clone", "--depth=1","--single-branch","--branch", extra["branch"], extra["git"], str(extra_path)])
-            
-            # 3. Build (若不存在 install 目录或 build_timing 为 pre_build)
-            if meta.get("build_timing") == "pre_build":
-                cmake_build_and_install(meta)
+        if lib_type == "remote_source_prebuild":
+            if not handle_remote_source_prebuild(meta):
+                raise RuntimeError(f"Failed to process dependency: {name}")
+        elif lib_type == "remote_source_imported":
+            if not handle_remote_source_imported(meta):
+                raise RuntimeError(f"Failed to process dependency: {name}")
                 
         processed_meta.append(meta)
     

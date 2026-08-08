@@ -231,9 +231,20 @@ namespace Renderer
 			return BlockIndexBufferGPU.get();
 		}
 
+        RHI::RHIShaderResourceView* GetBlockIndexBufferSRV() const
+        {
+            return BlockIndexBufferSRV;
+        }
+
         const Core::Float3& GetCenter() const {
             return Bounds.GetCenter();
         }
+        const Core::Float3& GetOrigin() const {
+            return Bounds.Min;
+        }
+        const Core::UInt3& GetGridSize() const {
+			return Core::UInt3(GridSizeX, GridSizeY, GridSizeZ);
+		}
 
         const Engine::DistanceFieldAtlas& GetAtlas() const {
             return *Atlas;
@@ -306,6 +317,7 @@ namespace Renderer
 
         std::vector<GlobalDistanceFieldBlockIndex> BlockIndexBufferCPU;
         RenderCore::RenderBufferSP BlockIndexBufferGPU;
+        RHI::RHIShaderResourceView* BlockIndexBufferSRV = nullptr;
 
         //--------------------------------
         // µ±Ç°World Block

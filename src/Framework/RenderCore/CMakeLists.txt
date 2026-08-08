@@ -38,12 +38,11 @@ target_include_directories(${TARGET_NAME}
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
         "${CMAKE_CURRENT_SOURCE_DIR}/../Engine/PublicHeader"
 )
-find_package(glslang REQUIRED)
 find_package(spirv_cross_core REQUIRED)
 find_package(spirv_cross_glsl REQUIRED)
 find_package(spirv_cross_hlsl REQUIRED)
 find_package(tinygltf REQUIRED)
-target_link_libraries(${TARGET_NAME} PUBLIC Core RHI glslang::glslang spirv-cross-hlsl tinygltf::tinygltf)
+target_link_libraries(${TARGET_NAME} PUBLIC Core RHI spirv-cross-hlsl tinygltf::tinygltf Deps::directx-shader-compiler::dxc)
 
 _3rds_copy_runtime_deps(${TARGET_NAME} "${BINARY_DIR}")
 

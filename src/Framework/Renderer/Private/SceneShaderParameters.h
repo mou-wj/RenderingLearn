@@ -89,7 +89,7 @@ namespace Renderer {
         SHADER_PARAMETER_SAMPLER(DistanceSampler)
         SHADER_PARAMETER_RDG_TEXTURE(Texture3D, GlobalDistanceFieldAtlas)
         SHADER_PARAMETER_RHI_STRUCTURED_BUFFER(GlobalDistanceFieldBlockIndex, AllocateBlockIndexInfos)
-        SHADER_PARAMETER(Core::Float3, GlobalDistanceFieldCenter)
+        SHADER_PARAMETER(Core::Float3, GlobalDistanceFieldOrigin)
         SHADER_PARAMETER(Core::Float3, BlockSize)
         SHADER_PARAMETER(Core::UInt3, GlobalDistanceFieldGridSize)
         SHADER_PARAMETER(float, DistanceFieldVoxelSize)
@@ -101,6 +101,7 @@ namespace Renderer {
 	BEGIN_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightParameters, LightParameters)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneLightShadowParameters, LightShadowParameters)
+        SHADER_PARAMETER_STRUCT_REFERENCE(SceneGlobalDistanceFieldParameters, GlobalDistanceFieldParameters)
     END_SHADER_PARAMETER_STRUCT(SceneShaderParameters)
 
     class Scene;

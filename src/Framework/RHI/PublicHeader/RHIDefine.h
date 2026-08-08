@@ -292,6 +292,7 @@ enum class ERHIShaderFrequency
         Indirect = 1 << 5,  // 间接绘制缓冲区
         Staging = 1 << 6,  // 暂存缓冲区（CPU->GPU 上传）
         Texel = 1 << 7,   // 
+        AccelerationStructureBuildInput = 1 << 8, // 加速结构构建输入
         // ---------- Buffer 使用方式 ----------
         ShaderResource = 1 << 16, // 作为 SRV
         UnorderedAccess = 1 << 17, // 作为 UAV

@@ -29,10 +29,11 @@ void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID, uint3 GroupID : SV_Gro
     uint3 LocalVoxel = DispatchThreadID.xyz;
     if(any(LocalVoxel >= OutputResolution)) return;
 
-    float Distance = 1000.0;
+    
 
     for(uint blockId = 0; blockId < OutputCount;blockId++)
     {
+        float Distance = 1000.0;
         DistanceFieldOutParameters Out = Output[blockId];
         
         float3 OutputVoxelSize = (Out.BoundsMax - Out.BoundsMin) / float3(OutputResolution);

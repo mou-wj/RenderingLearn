@@ -1,10 +1,7 @@
 {
   "name": "glslang",
-  "ignore": false,
-  "type": "source",
-  "config_type": "cmake_config",
-  "source_type": "git",
-  "build_timing": "pre_build",
+  "ignore": true,
+  "type": "remote_source_prebuild",
   "source": {
     "git": "https://github.com/KhronosGroup/glslang.git",
     "branch": "main"

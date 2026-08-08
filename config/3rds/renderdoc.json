@@ -1,8 +1,7 @@
 {
   "name": "RenderDoc1.44",
   "ignore": false,
-  "type": "prebuilt",
-  "config_type": "manual",
+  "type": "manual",
   "install_layout": {
     "root": "${ENV:RENDER_DOC_INSTALL}"
   },
@@ -10,12 +9,13 @@
     "common_defines": [
       "RENDERDOC_API_EXPORTS"
     ],
-    "components": {
-      "Runtime": {
-        "include_dirs": [
+    "include_dirs": [
           "."
-        ],
-        "libs": {
+    ],
+    "components": {
+      "renderdoc": {
+
+        "lib": {
           "debug": [
             ""
           ],
@@ -23,9 +23,14 @@
             ""
           ]
         },
-        "dlls": [
-          "renderdoc"
-        ],
+        "runtime": {
+          "debug": [
+            "renderdoc"
+          ],
+          "release": [
+            "renderdoc"
+          ]
+        },
         "dependencies": []
       }
     }

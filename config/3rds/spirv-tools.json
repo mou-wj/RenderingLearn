@@ -1,10 +1,7 @@
 {
   "name": "SPIRV-Tools",
   "ignore": false,
-  "type": "source",
-  "config_type": "cmake_config",
-  "source_type": "git",
-  "build_timing": "pre_build",
+  "type": "remote_source_prebuild",
   "source": {
     "git": "https://github.com/KhronosGroup/SPIRV-Tools.git",
     "branch": "main",

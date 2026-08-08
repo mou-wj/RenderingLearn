@@ -13,6 +13,7 @@
 #include "ShaderCore.h"
 #include "HashHelper.hpp"
 
+
 namespace RenderCore{
 
 
@@ -53,7 +54,7 @@ namespace RenderCore{
         ShaderCompilerEnvironment Environment;
 
         std::string TargetProfile;     // vs_6_6 / ps_6_6 ��
-        EShaderCompileFlags Flags = EShaderCompileFlags::None;
+        EShaderCompileFlags Flags = EShaderCompileFlags::DebugInfo | EShaderCompileFlags::DisableOptimize;
 
         // �Ƿ����� shader pipeline����ѡ��
         bool bCompilingForPipeline = false;

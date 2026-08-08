@@ -1,6 +1,6 @@
 #include "Widgets/ImFileDialogWidget.h"
 
-#include "ImGui/imgui.h"
+#include "imgui.h"
 
 #include <algorithm>
 #include <cctype>

@@ -133,6 +133,19 @@ namespace Renderer {
         Desc.Stride = sizeof(float);
         auto splitBufferSRV = Builder.CreateBufferSRV("SplitBufferSRV", Desc);
 		Out.LightShadowParameters.SplitBuffer = splitBufferSRV;
+
+        //Ìî³ä¾àÀë³¡²ÎÊý
+		auto& DistanceFieldResourceInfo = Scene->GetGPUResourceInfo().DistanceFieldResourceInfo;
+		Out.GlobalDistanceFieldParameters.BlockSize = Core::Float3(5,5,5);
+        Out.GlobalDistanceFieldParameters.DistanceFieldVoxelSize = 5 / 64.0;
+		Out.GlobalDistanceFieldParameters.DistanceSampler = RenderCore::GlobalSampler.get();
+		Out.GlobalDistanceFieldParameters.GlobalDistanceFieldAtlasResolution = Core::UInt3(256, 256, 256);
+		Out.GlobalDistanceFieldParameters.GlobalDistanceFieldGridSize = DistanceFieldResourceInfo.StaticDistanceField.GetGridSize();
+        Out.GlobalDistanceFieldParameters.GlobalDistanceFieldOrigin = DistanceFieldResourceInfo.StaticDistanceField.GetOrigin();
+        auto rdgGlobalDistenctAtlas = Builder.RegisterExternalTexture("GlobalDistanceFieldAtlas", DistanceFieldResourceInfo.StaticDistanceField.GetAtlas().GetAtlasTexture());
+        Out.GlobalDistanceFieldParameters.GlobalDistanceFieldAtlas = rdgGlobalDistenctAtlas;
+        Out.GlobalDistanceFieldParameters.AllocateBlockIndexInfos = DistanceFieldResourceInfo.StaticDistanceField.GetBlockIndexBufferSRV();
+
     }
 
 

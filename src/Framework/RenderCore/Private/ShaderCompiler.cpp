@@ -4,22 +4,78 @@
 #include <filesystem>
 #include <regex>
 #include <algorithm>
+#include <iostream>
+#include <atomic>
+#include <wrl/client.h>
+#include <stack>
+#include <string>
 
 // Include platform-specific compilation libraries
 // For DXC (DirectX Shader Compiler)
 // #include <dxcapi.h>
 
 // For glslang
-#include <glslang/Public/ShaderLang.h>
-#include "spirv_glsl.hpp"
 #include "spirv_cross.hpp"
-#include "glslang/SPIRV/GlslangToSpv.h"
 #include "spirv_hlsl.hpp"
+
+#include "dxc/dxcapi.h"
 #include "PathInfo.h"
 #include "ShaderCompiledDataPacker.h"
 #include "Log.h"
 
 namespace RenderCore {
+
+    namespace
+    {
+        std::string GetPathFileNameWithoutSuffix(const std::string& Path)
+        {
+            auto fileName = std::filesystem::path(Path).filename().string();
+            auto pos = fileName.find_last_of('.');
+			if (pos != std::string::npos)
+			{
+				return fileName.substr(0, pos);
+			}
+            return fileName;
+        }
+        std::wstring ToWide(const std::string& text)
+        {
+            return std::wstring(text.begin(), text.end());
+        }
+
+        std::string NormalizePath(const std::string& path)
+        {
+            std::string result = path;
+            std::replace(result.begin(), result.end(), '\\', '/');
+            while (result.starts_with("./"))
+            {
+                result.erase(0, 1);
+            }
+            return result;
+        }
+
+        std::string PathStem(const std::string& path)
+        {
+			auto pos = path.find_last_of("/");
+            if (pos != std::string::npos) {
+                return path.substr(0,pos);
+            }
+            return "";
+        }
+
+        bool ReadTextFile(const std::string& filePath, std::string& outText)
+        {
+            std::ifstream file(filePath, std::ios::in | std::ios::binary);
+            if (!file.is_open())
+            {
+                return false;
+            }
+
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            outText = ss.str();
+            return true;
+        }
+    }
 
     class ShaderVirtualFileSystem {
     public:
@@ -65,6 +121,7 @@ namespace RenderCore {
         }
     };
     ShaderVirtualFileSystem GShaderVirtualFileSystem;
+
 
     class ShaderParameterSFGenerator {
     public:
@@ -370,12 +427,12 @@ std::string ShaderCompiler::ShaderSourceDirectory = "";
 
 ShaderCompiler::ShaderCompiler()
 {
-    glslang::InitializeProcess();
+
 }
 
 ShaderCompiler::~ShaderCompiler()
 {
-    glslang::FinalizeProcess();
+
 }
 
 
@@ -386,28 +443,23 @@ ShaderCompilationOutput ShaderCompiler::Compile(const ShaderCompileInput& input)
 
     std::string source;
     std::vector<std::string> includedFiles;
-    if (!PreprocessSource(input, source, includedFiles))
-    {
-        output.Success = false;
-        output.ErrorMessage = "Failed to preprocess shader.";
-        return output;
-    }
-
+    if (PreprocessSource(input, source, includedFiles)) {
+        switch (input.Platform)
+        {
+        case ERHIShaderPlatform::Vulkan:
 #if defined(SHADER_DEBUG)
-    output.PreprocessedSource = source;
+            output.PreprocessedSource = source;
 #endif
-    output.IncludedFiles = includedFiles;
-
-    bool compiled = false;
-    switch (input.Platform)
-    {
-    case ERHIShaderPlatform::Vulkan:
-        CompileToSPIRV(source, input, output);
-        break;
-    default:
-        output.ErrorMessage = "Platform not implemented!";
-        compiled = false;
-        break;
+            CompileToSPIRV(source, input, output);
+            break;
+        default:
+#if defined(SHADER_DEBUG)
+            output.PreprocessedSource = source;
+#endif
+            output.IncludedFiles = includedFiles;
+            output.ErrorMessage = "Platform not implemented!";
+            break;
+        }
     }
     return output;
 }
@@ -587,185 +639,155 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     out.Platform = ERHIShaderPlatform::Vulkan;
     out.Success = false;
     out.PackedBinaryData.clear();
-    //LOG_INFO("%s", preprocessedSource.c_str());
-    // 1. ӳ�� Shader Stage
-    EShLanguage stage;
+
     std::string setId = "0";
+    std::string outProfile = "";
     switch (input.Frequency)
     {
-        // --- ��� A: �������еļ�����ɫ�� ---
-    case ERHIShaderFrequency::Compute:
-        stage = EShLangCompute;
-        setId = "0"; // ��Զ�� 0 ��ʼ
-        break;
-
-        // --- ��� B: ��׼ͼ�ι��� (ͨ�� Set 0 Ϊ VS, Set 1 Ϊ PS) ---
-    case ERHIShaderFrequency::Vertex:         stage = EShLangVertex;    setId = "0"; break;
-    case ERHIShaderFrequency::Fragment:       stage = EShLangFragment;  setId = "1"; break;
-    case ERHIShaderFrequency::Geometry:       stage = EShLangGeometry;  setId = "2"; break;
-        // ���δ���ͨ���� VS ���ܽ�ϣ����Ը�������΢��
-    case ERHIShaderFrequency::TessControl:    stage = EShLangTessControl;    setId = "3"; break;
-    case ERHIShaderFrequency::TessEvaluation: stage = EShLangTessEvaluation; setId = "4"; break;
-
-        // --- ��� C: �ִ� Mesh ��Ⱦ���� ---
-    case ERHIShaderFrequency::Task:           stage = EShLangTaskNV; setId = "0"; break;
-    case ERHIShaderFrequency::Mesh:           stage = EShLangMeshNV; setId = "1"; break;
-
-        // --- ��� D: ����׷�ٹ��� (�ؼ�����������) ---
-    case ERHIShaderFrequency::RayGen:
-    case ERHIShaderFrequency::ClosestHit:
-    case ERHIShaderFrequency::Miss:
-    case ERHIShaderFrequency::AnyHit:
-    case ERHIShaderFrequency::Intersection:
-    case ERHIShaderFrequency::Callable:
-        // ��׷�׶ν���ȫ��ӳ�䵽��ͬ�ļ����߼� Set (���� 0, 1, 2)
-        // ����� stage ӳ��...
-        setId = "0"; // ���߸�����ԴƵ����Ϊ "0", "1"
-        break;
-
+    case ERHIShaderFrequency::Compute:        outProfile = "cs_6_5";   setId = "0";  break;
+    case ERHIShaderFrequency::Vertex:         outProfile = "vs_6_5";   setId = "0"; break;
+    case ERHIShaderFrequency::Fragment:       outProfile = "ps_6_5";   setId = "1"; break;
+    case ERHIShaderFrequency::Geometry:       outProfile = "gs_6_5";   setId = "2"; break;
+    case ERHIShaderFrequency::TessControl:    outProfile = "hs_6_5";   setId = "3"; break;
+    case ERHIShaderFrequency::TessEvaluation: outProfile = "ds_6_5";   setId = "4"; break;
+    case ERHIShaderFrequency::Task:           outProfile = "as_6_5";   setId = "0"; break;
+    case ERHIShaderFrequency::Mesh:           outProfile = "ms_6_5";   setId = "1"; break;
+    case ERHIShaderFrequency::RayGen:         outProfile = "lib_6_5";   setId = "0"; break;
+    case ERHIShaderFrequency::ClosestHit:     outProfile = "lib_6_5";   setId = "1"; break;
+    case ERHIShaderFrequency::Miss:           outProfile = "lib_6_5";   setId = "2"; break;
+    case ERHIShaderFrequency::AnyHit:         outProfile = "lib_6_5";   setId = "1"; break;
+    case ERHIShaderFrequency::Intersection:   outProfile = "lib_6_5";   setId = "3"; break;
+    case ERHIShaderFrequency::Callable:       outProfile = "lib_6_5";   setId = "4"; break;
     default:
         out.ErrorMessage = "Unsupported shader stage";
         return;
     }
 
-    // 2. ���� TShader
-    glslang::TShader shader(stage);
-    const char* sourceCStr = preprocessedSource.c_str();
-    shader.setStrings(&sourceCStr, 1);
-    shader.setEntryPoint(input.EntryPoint.c_str());
-    EShMessages messages = (EShMessages)(EShMsgDefault | EShMsgReadHlsl | EShMsgVulkanRules | EShMsgSpvRules  | EShMsgDebugInfo/**/);
-    shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, 100);
-    shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_2);
-    shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_2);
-    // ����ƫ���� (����Ը����Լ� RHI ��ϰ�ߵ�����Щ����)
-    const int CBV_SHIFT = 100;   // b �Ĵ��� (Constant Buffer)
-    const int SRV_SHIFT = 200; // t �Ĵ��� (Texture/Buffer SRV)
-    const int SAMPLER_SHIFT = 300; // s �Ĵ��� (Sampler)
-    const int UAV_SHIFT = 400; // u �Ĵ��� (RWTexture/RWBuffer UAV)
-    shader.setAutoMapBindings(true);
-    // --- �����Զ�ӳ��binding ---
-    shader.setShiftBindingForSet(glslang::EResUbo, CBV_SHIFT,0);
-    shader.setShiftBindingForSet(glslang::EResUbo, CBV_SHIFT,0);
-    shader.setShiftBindingForSet(glslang::EResTexture, SRV_SHIFT,0);
-    shader.setShiftBindingForSet(glslang::EResSampler, SAMPLER_SHIFT, 0);
-    shader.setShiftBindingForSet(glslang::EResUav, UAV_SHIFT, 0);
-    shader.setShiftBindingForSet(glslang::EResImage, UAV_SHIFT, 0);
-    shader.setShiftBindingForSet(glslang::EResSsbo, UAV_SHIFT,0);
-    shader.setResourceSetBinding({ setId });
+    std::string targetProfile = outProfile;
+    if (targetProfile.empty())
+    {
+        out.ErrorMessage = "Unsupported shader stage for DXC.";
+        return;
+    }
 
-    // 3. ���Ӻ궨��
-    TBuiltInResource resources = {};
-    // ��ʼ��Ĭ����Դ����
-    resources.maxLights = 32;
-    resources.maxClipPlanes = 6;
-    resources.maxTextureUnits = 32;
-    resources.maxVertexAttribs = 64;
-    resources.maxVertexUniformComponents = 4096;
-    resources.maxVaryingFloats = 64;
-    resources.maxVertexTextureImageUnits = 32;
-    resources.maxCombinedTextureImageUnits = 80;
-    resources.maxTextureImageUnits = 32;
-    resources.maxFragmentUniformComponents = 4096;
-    resources.maxDrawBuffers = 32;
-    resources.maxVertexUniformVectors = 128;
-    resources.maxVaryingVectors = 8;
-    resources.maxFragmentUniformVectors = 16;
-    resources.maxVertexOutputVectors = 16;
-    resources.maxFragmentInputVectors = 15;
-    resources.minProgramTexelOffset = -8;
-    resources.maxProgramTexelOffset = 7;
-    resources.maxClipDistances = 8;
-    resources.maxComputeWorkGroupCountX = 65535;
-    resources.maxComputeWorkGroupCountY = 65535;
-    resources.maxComputeWorkGroupCountZ = 65535;
-    resources.maxComputeWorkGroupSizeX = 1024;
-    resources.maxComputeWorkGroupSizeY = 1024;
-    resources.maxComputeWorkGroupSizeZ = 64;
-    resources.maxComputeUniformComponents = 1024;
-    resources.maxComputeTextureImageUnits = 16;
-    resources.maxComputeImageUniforms = 8;
-    resources.maxComputeAtomicCounters = 8;
-    resources.maxComputeAtomicCounterBuffers = 1;
-    resources.maxVaryingComponents = 60;
-    resources.maxVertexOutputComponents = 64;
-    resources.maxGeometryInputComponents = 64;
-    resources.maxGeometryOutputComponents = 128;
-    resources.maxFragmentInputComponents = 128;
-    resources.maxImageUnits = 8;
-    resources.maxCombinedImageUnitsAndFragmentOutputs = 8;
-    resources.maxCombinedShaderOutputResources = 8;
-    resources.maxImageSamples = 0;
-    resources.maxVertexImageUniforms = 0;
-    resources.maxTessControlImageUniforms = 0;
-    resources.maxTessEvaluationImageUniforms = 0;
-    resources.maxGeometryImageUniforms = 0;
-    resources.maxFragmentImageUniforms = 8;
-    resources.maxCombinedImageUniforms = 8;
+    auto HasFlag = [&](EShaderCompileFlags flag)
+        {
+            return (static_cast<uint32_t>(input.Flags) & static_cast<uint32_t>(flag)) != 0;
+        };
 
-    // ����������
-    std::vector<const char*> preprocessorDefines;
+    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+    if (FAILED(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler))))
+    {
+        out.ErrorMessage = "Failed to initialize DXC compiler.";
+        return;
+    }
+
+    std::vector<std::wstring> argStorage;
+    argStorage.reserve(64);
+    std::vector<LPCWSTR> dxcArgs;
+    auto AddArg = [&](const std::wstring& arg)
+        {
+            argStorage.push_back(arg);
+            dxcArgs.push_back(argStorage.back().c_str());
+        };
+
+    AddArg(L"-spirv");
+    AddArg(L"-fspv-target-env=vulkan1.3");
+    AddArg(L"-fvk-use-dx-layout");
+    AddArg(L"-fvk-auto-shift-bindings");
+    AddArg(L"-fvk-bind-globals"); AddArg(L"10"); AddArg(ToWide(setId));
+    AddArg(L"-fvk-b-shift"); AddArg(L"100"); AddArg(ToWide(setId));
+    AddArg(L"-fvk-t-shift"); AddArg(L"200"); AddArg(ToWide(setId));
+    AddArg(L"-fvk-s-shift"); AddArg(L"300"); AddArg(ToWide(setId));
+    AddArg(L"-fvk-u-shift"); AddArg(L"400"); AddArg(ToWide(setId));
+
+    AddArg(L"-E");
+    AddArg(ToWide(input.EntryPoint));
+
+    AddArg(L"-T");
+    AddArg(ToWide(targetProfile));
+
+    if (HasFlag(EShaderCompileFlags::DebugInfo))
+    {
+        AddArg(L"-Zi");
+        AddArg(L"-Qembed_debug");
+    }
+
+    if (HasFlag(EShaderCompileFlags::DisableOptimize))
+    {
+        AddArg(L"-Od");
+    }
+    else
+    {
+        AddArg(L"-O3");
+    }
+
+    if (HasFlag(EShaderCompileFlags::WarningsAsError))
+    {
+        AddArg(L"-WX");
+    }
+
     for (const auto& define : input.Environment.Definitions)
     {
-        std::string def = define.first + "=" + define.second;
-        char* defStr = new char[def.size() + 1];
-        memcpy(defStr, def.c_str(), def.size() + 1);
-        preprocessorDefines.push_back(defStr);
+        std::string macro = "-D" + define.first + "=" + define.second;
+        AddArg(ToWide(macro));
+    }
+    DxcBuffer sourceBuffer = {};
+    sourceBuffer.Ptr = preprocessedSource.data();
+    sourceBuffer.Size = preprocessedSource.size();
+    sourceBuffer.Encoding = DXC_CP_UTF8;
+
+    Microsoft::WRL::ComPtr<IDxcResult> result;
+    HRESULT compileHr = dxcCompiler->Compile(
+        &sourceBuffer,
+        dxcArgs.data(),
+        static_cast<uint32_t>(dxcArgs.size()),
+        nullptr,
+        IID_PPV_ARGS(&result));
+
+    if (FAILED(compileHr) || result == nullptr)
+    {
+        out.ErrorMessage = "DXC compile invocation failed.";
+        return;
+    }
+
+    Microsoft::WRL::ComPtr<IDxcBlobUtf8> errorBlob;
+    result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errorBlob), nullptr);
+
+    HRESULT compileStatus = S_OK;
+    result->GetStatus(&compileStatus);
+    if (FAILED(compileStatus))
+    {
         
-    }
-
-    if (!shader.parse(&resources, 100, false, messages))
-    {
-        out.ErrorMessage = shader.getInfoLog();
-        out.ErrorMessage += "\n";
-        out.ErrorMessage += shader.getInfoDebugLog();
-        std::string text = preprocessedSource;
-        std::ofstream file("error_shader_source.txt");
-        if (file.is_open())
+        if (errorBlob && errorBlob->GetStringLength() > 0)
         {
-            file << text;
-            file << "\n\n\n\n\n\n\n\n\n\n\n";
-            file << out.ErrorMessage;
-            file.close();
+            out.ErrorMessage = errorBlob->GetStringPointer();
         }
-        LOG_ERROR("parse error %s", out.ErrorMessage);
-        // ����
-        for (auto p : preprocessorDefines) delete[] p;
+        else
+        {
+            out.ErrorMessage = "DXC failed with no detailed error output.";
+        }
         return;
     }
-    for (auto p : preprocessorDefines) delete[] p;
 
-    // 4. ���ӳ���
-    glslang::TProgram program;
-    program.addShader(&shader);
-
-    if (!program.link(messages))
-    {
-        out.ErrorMessage = program.getInfoLog();
-        out.ErrorMessage += "\n";
-        out.ErrorMessage += program.getInfoDebugLog();
-        return;
-    }
-    program.mapIO();
-    // 5. ���� SPIR-V
-    std::vector<uint32_t> spirv;
-
-    spv::SpvBuildLogger logger;
-    glslang::SpvOptions spvOptions;
-
-    // 开启 RenderDoc Source Debug
-    spvOptions.generateDebugInfo = true;
-
-    // 禁止优化（非常重要）
-    spvOptions.disableOptimizer = true;
-
-    // 不做 size optimization
-    spvOptions.optimizeSize = false;
-
-    // 可选：开启验证
-    spvOptions.validate = true;
-
-    glslang::GlslangToSpv(*program.getIntermediate(stage), spirv,&logger,&spvOptions/**/ );
     
+
+    Microsoft::WRL::ComPtr<IDxcBlob> spirvBlob;
+    if (FAILED(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&spirvBlob), nullptr)) || !spirvBlob)
+    {
+        out.ErrorMessage = "DXC did not return SPIR-V object blob.";
+        return;
+    }
+
+    if ((spirvBlob->GetBufferSize() % sizeof(uint32_t)) != 0)
+    {
+        out.ErrorMessage = "DXC SPIR-V blob size is invalid.";
+        return;
+    }
+
+    std::vector<uint32_t> spirv(spirvBlob->GetBufferSize() / sizeof(uint32_t));
+    memcpy(spirv.data(), spirvBlob->GetBufferPointer(), spirvBlob->GetBufferSize());
+
     const uint32_t OpTypeImage = 25;
     auto StripImageFormat = [](std::vector<uint32_t>& spirv)
         {
@@ -856,7 +878,6 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         }
 
         uint32_t binding = compiler.get_decoration(ub.id, spv::DecorationBinding);
-        if (binding == 0) continue;
         uint32_t set = compiler.get_decoration(ub.id, spv::DecorationDescriptorSet);
 
         auto& type = compiler.get_type(ub.base_type_id);
@@ -927,7 +948,6 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-        if (binding == 0) continue;
         out.ParameterMap.AddParameterAllocation(
             name,
             static_cast<uint32_t>(set),
@@ -947,7 +967,6 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
-        if (binding == 0) continue;
         auto& type = compiler.get_type(sb.type_id);
 
         uint32_t arraySize = 1;
@@ -968,9 +987,8 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         std::string name = compiler.get_name(img.id);
         uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-        if (binding == 0) continue;
         out.ParameterMap.AddParameterAllocation(
-            name, (uint32_t)set, (uint32_t)binding,1, EShaderParameterType::SRV
+            name, (uint32_t)set, (uint32_t)binding, 1, EShaderParameterType::SRV
         );
     }
 
@@ -981,7 +999,6 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
 
         uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-        if (binding == 0) continue;
         out.ParameterMap.AddParameterAllocation(
             name,
             static_cast<uint32_t>(set),
@@ -998,7 +1015,6 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         bool hasBinding = compiler.has_decoration(sb.id, spv::DecorationBinding);
         uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
         uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
-        if (binding == 0) continue;
         auto& type = compiler.get_type(sb.base_type_id);
         uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
 
@@ -1039,28 +1055,27 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     out.PackedBinaryData.resize(spirv.size() * sizeof(uint32_t));
     memcpy(out.PackedBinaryData.data(), spirv.data(), spirv.size() * sizeof(uint32_t));
 
-	SPIRVPackSource packSource;
-	packSource.compiler = &compiler;
-	packSource.spirvCode = &spirv;
+    SPIRVPackSource packSource;
+    packSource.compiler = &compiler;
+    packSource.spirvCode = &spirv;
     packSource.frequency = input.Frequency;
     packSource.entryPoint = input.EntryPoint;
 
-	SPIRVCompiledBinaryResultPacker packer;
-	std::vector<char> packedData;
+    SPIRVCompiledBinaryResultPacker packer;
+    std::vector<char> packedData;
 
-	if (packer.Pack(&packSource, packedData))
-	{
-		out.PackedBinaryData = std::move(packedData);
+    if (packer.Pack(&packSource, packedData))
+    {
+        out.PackedBinaryData = std::move(packedData);
         out.Success = true;
-	}
-
-
+    }
 }
 
 void ShaderCompiler::CompileToDirectX(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
 {
 
 }
+
 
 void ShaderCompiler::CompileToMetal(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
 {
@@ -1184,7 +1199,11 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
 
             info.Binding =
                 (uint16_t)compiler->get_decoration(res.id, spv::DecorationBinding);
-            if (info.Binding == 0) return;//binding为0表示没有使用，直接跳过
+            if (info.Binding == 0)
+            {
+                auto name = compiler->get_name(res.id);
+                //return;//binding为0表示没有使用，直接跳过
+            }
             info.Set =
                 (uint16_t)compiler->get_decoration(res.id, spv::DecorationDescriptorSet);
 

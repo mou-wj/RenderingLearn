@@ -1,0 +1,35 @@
+{
+  "name": "imgui",
+  "ignore": false,
+  "type": "remote_source_imported",
+  "source": {
+    "git": "https://github.com/ocornut/imgui.git",
+    "branch": "master"
+  },
+  "import_info": {
+    "headers": [
+      "imgui.h",
+      "imgui_internal.h",
+      "imconfig.h",
+      "imstb_rectpack.h",
+      "imstb_textedit.h",
+      "imstb_truetype.h",
+      "backends/imgui_impl_opengl3.h",
+      "backends/imgui_impl_opengl3_loader.h"
+    ],
+    "sources": [
+      "imgui.cpp",
+      "imgui_demo.cpp",
+      "imgui_draw.cpp",
+      "imgui_tables.cpp",
+      "imgui_widgets.cpp",
+      "backends/imgui_impl_opengl3.cpp"
+    ]
+  },
+    "install_layout": {
+    "root": "${INSTALL_DIR}/imgui",
+    "include": "include",
+    "source": "src"
+  },
+  "dependencies": []
+}

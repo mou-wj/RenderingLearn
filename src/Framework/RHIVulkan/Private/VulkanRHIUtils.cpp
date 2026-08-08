@@ -335,7 +335,10 @@ namespace RHIVulkan {
         {
             usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
         }
-
+        if (EnumHasAnyFlags(Flags,ERHIBufferUsageFlag::AccelerationStructureBuildInput))
+        {
+            usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+        }
         return usage;
     }
 

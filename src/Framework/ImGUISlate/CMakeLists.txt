@@ -8,6 +8,7 @@ set(TARGET_NAME ImGuiSlate)
 file(GLOB_RECURSE PUBLIC_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader/*.hpp"
+    "${IMGUI_HEADER_FILES}"
 )
 
 file(GLOB_RECURSE PRIVATE_HEADERS
@@ -19,6 +20,7 @@ file(GLOB_RECURSE MODULE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/Private/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp" # top-level cpp if any
     "${CMAKE_CURRENT_SOURCE_DIR}/*.c" # top-level cpp if any
+    
 )
 
 # Warn if no sources found (helps reuse the template)
@@ -30,12 +32,16 @@ endif()
 add_library(${TARGET_NAME} SHARED
     ${MODULE_SOURCES}
     ${PUBLIC_HEADERS}
-    ${PRIVATE_HEADERS})
+    ${PRIVATE_HEADERS}
+    ${IMGUI_SOURCE_FILES}
+)
 
 # Expose public headers to consumers
 target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
+        "${IMGUI_INCLUDE_DIR}"
+        "${IMGUI_INCLUDE_DIR}/backends"
 )
 find_package(OpenGL REQUIRED)
 target_link_libraries(${TARGET_NAME} PUBLIC SlateCore OpenGL::GL)

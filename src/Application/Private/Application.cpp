@@ -4,7 +4,7 @@
 #include "ImWidget.h"
 #include "ImMainWindow.h"
 
-#include "ImGui/imgui.h"
+#include "imgui.h"
 
 namespace App {
 

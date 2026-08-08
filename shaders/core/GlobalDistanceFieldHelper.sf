@@ -1,7 +1,6 @@
 
 #include "/Generated/ShaderParameters/SceneGlobalDistanceFieldParameters.sf"
-
-
+#define HitThreshold 20.0f
 
 uint GlobalDistanceFieldCalculateBlockId(int3 BlockCoord)
 {
@@ -17,9 +16,9 @@ bool GlobalDistanceFieldGetBlock(
     out GlobalDistanceFieldBlockIndex OutBlock)
 {
     OutBlock.Valid = 0;
-    OutBlock.AtlasX = 0;
-    OutBlock.AtlasY = 0;
-    OutBlock.AtlasZ = 0;
+    OutBlock.AllocationX = 0;
+    OutBlock.AllocationY = 0;
+    OutBlock.AllocationZ = 0;
 
 
     if(any(BlockCoord < 0))
@@ -52,7 +51,7 @@ int3 GlobalDistanceFieldWorldToBlock(
 {
     float3 LocalPosition =
         WorldPosition -
-        GlobalDistanceFieldCenter;
+        GlobalDistanceFieldOrigin;
 
 
     return int3(
@@ -66,7 +65,7 @@ float3 GlobalDistanceFieldGetBlockLocalUV(
     int3 BlockCoord)
 {
     float3 BlockMin =
-        GlobalDistanceFieldCenter +
+        GlobalDistanceFieldOrigin +
         float3(BlockCoord) *
         BlockSize;
 
@@ -83,14 +82,14 @@ float3 GlobalDistanceFieldGetAtlasUV(
     float3 LocalUV,
     GlobalDistanceFieldBlockIndex Block)
 {
+    float3 BlockVoxelDimention = BlockSize / DistanceFieldVoxelSize;
     float3 AtlasVoxelPosition =
         float3(
-            Block.AtlasX,
-            Block.AtlasY,
-            Block.AtlasZ)
+            Block.AllocationX,
+            Block.AllocationY,
+            Block.AllocationZ)
         +
-        LocalUV /
-        DistanceFieldVoxelSize;
+        LocalUV * BlockVoxelDimention;
 
 
     return
@@ -143,31 +142,29 @@ float TraceDistanceField(
     float3 Origin,
     float3 Direction)
 {
-    float DistanceTravel = 0;
+    float DistanceTravel = 0.1;
 
 
-    for(int i=0;i<64;i++)
+    for(int i=0;i< 40 ;i++)
     {
-        float3 P =
-            Origin +
-            Direction * DistanceTravel;
+        float3 P = Origin + Direction * DistanceTravel;
 
 
-        float SDF =
-            SampleGlobalDistanceField(P);
+        float SDF = SampleGlobalDistanceField(P);
 
 
-        if(SDF < HitThreshold)
+
+        if(SDF == 100000.0){
+            SDF = BlockSize.x;
+        }
+        if(SDF > HitThreshold || SDF < 0)
         {
             return DistanceTravel;
         }
 
-
-        DistanceTravel += max(
-            SDF * 0.8,
-            DistanceFieldVoxelSize * 0.5);
+        DistanceTravel += SDF;
     }
 
 
-    return -1;
+    return DistanceTravel;
 }

@@ -185,6 +185,39 @@ void VulkanDevice::CreateLogicalDevice(VkPhysicalDevice physicalDevice,
     if (timelineSemaphoreFeatures_.timelineSemaphore) {
 		createInfo.pNext = &timelineSemaphoreFeatures_;
     }
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+    accelStructFeatures.accelerationStructure = VK_TRUE;
+	accelStructFeatures.pNext = (void*)createInfo.pNext;
+    createInfo.pNext = &accelStructFeatures;
+    
+	VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufferDeviceAddressFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR };
+    bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
+    bufferDeviceAddressFeatures.pNext = (void*)createInfo.pNext;
+    createInfo.pNext = &bufferDeviceAddressFeatures;
+
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
+	rayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
+	rayTracingPipelineFeatures.pNext = (void*)createInfo.pNext;
+	createInfo.pNext = &rayTracingPipelineFeatures;
+
+    VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlockLayoutFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES };
+    scalarBlockLayoutFeatures.scalarBlockLayout = VK_TRUE;
+    scalarBlockLayoutFeatures.pNext = (void*)createInfo.pNext;
+    createInfo.pNext = &scalarBlockLayoutFeatures;
+
+    //dx编译器自动开启的，后续需要看情况移除
+    VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR computeShaderDerivativesFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR };
+    computeShaderDerivativesFeatures.computeDerivativeGroupQuads = VK_TRUE;
+    computeShaderDerivativesFeatures.computeDerivativeGroupLinear = VK_TRUE;
+    computeShaderDerivativesFeatures.pNext = (void*)createInfo.pNext;
+    createInfo.pNext = &computeShaderDerivativesFeatures;
+	//VkPhysicalDeviceComputeShaderDerivativesFeaturesNV computeShaderDerivativesFeaturesNV{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV };
+    //computeShaderDerivativesFeaturesNV.computeDerivativeGroupQuads = VK_TRUE;
+    //computeShaderDerivativesFeaturesNV.computeDerivativeGroupLinear = VK_TRUE;
+    //computeShaderDerivativesFeaturesNV.pNext = (void*)createInfo.pNext;
+    //createInfo.pNext = &computeShaderDerivativesFeaturesNV;
+
+
     //VkPhysicalDeviceFaultFeaturesEXT faultFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT };
     //faultFeatures.deviceFault = VK_TRUE; // ◄── 必须开启这个
     //faultFeatures.deviceFaultVendorBinary = VK_TRUE; // ◄── 必须开启这个

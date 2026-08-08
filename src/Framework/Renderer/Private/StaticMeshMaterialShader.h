@@ -192,8 +192,7 @@ namespace Renderer
             const RenderCore::ShaderPermutationParameters& Parameters,
             RenderCore::ShaderCompilerEnvironment& OutEnvironment);
 
-        static const RenderCore::ShaderParametersMetadata*
-            GetShaderParameterMetadata();
+        static const RenderCore::ShaderParametersMetadata* GetShaderParameterMetadata();
     };
 
     RHI::RHIVertexDescState* GetVertexOnlyState(bool useIntance = false);

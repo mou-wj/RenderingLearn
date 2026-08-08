@@ -1,6 +1,6 @@
 #include "ImWidget.h"
 
-#include "ImGui/imgui.h"
+#include "imgui.h"
 
 namespace {
 

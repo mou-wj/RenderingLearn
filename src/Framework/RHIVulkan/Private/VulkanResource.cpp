@@ -689,15 +689,8 @@ void VulkanRayTracingInstance::SetInstancesDesc(const RHIRayTracingInstancesDesc
         return;
     }
 
-    void* mapped = nullptr;
-    if (!VKFunc::MapMemory(Device->GetHandle(), InstanceAllocation.GetMemory(), InstanceAllocation.GetOffset(), instanceBufferSize, 0, &mapped) || mapped == nullptr)
-    {
-        DestroyInstanceBuffer();
-        return;
-    }
 
-    memcpy(mapped, vkInstances.data(), static_cast<size_t>(instanceBufferSize));
-    VKFunc::UnmapMemory(Device->GetHandle(), InstanceAllocation.GetMemory());
+    
 
     VkBufferDeviceAddressInfo instanceAddressInfo{};
     instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;

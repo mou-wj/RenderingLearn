@@ -2,11 +2,7 @@
 #include "/Generated/ShaderParameters/SceneShaderParameters.sf"
 #include "/Generated/ShaderParameters/SceneLightParameters.sf"
 #include "/core/ShadowParametersHelper.sf"
-#if DISTANCE_FIELD
-
-
-#endif
-
+#include "/core/GlobalDistanceFieldHelper.sf"
 
 
 // ============================================================================
@@ -192,24 +188,17 @@ float3 EvaluateSceneLighting(
     // =====================================================
     // IBL
     // =====================================================
+     float3 N = normalize(Material.NormalTS);
 
-    {
-        float3 N =
-            normalize(
-                Material.NormalTS);
+     float3 V = normalize(Context.ViewDirection);
 
-        float3 V =
-            normalize(
-                Context.ViewDirection);
+     float3 R = reflect(-V,N);
 
-        float3 R =
-            reflect(
-                -V,
-                N);
+     float NdotV = saturate(dot(N, V));
 
-        float NdotV =
-            saturate(
-                dot(N, V));
+     float distTrace = TraceDistanceField(Context.WorldPosition,R);
+     if(distTrace > HitThreshold)
+     {
 
         //---------------------------------
         // Sample diffuse irradiance

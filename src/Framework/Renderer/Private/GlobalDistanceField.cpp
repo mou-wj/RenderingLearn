@@ -218,6 +218,12 @@ namespace Renderer
         bufferDesc.Stride = sizeof(GlobalDistanceFieldBlockIndex);
         bufferDesc.Usage = RHI::ERHIBufferUsageFlag::ShaderResource | RHI::ERHIBufferUsageFlag::TransferDst;
         BlockIndexBufferGPU = std::make_unique<RenderCore::RenderBuffer>(bufferDesc);
+		BlockIndexBufferGPU->InitRHIResource();
+        RHI::RHIBufferSRVCreateInfo srvInfo;
+        srvInfo.Stride = sizeof(GlobalDistanceFieldBlockIndex);
+        srvInfo.NumElements = GridSizeX * GridSizeY * GridSizeZ;
+
+        BlockIndexBufferSRV = BlockIndexBufferGPU->GetViewCache().GetOrCreateSRV(BlockIndexBufferGPU->GetRHI(), srvInfo);
 
         VoxelSize = InVoxelSize;
 
@@ -467,7 +473,7 @@ namespace Renderer
             }
         }
 
-
+        UploadBlockIndexBufferToGPU();
 
         return !OutClipMap.BlockIds.empty();
     }
@@ -659,12 +665,25 @@ namespace Renderer
 
     void Renderer::GlobalDistanceField::UploadBlockIndexBufferToGPU()
     {
-		if (!BlockIndexBufferGPU)
-		{
-			return;
-		}
+        if (!BlockIndexBufferGPU)
+        {
+            return;
+        }
+
+
         auto size = GridSizeX * GridSizeY * GridSizeZ * sizeof(GlobalDistanceFieldBlockIndex);
-		BlockIndexBufferGPU->UploadData(BlockIndexBufferCPU.data(), size, 0);
+        char zero = 0;
+        memset(BlockIndexBufferCPU.data(), 0, size);
+        for (const auto& [BlockId, Block] : Blocks) {
+            auto& page = BlockIndexBufferCPU[BlockId];
+            page.Valid = 1;
+            page.AllocationX = Block.Allocation.X;
+            page.AllocationY = Block.Allocation.Y;
+            page.AllocationZ = Block.Allocation.Z;
+        }
+
+
+        BlockIndexBufferGPU->UploadData(BlockIndexBufferCPU.data(), size, 0);
     }
 
 

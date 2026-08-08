@@ -1,8 +1,7 @@
 {
   "name": "Vulkan",
   "ignore": false,
-  "type": "prebuilt",
-  "config_type": "manual",
+  "type": "manual",
   "install_layout": {
     "root": "${ENV:VULKAN_SDK}"
   },
@@ -10,22 +9,28 @@
     "common_defines": [
       ""
     ],
+     "include_dirs": [
+        "Include"
+     ],
     "components": {
-      "Runtime": {
-        "include_dirs": [
-          "Include"
-        ],
-        "libs": {
+      "vulkan": {
+        "lib": {
           "debug": [
-            ""
+            "Lib/vulkan-1"
           ],
           "release": [
-            ""
+            "Lib/vulkan-1"
           ]
         },
-        "dlls": [
-          ""
-        ],
+        "runtime": {
+          "PathMode" : "Absolute",
+          "debug": [
+            "${SYSTEM_PATH}/vulkan-1"
+          ],
+          "release": [
+            "${SYSTEM_PATH}/vulkan-1"
+          ]
+        },
         "dependencies": []
       }
     }

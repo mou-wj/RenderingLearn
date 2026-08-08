@@ -36,10 +36,11 @@ add_library(${TARGET_NAME} SHARED
 target_include_directories(${TARGET_NAME}
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/PublicHeader"
+        "${RENDERDOC1_44_INCLUDE_DIRS}"
 )
-target_link_libraries(${TARGET_NAME} PUBLIC Core Deps::RenderDoc)
+target_link_libraries(${TARGET_NAME} PUBLIC Core)
 
-_3rds_postbuild_copy_dlls(${TARGET_NAME} "${RENDERDOC_DLLS}" "${BINARY_DIR}")
+_3rds_postbuild_copy_dlls(${TARGET_NAME} "${RENDERDOC1_44_DLLS}" "${BINARY_DIR}")
 
 string(TOUPPER "${TARGET_NAME}" TARGET_NAME_UPPER)
 if (WIN32)

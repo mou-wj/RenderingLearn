@@ -286,7 +286,8 @@ private:
         vertexDesc.Stride = sizeof(TriangleVertex);
         vertexDesc.Usage = RHI::ERHIBufferUsageFlag::Vertex |
             RHI::ERHIBufferUsageFlag::ShaderResource |
-            RHI::ERHIBufferUsageFlag::TransferDst;
+            RHI::ERHIBufferUsageFlag::TransferDst | 
+            RHI::ERHIBufferUsageFlag::AccelerationStructureBuildInput;
         vertexDesc.InitialQueueType = RHI::EQueueType::Graphics;
         VertexBuffer = api->CreateBuffer(vertexDesc);
 
@@ -295,7 +296,8 @@ private:
         indexDesc.Stride = sizeof(uint32_t);
         indexDesc.Usage = RHI::ERHIBufferUsageFlag::Index |
             RHI::ERHIBufferUsageFlag::ShaderResource |
-            RHI::ERHIBufferUsageFlag::TransferDst;
+            RHI::ERHIBufferUsageFlag::TransferDst |
+            RHI::ERHIBufferUsageFlag::AccelerationStructureBuildInput;
         indexDesc.InitialQueueType = RHI::EQueueType::Graphics;
         IndexBuffer = api->CreateBuffer(indexDesc);
 
@@ -402,7 +404,7 @@ private:
             };
 
             [shader("closesthit")]
-            void ClosestHitMain(inout Payload payload)
+            void ClosestHitMain(inout Payload payload : SV_RayPayload)
             {
                 payload.Color = float3(1.0, 0.0, 0.0);
             }
