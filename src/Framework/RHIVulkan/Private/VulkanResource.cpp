@@ -528,6 +528,7 @@ void VulkanRayTracingGeometry::SetGeometryDesc(const RHIRayTracingGeometryDesc& 
     buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
     buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
     buildInfo.flags = buildFlags;
+    BuildFlags = buildFlags;
     buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
     buildInfo.geometryCount = 1;
     buildInfo.pGeometries = &GeometryInfo;
@@ -836,7 +837,7 @@ void VulkanShaderResourceView::CreateTextureView(
 
     viewInfo.format = Format;
 
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.aspectMask = GetImageAspectFlags(Format);
     viewInfo.subresourceRange.baseMipLevel = BaseMipLevel;
     viewInfo.subresourceRange.levelCount = MipLevelCount;
     viewInfo.subresourceRange.baseArrayLayer = BaseArrayLayer;
@@ -989,7 +990,7 @@ void VulkanUnorderedAccessView::CreateTextureView(
 
     viewInfo.format = Format;
 
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.aspectMask = GetImageAspectFlags(Format);
     viewInfo.subresourceRange.baseMipLevel = BaseMipLevel;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = BaseArrayLayer;

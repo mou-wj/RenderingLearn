@@ -251,7 +251,7 @@ public:
     VkDeviceAddress GetDeviceAddress() const { return DeviceAddress; }
     const VkAccelerationStructureGeometryKHR& GetGeometryInfo() const { return GeometryInfo; }
     const VkAccelerationStructureBuildRangeInfoKHR& GetBuildRangeInfo() const { return BuildRangeInfo; }
-
+    const VkBuildAccelerationStructureFlagsKHR& GetBuildFlags() const { return BuildFlags; }
 private:
     void DestroyAccelerationStructure();
     void DestroyStorageBuffer();
@@ -264,6 +264,7 @@ private:
     VkDeviceAddress DeviceAddress = 0;
     VkAccelerationStructureGeometryKHR GeometryInfo{};
     VkAccelerationStructureBuildRangeInfoKHR BuildRangeInfo{};
+    VkBuildAccelerationStructureFlagsKHR BuildFlags;
 };
 
 class VulkanRayTracingInstance : public RHIRayTracingInstance

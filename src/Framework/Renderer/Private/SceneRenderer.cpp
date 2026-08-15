@@ -464,6 +464,144 @@ namespace Renderer {
         
 
     }
+    void SceneRenderer::AddPreDepthPass(RenderCore::RenderGraphBuilder& graphBuilder, const MeshBatchList& meshBatchList, const Core::Mat4& viewProj, RenderCore::RenderGraphTextureRef depth)
+    {
+        // 创建深度模板状态
+        RHI::RHIDepthStencilStateDesc depthStencilDesc;
+        depthStencilDesc.depthTestEnable = true;
+        depthStencilDesc.depthWriteEnable = true;
+        depthStencilDesc.depthCompareOp = RHI::ERHICompareOp::Less;
+
+        auto depthStencilState = RHIPipelineStateCache::GetOrCreateDepthStencilState(depthStencilDesc);
+        RHI::RHIGraphicsPipelineStateDesc pipelineDesc;
+        // 创建图形管线状态
+
+
+        // 这里可以设置更多管线配置...
+
+
+        pipelineDesc.depthStencilState = depthStencilState;
+
+        //rendertarget info
+        pipelineDesc.attachmentDesc.colorAttachmentCount = 0;
+        pipelineDesc.attachmentDesc.depthActions = ERenderTargetActions::Clear_Store;
+        pipelineDesc.attachmentDesc.enableDepth = true;
+        pipelineDesc.attachmentDesc.depthStencilFormat = RHI::ERHIFormat::D32_Float;
+        auto vsShaderType = ShaderType::GetRegisterMap() [ShaderType::EShaderTypeFlag::Global]["PositionOnlyVS"];
+        for (auto MeshBatch : meshBatchList) {
+            
+            auto vfType = VertexFactoryType::GetRegisterMap()["LocalVertexFactory"];
+            auto vfFlags = MeshBatch.VertexFactory->GetVertexFactoryFlags();
+            bool supportInstance = MeshBatch.InstanceDataIds.size() > 1;
+            if (supportInstance) {
+                LocalVertexFactoryFeatureFlags flags;
+                flags.PackedFlags = vfFlags;
+                flags.SupportsInstanceData = true;
+                vfFlags = flags.PackedFlags;
+            }
+            if (MeshBatch.MaterialProxy->GetParent()->GetBlendMode() == EBlendMode::Opaque) {
+                // 创建光栅化状态
+                RHI::RHIRasterizerStateDesc rasterizerDesc;
+                rasterizerDesc.polygonMode = RHI::ERHIPolygonMode::Fill;
+                rasterizerDesc.cullMode = RHI::ERHICullMode::Back;
+                rasterizerDesc.frontFace = MeshBatch.FrontFace;
+                rasterizerDesc.lineWidth = 1.0f;
+                rasterizerDesc.depthBiasEnable = false;
+
+                auto rasterizerState = RHIPipelineStateCache::GetOrCreateRasterizerState(rasterizerDesc);
+                pipelineDesc.rasterizerState = rasterizerState;
+                bool supportInstance = MeshBatch.InstanceDataIds.size() > 1;
+                uint32_t vsPermutationId = 0;
+                if (supportInstance) {
+                    vsPermutationId = 1;
+                }
+                //auto vfFlags = batch.VertexFactory->GetVertexFactoryFlags();
+                auto vertexShader = GShaderMap.GetShader(vsShaderType, vsPermutationId);
+                pipelineDesc.shaderStages.vertexShader = dynamic_cast<RHI::RHIVertexShader*>(vertexShader->GetRHIShader());
+
+               
+                pipelineDesc.vertexDescState = GetVertexOnlyState(supportInstance);
+                RHI::RHIColorBlendStateDesc blendDesc;
+                // 创建颜色混合状态
+                blendDesc.attachments = {};
+                auto colorBlendState = RHIPipelineStateCache::GetOrCreateColorBlendState(blendDesc);
+                pipelineDesc.colorBlendState = colorBlendState;
+                auto pipeline = RHIPipelineStateCache::GetOrCreateGraphicsPipelineState(pipelineDesc);
+
+
+                // 这里 pipeline 创建建议提取缓存
+                // 逻辑与你当前 StaticMeshDrawPass 一样
+
+                BEGIN_SHADER_PARAMETER_STRUCT(PassParameters)
+                    SHADER_PARAMETER_STRUCT_REFERENCE(PositionOnlyVSParameters, vertexParameters)
+                    SHADER_PARAMETER_RENDER_TARGET_BINDING_SLOTS(renderTargetSlots)
+                END_SHADER_PARAMETER_STRUCT(PassParameters)
+
+                auto* params = graphBuilder.AllocateParameter<PassParameters>();
+                params->vertexParameters.ViewProjection = viewProj;
+                params->vertexParameters.Model = MeshBatch.LocalToWorld;
+                if (supportInstance) {
+                    params->vertexParameters.LocalVFInstanceInfo.InstanceData = MeshBatch.InstanceDataBufferSRV;
+                }
+                params->renderTargetSlots.DepthStencil.Texture = depth;
+                params->renderTargetSlots.DepthStencil.DepthAction = ERenderTargetActions::Clear_Store;
+                auto width = depth->GetDesc().Width;
+				auto height = depth->GetDesc().Height;
+                graphBuilder.AddPass<PassParameters>(
+                    "DepthOnlyPass",
+                    PassParameters::GetMetaData(),
+                    params,
+                    EPassFlag::Graphic,
+                    [=](RHI::RHICommandListBase& RHICmdList)
+                    {
+                        auto& cmd =
+                            static_cast<RHI::RHIGraphicCommandList&>(RHICmdList);
+                        cmd.SetGraphicPipelineState(pipeline);
+                        //绑定vertexfactory
+                        MeshBatch.VertexFactory->Bind(cmd);
+                        if (supportInstance) {
+                            cmd.SetStreamSource(1, MeshBatch.InstanceDataBufferAccessor->GetInstanceIdBuffer()->GetRHI(), 0);
+                        }
+                        // Bind Pipeline
+                        //设置vertex参数
+                        SetShaderParameters(cmd, vertexShader, &params->vertexParameters);
+
+                        //设置pixel参数
+                        auto boundRenderTarget = params->renderTargetSlots.GetBoundRenderTarget();
+                        RHIRenderPassInfo passInfo;
+                        passInfo.RenderTargets = boundRenderTarget;
+                        passInfo.RenderTargets.DepthStencil.ClearBinding.Depth = 1.0f;
+                        passInfo.RenderArea.X = 0;
+                        passInfo.RenderArea.Y = 0;
+                        passInfo.RenderArea.Width = width;
+                        passInfo.RenderArea.Height = height;
+                        cmd.BeginRenderPass(passInfo);
+                        cmd.SetViewport(
+                            0,
+                            0,
+                            width,
+                            height,
+                            0.0f,
+                            1.0f);
+                        cmd.SetScissor(0, 0, width, height);
+                        for (auto& element : MeshBatch.Elements)
+                        {
+                            cmd.DrawIndexed(
+                                MeshBatch.IndexBuffer->GetRHI(),
+                                element.NumIndices,
+                                MeshBatch.InstanceDataIds.size(),
+                                element.FirstIndex,
+                                element.BaseVertexIndex,
+                                MeshBatch.StartInstance);
+                        }
+                        cmd.EndRenderPass();
+                    });
+            }
+
+        }
+
+    }
+
     void SceneRenderer::UpdateCascadeShadowInfo(Renderer::Scene* Scene, RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view)
 	{
         BuildSceneLightCascadeShadowMap(Scene, graphBuilder, view);

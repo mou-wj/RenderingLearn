@@ -230,6 +230,9 @@ namespace RHIVulkan {
         case ESPIRVShaderResourceType::StorageBuffer:
             return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 
+        case ESPIRVShaderResourceType::AccelerationStructure:
+            return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+
         default:
             return VK_DESCRIPTOR_TYPE_MAX_ENUM;
         }

@@ -138,6 +138,14 @@ namespace RHI {
         void Execute(RHICommandListBase& cmdList) override;
     };
 
+    struct RHI_API RHICommandSetRayTracingShaderParameters : public RHICommandBase
+    {
+        RHIRayTracingShader* Shader = nullptr;
+        RHIBatchedShaderParameters Parameters{};
+        RHICommandSetRayTracingShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& parameters);
+        void Execute(RHICommandListBase& cmdList) override;
+    };
+
     struct RHI_API RHICommandSetStreamSource : public RHICommandBase
     {
         uint32_t StreamIndex = 0;
@@ -192,13 +200,6 @@ namespace RHI {
     {
         RHIRayTracingPipelineState* PipelineState = nullptr;
         explicit RHICommandSetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState);
-        void Execute(RHICommandListBase& cmdList) override;
-    };
-
-    struct RHI_API RHICommandSetRayTracingAccelerationStructure : public RHICommandBase
-    {
-        RHIRayTracingInstance* AccelerationStructure = nullptr;
-        explicit RHICommandSetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure);
         void Execute(RHICommandListBase& cmdList) override;
     };
 
@@ -289,6 +290,7 @@ namespace RHI {
         RHIGraphicContex* GetGraphicContext() const;
 
         void SetBatchedShaderParameters(RHIGraphicShader* shader, const RHIBatchedShaderParameters& batchedShaderParameter);
+        void SetBatchedShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& batchedShaderParameter);
         void SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset);
         void SetGraphicPipelineState(RHIGraphicsPipelineState* pipelineState);
         void SetViewport(float x, float y, float w, float h, float minDepth, float maxDepth);
@@ -300,7 +302,6 @@ namespace RHI {
         void BeginRenderPass(const RHIRenderPassInfo& renderPassInfo);
         void EndRenderPass();
         void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState);
-        void SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure);
         void BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure);
         void UpdateAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure);
         void TraceRays(uint32_t width, uint32_t height, uint32_t depth = 1);

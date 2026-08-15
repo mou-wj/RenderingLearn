@@ -1,0 +1,135 @@
+#include "/Generated/ShaderParameters/SceneEvnIBLLightParameters.sf"
+#include "/core/ShadingCommon.sf"
+
+float3 ShadeIBL(
+    ShadingContext Context,
+    MaterialData Material,
+    float3 DiffuseIrradiance,
+    float3 PrefilteredSpecular,
+    float2 BRDF)
+{
+    float3 N =
+        normalize(
+            Material.NormalTS);
+
+    float3 V =
+        normalize(
+            Context.ViewDirection);
+
+    float NdotV =
+        saturate(
+            dot(N, V));
+
+    //------------------------------------
+    // Fresnel
+    //------------------------------------
+
+    float3 F0 =
+        lerp(
+            0.04.xxx,
+            Material.BaseColor,
+            Material.Metallic);
+
+    float3 F =
+        FresnelSchlickRoughness(
+            NdotV,
+            F0,
+            Material.Roughness);
+
+    //------------------------------------
+    // Diffuse
+    //------------------------------------
+
+    float3 kd =
+        (1.0 - F) *
+        (1.0 - Material.Metallic);
+
+    float3 Diffuse =
+        DiffuseIrradiance *
+        Material.BaseColor;
+
+    //------------------------------------
+    // Specular
+    //------------------------------------
+
+    float3 Specular =
+        PrefilteredSpecular *
+        (
+            F * BRDF.x +
+            BRDF.y
+        );
+
+    //------------------------------------
+    // Final
+    //------------------------------------
+
+    return
+        kd *
+        Diffuse +
+        Specular;
+}
+float3 CalculateIBLShading(ShadingContext Context,
+                            MaterialData Material ,
+                            float3 N, 
+                            float3 V, 
+                            float3 R, 
+                            float NdotV )
+{
+    float3 Result = 0;
+    //---------------------------------
+    // Sample diffuse irradiance
+    //---------------------------------
+
+    float3 DiffuseIrradiance =
+        IBLDiffuseMap.Sample(
+            LinearClampIBLSampler,
+            N).rgb;
+
+    //---------------------------------
+    // Sample prefiltered specular
+    //---------------------------------
+
+    uint Width;
+    uint Height;
+    uint MipCount;
+
+    IBLSpecularMap.GetDimensions(
+        0,
+        Width,
+        Height,
+        MipCount);
+
+    float MipLevel =
+        Material.Roughness *
+        (MipCount - 1);
+
+    float3 PrefilteredSpecular =
+        IBLSpecularMap.SampleLevel(
+            LinearClampIBLSampler,
+            R,
+            MipLevel).rgb;
+
+    //---------------------------------
+    // Sample BRDF LUT
+    //---------------------------------
+
+    float2 BRDF =
+        IBLLut.Sample(
+            LinearClampIBLSampler,
+            float2(
+                NdotV,
+                Material.Roughness)).rg;
+
+    //---------------------------------
+    // Evaluate IBL
+    //---------------------------------
+
+    Result +=
+        ShadeIBL(
+            Context,
+            Material,
+            DiffuseIrradiance,
+            PrefilteredSpecular,
+            BRDF);
+    return Result;
+}

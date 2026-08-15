@@ -21,6 +21,7 @@ namespace RenderCore {
         UAV,
         BindlessResourceIndex,
         BindlessSamplerIndex,
+        AccelerationStructure,
         Num
     };
 

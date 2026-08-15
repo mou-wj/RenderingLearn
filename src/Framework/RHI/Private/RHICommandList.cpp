@@ -169,6 +169,20 @@ void RHICommandSetGraphicShaderParameters::Execute(RHICommandListBase& cmdList)
     }
 }
 
+RHICommandSetRayTracingShaderParameters::RHICommandSetRayTracingShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& parameters)
+    : Shader(shader), Parameters(parameters)
+{
+}
+
+void RHICommandSetRayTracingShaderParameters::Execute(RHICommandListBase& cmdList)
+{
+    auto* graphicContext = dynamic_cast<RHIGraphicContex*>(cmdList.GetContext());
+    if (graphicContext)
+    {
+        graphicContext->SetBatchedShaderParameters(Shader, Parameters);
+    }
+}
+
 RHICommandSetStreamSource::RHICommandSetStreamSource(uint32_t streamIndex, RHIBuffer* vertexBuffer, uint32_t offset)
     : StreamIndex(streamIndex), VertexBuffer(std::move(vertexBuffer)), Offset(offset)
 {
@@ -259,20 +273,6 @@ void RHICommandSetRayTracingPipelineState::Execute(RHICommandListBase& cmdList)
     if (graphicContext)
     {
         graphicContext->SetRayTracingPipelineState(PipelineState);
-    }
-}
-
-RHICommandSetRayTracingAccelerationStructure::RHICommandSetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure)
-    : AccelerationStructure(accelerationStructure)
-{
-}
-
-void RHICommandSetRayTracingAccelerationStructure::Execute(RHICommandListBase& cmdList)
-{
-    auto* graphicContext = dynamic_cast<RHIGraphicContex*>(cmdList.GetContext());
-    if (graphicContext)
-    {
-        graphicContext->SetRayTracingAccelerationStructure(AccelerationStructure);
     }
 }
 
@@ -417,6 +417,11 @@ void RHIGraphicCommandList::SetBatchedShaderParameters(RHIGraphicShader* shader,
     AddCommand<RHICommandSetGraphicShaderParameters>(shader, batchedShaderParameter);
 }
 
+void RHIGraphicCommandList::SetBatchedShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& batchedShaderParameter)
+{
+    AddCommand<RHICommandSetRayTracingShaderParameters>(shader, batchedShaderParameter);
+}
+
 void RHIGraphicCommandList::SetStreamSource(uint32_t streamIndex, RHIBuffer* VertexBuffer, uint32_t Offset)
 {
     AddCommand<RHICommandSetStreamSource>(streamIndex, std::move(VertexBuffer), Offset);
@@ -458,11 +463,6 @@ void RHIGraphicCommandList::EndRenderPass()
 void RHIGraphicCommandList::SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState)
 {
     AddCommand<RHICommandSetRayTracingPipelineState>(pipelineState);
-}
-
-void RHIGraphicCommandList::SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure)
-{
-    AddCommand<RHICommandSetRayTracingAccelerationStructure>(accelerationStructure);
 }
 
 void RHIGraphicCommandList::BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)

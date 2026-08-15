@@ -156,7 +156,7 @@ class RENDERCORE_API RenderGraphTextureSRV : public RenderGraphSRV
 public:
     RenderGraphTextureSRV(const std::string& name,const RenderGraphTextureSRVDesc& desc);
     ~RenderGraphTextureSRV() override;
-
+    const RenderGraphTextureSRVDesc& GetDesc() const { return Desc; }
 private:
     friend class RenderGraphBuilder;
     RenderGraphTextureSRVDesc Desc;
@@ -177,7 +177,7 @@ class RENDERCORE_API RenderGraphTextureUAV : public RenderGraphUAV
 public:
     RenderGraphTextureUAV(const std::string& name, const RenderGraphTextureUAVDesc& desc);
     ~RenderGraphTextureUAV() override;
-
+    const RenderGraphTextureUAVDesc& GetDesc() const { return Desc; }
 private:
     friend class RenderGraphBuilder;
     RenderGraphTextureUAVDesc Desc;
@@ -197,6 +197,7 @@ class RENDERCORE_API RenderGraphBufferSRV : public RenderGraphSRV
 public:
     RenderGraphBufferSRV(const std::string& name, const RenderGraphBufferSRVDesc& desc);
     ~RenderGraphBufferSRV() override;
+    const RenderGraphBufferSRVDesc& GetDesc() const { return Desc; }
 private:
     friend class RenderGraphBuilder;
     RenderGraphBufferSRVDesc Desc;
@@ -216,6 +217,7 @@ class RENDERCORE_API RenderGraphBufferUAV : public RenderGraphUAV
 public:
     RenderGraphBufferUAV(const std::string& name, const RenderGraphBufferUAVDesc& desc);
     ~RenderGraphBufferUAV() override;
+	const RenderGraphBufferUAVDesc& GetDesc() const { return Desc; }
 private:
     friend class RenderGraphBuilder;
     RenderGraphBufferUAVDesc Desc;

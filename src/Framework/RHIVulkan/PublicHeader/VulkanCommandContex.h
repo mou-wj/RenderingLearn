@@ -90,9 +90,6 @@ public:
     void SetBatchedShaderParameters(RHIRayTracingShader* shader, const RHIBatchedShaderParameters& parameter) override;
     void SetRayTracingPipelineState(RHIRayTracingPipelineState* pipelineState) override;
 
-    virtual void SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure) override;
-
-
     virtual void BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure) override;
 
 

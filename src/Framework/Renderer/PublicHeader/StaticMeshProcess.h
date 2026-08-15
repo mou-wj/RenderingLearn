@@ -62,5 +62,6 @@ namespace Renderer {
 
     RENDERER_API void StaticMeshDrawBuild(Scene* scene,const Engine::SceneView& view, MeshBatchList& outDrawMeshList);
 
-
+    struct StaticMeshMaterialDefferedShadingCSParameters;
+    RENDERER_API void AddStaticMeshDefferedShadingPass(RenderCore::RenderGraphBuilder& builder, StaticMeshMaterialDefferedShadingCSParameters* params,bool isIBLMode);
 }

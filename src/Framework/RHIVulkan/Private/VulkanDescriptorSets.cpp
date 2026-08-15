@@ -29,10 +29,10 @@ namespace RHIVulkan {
     //------------------------------------------------------------
     // VulkanDescriptorPool
     //------------------------------------------------------------
-    VulkanDescriptorPool::VulkanDescriptorPool(VulkanDevice* device, uint32_t maxSets, const std::array<uint32_t, VK_DESCRIPTOR_TYPE_RANGE_SIZE>& poolSizes)
+    VulkanDescriptorPool::VulkanDescriptorPool(VulkanDevice* device, uint32_t maxSets, const std::array<uint32_t, VK_DESCRIPTOR_TYPE_POOL_INDEX_COUNT>& poolSizes)
         : Device(device), MaxDescriptorSets(maxSets)
     {
-        for (int i = 0; i < VK_DESCRIPTOR_TYPE_RANGE_SIZE; ++i)
+        for (size_t i = 0; i < PoolSizes.size(); ++i)
             PoolSizes[i] = static_cast<float>(poolSizes[i]);
 
         CreatePool();
@@ -50,12 +50,12 @@ namespace RHIVulkan {
     void VulkanDescriptorPool::CreatePool()
     {
         std::vector<VkDescriptorPoolSize> sizes;
-        for (uint32_t i = 0; i < VK_DESCRIPTOR_TYPE_RANGE_SIZE; ++i)
+        for (uint32_t i = 0; i < PoolSizes.size(); ++i)
         {
             if (PoolSizes[i] > 0)
             {
                 VkDescriptorPoolSize s{};
-                s.type = static_cast<VkDescriptorType>(i);
+                s.type = GetDescriptorTypeByPoolIndex(i);
                 s.descriptorCount = static_cast<uint32_t>(PoolSizes[i]);
                 sizes.push_back(s);
             }
@@ -125,10 +125,14 @@ namespace RHIVulkan {
         }
 
         // 没有可用 pool，创建新的
-        std::array<uint32_t, VK_DESCRIPTOR_TYPE_RANGE_SIZE> poolSizes{};
+        std::array<uint32_t, VK_DESCRIPTOR_TYPE_POOL_INDEX_COUNT> poolSizes{};
         for (auto& b : LayoutInfo.bindings)
         {
-            poolSizes[b.Type] += b.Count;
+            const uint32_t poolIndex = GetDescriptorTypePoolIndex(b.Type);
+            if (poolIndex != VK_DESCRIPTOR_TYPE_POOL_INVALID_INDEX)
+            {
+                poolSizes[poolIndex] += b.Count;
+            }
         }
 
         Pools.push_back(std::make_unique<VulkanDescriptorPool>(Device, MaxSetsPerPool, poolSizes));

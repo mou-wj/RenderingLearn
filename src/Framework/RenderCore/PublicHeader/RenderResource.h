@@ -288,10 +288,10 @@ struct RENDERCORE_API PoolRenderTargetDesc
 
             Width == rhs.Width &&
             Height == rhs.Height &&
-            Depth >= rhs.Depth &&
+            Depth == rhs.Depth &&
 
-            MipLevels >= rhs.MipLevels &&
-            ArraySize >= rhs.ArraySize;
+            MipLevels == rhs.MipLevels &&
+            ArraySize == rhs.ArraySize;
     }
 };
 

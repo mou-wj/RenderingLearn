@@ -24,6 +24,7 @@ namespace RHI
             UAV,
             Sampler,
             UniformBuffer,
+			AccelerationStructure,
         };
 
         RHIResource* Resource;

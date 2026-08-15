@@ -1,0 +1,47 @@
+#include "/core/ShadingCommon.sf"
+#include "/Generated/ShaderParameters/DepthPyramidGenerateParameters.sf"
+
+[numthreads(8, 8, 1)]
+void MainCS(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    uint2 outCoord = dispatchThreadID.xy;
+
+    if (outCoord.x >= (uint)OutputExtent.x || outCoord.y >= (uint)OutputExtent.y)
+    {
+        return;
+    }
+
+    uint2 srcSize;
+    srcSize.x = max(1u, (uint)InputExtent.x);
+    srcSize.y = max(1u, (uint)InputExtent.y);
+
+    if (InputMipLevel == 0u)
+    {
+        // Mip0: copy from external input texture mip0 to output mip0.
+        uint2 dstSize = uint2(max(1, OutputExtent.x), max(1, OutputExtent.y));
+        float2 uv = (float2(outCoord) + 0.5) / float2(dstSize);
+        uint2 srcCoord = min(uint2(uv * float2(srcSize)), srcSize - 1u);
+        float depth = InputDepthTexture.Load(int3((int)srcCoord.x, (int)srcCoord.y, 0)).r;
+        OutDepthMipTexture[outCoord] = depth;
+        return;
+    }
+
+    // MipN (N>0): read from the previous mip in OutputDepthMipTexture, then write
+    // the downsampled result back into the current mip of the same UAV.
+    uint2 srcBase = outCoord << 1;
+    uint2 s00 = min(srcBase + uint2(0u, 0u), srcSize - 1u);
+    uint2 s10 = min(srcBase + uint2(1u, 0u), srcSize - 1u);
+    uint2 s01 = min(srcBase + uint2(0u, 1u), srcSize - 1u);
+    uint2 s11 = min(srcBase + uint2(1u, 1u), srcSize - 1u);
+
+    // Use the same UAV as both input and output. The previous mip is read via InputMipLevel,
+    // and the current dispatch writes to the current mip of OutputDepthMipTexture.
+    float d00 = SrcDepthMipTexture.Load(int2((int)s00.x, (int)s00.y)).r;
+    float d10 = SrcDepthMipTexture.Load(int2((int)s10.x, (int)s10.y)).r;
+    float d01 = SrcDepthMipTexture.Load(int2((int)s01.x, (int)s01.y)).r;
+    float d11 = SrcDepthMipTexture.Load(int2((int)s11.x, (int)s11.y)).r;
+
+    // For reversed-Z depth, taking min keeps the furthest depth and makes conservative tracing.
+    float mipDepth = min(min(d00, d10), min(d01, d11));
+    OutDepthMipTexture[outCoord] = mipDepth;
+}

@@ -1,0 +1,73 @@
+#include "/core/ShadingCommon.sf"
+#include "/core/SceneParametersHelper.sf"
+#include "/Generated/ShaderParameters/SceneVoxelDiffuseInitParameters.sf"
+
+struct SceneVoxelLeafIrradiance
+{
+    float3 Irradiance;
+    float Weight;
+};
+
+static bool IsVoxelOccluded(float3 voxelPos, float3 normal, float3 dir)
+{
+    // TODO: Replace with global distance field occlusion when available.
+    // The shader currently treats the voxel as unoccluded.
+    return false;
+}
+
+static float3 SampleEnvironmentDiffuse(float3 direction)
+{
+    // The project uses an environment cubemap or equirectangular map.
+    // For now we use a simple cosine-weighted fallback for the precompute stage.
+    float ndotl = max(dot(normalize(direction), float3(0.0, 1.0, 0.0)), 0.0);
+    return float3(1.0, 1.0, 1.0) * (0.25 + 0.75 * ndotl);
+}
+
+[numthreads(64, 1, 1)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+    uint voxelIndex = DispatchThreadID.x;
+    if (voxelIndex >= VoxelCount)
+    {
+        return;
+    }
+
+    SceneVoxelCell voxel = Voxels[voxelIndex];
+    float3 voxelCenter = (voxel.Bounds.Min + voxel.Bounds.Max) * 0.5;
+    float3 normal = normalize(voxel.Normal);
+
+    float3 accum = float3(0.0, 0.0, 0.0);
+    float weight = 0.0;
+
+    const uint sampleCount = 32u;
+    for (uint i = 0; i < sampleCount; ++i)
+    {
+        float u = float(i) / float(sampleCount);
+        float v = fract(float(i) * 0.61803398875);
+
+        float3 dir = normalize(float3(
+            cos(2.0 * PI * v) * sqrt(1.0 - u * u),
+            u,
+            sin(2.0 * PI * v) * sqrt(1.0 - u * u)));
+
+        if (dot(dir, normal) <= 0.0)
+        {
+            continue;
+        }
+
+        float3 worldDir = normalize(dir);
+        if (IsVoxelOccluded(voxelCenter, normal, worldDir))
+        {
+            continue;
+        }
+
+        float3 envColor = SampleEnvironmentDiffuse(worldDir);
+        accum += envColor * max(dot(worldDir, normal), 0.0);
+        weight += max(dot(worldDir, normal), 0.0);
+    }
+
+    float3 finalIrradiance = (weight > 0.0) ? (accum / weight) : float3(0.0, 0.0, 0.0);
+
+    InitialDiffuse[voxelIndex].Irradiance = finalIrradiance;
+    InitialDiffuse[voxelIndex].Weight = weight;
+}

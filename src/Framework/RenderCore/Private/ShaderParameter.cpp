@@ -160,11 +160,26 @@ namespace RenderCore {
         }
 
         // 4. �ύ��ָ����
-        if (shader->GetShaderFrequency() == ERHIShaderFrequency::Compute)
+        const auto shaderFrequency = shader->GetShaderFrequency();
+        if (shaderFrequency == ERHIShaderFrequency::Compute)
         {
             auto& ComputeCmdList = static_cast<RHI::RHIComputeCommandList&>(cmdList);
             ComputeCmdList.SetBatchedShaderParameters(
                 static_cast<RHI::RHIComputeShader*>(shader->GetRHIShader()),
+                BatchedParams
+            );
+        }
+        else if (
+            shaderFrequency == ERHIShaderFrequency::RayGen ||
+            shaderFrequency == ERHIShaderFrequency::ClosestHit ||
+            shaderFrequency == ERHIShaderFrequency::Miss ||
+            shaderFrequency == ERHIShaderFrequency::AnyHit ||
+            shaderFrequency == ERHIShaderFrequency::Intersection ||
+            shaderFrequency == ERHIShaderFrequency::Callable)
+        {
+            auto& GraphicCmdList = static_cast<RHI::RHIGraphicCommandList&>(cmdList);
+            GraphicCmdList.SetBatchedShaderParameters(
+                static_cast<RHI::RHIRayTracingShader*>(shader->GetRHIShader()),
                 BatchedParams
             );
         }

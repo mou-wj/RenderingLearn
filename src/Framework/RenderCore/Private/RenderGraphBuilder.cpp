@@ -207,8 +207,8 @@ namespace RenderCore {
 
         // 👉 构造 desc（你可能需要补一个转换函数）
         RenderGraphTextureDesc desc;
-        static_cast<RHI::RHITextureDesc>(desc) = texture->GetRHI()->GetDesc(); // ⚠️ 如果没有，需要你自己实现转换
-
+        static_cast<RHI::RHITextureDesc&>(desc) = texture->GetRHI()->GetDesc(); // ⚠️ 如果没有，需要你自己实现转换
+        
         auto rdgTex = CreateTexture(name, desc);
 
         rdgTex->Resource = rhiTex;
@@ -241,7 +241,7 @@ namespace RenderCore {
 
         // 👉 构造 desc
         RenderGraphBufferDesc desc;
-        static_cast<RHI::RHIBufferDesc>(desc) = buffer->GetRHI()->GetDesc(); // ⚠️ 同样需要转换
+        static_cast<RHI::RHIBufferDesc&>(desc) = buffer->GetRHI()->GetDesc(); // ⚠️ 同样需要转换
 
         auto rdgBuf = CreateBuffer(name, desc);
 
@@ -288,6 +288,26 @@ namespace RenderCore {
     RenderGraphBufferRef RenderGraphBuilder::GetBuffer(const std::string& name)
     {
         return BufferCache[name];
+    }
+
+    TextureViewCache* RenderGraphBuilder::GetExternalTextureViewCache(RenderGraphTextureRef tex)
+    {
+        auto it = ExternalTextures.find(tex->GetRHITexture());
+		if (it != ExternalTextures.end())
+		{
+			return it->second.ViewCache;
+		}
+        return nullptr;
+    }
+
+    BufferViewCache* RenderGraphBuilder::GetExternalBufferViewCache(RenderGraphBufferRef buf)
+    {
+        auto it = ExternalBuffers.find(buf->GetRHIBuffer());
+        if (it != ExternalBuffers.end())
+        {
+        	return it->second.ViewCache;
+        }
+        return nullptr;
     }
 
     void RenderGraphBuilder::Execute()
@@ -790,16 +810,17 @@ namespace RenderCore {
                         if (SRV)
                         {
                             auto* Tex = static_cast<RenderGraphTexture*>(SRV->Desc.Texture);
+                            const auto& TexDesc = SRV->Desc.Texture->GetDesc();
                             const auto& Desc = SRV->Desc;
 
                             RenderGraphPass::RenderGraphTextureIntent Intent;
                             Intent.Texture = Tex;
                             uint32_t mipSlice = Desc.FirstMipSlice;
-                            if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
+                            if (Desc.MipCount == TexDesc.MipLevels && Desc.FirstMipSlice == 0) {
                                 mipSlice = RHISubresourceRange::kAllSubresources;
                             }
                             uint32_t arraySlice = Desc.FirstArraySlice;
-                            if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
+                            if (Desc.ArraySize ==  TexDesc.ArraySize && Desc.FirstArraySlice == 0) {
                                 arraySlice = RHISubresourceRange::kAllSubresources;
                             }
 
@@ -825,16 +846,17 @@ namespace RenderCore {
                         if (UAV)
                         {
                             auto* Tex = static_cast<RenderGraphTexture*>(UAV->Desc.Texture);
+                            const auto& TexDesc = UAV->Desc.Texture->GetDesc();
                             const auto& Desc = UAV->Desc;
 
                             RenderGraphPass::RenderGraphTextureIntent Intent;
                             Intent.Texture = Tex;
                             uint32_t mipSlice = Desc.FirstMipSlice;
-                            if (Desc.MipCount == 1 && Desc.FirstMipSlice == 0) {
+                            if (Desc.MipCount == TexDesc.MipLevels && Desc.FirstMipSlice == 0) {
                                 mipSlice = RHISubresourceRange::kAllSubresources;
                             }
                             uint32_t arraySlice = Desc.FirstArraySlice;
-                            if (Desc.ArraySize == 1 && Desc.FirstArraySlice == 0) {
+                            if (Desc.ArraySize == TexDesc.ArraySize && Desc.FirstArraySlice == 0) {
                                 arraySlice = RHISubresourceRange::kAllSubresources;
                             }
                             Intent.SubresourceRange = RHISubresourceRange(

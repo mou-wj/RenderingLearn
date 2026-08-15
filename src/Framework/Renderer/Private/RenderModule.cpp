@@ -89,6 +89,12 @@ namespace Renderer {
         auto PoolDepthTarget = GRenderTargetPool.GetFreeRenderTarget(depthDesc);
 		PoolDepthTarget->MarkUsed(true);
 		auto depthText = builder.RegisterExternalTexture("DepthTarget", PoolDepthTarget.get());
+        uint32_t maxMipLevel = std::max<uint32_t>(1, (uint32_t)std::log2(std::max<uint32_t>(1, depthDesc.Width)));
+        depthDesc.MipLevels = maxMipLevel;
+        depthDesc.Usage |= RHI::ERHITextureCreateFlag::UAV;
+        auto PoolDepthPyramidTarget = GRenderTargetPool.GetFreeRenderTarget(depthDesc);
+        PoolDepthPyramidTarget->MarkUsed(true);
+        auto preDepthText = builder.RegisterExternalTexture("DepthTargetPyramid", PoolDepthPyramidTarget.get());
         //构建Gbuffer
         auto gbufferInfo = CreateGBufferInfo({});
         std::vector<RenderCore::RenderGraphTextureRef> gbuffers;
@@ -111,6 +117,7 @@ namespace Renderer {
         sceneRenderer->Views = Views;
         sceneRenderer->SceneTextures.SceneColor = sceneColorTexture;
         sceneRenderer->SceneTextures.SceneDepth = depthText;
+        sceneRenderer->SceneTextures.SceneDepthPyramid = preDepthText;
         sceneRenderer->SceneTextures.GBufferA = gbuffers[0];
         sceneRenderer->SceneTextures.GBufferB = gbuffers[1];
         sceneRenderer->SceneTextures.GBufferC = gbuffers[2];
@@ -121,6 +128,7 @@ namespace Renderer {
         sceneRenderer->Scene->UpdateGlobalDistanceFieldIfNeeded();
         builder.Execute();
         PoolDepthTarget->MarkUsed(false);
+        PoolDepthPyramidTarget->MarkUsed(false);
         for (auto gTarget : GbufferTargets) {
             gTarget->MarkUsed(false);
         }

@@ -767,6 +767,10 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         {
             out.ErrorMessage = "DXC failed with no detailed error output.";
         }
+        //写一个写出到文档逻辑
+        std::ofstream fout("error.txt");
+        fout << preprocessedSource;
+        fout.close();
         return;
     }
 
@@ -1051,6 +1055,25 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         }
     }
 
+    // ---------- Accelerations Structures ----------
+    for (const auto& sb : resourcesSC.acceleration_structures)
+    {
+        std::string name = compiler.get_name(sb.id);
+        bool hasBinding = compiler.has_decoration(sb.id, spv::DecorationBinding);
+        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
+        auto& type = compiler.get_type(sb.base_type_id);
+        
+
+        out.ParameterMap.AddParameterAllocation(
+            name,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
+            EShaderParameterType::AccelerationStructure
+        );
+    }
+
     // 6. ������
     out.PackedBinaryData.resize(spirv.size() * sizeof(uint32_t));
     memcpy(out.PackedBinaryData.data(), spirv.data(), spirv.size() * sizeof(uint32_t));
@@ -1259,6 +1282,15 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
     for (auto& sb : resources.storage_buffers)
     {
         addBinding(sb, ESPIRVShaderResourceType::StorageBuffer);
+    }
+
+    // =========================
+    // Acceleration structures
+    // =========================
+
+    for (auto& as : resources.acceleration_structures)
+    {
+        addBinding(as, ESPIRVShaderResourceType::AccelerationStructure);
     }
 
     // =========================

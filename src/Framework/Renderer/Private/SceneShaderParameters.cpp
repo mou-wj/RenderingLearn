@@ -45,37 +45,7 @@ namespace Renderer {
             SRVDesc.Buffer = rdgB;
             Out.LightParameters.DirectionalLights = Builder.CreateBufferSRV("DirectionalLightsSRV", SRVDesc);
         }
-        if (SceneLightResourceInfo.IBLDiffuseTexture != nullptr && SceneLightResourceInfo.IBLSpecularTexture != nullptr) {
-
-
-            auto rdgT = Builder.RegisterExternalTexture("IBLDiffuseTexture", SceneLightResourceInfo.IBLDiffuseTexture);
-            Out.LightParameters.IBLDiffuseMap = rdgT;
-            rdgT = Builder.RegisterExternalTexture("IBLSpecularTexture", SceneLightResourceInfo.IBLSpecularTexture);
-            Out.LightParameters.IBLSpecularMap = rdgT;
-            rdgT = Builder.RegisterExternalTexture("IBLLutTexture", GlobalIBLLutTexture.get());
-            Out.LightParameters.LinearClampSampler = RenderCore::GlobalSampler.get();
-            Out.LightParameters.IBLLut = rdgT;
-            Out.LightParameters.EnableIBLMap = 1;
-        }
-        else {
-            RenderCore::RenderGraphTextureDesc emptyCubeMapDesc;
-            emptyCubeMapDesc.Type = RHI::ERHITextureType::TextureCube;
-            emptyCubeMapDesc.Width = 1;
-            emptyCubeMapDesc.Height = 1;
-            emptyCubeMapDesc.ArraySize = 6;
-            emptyCubeMapDesc.MipLevels = 1;
-            emptyCubeMapDesc.Usage = RHI::ERHITextureCreateFlag::ShaderResource;
-            emptyCubeMapDesc.Format = RHI::ERHIFormat::R8G8B8A8_UNorm;
-            Out.LightParameters.LinearClampSampler = RenderCore::GlobalSampler.get();
-            auto rdgT = Builder.CreateTexture("EmptyCubeMap", emptyCubeMapDesc);
-            Out.LightParameters.IBLDiffuseMap = rdgT;
-            Out.LightParameters.IBLSpecularMap = rdgT;
-            rdgT = Builder.RegisterExternalTexture("IBLLutTexture", GlobalIBLLutTexture.get());
-            Out.LightParameters.IBLLut = rdgT;
-            Out.LightParameters.EnableIBLMap = 0;
-
-        }
-        
+        Out.LightParameters.LinearClampSampler = RenderCore::GlobalSampler.get();
         //填充阴影参数
         Out.LightShadowParameters.NearestSampler = RenderCore::GlobalNearestSampler.get();
         auto altasTexture = Scene->GetShadowMapAllocator().GetShadowAtlas();
@@ -135,17 +105,55 @@ namespace Renderer {
 		Out.LightShadowParameters.SplitBuffer = splitBufferSRV;
 
         //填充距离场参数
-		auto& DistanceFieldResourceInfo = Scene->GetGPUResourceInfo().DistanceFieldResourceInfo;
-		Out.GlobalDistanceFieldParameters.BlockSize = Core::Float3(5,5,5);
-        Out.GlobalDistanceFieldParameters.DistanceFieldVoxelSize = 5 / 64.0;
-		Out.GlobalDistanceFieldParameters.DistanceSampler = RenderCore::GlobalSampler.get();
-		Out.GlobalDistanceFieldParameters.GlobalDistanceFieldAtlasResolution = Core::UInt3(256, 256, 256);
-		Out.GlobalDistanceFieldParameters.GlobalDistanceFieldGridSize = DistanceFieldResourceInfo.StaticDistanceField.GetGridSize();
-        Out.GlobalDistanceFieldParameters.GlobalDistanceFieldOrigin = DistanceFieldResourceInfo.StaticDistanceField.GetOrigin();
-        auto rdgGlobalDistenctAtlas = Builder.RegisterExternalTexture("GlobalDistanceFieldAtlas", DistanceFieldResourceInfo.StaticDistanceField.GetAtlas().GetAtlasTexture());
-        Out.GlobalDistanceFieldParameters.GlobalDistanceFieldAtlas = rdgGlobalDistenctAtlas;
-        Out.GlobalDistanceFieldParameters.AllocateBlockIndexInfos = DistanceFieldResourceInfo.StaticDistanceField.GetBlockIndexBufferSRV();
+		
 
+    }
+
+    void BuildGlobalDistanceFieldParameters(Scene* Scene, RenderCore::RenderGraphBuilder& Builder, SceneGlobalDistanceFieldParameters& Out)
+    {
+        auto& DistanceFieldResourceInfo = Scene->GetGPUResourceInfo().DistanceFieldResourceInfo;
+        Out.BlockSize = Core::Float3(5, 5, 5);
+        Out.DistanceFieldVoxelSize = 5 / 64.0;
+        Out.DistanceSampler = RenderCore::GlobalSampler.get();
+        Out.GlobalDistanceFieldAtlasResolution = Core::UInt3(256, 256, 256);
+        Out.GlobalDistanceFieldGridSize = DistanceFieldResourceInfo.StaticDistanceField.GetGridSize();
+        Out.GlobalDistanceFieldOrigin = DistanceFieldResourceInfo.StaticDistanceField.GetOrigin();
+        auto rdgGlobalDistenctAtlas = Builder.RegisterExternalTexture("GlobalDistanceFieldAtlas", DistanceFieldResourceInfo.StaticDistanceField.GetAtlas().GetAtlasTexture());
+        Out.GlobalDistanceFieldAtlas = rdgGlobalDistenctAtlas;
+        Out.AllocateBlockIndexInfos = DistanceFieldResourceInfo.StaticDistanceField.GetBlockIndexBufferSRV();
+    }
+
+    void BuildEvnIBLLightParameters(Scene* Scene, RenderCore::RenderGraphBuilder& Builder, SceneEvnIBLLightParameters& Out)
+    {
+        const auto& SceneLightResourceInfo = Scene->GetGPUResourceInfo().LightResourceInfo;
+        if (SceneLightResourceInfo.IBLDiffuseTexture != nullptr && SceneLightResourceInfo.IBLSpecularTexture != nullptr) {
+
+
+            auto rdgT = Builder.RegisterExternalTexture("IBLDiffuseTexture", SceneLightResourceInfo.IBLDiffuseTexture);
+            Out.IBLDiffuseMap = rdgT;
+            rdgT = Builder.RegisterExternalTexture("IBLSpecularTexture", SceneLightResourceInfo.IBLSpecularTexture);
+            Out.IBLSpecularMap = rdgT;
+            rdgT = Builder.RegisterExternalTexture("IBLLutTexture", GlobalIBLLutTexture.get());
+            Out.LinearClampIBLSampler = RenderCore::GlobalSampler.get();
+            Out.IBLLut = rdgT;
+        }
+        else {
+            RenderCore::RenderGraphTextureDesc emptyCubeMapDesc;
+            emptyCubeMapDesc.Type = RHI::ERHITextureType::TextureCube;
+            emptyCubeMapDesc.Width = 1;
+            emptyCubeMapDesc.Height = 1;
+            emptyCubeMapDesc.ArraySize = 6;
+            emptyCubeMapDesc.MipLevels = 1;
+            emptyCubeMapDesc.Usage = RHI::ERHITextureCreateFlag::ShaderResource;
+            emptyCubeMapDesc.Format = RHI::ERHIFormat::R8G8B8A8_UNorm;
+            Out.LinearClampIBLSampler = RenderCore::GlobalSampler.get();
+            auto rdgT = Builder.CreateTexture("EmptyCubeMap", emptyCubeMapDesc);
+            Out.IBLDiffuseMap = rdgT;
+            Out.IBLSpecularMap = rdgT;
+            rdgT = Builder.RegisterExternalTexture("IBLLutTexture", GlobalIBLLutTexture.get());
+            Out.IBLLut = rdgT;
+
+        }
     }
 
 

@@ -544,6 +544,9 @@ void VulkanGraphicContext::SetBatchedShaderParameters(RHIRayTracingShader* shade
         case RHIShaderResourceParameter::EType::UniformBuffer:
             PendingRayTracing->SetUniformBuffer(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanBuffer*>(resourceParam.GetResourceAs<RHIBuffer>()));
             break;
+        case RHIShaderResourceParameter::EType::AccelerationStructure:
+            PendingRayTracing->SetAccelerationStructure(shaderType, resourceParam.Index, resourceParam.ArrayIndex, static_cast<VulkanRayTracingInstance*>(resourceParam.GetResourceAs<RHIRayTracingInstance>()));
+            break;
         default:
             break;
         }
@@ -559,17 +562,6 @@ void VulkanGraphicContext::SetRayTracingPipelineState(RHIRayTracingPipelineState
 
     auto vkPipeline = dynamic_cast<VulkanRayTracingPipeline*>(pipelineState);
     PendingRayTracing->SetPipeline(vkPipeline);
-}
-
-void VulkanGraphicContext::SetRayTracingAccelerationStructure(RHIRayTracingInstance* accelerationStructure)
-{
-    if (!PendingRayTracing)
-    {
-        return;
-    }
-
-    auto vkAccelerationStructure = dynamic_cast<VulkanRayTracingInstance*>(accelerationStructure);
-    PendingRayTracing->SetAccelerationStructure(vkAccelerationStructure);
 }
 
 void VulkanGraphicContext::BuildAccelerationStructure(RHIRayTracingAccelerationStructure* accelerationStructure)
@@ -604,10 +596,10 @@ void VulkanGraphicContext::TraceRays(uint32_t width, uint32_t height, uint32_t d
     auto commandBuffer = commandBufferManager->GetActiveCommandBuffer();
     PendingRayTracing->PrepareForTraceRays(commandBuffer);
 
-    VkStridedDeviceAddressRegionKHR raygenShaderBindingTable = {};
-    VkStridedDeviceAddressRegionKHR missShaderBindingTable = {};
-    VkStridedDeviceAddressRegionKHR hitShaderBindingTable = {};
-    VkStridedDeviceAddressRegionKHR callableShaderBindingTable = {};
+    const auto& raygenShaderBindingTable = PendingRayTracing->GetRayGenShaderBindingTableRegion();
+    const auto& missShaderBindingTable = PendingRayTracing->GetMissShaderBindingTableRegion();
+    const auto& hitShaderBindingTable = PendingRayTracing->GetHitShaderBindingTableRegion();
+    const auto& callableShaderBindingTable = PendingRayTracing->GetCallableShaderBindingTableRegion();
 
     VKFunc::CmdTraceRaysKHR(
         commandBuffer->GetHandle(),

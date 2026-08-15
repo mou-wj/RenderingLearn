@@ -1,0 +1,63 @@
+#include "/core/ShadingContext.sf"
+#include "/Generated/ShaderParameters/GBufferInputParameters.sf"
+
+
+MaterialData ReconstructMaterialData(float2 UV)
+{
+    MaterialData M;
+
+    float4 A = GBufferA.SampleLevel(PointSampler, UV, 0);
+    float4 B = GBufferB.SampleLevel(PointSampler, UV, 0);
+    float4 C = GBufferC.SampleLevel(PointSampler, UV, 0);
+
+    M.BaseColor = A.rgb;
+    M.Metallic = A.a;
+
+    M.NormalTS = B.rgb * 2 - 1;
+    M.Roughness = B.a;
+
+    M.Specular = C.r;
+    M.AmbientOcclusion = C.g;
+
+    M.EmissiveColor = 0;
+    M.Opacity = 1;
+    M.OpacityMask = 1;
+
+    return M;
+}
+uint GetShadingModelId(float2 UV)
+{
+    float4 A = GBufferC.SampleLevel(PointSampler, UV, 0);
+    return (uint)(A.b * 255.0);
+}
+
+
+float3 ReconstructWorldPosition(
+    float2 UV,
+    float4x4 InvViewProjection)
+{
+    float depth = Depth.SampleLevel(PointSampler, UV, 0).r;
+    // Screen UV -> NDC
+    // UV: [0,1]
+    // NDC.x: [-1,1]
+    // NDC.y: [ 1,-1] (flip Y for screen space)
+    float2 NDC;
+    NDC.x = UV.x * 2.0 - 1.0;
+    NDC.y = (1.0 - UV.y) * 2.0 - 1.0;
+
+    // Construct clip-space position
+    float4 ClipPos = float4(
+        NDC.x,
+        NDC.y,
+        depth,
+        1.0);
+
+    // Transform back to world space
+    float4 WorldPos =
+        mul(InvViewProjection, ClipPos);
+
+    // Perspective divide
+    WorldPos.xyz /= WorldPos.w;
+
+    return WorldPos.xyz;
+}

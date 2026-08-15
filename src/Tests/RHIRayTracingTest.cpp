@@ -143,7 +143,7 @@ public:
             return;
         }
 
-        constexpr int kFrameCount = 300;
+        constexpr int kFrameCount = 30000;
         for (int frameIndex = 0; frameIndex < kFrameCount; ++frameIndex)
         {
             auto* cmdContext = queue->AcquireCommandContext();
@@ -181,14 +181,20 @@ public:
             auto* backTexture = swapchainSlot.Texture;
             if (backTexture)
             {
-                TransitionViewableResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::Present);
+                TransitionViewableResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::UAV);
+                CreateBackTextureUAV(backTexture);
             }
 
             if (RayTracingPipelineState)
             {
                 cmdList.SetRayTracingPipelineState(RayTracingPipelineState.get());
-                cmdList.SetRayTracingAccelerationStructure(TopLevelAS.get());
+                BindRayGenShaderParameters(cmdList);
                 cmdList.TraceRays(static_cast<uint32_t>(FrameWidth), static_cast<uint32_t>(FrameHeight), 1);
+            }
+
+            if (backTexture)
+            {
+                TransitionViewableResource(api, cmdList, backTexture, RHI::ERHIResourceAccess::Present);
             }
 
             cmdList.End();
@@ -241,6 +247,57 @@ public:
     }
 
 private:
+    void CreateBackTextureUAV(RHI::RHITexture* backTexture)
+    {
+        if (!backTexture || !RHI::GRHIApi)
+        {
+            return;
+        }
+
+        RHI::RHITexUAVCreateInfo texUavDesc{};
+        texUavDesc.Format = backTexture->GetDesc().Format;
+        CurrentBackTextureUAV = RHI::GRHIApi->CreateTextureUnorderedAccessView(backTexture, texUavDesc);
+    }
+
+    void BindRayGenShaderParameters(RHI::RHIGraphicCommandList& cmdList)
+    {
+        if (!RayGenShader || !CurrentBackTextureUAV || !TopLevelAS)
+        {
+            return;
+        }
+
+        RHI::RHIBatchedShaderParameters params;
+
+        auto addResource = [&](const std::string& name, RHI::RHIShaderResourceParameter::EType type, RHI::RHIResource* resource)
+        {
+            if (!resource)
+            {
+                return;
+            }
+
+            auto allocation = RayGenParameterMap.FindParameterAllocation(name);
+            if (!allocation.has_value())
+            {
+                return;
+            }
+
+            RHI::RHIShaderResourceParameter resourceParam{};
+            resourceParam.Resource = resource;
+            resourceParam.Type = type;
+            resourceParam.Index = allocation->BaseIndex;
+            resourceParam.ArrayIndex = 0;
+            params.ResourceParameters.push_back(resourceParam);
+        };
+
+        addResource("gScene", RHI::RHIShaderResourceParameter::EType::AccelerationStructure, TopLevelAS.get());
+        addResource("gOutput", RHI::RHIShaderResourceParameter::EType::UAV, CurrentBackTextureUAV.get());
+
+        if (!params.ResourceParameters.empty())
+        {
+            cmdList.SetBatchedShaderParameters(RayGenShader.get(), params);
+        }
+    }
+
     void CreateSwapchain(RHI::RHIApi* api)
     {
         if (!api)
@@ -374,9 +431,47 @@ private:
         rayGenInput.Platform = RHI::GShaderPlatform;
         rayGenInput.VirtualSourceFilePath = "basic_rt_raygen.hlsl";
         rayGenInput.Environment.VirtualIncludes["basic_rt_raygen.hlsl"] = R"(
+            struct Payload
+            {
+                float3 Color;
+            };
+            RaytracingAccelerationStructure gScene;
+            RWTexture2D<float4> gOutput;
             [shader("raygeneration")]
             void RayGenMain()
             {
+                uint2 pixel = DispatchRaysIndex().xy;
+                uint2 size = DispatchRaysDimensions().xy;
+
+                float2 uv = (float2(pixel) + 0.5) / float2(size);
+
+                
+                float2 ndc;
+                ndc.x = uv.x * 2.0 - 1.0;
+                ndc.y = uv.y * 2.0 - 1.0;
+
+                Payload payload;
+                payload.Color = float3(0.0, 0.0, 0.0);
+
+                RayDesc ray;
+                ray.Origin = float3(0.0, 0.0, -2.0);
+                ray.Direction = normalize(float3(ndc.x, ndc.y, 1.0));
+                ray.TMin = 0.001;
+                ray.TMax = 10000.0;
+
+
+                TraceRay(
+                    gScene,
+                    RAY_FLAG_NONE,
+                    0xff,
+                    0,      // hit group index
+                    1,      // hit group stride
+                    0,      // miss index
+                    ray,
+                    payload);
+
+
+                gOutput[pixel] = float4(payload.Color, 1.0);
             }
         )";
 
@@ -386,9 +481,15 @@ private:
         missInput.Platform = RHI::GShaderPlatform;
         missInput.VirtualSourceFilePath = "basic_rt_miss.hlsl";
         missInput.Environment.VirtualIncludes["basic_rt_miss.hlsl"] = R"(
-            [shader("miss")]
-            void MissMain()
+            struct Payload
             {
+                float3 Color;
+            };
+                        
+            [shader("miss")]
+            void MissMain(inout Payload payload)
+            {
+                payload.Color = float3(0.0, 0.0, 1.0);
             }
         )";
 
@@ -402,9 +503,12 @@ private:
             {
                 float3 Color;
             };
-
+            struct Attributes
+            {
+                float2 Barycentrics;
+            };
             [shader("closesthit")]
-            void ClosestHitMain(inout Payload payload : SV_RayPayload)
+            void ClosestHitMain(inout Payload payload ,Attributes attr)
             {
                 payload.Color = float3(1.0, 0.0, 0.0);
             }
@@ -419,6 +523,8 @@ private:
             std::cout << "RHIRayTracingTest: ray tracing shader compile failed.\n";
             return;
         }
+
+        RayGenParameterMap = rayGenOutput.ParameterMap;
 
         RayGenShader = api->CreateRayGenShader(rayGenOutput.PackedBinaryData);
         MissShader = api->CreateMissShader(missOutput.PackedBinaryData);
@@ -463,6 +569,8 @@ private:
     RHI::RHIMissShaderSP MissShader;
     RHI::RHICloseHitShaderSP ClosestHitShader;
     RHI::RHIRayTracingPipelineStateSP RayTracingPipelineState;
+    RHI::RHIUnorderedAccessViewSP CurrentBackTextureUAV;
+    RenderCore::ShaderParameterAllocationMap RayGenParameterMap;
 };
 
 REGISTER_RENDER_TEST("RHIRayTracingTest", RHIRayTracingTest);

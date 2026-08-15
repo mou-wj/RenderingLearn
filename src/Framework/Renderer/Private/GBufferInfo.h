@@ -1,9 +1,10 @@
 #pragma once
-
+#include "ShaderParameter.h"
 #include <string>
 #include <cstdint>
 
 #include "RHIDefine.h"
+#include "ShaderParameter.h"
 
 namespace Renderer
 {
@@ -198,5 +199,13 @@ namespace Renderer
     const FGBufferTarget* FindGBufferTargetByName(
         const FGBufferInfo& GBufferInfo,
         const std::string& Name);
+
+    BEGIN_SHADER_PARAMETER_STRUCT(GBufferInputParameters)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, GBufferA)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, GBufferB)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, GBufferC)
+        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, Depth)
+        SHADER_PARAMETER_SAMPLER(PointSampler)
+    END_SHADER_PARAMETER_STRUCT(GBufferInputParameters)
 
 }

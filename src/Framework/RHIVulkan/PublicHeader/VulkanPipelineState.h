@@ -246,9 +246,23 @@ public:
     VulkanRayTracingPipeline(VulkanDevice* device, const RHIRayTracingPipelineStateDesc& pipelineDesc);
     ~VulkanRayTracingPipeline();
 
+    const VkStridedDeviceAddressRegionKHR& GetRayGenShaderBindingTableRegion() const { return rayGenShaderBindingTableRegion; }
+    const VkStridedDeviceAddressRegionKHR& GetMissShaderBindingTableRegion() const { return missShaderBindingTableRegion; }
+    const VkStridedDeviceAddressRegionKHR& GetHitShaderBindingTableRegion() const { return hitShaderBindingTableRegion; }
+    const VkStridedDeviceAddressRegionKHR& GetCallableShaderBindingTableRegion() const { return callableShaderBindingTableRegion; }
+
 private:
     PipelineLayoutInfo BuildPipelineLayoutInfo(const RHIRayTracingPipelineStateDesc& pipelineDesc);
     VkRayTracingPipelineCreateInfoKHR createInfo; // Vulkan-specific create info
+
+    VkStridedDeviceAddressRegionKHR rayGenShaderBindingTableRegion{};
+    VkStridedDeviceAddressRegionKHR missShaderBindingTableRegion{};
+    VkStridedDeviceAddressRegionKHR hitShaderBindingTableRegion{};
+    VkStridedDeviceAddressRegionKHR callableShaderBindingTableRegion{};
+
+    VkBuffer shaderBindingTableBuffer = VK_NULL_HANDLE;
+    VulkanAllocation shaderBindingTableAllocation{};
+    VkDeviceAddress shaderBindingTableDeviceAddress = 0;
 
     void CreatePipeline() override;
 };

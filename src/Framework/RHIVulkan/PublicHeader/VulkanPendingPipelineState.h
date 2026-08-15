@@ -391,6 +391,23 @@ namespace RHIVulkan {
                 state);
         }
 
+        void SetAccelerationStructure(
+            uint32_t setIndex,
+            uint32_t binding,
+            uint32_t element,
+            VulkanRayTracingInstance* accelerationStructure)
+        {
+            auto& set = Sets[setIndex];
+
+            DescriptorBindingState state;
+            state.Kind = DescriptorBindingState::EKind::AccelerationStructure;
+            state.Type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+            state.AccelerationStructure = accelerationStructure;
+            state.Binding = binding;
+            state.ElementIndex = element;
+            UpdateBindingState(set, binding, element, state);
+        }
+
     public:
         //
         bool UpdateDescriptorSetsIfDirty()
@@ -435,45 +452,44 @@ namespace RHIVulkan {
                 {
                     switch (state.Kind)
                     {
-                        case DescriptorBindingState
-                        ::EKind::Image:
+                    case DescriptorBindingState::EKind::Image:
+                        batchWriter.WriteImage(set.DescriptorSet,
+                            state.Binding,
+                            state.ElementIndex,
+                            state.Type,
+                            state.Image.imageView,
+                            state.Image.imageLayout,
+                            state.Image.sampler);
+                        break;
 
-                            batchWriter.WriteImage(set.DescriptorSet,
-                                state.Binding,
-                                state.ElementIndex,
-                                state.Type,
-                                state.Image.imageView,
-                                state.Image.imageLayout,
-                                state.Image.sampler);
+                    case DescriptorBindingState::EKind::Buffer:
+                        batchWriter.WriteBuffer(
+                            set.DescriptorSet,
+                            state.Binding,
+                            state.ElementIndex,
+                            state.Type,
+                            state.Buffer.buffer,
+                            state.Buffer.offset,
+                            state.Buffer.range);
+                        break;
 
-                            break;
+                    case DescriptorBindingState::EKind::TexelBuffer:
+                        batchWriter.WriteTexelBuffer(
+                            set.DescriptorSet,
+                            state.Binding,
+                            state.ElementIndex,
+                            state.Type,
+                            state.BufferView);
+                        break;
 
-                            case DescriptorBindingState
-                            ::EKind::Buffer:
-
-                                batchWriter.WriteBuffer(
-                                    set.DescriptorSet,
-                                    state.Binding,
-                                    state.ElementIndex,
-                                    state.Type,
-                                    state.Buffer.buffer,
-                                    state.Buffer.offset,
-                                    state.Buffer.range);
-
-                                break;
-
-                                case DescriptorBindingState
-                                ::EKind::TexelBuffer:
-
-                                    batchWriter
-                                        .WriteTexelBuffer(
-                                            set.DescriptorSet,
-                                            state.Binding,
-                                            state.ElementIndex,
-                                            state.Type,
-                                            state.BufferView);
-
-                                    break;
+                    case DescriptorBindingState::EKind::AccelerationStructure:
+                        batchWriter.WriteAccelerationStructure(
+                            set.DescriptorSet,
+                            state.Binding,
+                            state.ElementIndex,
+                            state.Type,
+                            state.AccelerationStructure ? state.AccelerationStructure->GetHandle() : VK_NULL_HANDLE);
+                        break;
                     }
                 }
 
@@ -511,19 +527,20 @@ namespace RHIVulkan {
                 None,
                 Image,
                 Buffer,
-                TexelBuffer
+                TexelBuffer,
+                AccelerationStructure
             } Kind = EKind::None;
 
             VkDescriptorImageInfo Image{};
             VkDescriptorBufferInfo Buffer{};
-            VkBufferView BufferView{};
-            uint32_t Binding;
-            uint32_t ElementIndex;
+            VkBufferView BufferView = VK_NULL_HANDLE;
+            VulkanRayTracingInstance* AccelerationStructure = nullptr;
+            uint32_t Binding = 0;
+            uint32_t ElementIndex = 0;
 
             bool operator==(const DescriptorBindingState& rhs) const
             {
-                if (Kind != rhs.Kind ||
-                    Type != rhs.Type)
+                if (Kind != rhs.Kind || Type != rhs.Type)
                 {
                     return false;
                 }
@@ -535,7 +552,7 @@ namespace RHIVulkan {
                         Image.imageView == rhs.Image.imageView &&
                         Image.imageLayout == rhs.Image.imageLayout &&
                         Image.sampler == rhs.Image.sampler &&
-                        Binding == rhs.Binding  &&
+                        Binding == rhs.Binding &&
                         ElementIndex == rhs.ElementIndex;
 
                 case EKind::Buffer:
@@ -545,10 +562,16 @@ namespace RHIVulkan {
                         Buffer.range == rhs.Buffer.range &&
                         Binding == rhs.Binding &&
                         ElementIndex == rhs.ElementIndex;
+
                 case EKind::TexelBuffer:
                     return BufferView == rhs.BufferView &&
-                    Binding == rhs.Binding &&
-                    ElementIndex == rhs.ElementIndex;
+                        Binding == rhs.Binding &&
+                        ElementIndex == rhs.ElementIndex;
+
+                case EKind::AccelerationStructure:
+                    return AccelerationStructure == rhs.AccelerationStructure &&
+                        Binding == rhs.Binding &&
+                        ElementIndex == rhs.ElementIndex;
 
                 default:
                     return true;
@@ -923,6 +946,7 @@ namespace RHIVulkan {
         VulkanDevice* Device;
         friend class VulkanCommandContext;
         bool bDirtyPipelineState = false;
+        VkStridedDeviceAddressRegionKHR EmptyRegion{};
         VulkanComputePipelineState* CurrentPipeline = nullptr;
         VulkanComputePipelineDescriptorState* CurrentState = nullptr;
 		VulkanCommandContext* Context = nullptr;
@@ -1305,6 +1329,19 @@ namespace RHIVulkan {
             CurrentAccelerationStructure = accelerationStructure;
         }
 
+        void SetAccelerationStructure(ERHIShaderFrequency frequency, uint32_t parameterId, uint32_t elementId, VulkanRayTracingInstance* accelerationStructure)
+        {
+            if (!CurrentState)
+                return;
+
+            uint32_t setIndex = 0;
+            uint32_t binding = 0;
+            if (CurrentState->GetBinding(frequency, parameterId, setIndex, binding))
+            {
+                CurrentState->SetAccelerationStructure(setIndex, binding, elementId, accelerationStructure);
+            }
+        }
+
         bool HasPipeline() const
         {
             return CurrentPipeline != nullptr;
@@ -1313,6 +1350,26 @@ namespace RHIVulkan {
         bool HasAccelerationStructure() const
         {
             return CurrentAccelerationStructure != nullptr;
+        }
+
+        const VkStridedDeviceAddressRegionKHR& GetRayGenShaderBindingTableRegion() const
+        {
+            return CurrentPipeline ? CurrentPipeline->GetRayGenShaderBindingTableRegion() : EmptyRegion;
+        }
+
+        const VkStridedDeviceAddressRegionKHR& GetMissShaderBindingTableRegion() const
+        {
+            return CurrentPipeline ? CurrentPipeline->GetMissShaderBindingTableRegion() : EmptyRegion;
+        }
+
+        const VkStridedDeviceAddressRegionKHR& GetHitShaderBindingTableRegion() const
+        {
+            return CurrentPipeline ? CurrentPipeline->GetHitShaderBindingTableRegion() : EmptyRegion;
+        }
+
+        const VkStridedDeviceAddressRegionKHR& GetCallableShaderBindingTableRegion() const
+        {
+            return CurrentPipeline ? CurrentPipeline->GetCallableShaderBindingTableRegion() : EmptyRegion;
         }
 
         void PrepareForTraceRays(VulkanCommandBuffer* cmd)
@@ -1326,6 +1383,8 @@ namespace RHIVulkan {
                 cmd->GetHandle(),
                 VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
                 CurrentPipeline->GetHandle());
+            // 2. Bind descriptor sets
+            CurrentState->FlushAndBind(cmd);
         }
 
         void BuildAccelerationStructure(VulkanCommandBuffer* cmd, RHIRayTracingAccelerationStructure* accelerationStructure, bool bUpdate)
@@ -1354,6 +1413,7 @@ namespace RHIVulkan {
             if (blas)
             {
                 buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+                buildInfo.flags = blas->GetBuildFlags();
                 buildInfo.dstAccelerationStructure = blas->GetHandle();
                 buildInfo.srcAccelerationStructure = bUpdate ? blas->GetHandle() : VK_NULL_HANDLE;
                 buildInfo.pGeometries = &blas->GetGeometryInfo();
@@ -1427,6 +1487,7 @@ namespace RHIVulkan {
         VulkanRayTracingPipeline* CurrentPipeline = nullptr;
         VulkanRayTracingPipelineDescriptorState* CurrentState = nullptr;
         VulkanRayTracingInstance* CurrentAccelerationStructure = nullptr;
+		VkStridedDeviceAddressRegionKHR EmptyRegion{};
         std::unordered_map<VulkanRayTracingPipeline*, std::unique_ptr<VulkanRayTracingPipelineDescriptorState>> States;
         std::shared_ptr < VulkanBuffer> ScratchBuffer;
         VkDeviceSize ScratchBufferSize = 0;

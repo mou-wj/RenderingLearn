@@ -62,11 +62,6 @@ namespace RHI
         virtual void SetRayTracingPipelineState(
             RHIRayTracingPipelineState* pipelineState) = 0;
 
-
-        virtual void SetRayTracingAccelerationStructure(
-            RHIRayTracingInstance* accelerationStructure) = 0;
-
-
         virtual void BuildAccelerationStructure(
             RHIRayTracingAccelerationStructure* accelerationStructure) = 0;
 

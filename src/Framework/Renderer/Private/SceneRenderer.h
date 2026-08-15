@@ -3,15 +3,16 @@
 #include "Scene.h"
 #include "RenderGraphBuilder.h"
 #include "IBLPrecomputeShader.h"
+#include "StaticMeshProcess.h"
 namespace Renderer {
-
+    
     struct SceneTextures
     {
        
         // �����
         RenderCore::RenderGraphTextureRef SceneColor;
         RenderCore::RenderGraphTextureRef SceneDepth;
-
+        RenderCore::RenderGraphTextureRef SceneDepthPyramid;
         // GBuffer����ѡ��������չ��
         RenderCore::RenderGraphTextureRef GBufferA;
         RenderCore::RenderGraphTextureRef GBufferB;
@@ -64,6 +65,7 @@ namespace Renderer {
         static void BuildSceneLightShadowMap(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder);
         
         static void UploadShadowMapInfo(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder);
+        static void AddPreDepthPass(RenderCore::RenderGraphBuilder& graphBuilder,const MeshBatchList& meshBatchList,const Core::Mat4& viewProj, RenderCore::RenderGraphTextureRef depth);
     protected:
         static void BuildSceneLightCascadeShadowMap(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view);
         static void UpdateCascadeShadowInfo(Renderer::Scene* scene, RenderCore::RenderGraphBuilder& graphBuilder, const Engine::SceneView& view);

@@ -529,7 +529,7 @@ RHIComputePipelineStateSP VulkanRHIApi::CreateComputePipelineState(const RHIComp
 RHIRayTracingPipelineStateSP VulkanRHIApi::CreateRayTracingsPipelineState(const RHIRayTracingPipelineStateDesc& desc)
 {
     // 创建Vulkan光线追踪管线状态
-    return nullptr; // 暂时返回nullptr
+    return DynamicPtrCast(std::make_shared<VulkanRayTracingPipeline>(Device, desc), RHIRayTracingPipelineState);; // 暂时返回nullptr
 }
 
 RHIVertexDescStateSP VulkanRHIApi::CreateVertexDescState(const RHIVertexDescStateDesc& desc)
@@ -888,7 +888,6 @@ std::vector<const char*> VulkanRHIApi::GetWantedInstanceExtensions() {
 
 std::vector<const char*> VulkanRHIApi::GetWantedDeviceLayers() {
 	std::vector<const char*> wantLayers = {
-		"VK_LAYER_KHRONOS_validation" // Vulkan验证层
 	};
 	std::vector<const char*> res;
 	// 检查是否支持

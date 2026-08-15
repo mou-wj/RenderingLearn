@@ -1,0 +1,121 @@
+#include "/core/ShadingCommon.sf"
+#include "/Generated/ShaderParameters/ScreenSpaceReflectionParameters.sf"
+
+#define SHADINGMODEL_UNLIT 0u
+
+float3 DecodeNormal(float3 encoded)
+{
+    return normalize(encoded * 2.0 - 1.0);
+}
+
+float3 ReconstructWorldPosition(float2 uv, float depth)
+{
+    float2 ndc;
+    ndc.x = uv.x * 2.0 - 1.0;
+    ndc.y = (1.0 - uv.y) * 2.0 - 1.0;
+
+    float4 clipPos = float4(ndc.x, ndc.y, depth, 1.0);
+    float4 worldPos = mul(InvViewProj, clipPos);
+    worldPos.xyz /= max(worldPos.w, 1e-6);
+
+    return worldPos.xyz;
+}
+
+float3 ProjectWorldToScreenUVDepth(float3 worldPos)
+{
+    float4 clipPos = mul(ViewProj, float4(worldPos, 1.0));
+    float invW = 1.0 / max(abs(clipPos.w), 1e-6);
+
+    float2 ndc = clipPos.xy * invW;
+    float2 uv;
+    uv.x = ndc.x * 0.5 + 0.5;
+    uv.y = 1.0 - (ndc.y * 0.5 + 0.5);
+
+    float depth = clipPos.z * invW;
+    return float3(uv, depth);
+}
+
+bool ShouldShade(float roughness, uint shadingModelId)
+{
+    if (shadingModelId == SHADINGMODEL_UNLIT)
+    {
+        return false;
+    }
+
+    return roughness <= RoughnessThreshold;
+}
+
+[numthreads(8, 8, 1)]
+void MainCS(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    uint2 pixelPos = dispatchThreadID.xy;
+    uint2 screenSize = uint2((uint)ScreenSize.x, (uint)ScreenSize.y);
+
+    if (pixelPos.x >= screenSize.x || pixelPos.y >= screenSize.y)
+    {
+        return;
+    }
+
+    float2 uv = (float2(pixelPos) + 0.5) / ScreenSize;
+
+    float4 gbufferA = GBufferA.SampleLevel(PointSampler, uv, 0.0);
+    float4 gbufferB = GBufferB.SampleLevel(PointSampler, uv, 0.0);
+    float4 gbufferC = GBufferC.SampleLevel(PointSampler, uv, 0.0);
+
+    float roughness = saturate(gbufferB.a);
+    uint shadingModelId = (uint)(gbufferC.b * 255.0 + 0.5);
+
+    float3 sceneColor = SceneColorTexture.SampleLevel(PointSampler, uv, 0.0).rgb;
+
+    if (!ShouldShade(roughness, shadingModelId))
+    {
+        OutputReflectionColor[pixelPos] = float4(sceneColor, 1.0);
+        return;
+    }
+
+    float depth = DepthPyramidTexture.SampleLevel(PointSampler, uv, 0.0).r;
+    float3 worldPos = ReconstructWorldPosition(uv, depth);
+    float3 normal = DecodeNormal(gbufferB.rgb);
+    float3 viewDir = normalize(CameraPos - worldPos);
+
+    float3 reflectDir = normalize(reflect(-viewDir, normal));
+    float3 traceOrigin = worldPos + normal * 0.03;
+
+    float3 hitColor = sceneColor;
+    bool hit = false;
+
+    const float stepStride = MaxTraceDistance / max((float)MaxTraceSteps, 1.0);
+
+    [loop]
+    for (uint stepIndex = 0u; stepIndex < MaxTraceSteps; ++stepIndex)
+    {
+        float t = ((float)stepIndex + 1.0) * stepStride;
+        float3 sampleWorld = traceOrigin + reflectDir * t;
+
+        float3 proj = ProjectWorldToScreenUVDepth(sampleWorld);
+        float2 sampleUV = proj.xy;
+
+        if (sampleUV.x <= 0.0 || sampleUV.x >= 1.0 || sampleUV.y <= 0.0 || sampleUV.y >= 1.0)
+        {
+            break;
+        }
+
+        float mipLevel = clamp(log2(1.0 + (float)stepIndex * 0.5), 0.0, 10.0);
+        float sceneDepth = DepthPyramidTexture.SampleLevel(PointSampler, sampleUV, mipLevel).r;
+        float rayDepth = proj.z;
+
+        if (abs(rayDepth - sceneDepth) < TraceThickness)
+        {
+            hitColor = SceneColorTexture.SampleLevel(PointSampler, sampleUV, 0.0).rgb;
+            hit = true;
+            break;
+        }
+    }
+
+    float hitWeight = hit ? 1.0 : 0.0;
+    float fresnel = pow(1.0 - saturate(dot(normal, viewDir)), 5.0);
+    float reflectionStrength = (1.0 - roughness) * (0.04 + 0.96 * fresnel) * hitWeight;
+
+    float3 indirectColor = sceneColor + hitColor * reflectionStrength;
+    OutputReflectionColor[pixelPos] = float4(indirectColor, 1.0);
+}

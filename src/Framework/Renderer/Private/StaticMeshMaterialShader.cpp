@@ -135,6 +135,7 @@ namespace Renderer
 
         OutEnvironment.SetDefine("PIXEL_SHADER", 1);
         Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
+
     }
 
 
@@ -157,6 +158,9 @@ namespace Renderer
         const MaterialShaderPermutationParameters& MeshParams =
             static_cast<const MaterialShaderPermutationParameters&>(Parameters);
         Engine::ModifyShaderCompilerEnvironment(MeshParams.MaterialParams, OutEnvironment);
+        PermutationDomain domain;
+        domain.SetFromId(Parameters.PermutationId);
+        domain.ModifyCompilationEnvironment(OutEnvironment);
     }
 
     IMPLEMENT_MATERIAL_SHADER_TYPE(

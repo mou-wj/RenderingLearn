@@ -7,6 +7,7 @@
 #include "StaticMeshMaterialShader.h"
 #include "GBufferInfo.h"
 #include "DrawSkyPass.h"
+#include "GI/ScreenSpaceGI.h"
 #include "Log.h"
 #include <iostream>
 using namespace RenderCore;
@@ -26,7 +27,6 @@ namespace Renderer {
         AddClearRenderTargetsPass(builder, renderTargetBindingSlots);
 
 
-
         auto sceneEnvMap = Scene->GetGPUResourceInfo().LightResourceInfo.IBLSpecularTexture;
         //��renderer���Ƶ�DefferedOutputColor
         //��ȡ����static mesh primitive
@@ -35,6 +35,10 @@ namespace Renderer {
             UpdateCascadeShadowInfo(Scene, builder, view);
             MeshBatchList DrawMeshBatches;
             StaticMeshDrawBuild(Scene, view, DrawMeshBatches);
+			//跑一遍pre depth pass
+            //AddPreDepthPass(builder, DrawMeshBatches,view.ViewProjectionMatrix,SceneTextures.ScenePreDepth);
+            //构建depth pyramid
+
             for (auto MeshBatch : DrawMeshBatches) {
                 auto vsfShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::MeshMaterial]["StaticMeshMaterialShaderVS"];
                 auto psfShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::MeshMaterial]["StaticMeshMaterialGBufferShaderPS"];
@@ -222,45 +226,50 @@ namespace Renderer {
             paramss->CameraPos = view.CameraWorldPos;
             paramss->ScreenSize.x = width;
             paramss->ScreenSize.y = height;
-            paramss->GBuffer.GBufferA = SceneTextures.GBufferA;
-            paramss->GBuffer.GBufferB = SceneTextures.GBufferB;
-            paramss->GBuffer.GBufferC = SceneTextures.GBufferC;
-            paramss->GBuffer.Depth = SceneTextures.SceneDepth;
+            paramss->GBuffer.GBufferInput.GBufferA = SceneTextures.GBufferA;
+            paramss->GBuffer.GBufferInput.GBufferB = SceneTextures.GBufferB;
+            paramss->GBuffer.GBufferInput.GBufferC = SceneTextures.GBufferC;
+            paramss->GBuffer.GBufferInput.Depth = SceneTextures.SceneDepth;
+            
+            //创建一个临时的color用于输出deferred shading的结果
+            RenderGraphTextureDesc colorDesc;
+            colorDesc = SceneTextures.SceneColor->GetDesc();
+            auto defferedColor = builder.CreateTexture("defferedColor", colorDesc);
+
             RenderGraphTextureUAVDesc uavDesc;
-            uavDesc.Format = SceneTextures.SceneColor->GetDesc().Format;
-            uavDesc.Texture = SceneTextures.SceneColor;
+            uavDesc.Texture = defferedColor;
+
+
             
             auto sceneColorUAV = builder.CreateTextureUAV("sceneColorUAV", uavDesc);
             paramss->GBuffer.OutputColor = sceneColorUAV;
-            paramss->GBuffer.PointSampler = GlobalSampler.get();
+            paramss->GBuffer.GBufferInput.PointSampler = GlobalSampler.get();
             BuildShaderParameters(Scene, builder, paramss->Scene);
-            RHIComputePipelineStateDesc computePipelineDesc;
-            auto defferedShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Material]["StaticMeshMaterialDefferedShadingCS"];
-            MaterialShaderKey key;
-            key.ShaderType = static_cast<MaterialShaderType*>(defferedShaderType); ;
-            key.PermutationId = 0;
-            key.MaterialParameter.ShadingModel = EShadingModel::Lit;
-            auto cshader = GMaterialShaderMap.GetShader(key);
-            computePipelineDesc.computeShader = dynamic_cast<RHI::RHIComputeShader*>(cshader->GetRHIShader());
-            auto defferedDrawPipeline = RHIPipelineStateCache::GetOrCreateComputePipelineState(computePipelineDesc);
-            builder.AddPass<StaticMeshMaterialDefferedShadingCSParameters>(
-                "StaticMeshDefferedDrawPass",
-                StaticMeshMaterialDefferedShadingCSParameters::GetMetaData(),
-                paramss,
-                EPassFlag::Compute,
-                [=](RHI::RHICommandListBase& RHICmdList)
-                {
-                    auto& cmd = static_cast<RHI::RHIComputeCommandList&>(RHICmdList);
-                    StaticMeshMaterialDefferedShadingCSParameters* materialParams = paramss;
+            BuildEvnIBLLightParameters(Scene, builder, paramss->EnvIBLParameters);
+			AddStaticMeshDefferedShadingPass(builder, paramss, false);
+            //构建生成屏幕空间反射的深度
             
-                    cmd.SetComputePipelineState(defferedDrawPipeline);
-            
-                    //����pixel����
-                    SetShaderParameters(cmd, cshader, paramss);
-            
-                    cmd.Dispatch(width / 8, height / 8, 1);
-                }
-            );
+            AddStaticMeshDefferedShadingPass(builder, paramss, true);
+            //构建深度金字塔
+			BuildDepthPyramidPassInput input;
+            input.SceneDepthTexture = SceneTextures.SceneDepth;
+            input.DepthPyramidTexture = SceneTextures.SceneDepthPyramid;
+            AddBuildDepthPyramidPass(builder, input);
+
+			//然后基于深度金字塔和Gbuffer生成屏幕空间反射和漫反射GI
+            ScreenSpaceGIPassInput SSGIInput;
+            SSGIInput.DepthPyramid = SceneTextures.SceneDepthPyramid;
+            SSGIInput.GBufferA = SceneTextures.GBufferA;
+			SSGIInput.GBufferB = SceneTextures.GBufferB;
+			SSGIInput.GBufferC = SceneTextures.GBufferC;
+            SSGIInput.SceneColor = defferedColor;
+            SSGIInput.OutputGI = SceneTextures.SceneColor;
+            SSGIInput.ViewProj = view.ViewProjectionMatrix;
+            SSGIInput.InvViewProj = view.InvViewProjectionMatrix;
+            SSGIInput.CameraPos = view.CameraWorldPos;
+            AddScreenSpaceGIPass(builder, SSGIInput);
+
+
             if (sceneEnvMap != nullptr) {
                 AddDrawSkyBoxPass(builder, sceneEnvMap, SceneTextures.SceneColor, SceneTextures.SceneDepth, view);
             }

@@ -8,9 +8,63 @@
 #include <set>
 #include <list>
 #include <unordered_map>
-#define VK_DESCRIPTOR_TYPE_RANGE_SIZE (VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT - VK_DESCRIPTOR_TYPE_SAMPLER + 1)
 
 namespace RHIVulkan {
+    static constexpr uint32_t VK_DESCRIPTOR_TYPE_POOL_INDEX_COUNT = 12u;
+    static constexpr uint32_t VK_DESCRIPTOR_TYPE_POOL_INVALID_INDEX = 0xFFFFFFFFu;
+
+    inline uint32_t GetDescriptorTypePoolIndex(VkDescriptorType type)
+    {
+        switch (type)
+        {
+        case VK_DESCRIPTOR_TYPE_SAMPLER:
+            return 0u;
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            return 1u;
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            return 2u;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            return 3u;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            return 4u;
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            return 5u;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            return 6u;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            return 7u;
+        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            return 8u;
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            return 9u;
+        case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            return 10u;
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            return 11u;
+        default:
+            return VK_DESCRIPTOR_TYPE_POOL_INVALID_INDEX;
+        }
+    }
+
+    inline VkDescriptorType GetDescriptorTypeByPoolIndex(uint32_t index)
+    {
+        static const std::array<VkDescriptorType, VK_DESCRIPTOR_TYPE_POOL_INDEX_COUNT> DescriptorTypePoolIndexMap = {
+            VK_DESCRIPTOR_TYPE_SAMPLER,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+            VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+            VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+        };
+
+        return index < DescriptorTypePoolIndexMap.size() ? DescriptorTypePoolIndexMap[index] : VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    }
     class VulkanCommandBuffer;
     //------------------------------------------------------------
     // Descriptor Set Binding / Layout
@@ -49,7 +103,7 @@ namespace RHIVulkan {
     class VulkanDescriptorPool
     {
     public:
-        VulkanDescriptorPool(VulkanDevice* device, uint32_t maxSets, const std::array<uint32_t, VK_DESCRIPTOR_TYPE_RANGE_SIZE>& poolSizes);
+        VulkanDescriptorPool(VulkanDevice* device, uint32_t maxSets, const std::array<uint32_t, VK_DESCRIPTOR_TYPE_POOL_INDEX_COUNT>& poolSizes);
         ~VulkanDescriptorPool();
 
         bool AllocateDescriptorSet(VkDescriptorSetLayout layout, VkDescriptorSet& outSet);
@@ -63,7 +117,7 @@ namespace RHIVulkan {
 		friend class VulkanDescriptorSetManager;
         VulkanDevice* Device;
         uint32_t MaxDescriptorSets;
-        std::array<float, VK_DESCRIPTOR_TYPE_RANGE_SIZE> PoolSizes{};
+        std::array<float, VK_DESCRIPTOR_TYPE_POOL_INDEX_COUNT> PoolSizes{};
         VkDescriptorPool Pool = VK_NULL_HANDLE;
         uint32_t AllocatedCount = 0;
     };
@@ -147,6 +201,9 @@ namespace RHIVulkan {
             Writes.clear();
             ImageInfos.clear();
             BufferInfos.clear();
+            BufferViews.clear();
+            AccelerationStructureInfos.clear();
+            AccelerationStructures.clear();
             Dirty = false;
         }
 
@@ -213,6 +270,26 @@ namespace RHIVulkan {
             Dirty = true;
         }
 
+        void WriteAccelerationStructure(VkDescriptorSet set, uint32_t binding, uint32_t element, VkDescriptorType type, VkAccelerationStructureKHR accelerationStructure)
+        {
+            VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            write.dstSet = set;
+            write.dstBinding = binding;
+            write.dstArrayElement = element;
+            write.descriptorType = type;
+            write.descriptorCount = 1;
+
+            auto& structure = AccelerationStructures.emplace_back(accelerationStructure);
+            auto& info = AccelerationStructureInfos.emplace_back();
+            info.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+            info.accelerationStructureCount = 1;
+            info.pAccelerationStructures = &structure;
+            write.pNext = &info;
+
+            Writes.push_back(write);
+            Dirty = true;
+        }
+
         void Update(VkDevice device)
         {
 
@@ -231,6 +308,8 @@ namespace RHIVulkan {
         std::deque<VkDescriptorImageInfo> ImageInfos;
         std::deque<VkDescriptorBufferInfo> BufferInfos;
         std::deque<VkBufferView> BufferViews;
+        std::deque<VkWriteDescriptorSetAccelerationStructureKHR> AccelerationStructureInfos;
+        std::deque<VkAccelerationStructureKHR> AccelerationStructures;
         bool Dirty = false;
     };
 

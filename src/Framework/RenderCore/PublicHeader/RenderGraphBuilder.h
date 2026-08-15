@@ -181,6 +181,9 @@ public:
 
     RenderGraphTextureRef GetTexture(const std::string& name);
     RenderGraphBufferRef GetBuffer(const std::string& name);
+
+    TextureViewCache* GetExternalTextureViewCache(RenderGraphTextureRef tex);
+	BufferViewCache* GetExternalBufferViewCache(RenderGraphBufferRef buf);
     template<typename T>
     T* AllocateParameter(){
         return Allocator.Allocate<T>();

@@ -3,9 +3,13 @@
 #include "StaticMeshComponent.h"
 #include "StaticMeshResources.h"
 #include "StaticMeshProxy.h"
+#include "StaticMeshMaterialShader.h"
 #include "HashHelper.hpp"
+#include "RHIPipelineStateCache.h"
 #include <unordered_map>
 #include <set>
+using namespace RenderCore;
+using namespace RHI;
 
 struct MeshBatchKey
 {
@@ -277,6 +281,42 @@ namespace Renderer {
 		BuildMeshBatchFromMap(GMeshBatchElementMap, outDrawMeshList);
 		AllocateInstanceDataIds(scene, outDrawMeshList);
 	}
+
+    void AddStaticMeshDefferedShadingPass(RenderCore::RenderGraphBuilder& builder, StaticMeshMaterialDefferedShadingCSParameters* params, bool isIBLMode)
+    {
+        RHIComputePipelineStateDesc computePipelineDesc;
+        auto defferedShaderType = ShaderType::GetRegisterMap()[ShaderType::EShaderTypeFlag::Material]["StaticMeshMaterialDefferedShadingCS"];
+        MaterialShaderKey key;
+        key.ShaderType = static_cast<MaterialShaderType*>(defferedShaderType); ;
+        key.PermutationId = 0;
+        std::string passName = "StaticMeshDefferedDrawPass";
+        if (isIBLMode) {
+            key.PermutationId = 1;
+            passName = "StaticMeshDefferedDrawIBLPass";
+        }
+        key.MaterialParameter.ShadingModel = EShadingModel::Lit;
+        auto cshader = GMaterialShaderMap.GetShader(key);
+        computePipelineDesc.computeShader = dynamic_cast<RHI::RHIComputeShader*>(cshader->GetRHIShader());
+        auto defferedDrawPipeline = RHIPipelineStateCache::GetOrCreateComputePipelineState(computePipelineDesc);
+        builder.AddPass<StaticMeshMaterialDefferedShadingCSParameters>(
+            passName,
+            StaticMeshMaterialDefferedShadingCSParameters::GetMetaData(),
+            params,
+            EPassFlag::Compute,
+            [=](RHI::RHICommandListBase& RHICmdList)
+            {
+                auto& cmd = static_cast<RHI::RHIComputeCommandList&>(RHICmdList);
+                StaticMeshMaterialDefferedShadingCSParameters* materialParams = params;
+
+                cmd.SetComputePipelineState(defferedDrawPipeline);
+
+                //����pixel����
+                SetShaderParameters(cmd, cshader, params);
+
+                cmd.Dispatch(params->ScreenSize.x / 8, params->ScreenSize.y / 8, 1);
+            }
+        );
+    }
 
 
 

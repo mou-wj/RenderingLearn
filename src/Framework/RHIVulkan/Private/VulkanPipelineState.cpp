@@ -5,6 +5,7 @@
 #include "VulkanResource.h"
 #include "VulkanRHIUtils.h"
 #include "VulkanCommandBuffer.h"
+#include "VulkanMemory.h"
 #include <vector>
 
 using namespace RHI;
@@ -373,6 +374,17 @@ VulkanRayTracingPipeline::VulkanRayTracingPipeline(VulkanDevice* device, const R
 }
 
 VulkanRayTracingPipeline::~VulkanRayTracingPipeline() {
+    if (shaderBindingTableBuffer != VK_NULL_HANDLE)
+    {
+        device->EnqueueBufferForDeletion(shaderBindingTableBuffer);
+        shaderBindingTableBuffer = VK_NULL_HANDLE;
+    }
+
+    if (shaderBindingTableAllocation.GetMemory() != VK_NULL_HANDLE)
+    {
+        device->GetMemoryManager()->Free(shaderBindingTableAllocation);
+        shaderBindingTableAllocation = VulkanAllocation{};
+    }
 }
 
 PipelineLayoutInfo VulkanRayTracingPipeline::BuildPipelineLayoutInfo(const RHIRayTracingPipelineStateDesc& pipelineDesc)
@@ -554,6 +566,59 @@ void VulkanRayTracingPipeline::CreatePipeline() {
     createInfo.groupCount = static_cast<uint32_t>(shaderGroups.size());
     createInfo.pGroups = shaderGroups.data();
     createInfo.maxPipelineRayRecursionDepth = 1;
+
+    const VkDeviceSize shaderBindingTableEntrySize = 64;
+    const VkDeviceSize shaderBindingTableSize = shaderBindingTableEntrySize * 4;
+
+    if (shaderBindingTableSize > 0)
+    {
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = shaderBindingTableSize;
+        bufferInfo.usage = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        if (!VKFunc::CreateBuffer(device->GetHandle(), &bufferInfo, &shaderBindingTableBuffer))
+        {
+            throw std::runtime_error("无法创建光线追踪 SBT buffer");
+        }
+
+        VkMemoryRequirements memoryRequirements{};
+        VKFunc::GetBufferMemoryRequirements(device->GetHandle(), shaderBindingTableBuffer, &memoryRequirements);
+        if (!device->GetMemoryManager()->Allocate(memoryRequirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, shaderBindingTableAllocation))
+        {
+            device->EnqueueBufferForDeletion(shaderBindingTableBuffer);
+            shaderBindingTableBuffer = VK_NULL_HANDLE;
+            throw std::runtime_error("无法分配光线追踪 SBT 内存");
+        }
+
+        VKFunc::BindBufferMemory(device->GetHandle(), shaderBindingTableBuffer, shaderBindingTableAllocation.GetMemory(), shaderBindingTableAllocation.GetOffset());
+
+        VkBufferDeviceAddressInfo bufferAddressInfo{};
+        bufferAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        bufferAddressInfo.buffer = shaderBindingTableBuffer;
+        shaderBindingTableDeviceAddress = VKFunc::GetBufferDeviceAddress(device->GetHandle(), &bufferAddressInfo);
+    }
+
+    rayGenShaderBindingTableRegion = {};
+    rayGenShaderBindingTableRegion.deviceAddress = shaderBindingTableDeviceAddress;
+    rayGenShaderBindingTableRegion.size = shaderBindingTableEntrySize;
+    rayGenShaderBindingTableRegion.stride = shaderBindingTableEntrySize;
+
+    missShaderBindingTableRegion = {};
+    missShaderBindingTableRegion.deviceAddress = shaderBindingTableDeviceAddress + shaderBindingTableEntrySize;
+    missShaderBindingTableRegion.size = shaderBindingTableEntrySize;
+    missShaderBindingTableRegion.stride = shaderBindingTableEntrySize;
+
+    hitShaderBindingTableRegion = {};
+    hitShaderBindingTableRegion.deviceAddress = shaderBindingTableDeviceAddress + shaderBindingTableEntrySize * 2;
+    hitShaderBindingTableRegion.size = shaderBindingTableEntrySize;
+    hitShaderBindingTableRegion.stride = shaderBindingTableEntrySize;
+
+    callableShaderBindingTableRegion = {};
+    callableShaderBindingTableRegion.deviceAddress = shaderBindingTableDeviceAddress + shaderBindingTableEntrySize * 3;
+    callableShaderBindingTableRegion.size = shaderBindingTableEntrySize;
+    callableShaderBindingTableRegion.stride = shaderBindingTableEntrySize;
 
     if (!VKFunc::CreateRayTracingPipelinesKHR(device->GetHandle(), VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &createInfo, &pipeline)) {
         throw std::runtime_error("无法创建光线追踪管线!");

@@ -8,6 +8,7 @@
 #include "MaterialShaderParameter.h"
 #include "MateiralShader.h"
 #include "GlobalShader.h"
+#include "GBufferInfo.h"
 
 namespace Renderer
 {
@@ -94,12 +95,8 @@ namespace Renderer
     };
 
     BEGIN_SHADER_PARAMETER_STRUCT(GBufferTextureParameters)
-        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, GBufferA)
-        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, GBufferB)
-        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, GBufferC)
-        SHADER_PARAMETER_RDG_TEXTURE(Texture2D, Depth)
         SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, OutputColor)
-        SHADER_PARAMETER_SAMPLER(PointSampler)
+        SHADER_PARAMETER_STRUCT_REFERENCE(GBufferInputParameters, GBufferInput)
     END_SHADER_PARAMETER_STRUCT(GBufferTextureParameters)
 
 
@@ -108,13 +105,21 @@ namespace Renderer
         SHADER_PARAMETER(Core::Float3, CameraPos)
         SHADER_PARAMETER(Core::Float2, ScreenSize)
         SHADER_PARAMETER_STRUCT_REFERENCE(SceneShaderParameters, Scene)
-        SHADER_PARAMETER_STRUCT_INCLUDE(GBufferTextureParameters, GBuffer)
+        SHADER_PARAMETER_STRUCT_REFERENCE(GBufferTextureParameters, GBuffer)
+        SHADER_PARAMETER_STRUCT_REFERENCE(SceneEvnIBLLightParameters, EnvIBLParameters)
     END_SHADER_PARAMETER_STRUCT(StaticMeshMaterialDefferedShadingCSParameters)
 
     class StaticMeshMaterialDefferedShadingCS : public MaterialShader
     {
 
     public:
+        static constexpr char IS_IBL[] = "IS_IBL";
+
+        // 2. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½È£ï¿½ï¿½ï¿½ï¿½ï¿½ 3 ï¿½ï¿½ï¿½ï¿½É«×ªï¿½ï¿½Ä£Ê½ï¿½ï¿½
+        using IsIBLPermutation = RenderCore::FPermutationDimensionBool<IS_IBL>;
+
+        // 3. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Domainï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½ï¿½
+        using PermutationDomain = RenderCore::ShaderPermutationDomain<IsIBLPermutation>;
 
         DECLARE_MATERIAL_SHADER_TYPE(StaticMeshMaterialDefferedShadingCS);
 
@@ -146,10 +151,10 @@ namespace Renderer
     public:
         static constexpr char USE_INSTANCE_MODEL[] = "USE_INSTANCE";
 
-        // 2. ¶¨Òå±äÌåÎ¬¶È£¨ÀýÈç 3 ÖÖÑÕÉ«×ª»»Ä£Ê½£©
+        // 2. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½È£ï¿½ï¿½ï¿½ï¿½ï¿½ 3 ï¿½ï¿½ï¿½ï¿½É«×ªï¿½ï¿½Ä£Ê½ï¿½ï¿½
         using InstancePermutation = RenderCore::FPermutationDimensionBool<USE_INSTANCE_MODEL>;
 
-        // 3. ¶¨Òå±äÌåÓò£¨Domain£©£¬¿ÉÒÔ°üº¬¶à¸öÎ¬¶È
+        // 3. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Domainï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½ï¿½
         using PermutationDomain = RenderCore::ShaderPermutationDomain<InstancePermutation>;
         DECLARE_GLOBAL_SHADER_TYPE(PositionOnlyVS)
         static bool ShouldCompilePermutation(
@@ -179,10 +184,10 @@ namespace Renderer
     public:
         static constexpr char Macro_DepthStoreMode[] = "DEPTH_STORE_MODE";
 
-        // 2. ¶¨Òå±äÌåÎ¬¶È£¨ÀýÈç 3 ÖÖÑÕÉ«×ª»»Ä£Ê½£©
+        // 2. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½È£ï¿½ï¿½ï¿½ï¿½ï¿½ 3 ï¿½ï¿½ï¿½ï¿½É«×ªï¿½ï¿½Ä£Ê½ï¿½ï¿½
         using DepthStoreModeDim = RenderCore::FPermutationDimensionEnum<Macro_DepthStoreMode, 2>;
 
-        // 3. ¶¨Òå±äÌåÓò£¨Domain£©£¬¿ÉÒÔ°üº¬¶à¸öÎ¬¶È
+        // 3. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Domainï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¬ï¿½ï¿½
         using PermutationDomain = RenderCore::ShaderPermutationDomain<DepthStoreModeDim>;
         DECLARE_GLOBAL_SHADER_TYPE(DepthShadowPassPS)
         static bool ShouldCompilePermutation(
