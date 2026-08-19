@@ -35,6 +35,89 @@ float3 ProjectWorldToScreenUVDepth(float3 worldPos)
     return float3(uv, depth);
 }
 
+bool TraceScreenSpaceRay(float3 rayOrigin, float3 rayDir, out float2 hitUV)
+{
+    hitUV = 0.0;
+    float3 tracePos = rayOrigin;
+    float2 candidateUV = 0.0;
+    bool foundCandidate = false;
+
+    const uint maxMipLevel = 6u;
+    const float stepStride = MaxTraceDistance / max((float)MaxTraceSteps, 1.0);
+
+    [loop]
+    for (uint mipLevel = maxMipLevel; mipLevel > 0u; --mipLevel)
+    {
+        float mipStep = stepStride * pow(2.0, (float)mipLevel);
+        foundCandidate = false;
+
+        [loop]
+        for (uint stepIndex = 0u; stepIndex < MaxTraceSteps; ++stepIndex)
+        {
+            float t = ((float)stepIndex + 1.0) * mipStep;
+            if (t > MaxTraceDistance)
+            {
+                break;
+            }
+
+            float3 samplePos = tracePos + rayDir * t;
+            float3 projected = ProjectWorldToScreenUVDepth(samplePos);
+            float2 sampleUV = projected.xy;
+
+            if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0)
+            {
+                continue;
+            }
+
+            float sceneDepth = DepthPyramidTexture.SampleLevel(PointSampler, sampleUV, mipLevel).r;
+            float rayDepth = projected.z;
+
+            if (abs(rayDepth - sceneDepth) < TraceThickness)
+            {
+                foundCandidate = true;
+                candidateUV = sampleUV;
+                tracePos = samplePos;
+                break;
+            }
+        }
+
+        if (!foundCandidate)
+        {
+            continue;
+        }
+    }
+
+    [loop]
+    for (uint stepIndex = 0u; stepIndex < MaxTraceSteps; ++stepIndex)
+    {
+        float t = ((float)stepIndex + 1.0) * stepStride;
+        if (t > MaxTraceDistance)
+        {
+            break;
+        }
+
+        float3 samplePos = tracePos + rayDir * t;
+        float3 projected = ProjectWorldToScreenUVDepth(samplePos);
+        float2 sampleUV = projected.xy;
+
+        if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0)
+        {
+            continue;
+        }
+
+        float sceneDepth = DepthPyramidTexture.SampleLevel(PointSampler, sampleUV, 0.0).r;
+        float rayDepth = projected.z;
+
+        if (abs(rayDepth - sceneDepth) < TraceThickness)
+        {
+            hitUV = sampleUV;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool ShouldShade(float roughness, uint shadingModelId)
 {
     if (shadingModelId == SHADINGMODEL_UNLIT)
@@ -81,38 +164,16 @@ void MainCS(uint3 dispatchThreadID : SV_DispatchThreadID)
     float3 reflectDir = normalize(reflect(-viewDir, normal));
     float3 traceOrigin = worldPos + normal * 0.03;
 
+    float2 hitUV = 0.0;
     float3 hitColor = sceneColor;
-    bool hit = false;
+    bool foundHit = TraceScreenSpaceRay(traceOrigin, reflectDir, hitUV);
 
-    const float stepStride = MaxTraceDistance / max((float)MaxTraceSteps, 1.0);
-
-    [loop]
-    for (uint stepIndex = 0u; stepIndex < MaxTraceSteps; ++stepIndex)
+    if (foundHit)
     {
-        float t = ((float)stepIndex + 1.0) * stepStride;
-        float3 sampleWorld = traceOrigin + reflectDir * t;
-
-        float3 proj = ProjectWorldToScreenUVDepth(sampleWorld);
-        float2 sampleUV = proj.xy;
-
-        if (sampleUV.x <= 0.0 || sampleUV.x >= 1.0 || sampleUV.y <= 0.0 || sampleUV.y >= 1.0)
-        {
-            break;
-        }
-
-        float mipLevel = clamp(log2(1.0 + (float)stepIndex * 0.5), 0.0, 10.0);
-        float sceneDepth = DepthPyramidTexture.SampleLevel(PointSampler, sampleUV, mipLevel).r;
-        float rayDepth = proj.z;
-
-        if (abs(rayDepth - sceneDepth) < TraceThickness)
-        {
-            hitColor = SceneColorTexture.SampleLevel(PointSampler, sampleUV, 0.0).rgb;
-            hit = true;
-            break;
-        }
+        hitColor = SceneColorTexture.SampleLevel(PointSampler, hitUV, 0.0).rgb;
     }
 
-    float hitWeight = hit ? 1.0 : 0.0;
+    float hitWeight = foundHit ? 1.0 : 0.0;
     float fresnel = pow(1.0 - saturate(dot(normal, viewDir)), 5.0);
     float reflectionStrength = (1.0 - roughness) * (0.04 + 0.96 * fresnel) * hitWeight;
 

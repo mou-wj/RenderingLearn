@@ -38,6 +38,173 @@ float Hash11(uint seed)
     return (float(seed) / 4294967295.0);
 }
 
+
+bool IsInsideScreenUV(float2 uv)
+{
+    return uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
+}
+
+float2 ComputeMipUVStep(float2 dirUV, uint mipLevel)
+{
+    float2 stepUV = normalize(dirUV) * (1.0 / pow(2.0, (float)mipLevel));
+    float minStep = min(abs(stepUV.x), abs(stepUV.y));
+    if (abs(stepUV.x) > abs(stepUV.y))
+    {
+        stepUV.x = sign(stepUV.x) * minStep;
+    }
+    else if (abs(stepUV.y) > abs(stepUV.x))
+    {
+        stepUV.y = sign(stepUV.y) * minStep;
+    }
+    return stepUV;
+}
+
+float2 ProjectRayUVToScreen(float3 rayOrigin, float3 rayDir, float2 startUV, float2 dirUV, float2 uv)
+{
+    float2 uvDelta = uv - startUV;
+    float rayT = length(uvDelta) / max(length(dirUV), 1e-4) * MaxTraceDistance;
+    float3 samplePos = rayOrigin + rayDir * rayT;
+    return ProjectWorldToScreenUVDepth(samplePos).xy;
+}
+
+bool IsPossibleHiZHit(float rayDepth, float minDepth, uint mipLevel)
+{
+    return rayDepth >= minDepth;
+}
+
+bool IsFinalDepthHit(float rayDepth, float sceneDepth)
+{
+    const float finalHitEpsilon = 0.0005;
+    float delta = rayDepth - sceneDepth;
+    if(delta >= 0 && delta < finalHitEpsilon){
+        return true;
+    }
+    return false;
+}
+
+bool TraceScreenSpaceRayStep(float3 rayOrigin, float3 rayDir, float2 startUV, float2 dirUV, uint mipLevel, inout float2 currentUV, out float2 hitUV)
+{
+    hitUV = currentUV;
+
+    float2 stepUV = ComputeMipUVStep(dirUV, mipLevel);
+    float2 nextUV = currentUV + stepUV;
+    if (!IsInsideScreenUV(nextUV))
+    {
+        currentUV = nextUV;
+        return false;
+    }
+
+    float2 sampleUV = ProjectRayUVToScreen(rayOrigin, rayDir, startUV, dirUV, nextUV);
+    if (!IsInsideScreenUV(sampleUV))
+    {
+        currentUV = nextUV;
+        return false;
+    }
+
+    float sceneDepth = Depth.SampleLevel(PointSampler, sampleUV, mipLevel).r;
+    float rayDepth = ProjectWorldToScreenUVDepth(rayOrigin + rayDir * (length(nextUV - startUV) / max(length(dirUV), 1e-4) * MaxTraceDistance)).z;
+
+    if (mipLevel == 0u)
+    {
+        if (IsFinalDepthHit(rayDepth, sceneDepth))
+        {
+            currentUV = sampleUV;
+            hitUV = sampleUV;
+            return true;
+        }
+    }
+    else
+    {
+        if (IsPossibleHiZHit(rayDepth, sceneDepth, mipLevel))
+        {
+            currentUV = sampleUV;
+            hitUV = sampleUV;
+            return true;
+        }
+    }
+
+    currentUV = nextUV;
+    return false;
+}
+
+bool TraceScreenSpaceRay(float3 rayOrigin, float3 rayDir, out float2 hitUV)
+{
+    hitUV = 0.0;
+
+    float2 startUV = ProjectWorldToScreenUVDepth(rayOrigin).xy;
+    if (!IsInsideScreenUV(startUV))
+    {
+        return false;
+    }
+
+    float3 farPos = rayOrigin + rayDir * MaxTraceDistance;
+    float2 farUV = ProjectWorldToScreenUVDepth(farPos).xy;
+    float2 dirUV = farUV - startUV;
+    if (length(dirUV) < 1e-4)
+    {
+        return false;
+    }
+    dirUV = normalize(dirUV);
+
+    const uint maxMipLevel = 6u;
+    float2 currentUV = startUV;
+    float2 candidateUV = startUV;
+    bool foundCandidate = false;
+
+    [loop]
+    for (uint mipLevel = maxMipLevel; mipLevel > 0u; --mipLevel)
+    {
+        currentUV = candidateUV;
+        foundCandidate = false;
+
+        [loop]
+        for (uint traceIter = 0u; traceIter < 256u; ++traceIter)
+        {
+            if (!IsInsideScreenUV(currentUV))
+            {
+                break;
+            }
+
+            float2 stepHitUV;
+            if (TraceScreenSpaceRayStep(rayOrigin, rayDir, startUV, dirUV, mipLevel, currentUV, stepHitUV))
+            {
+                foundCandidate = true;
+                candidateUV = stepHitUV;
+                break;
+            }
+        }
+
+        if (foundCandidate)
+        {
+            continue;
+        }
+    }
+
+    if (!foundCandidate)
+    {
+        return false;
+    }
+
+    currentUV = candidateUV;
+    [loop]
+    for (uint traceIter = 0u; traceIter < 256u; ++traceIter)
+    {
+        if (!IsInsideScreenUV(currentUV))
+        {
+            break;
+        }
+
+        float2 stepHitUV;
+        if (TraceScreenSpaceRayStep(rayOrigin, rayDir, startUV, dirUV, 0u, currentUV, stepHitUV))
+        {
+            hitUV = stepHitUV;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 float3 ScreenSpaceDiffuseGI(float3 worldPos, float3 normal, float2 uv, float3 albedo)
 {
     float3 accum = 0.0;
@@ -48,7 +215,7 @@ float3 ScreenSpaceDiffuseGI(float3 worldPos, float3 normal, float2 uv, float3 al
 
     const uint diffuseSampleCount = 20u;
     const float hemisphereRadius = 0.45;
-
+    bool hit = false;
     [loop]
     for (uint i = 0u; i < diffuseSampleCount; ++i)
     {
@@ -61,28 +228,27 @@ float3 ScreenSpaceDiffuseGI(float3 worldPos, float3 normal, float2 uv, float3 al
 
         float3 localDir = float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
         float3 sampleDir = normalize(tangent * localDir.x + bitangent * localDir.y + normal * localDir.z);
-        float3 samplePos = worldPos + sampleDir * hemisphereRadius;
-
-        float3 projected = ProjectWorldToScreenUVDepth(samplePos);
-        float2 sampleUV = projected.xy;
-
-        if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0)
+        float3 viewDir = normalize(CameraPos - worldPos);
+        if (dot(sampleDir, viewDir) >= 0.0)
         {
             continue;
         }
 
-        float sceneDepth = Depth.SampleLevel(PointSampler, sampleUV, 0.0).r;
-        float relation = abs(projected.z - sceneDepth);
-
-        if (relation < TraceThickness)
+        float3 rayOrigin = worldPos + normal * 0.04;
+        float2 traceHitUV = 0.0;
+        if (!TraceScreenSpaceRay(rayOrigin, sampleDir, traceHitUV))
         {
-            float weight = saturate(dot(sampleDir, normal));
-            float3 sampleColor = SceneColorTexture.SampleLevel(PointSampler, sampleUV, 0.0).rgb;
-            accum += sampleColor * weight;
-            totalWeight += weight;
+            continue;
         }
+        hit = true;
+        float weight = saturate(dot(sampleDir, normal));
+        float3 incidentLight = SceneColorTexture.SampleLevel(PointSampler, traceHitUV, 0.0).rgb;
+        accum += incidentLight * weight;
+        totalWeight += weight;
     }
-
+    if(hit){
+        //return float3(0,1,0);
+    }
     if (totalWeight <= 1e-4)
     {
         return 0.0;
@@ -92,42 +258,27 @@ float3 ScreenSpaceDiffuseGI(float3 worldPos, float3 normal, float2 uv, float3 al
     return diffuse * albedo * 0.75;
 }
 
+
 float3 ScreenSpaceSpecularReflection(float3 worldPos, float3 normal, float3 viewDir, float2 uv, float roughness)
 {
     float3 reflectDir = normalize(reflect(-viewDir, normal));
     float3 rayOrigin = worldPos + normal * 0.04;
+    float2 hitUV = 0.0;
 
-    const float maxDist = max(MaxTraceDistance, 0.1);
-    const float stepStride = maxDist / max((float)MaxTraceSteps, 1.0);
-
-    [loop]
-    for (uint stepIndex = 0u; stepIndex < MaxTraceSteps; ++stepIndex)
+    float rayForward = dot(normalize(reflectDir), normalize(viewDir));
+    if (rayForward >= 0.0)
     {
-        float t = ((float)stepIndex + 1.0) * stepStride;
-        float3 samplePos = rayOrigin + reflectDir * t;
-
-        float3 projected = ProjectWorldToScreenUVDepth(samplePos);
-        float2 sampleUV = projected.xy;
-
-        if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0)
-        {
-            break;
-        }
-
-        float mipLevel = clamp(log2(1.0 + (float)stepIndex * 0.6), 0.0, 10.0);
-        float sceneDepth = Depth.SampleLevel(PointSampler, sampleUV, mipLevel).r;
-        float rayDepth = projected.z;
-
-        if (abs(rayDepth - sceneDepth) < TraceThickness)
-        {
-            float fresnel = pow(1.0 - saturate(dot(normal, viewDir)), 5.0);
-            float weight = (1.0 - roughness) * (0.04 + 0.96 * fresnel);
-            float3 hitColor = SceneColorTexture.SampleLevel(PointSampler, sampleUV, 0.0).rgb;
-            return hitColor * weight;
-        }
+        return 0.0;
+    }
+    if (!TraceScreenSpaceRay(rayOrigin, reflectDir, hitUV))
+    {
+        return 0.0;
     }
 
-    return 0.0;
+    float fresnel = pow(1.0 - saturate(dot(normal, viewDir)), 5.0);
+    float weight = (1.0 - roughness) * (0.04 + 0.96 * fresnel);
+    float3 hitColor = SceneColorTexture.SampleLevel(PointSampler, hitUV, 0.0).rgb;
+    return hitColor;
 }
 
 [numthreads(8,8,1)]

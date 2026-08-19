@@ -71,37 +71,26 @@ namespace {
 
 namespace ImGUISlate {
 
-    ImWidget::ImWidget(DrawCallback callback)
+    ImWidgetBase::ImWidgetBase(DrawCallback callback)
         : DrawHandler(std::move(callback))
     {
     }
 
-    void ImWidget::SetDrawCallback(DrawCallback callback)
+    void ImWidgetBase::SetDrawCallback(DrawCallback callback)
     {
         DrawHandler = std::move(callback);
     }
 
-    void ImWidget::Draw()
-    {
-        if (Visibility != SlateCore::EVisibility::Visible)
-        {
-            return;
-        }
 
-        if (DrawHandler)
-        {
-            DrawHandler(Geometry.X, Geometry.Y, Geometry.Width, Geometry.Height);
-        }
-    }
 
-    bool ImWidget::OnMouseMove(const SlateCore::MouseMoveEvent& event)
+    bool ImWidgetBase::OnMouseMove(const SlateCore::MouseMoveEvent& event)
     {
         UpdateModifiers(event.Modifiers);
         ImGui::GetIO().AddMousePosEvent(static_cast<float>(event.X), static_cast<float>(event.Y));
         return true;
     }
 
-    bool ImWidget::OnMouseButton(const SlateCore::MouseButtonEvent& event)
+    bool ImWidgetBase::OnMouseButton(const SlateCore::MouseButtonEvent& event)
     {
         UpdateModifiers(event.Modifiers);
 
@@ -115,14 +104,14 @@ namespace ImGUISlate {
         return true;
     }
 
-    bool ImWidget::OnMouseWheel(const SlateCore::MouseWheelEvent& event)
+    bool ImWidgetBase::OnMouseWheel(const SlateCore::MouseWheelEvent& event)
     {
         UpdateModifiers(event.Modifiers);
         ImGui::GetIO().AddMouseWheelEvent(0.0f, event.Delta);
         return true;
     }
 
-    bool ImWidget::OnKeyDown(const SlateCore::KeyEvent& event)
+    bool ImWidgetBase::OnKeyDown(const SlateCore::KeyEvent& event)
     {
         UpdateModifiers(event.Modifiers);
 
@@ -136,7 +125,7 @@ namespace ImGUISlate {
         return true;
     }
 
-    bool ImWidget::OnKeyUp(const SlateCore::KeyEvent& event)
+    bool ImWidgetBase::OnKeyUp(const SlateCore::KeyEvent& event)
     {
         UpdateModifiers(event.Modifiers);
 
@@ -150,19 +139,54 @@ namespace ImGUISlate {
         return true;
     }
 
-    bool ImWidget::OnFocusReceived()
+    bool ImWidgetBase::OnFocusReceived()
     {
         ImGui::GetIO().AddFocusEvent(true);
         return true;
     }
 
-    bool ImWidget::OnFocusLost()
+    bool ImWidgetBase::OnFocusLost()
     {
         ImGui::GetIO().AddFocusEvent(false);
         return true;
     }
+    ImWidget::ImWidget(DrawCallback callback): ImWidgetBase(std::move(callback))
+    {
+    }
+    void ImWidget::Draw()
+    {
+        if (Visibility != SlateCore::EVisibility::Visible)
+        {
+            return;
+        }
 
+        if (DrawHandler)
+        {
+            DrawHandler(Geometry.X, Geometry.Y, Geometry.Width, Geometry.Height);
+        }
+    }
     bool ImWidget::OnResize(uint32_t width, uint32_t height)
+    {
+        Resize(static_cast<float>(width), static_cast<float>(height));
+        return true;
+    }
+    PopupImWidget::PopupImWidget(SlateCore::PlatformSurfaceOwner * parentOwner)
+		: SlateCore::NativeWidget(parentOwner)
+	{
+	}
+    void PopupImWidget::Draw()
+    {
+        if (Visibility != SlateCore::EVisibility::Visible)
+        {
+            return;
+        }
+
+        if (DrawHandler)
+        {
+            DrawHandler(Geometry.X, Geometry.Y, Geometry.Width, Geometry.Height);
+        }
+    }
+    bool PopupImWidget::OnResize(uint32_t width, uint32_t height)
     {
         Resize(static_cast<float>(width), static_cast<float>(height));
         return true;

@@ -56,7 +56,7 @@ namespace Renderer {
         passParameter->Textures.SceneColorTexture = InputCopy.SceneColor;
         passParameter->Textures.GBufferInput.Depth = InputCopy.DepthPyramid;
         passParameter->Textures.OutputGIColor = outputUAV;
-        passParameter->Textures.GBufferInput.PointSampler = RenderCore::GlobalSampler.get();
+        passParameter->Textures.GBufferInput.PointSampler = RenderCore::GlobalNearestSampler.get();
 
         GraphBuilder.AddPass<ScreenSpaceGIParameters>(
             "ScreenSpaceGIPass",
