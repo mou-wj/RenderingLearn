@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Set, Tuple
 
 # --- 路径定义 ---
 ROOT = Path(__file__).resolve().parent
+PROJECT_DIR = ROOT
 CONFIG_DIR = ROOT / "config" / "3rds"
 DEPS_DIR = ROOT / "deps"
 BUILD_DIR = DEPS_DIR / "build"
@@ -33,6 +34,7 @@ def expand_placeholders(s: str, config: str = "Release") -> str:
     if not s: return ""
     # 替换内置变量
     result = s.replace("${INSTALL_DIR}", str(INSTALL_DIR_BASE).replace("\\", "/"))
+    result = result.replace("${PROJECT_DIR}", str(PROJECT_DIR).replace("\\", "/"))
     result = result.replace("${CONFIG}", config)
     
     # 替换环境变量 ${ENV:VAR}
@@ -103,14 +105,32 @@ def clone_remote_source(meta: Dict[str, Any], src_dir: Path) -> bool:
     return True
 
 
-def handle_remote_source_imported(meta: Dict[str, Any]) -> bool:
-    src_dir = DEPS_DIR / meta["name"]
+def resolve_source_imported_dir(meta: Dict[str, Any]) -> Path:
+    lib_type = meta.get("type", "")
+    src_info = meta.get("source", {})
 
-    if not src_dir.exists():
-        if not clone_remote_source(meta, src_dir):
-            return False
+    if lib_type == "local_source_imported":
+        location = src_info.get("location")
+        if not location:
+            raise ValueError(f"Missing source.location for local source imported dependency: {meta['name']}")
+        src_dir = Path(expand_placeholders(location))
+        if not src_dir.exists():
+            raise FileNotFoundError(f"Local source directory not found for {meta['name']}: {src_dir}")
+        return src_dir
 
-    install_remote_source_imported_files(meta, src_dir)
+    if lib_type == "remote_source_imported":
+        src_dir = DEPS_DIR / meta["name"]
+        if not src_dir.exists():
+            if not clone_remote_source(meta, src_dir):
+                raise RuntimeError(f"Failed to clone remote source for dependency: {meta['name']}")
+        return src_dir
+
+    raise ValueError(f"Unsupported imported source type: {lib_type}")
+
+
+def handle_source_imported(meta: Dict[str, Any]) -> bool:
+    src_dir = resolve_source_imported_dir(meta)
+    install_source_imported_files(meta, src_dir)
     return True
 
 
@@ -310,7 +330,7 @@ def _copy_imported_entries(src_root: Path, target_root: Path, entries: List[str]
         shutil.copy2(src_path, target_path)
 
 
-def install_remote_source_imported_files(meta: Dict[str, Any], src_dir: Path) -> None:
+def install_source_imported_files(meta: Dict[str, Any], src_dir: Path) -> None:
     import_info = meta.get("import_info", {})
 
     for cfg in ["Debug", "Release"]:
@@ -323,7 +343,7 @@ def install_remote_source_imported_files(meta: Dict[str, Any], src_dir: Path) ->
         _copy_imported_entries(src_dir, source_root, import_info.get("sources", []))
 
 
-def append_remote_source_imported_find_entries(lines: List[str], meta: Dict[str, Any]):
+def append_source_imported_find_entries(lines: List[str], meta: Dict[str, Any]):
     name = meta["name"]
     safe_name = name.replace("-", "_").replace(".", "_").upper()
     import_info = meta.get("import_info", {})
@@ -467,8 +487,8 @@ def generate_cmake_find_file(processed_meta: List[Dict[str, Any]]):
 
         if lib_type == "remote_source_prebuild":
             append_remote_source_prebuild_find_entries(lines, meta)
-        elif lib_type == "remote_source_imported":
-            append_remote_source_imported_find_entries(lines, meta)
+        elif lib_type in {"remote_source_imported", "local_source_imported"}:
+            append_source_imported_find_entries(lines, meta)
         elif lib_type == "manual":
             append_manual_find_entries(lines, meta)
 
@@ -495,8 +515,8 @@ def main():
         if lib_type == "remote_source_prebuild":
             if not handle_remote_source_prebuild(meta):
                 raise RuntimeError(f"Failed to process dependency: {name}")
-        elif lib_type == "remote_source_imported":
-            if not handle_remote_source_imported(meta):
+        elif lib_type in {"remote_source_imported", "local_source_imported"}:
+            if not handle_source_imported(meta):
                 raise RuntimeError(f"Failed to process dependency: {name}")
                 
         processed_meta.append(meta)

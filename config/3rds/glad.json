@@ -1,0 +1,23 @@
+{
+  "name": "glad",
+  "ignore": false,
+  "type": "local_source_imported",
+  "source": {
+    "location": "${PROJECT_DIR}/extern/glad"
+  },
+  "import_info": {
+    "headers": [
+      "glad/gl.h",
+      "KHR/khrplatform.h"
+    ],
+    "sources": [
+      "gl.c"
+    ]
+  },
+    "install_layout": {
+    "root": "${INSTALL_DIR}/glad",
+    "include": "include",
+    "source": "src"
+  },
+  "dependencies": []
+}

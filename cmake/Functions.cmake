@@ -35,3 +35,22 @@ function(_3rds_postbuild_copy_dlls consumer dlls dst_dir)
     )
 endfunction()
 
+function(_define_export_macro TARGET_NAME)
+  if(NOT TARGET ${TARGET_NAME})
+    message(FATAL_ERROR "_define_export_macro called with non-target: ${TARGET_NAME}")
+  endif()
+
+  string(TOUPPER "${TARGET_NAME}" TARGET_NAME_UPPER)
+
+  if(WIN32)
+    target_compile_definitions(${TARGET_NAME}
+      PRIVATE ${TARGET_NAME_UPPER}_API=__declspec\(dllexport\)
+      INTERFACE ${TARGET_NAME_UPPER}_API=__declspec\(dllimport\)
+    )
+  else()
+    target_compile_definitions(${TARGET_NAME}
+      PRIVATE ${TARGET_NAME_UPPER}_API=__attribute__\(\(visibility\(\"default\"\)\)\)
+      INTERFACE ${TARGET_NAME_UPPER}_API=__attribute__\(\(visibility\(\"default\"\)\)\)
+    )
+  endif()
+endfunction()

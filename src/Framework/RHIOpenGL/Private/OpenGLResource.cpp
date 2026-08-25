@@ -1,0 +1,363 @@
+#include "OpenGLResource.h"
+#include <cstdlib>
+#include <cstdio>
+
+namespace RHIOpenGL
+{
+    static GLenum ConvertRHIFormatToGLInternalFormat(RHI::ERHIFormat format)
+    {
+        switch (format)
+        {
+        case RHI::ERHIFormat::R8_UNorm:
+            return GL_R8;
+        case RHI::ERHIFormat::R8G8B8A8_UNorm:
+        case RHI::ERHIFormat::B8G8R8A8_UNorm:
+            return GL_RGBA8;
+        case RHI::ERHIFormat::R16G16_Float:
+            return GL_RG16F;
+        case RHI::ERHIFormat::R16G16B16A16_Float:
+            return GL_RGBA16F;
+        case RHI::ERHIFormat::R32_Float:
+            return GL_R32F;
+        case RHI::ERHIFormat::R32G32_Float:
+            return GL_RG32F;
+        case RHI::ERHIFormat::R32G32B32A32_Float:
+            return GL_RGBA32F;
+        case RHI::ERHIFormat::D32_Float:
+            return GL_DEPTH_COMPONENT32F;
+        case RHI::ERHIFormat::D24_UNorm_S8_UInt:
+            return GL_DEPTH24_STENCIL8;
+        default:
+            return GL_RGBA8;
+        }
+    }
+
+    static GLenum ConvertRHIFormatToGLFormat(RHI::ERHIFormat format)
+    {
+        switch (format)
+        {
+        case RHI::ERHIFormat::R8_UNorm:
+            return GL_RED;
+        case RHI::ERHIFormat::R8G8B8A8_UNorm:
+        case RHI::ERHIFormat::B8G8R8A8_UNorm:
+            return GL_BGRA;
+        case RHI::ERHIFormat::R16G16_Float:
+            return GL_RG;
+        case RHI::ERHIFormat::R16G16B16A16_Float:
+            return GL_RGBA;
+        case RHI::ERHIFormat::R32_Float:
+            return GL_RED;
+        case RHI::ERHIFormat::R32G32_Float:
+            return GL_RG;
+        case RHI::ERHIFormat::R32G32B32A32_Float:
+            return GL_RGBA;
+        case RHI::ERHIFormat::D32_Float:
+            return GL_DEPTH_COMPONENT;
+        case RHI::ERHIFormat::D24_UNorm_S8_UInt:
+            return GL_DEPTH_STENCIL;
+        default:
+            return GL_RGBA;
+        }
+    }
+
+    static GLenum ConvertRHIFormatToGLType(RHI::ERHIFormat format)
+    {
+        switch (format)
+        {
+        case RHI::ERHIFormat::R8_UNorm:
+        case RHI::ERHIFormat::R8G8B8A8_UNorm:
+        case RHI::ERHIFormat::B8G8R8A8_UNorm:
+            return GL_UNSIGNED_BYTE;
+        case RHI::ERHIFormat::R16G16_Float:
+        case RHI::ERHIFormat::R16G16B16A16_Float:
+            return GL_HALF_FLOAT;
+        case RHI::ERHIFormat::R32_Float:
+        case RHI::ERHIFormat::R32G32_Float:
+        case RHI::ERHIFormat::R32G32B32A32_Float:
+            return GL_FLOAT;
+        case RHI::ERHIFormat::D32_Float:
+        case RHI::ERHIFormat::D24_UNorm_S8_UInt:
+            return GL_UNSIGNED_INT;
+        default:
+            return GL_UNSIGNED_BYTE;
+        }
+    }
+
+    static bool CompileOpenGLShader(GLuint shaderHandle, const std::vector<char>& source, const char* shaderName)
+    {
+        if (shaderHandle == 0)
+        {
+            return false;
+        }
+
+        const char* sourceText = source.empty() ? "" : source.data();
+        GLint sourceLength = static_cast<GLint>(source.size());
+        glShaderSource(shaderHandle, 1, &sourceText, sourceLength == 0 ? nullptr : &sourceLength);
+        glCompileShader(shaderHandle);
+
+        GLint compileStatus = GL_FALSE;
+        glGetShaderiv(shaderHandle, GL_COMPILE_STATUS, &compileStatus);
+        if (compileStatus == GL_FALSE)
+        {
+            GLint infoLogLength = 0;
+            glGetShaderiv(shaderHandle, GL_INFO_LOG_LENGTH, &infoLogLength);
+            std::vector<char> infoLog(static_cast<size_t>(infoLogLength > 0 ? infoLogLength : 1));
+            glGetShaderInfoLog(shaderHandle, static_cast<GLint>(infoLog.size()), nullptr, infoLog.data());
+            std::fprintf(stderr, "[OpenGLRHI] Failed to compile %s shader: %s\n", shaderName, infoLog.data());
+            return false;
+        }
+
+        return true;
+    }
+
+    OpenGLTexture::OpenGLTexture(const RHI::RHITextureDesc& desc)
+        : RHI::RHITexture(desc)
+    {
+        glGenTextures(1, &TextureHandle);
+        glBindTexture(GL_TEXTURE_2D, TextureHandle);
+
+        const GLenum internalFormat = ConvertRHIFormatToGLInternalFormat(desc.Format);
+        const GLenum glFormat = ConvertRHIFormatToGLFormat(desc.Format);
+        const GLenum glType = ConvertRHIFormatToGLType(desc.Format);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, desc.Width, desc.Height, 0, glFormat, glType, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    OpenGLTexture::~OpenGLTexture()
+    {
+        if (TextureHandle != 0)
+        {
+            glDeleteTextures(1, &TextureHandle);
+            TextureHandle = 0;
+        }
+    }
+
+    OpenGLBuffer::OpenGLBuffer(const RHI::RHIBufferDesc& desc)
+        : RHI::RHIBuffer(desc)
+    {
+        glGenBuffers(1, &BufferHandle);
+        glBindBuffer(GL_ARRAY_BUFFER, BufferHandle);
+        glBufferData(GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(desc.Size == 0 ? 1 : desc.Size),
+            nullptr,
+            (desc.bCPUAccessible || (desc.Usage & RHI::ERHIBufferUsageFlag::Staging) != RHI::ERHIBufferUsageFlag::None)
+                ? GL_STREAM_DRAW
+                : GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    OpenGLBuffer::~OpenGLBuffer()
+    {
+        if (BufferHandle != 0)
+        {
+            glDeleteBuffers(1, &BufferHandle);
+            BufferHandle = 0;
+        }
+    }
+
+    OpenGLShaderResourceView::OpenGLShaderResourceView(RHI::RHIViewableResource* Resource)
+        : RHI::RHIShaderResourceView(Resource)
+    {
+    }
+
+    OpenGLUnorderedAccessView::OpenGLUnorderedAccessView(RHI::RHIViewableResource* Resource)
+        : RHI::RHIUnorderedAccessView(Resource)
+    {
+    }
+
+    bool OpenGLVertexShader::Compile(const std::vector<char>& source)
+    {
+        SourceCode = source;
+        return CompileOpenGLShader(ShaderHandle, SourceCode, "vertex");
+    }
+
+    OpenGLVertexShader::~OpenGLVertexShader()
+    {
+        if (ShaderHandle != 0)
+        {
+            glDeleteShader(ShaderHandle);
+            ShaderHandle = 0;
+        }
+    }
+
+    OpenGLVertexShader::OpenGLVertexShader()
+        : RHI::RHIVertexShader()
+    {
+        ShaderHandle = glCreateShader(GL_VERTEX_SHADER);
+    }
+
+    bool OpenGLFragmentShader::Compile(const std::vector<char>& source)
+    {
+        SourceCode = source;
+        return CompileOpenGLShader(ShaderHandle, SourceCode, "fragment");
+    }
+
+    OpenGLFragmentShader::~OpenGLFragmentShader()
+    {
+        if (ShaderHandle != 0)
+        {
+            glDeleteShader(ShaderHandle);
+            ShaderHandle = 0;
+        }
+    }
+
+    OpenGLFragmentShader::OpenGLFragmentShader()
+        : RHI::RHIFragmentShader()
+    {
+        ShaderHandle = glCreateShader(GL_FRAGMENT_SHADER);
+    }
+
+    bool OpenGLComputeShader::Compile(const std::vector<char>& source)
+    {
+        SourceCode = source;
+        return CompileOpenGLShader(ShaderHandle, SourceCode, "compute");
+    }
+
+    OpenGLComputeShader::~OpenGLComputeShader()
+    {
+        if (ShaderHandle != 0)
+        {
+            glDeleteShader(ShaderHandle);
+            ShaderHandle = 0;
+        }
+    }
+
+    OpenGLComputeShader::OpenGLComputeShader()
+        : RHI::RHIComputeShader()
+    {
+        ShaderHandle = glCreateShader(GL_COMPUTE_SHADER);
+    }
+
+    bool OpenGLGeometryShader::Compile(const std::vector<char>& source)
+    {
+        SourceCode = source;
+        return CompileOpenGLShader(ShaderHandle, SourceCode, "geometry");
+    }
+
+    OpenGLGeometryShader::~OpenGLGeometryShader()
+    {
+        if (ShaderHandle != 0)
+        {
+            glDeleteShader(ShaderHandle);
+            ShaderHandle = 0;
+        }
+    }
+
+    OpenGLGeometryShader::OpenGLGeometryShader()
+        : RHI::RHIGeometryShader()
+    {
+        ShaderHandle = glCreateShader(GL_GEOMETRY_SHADER);
+    }
+
+    bool OpenGLTessControlShader::Compile(const std::vector<char>& source)
+    {
+        SourceCode = source;
+        return CompileOpenGLShader(ShaderHandle, SourceCode, "tess control");
+    }
+
+    OpenGLTessControlShader::~OpenGLTessControlShader()
+    {
+        if (ShaderHandle != 0)
+        {
+            glDeleteShader(ShaderHandle);
+            ShaderHandle = 0;
+        }
+    }
+
+    OpenGLTessControlShader::OpenGLTessControlShader()
+        : RHI::RHITessControlShader()
+    {
+        ShaderHandle = glCreateShader(GL_TESS_CONTROL_SHADER);
+    }
+
+    bool OpenGLTessEvalShader::Compile(const std::vector<char>& source)
+    {
+        SourceCode = source;
+        return CompileOpenGLShader(ShaderHandle, SourceCode, "tess eval");
+    }
+
+    OpenGLTessEvalShader::~OpenGLTessEvalShader()
+    {
+        if (ShaderHandle != 0)
+        {
+            glDeleteShader(ShaderHandle);
+            ShaderHandle = 0;
+        }
+    }
+
+    OpenGLTessEvalShader::OpenGLTessEvalShader()
+        : RHI::RHITessEvalShader()
+    {
+        ShaderHandle = glCreateShader(GL_TESS_EVALUATION_SHADER);
+    }
+
+    OpenGLSampler::OpenGLSampler(const RHI::RHISamplerDesc& desc)
+        : RHI::RHISampler(desc)
+    {
+        glGenSamplers(1, &SamplerHandle);
+    }
+
+    OpenGLStagingBuffer::~OpenGLStagingBuffer()
+    {
+        if (MappedData != nullptr)
+        {
+            std::free(MappedData);
+            MappedData = nullptr;
+        }
+    }
+
+    OpenGLVertexDescState::OpenGLVertexDescState(const RHI::RHIVertexDescStateDesc& desc)
+        : RHI::RHIVertexDescState(desc)
+    {
+    }
+
+    OpenGLRasterizerState::OpenGLRasterizerState(const RHI::RHIRasterizerStateDesc& desc)
+        : RHI::RHIRasterizerState(desc)
+    {
+    }
+
+    OpenGLColorBlendState::OpenGLColorBlendState(const RHI::RHIColorBlendStateDesc& desc)
+        : RHI::RHIColorBlendState(desc)
+    {
+    }
+
+    OpenGLDepthStencilState::OpenGLDepthStencilState(const RHI::RHIDepthStencilStateDesc& desc)
+        : RHI::RHIDepthStencilState(desc)
+    {
+    }
+
+    OpenGLSampler::~OpenGLSampler()
+    {
+        if (SamplerHandle != 0)
+        {
+            glDeleteSamplers(1, &SamplerHandle);
+            SamplerHandle = 0;
+        }
+    }
+
+    OpenGLStagingBuffer::OpenGLStagingBuffer(uint32_t size)
+        : RHI::RHIStagingBuffer(size)
+    {
+        MappedData = std::malloc(size == 0 ? 1 : size);
+    }
+
+    void* OpenGLStagingBuffer::Map(uint32_t offset, uint32_t numBytes)
+    {
+        if (!MappedData)
+        {
+            MappedData = std::malloc((numBytes == 0 ? 1u : numBytes));
+        }
+        return static_cast<char*>(MappedData) + offset;
+    }
+
+    void OpenGLStagingBuffer::Unmap()
+    {
+        MappedData = nullptr;
+    }
+
+}

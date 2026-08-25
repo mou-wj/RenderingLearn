@@ -1,6 +1,7 @@
 #include "TestBase.h"
 #include "RHIApi.h"
 #include "VulkanRHIApi.h"
+#include "OpenGLRHIApi.h"
 #include "ShaderCompiler.h"
 #include "Window.h"
 #include "RHIPipelineStateCache.h"
@@ -79,7 +80,7 @@ public:
     // ==========================================
     void Setup() override
     {
-        RHI::GRHIApi = new RHIVulkan::VulkanRHIApi();
+        RHI::GRHIApi = new RHIOpenGL::OpenGLRHIApi();
         RHI::GRHIApi->Init();
         auto* api = RHI::GRHIApi;
         if (!api)
