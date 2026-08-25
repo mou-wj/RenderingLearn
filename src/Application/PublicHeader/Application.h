@@ -6,6 +6,10 @@
 #include "AppViewportClient.h"
 #include "SlateWidget.h"
 #include "ImMainWindow.h"
+#include "SceneHierarchyWidget.h"
+#include "PropertyInspectorWidget.h"
+#include "AssetBrowserWidget.h"
+
 namespace ImGUISlate {
     class ImSlateRenderer;
     class ImWidget;
@@ -36,6 +40,9 @@ namespace App {
         std::unique_ptr<Engine::SceneViewport> SceneMainViewport;
         std::unique_ptr<AppViewportClient> SceneViewportClient;
 		std::unique_ptr<ImGUISlate::ImWidget> ImGuiWidget;
+        std::unique_ptr<SceneHierarchyWidget> SceneHierarchyPanel;
+        std::unique_ptr<PropertyInspectorWidget> PropertyInspectorPanel;
+        std::unique_ptr<AssetBrowserWidget> AssetBrowserPanel;
 		bool QuitFlag = false;
     };
 
