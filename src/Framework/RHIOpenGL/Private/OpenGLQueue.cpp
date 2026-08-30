@@ -1,9 +1,27 @@
 #include "OpenGLQueue.h"
 #include "OpenGLContext.h"
 #include "glad/gl.h"
+#include "OpenGLPlatformSurport.h"
 
 namespace RHIOpenGL
 {
+    OpenGLSyncPoint::OpenGLSyncPoint() {
+
+    }
+    OpenGLSyncPoint::~OpenGLSyncPoint() {
+
+    }
+    // 获取当前 GPU 已经执行到的数值（用于 CPU 端的进度查询或 GC）
+    uint64_t OpenGLSyncPoint::GetCurrentValue() {
+        return 0;
+    }
+
+    // CPU 端阻塞等待直到达到某个值
+    void OpenGLSyncPoint::Wait(uint64_t Value, uint64_t TimeoutNS) {
+
+    }
+
+
     OpenGLSwapchain::OpenGLSwapchain(void* inWindowHandle, uint32_t width, uint32_t height, RHI::ERHIFormat format)
         : WindowHandle(inWindowHandle)
         , Width(width)
@@ -19,19 +37,28 @@ namespace RHIOpenGL
         desc.Format = format;
         desc.Type = RHI::ERHITextureType::Texture2D;
         desc.Usage = RHI::ERHITextureCreateFlag::RenderTarget | RHI::ERHITextureCreateFlag::Presentable;
-        BackBufferTexture = std::make_shared<OpenGLTexture>(desc);
-        BackBufferHandle = BackBufferTexture->GetHandle();
+        for (int i = 0; i < 3; i++)
+        {
+            BackBufferTextures[i] = std::make_shared<OpenGLTexture>(desc);
+        }
+		PlatformContext = CreateOpenGLPlatformContext(WindowHandle,desc.Format);
+        PlatformContext->Initialize();
     }
 
     OpenGLSwapchain::~OpenGLSwapchain()
     {
-        BackBufferTexture.reset();
+        BackBufferTextures.clear();
+		if (PlatformContext)
+		{
+			delete PlatformContext;
+			PlatformContext = nullptr;
+		}
     }
 
     RHI::RHISwapchain::RHISwapchainSlot OpenGLSwapchain::AcquireNextSlot()
     {
         RHISwapchainSlot slot{};
-        slot.Texture = BackBufferTexture.get();
+        //slot.Texture = BackBufferTexture.get();
         return slot;
     }
 
@@ -40,17 +67,17 @@ namespace RHIOpenGL
         Width = width;
         Height = height;
 
-        if (BackBufferTexture)
-        {
-            RHI::RHITextureDesc desc = BackBufferTexture->GetDesc();
+        for (auto& texture : BackBufferTextures) {
+            RHI::RHITextureDesc desc = texture->GetDesc();
             desc.Width = width;
             desc.Height = height;
             desc.Depth = 1;
-            BackBufferTexture = std::make_shared<OpenGLTexture>(desc);
-            BackBufferHandle = BackBufferTexture->GetHandle();
+            texture = std::make_shared<OpenGLTexture>(desc);
         }
     }
+    void OpenGLSwapchain::Present() {
 
+    }
     OpenGLQueue::OpenGLQueue(RHI::EQueueType type)
         : QueueType(type)
     {
@@ -77,7 +104,7 @@ namespace RHIOpenGL
         return nullptr;
     }
 
-    RHI::RHIFence OpenGLQueue::ExecuteContext(RHI::RHIContextBase* context)
+    uint64_t OpenGLQueue::ExecuteContext(RHI::RHIContextBase* context)
     {
         if (context)
         {
@@ -85,10 +112,10 @@ namespace RHIOpenGL
         }
 
         glFlush();
-        return RHI::RHIFence{};
+        return 0;
     }
 
-    RHI::RHIFence OpenGLQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*>& cmds, const std::vector<RHI::RHIWaitInfo>& waitInfos)
+    uint64_t OpenGLQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*>& cmds, const std::vector<RHI::RHIWaitInfo>& waitInfos)
     {
         (void)waitInfos;
 
@@ -101,12 +128,11 @@ namespace RHIOpenGL
         }
 
         glFlush();
-        return RHI::RHIFence{};
+        return 0;
     }
 
-    void OpenGLQueue::WaitFence(RHI::RHIFence fence)
+    void OpenGLQueue::WaitValue(uint64_t fenceValue)
     {
-        (void)fence;
         glFinish();
     }
 
@@ -137,10 +163,25 @@ namespace RHIOpenGL
         {
             return;
         }
+        RHI::EQueueType queueType = RHI::EQueueType::Graphics;
+		uint64_t waitValue = 0;
+        if (waitInfo.SyncPoint) {
+			queueType = waitInfo.SyncPoint->GetQueueType();
+			waitValue = waitInfo.SyncPoint->GetCurrentValue();
+        }
+        else {
+            queueType = waitInfo.QueueType;
+            waitValue = waitInfo.Value;
+        }
+        RHI::RHIFence fence;
+		fence.QueueType = queueType;
+        fence.Value = waitValue;
+		OpenGLQueueManager::GetInstance().GetQueue(queueType)->WaitValue(waitValue);
 
         auto* glSwapchain = dynamic_cast<OpenGLSwapchain*>(swapchain);
         if (glSwapchain)
         {
+            glSwapchain->Present();
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, glSwapchain->GetWidth(), glSwapchain->GetHeight());
         }

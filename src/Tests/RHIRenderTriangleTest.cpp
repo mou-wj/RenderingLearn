@@ -193,11 +193,11 @@ public:
                 waitInfos.push_back({ swapchainSlot.ReadySync, EQueueType::Graphics, 0,RHI::ERHIPipelineStage::ColorAttachmentOutput });
             }
 
-            RHI::RHIFence submitResult = queue->ExecuteContext({ graphicContext }, waitInfos);
-            queue->WaitFence(submitResult);
+            auto submitResultValue = queue->ExecuteContext({ graphicContext }, waitInfos);
+            queue->WaitValue(submitResultValue);
             RHI::RHIWaitInfo presentWait;
             presentWait.SyncPoint = queue->GetSyncPoint();
-			presentWait.Value = submitResult.Value;
+			presentWait.Value = submitResultValue;
             presentWait.WaitStage = RHI::ERHIPipelineStage::ColorAttachmentOutput;
             GRHIApi->GetPresentExecutor()->Present(Swapchain.get(), presentWait);
             cmdList.Clear();

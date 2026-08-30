@@ -210,7 +210,19 @@ namespace RenderCore
             const ShaderCompileInput& input,
             ShaderCompilationOutput& out);
 
+
     private:
+        static void CompileHLSLToSPIRV(
+            const std::string& preprocessedHLSLSource,
+            const ShaderCompileInput& input,
+            const std::vector<std::wstring>& compileParams,
+            ShaderCompilationOutput& out,
+            std::vector<uint32_t>& spirvOut);
+
+        static void ReflectParameterMapFromSPIRV(
+            const std::vector<uint32_t>& inputCode,
+            ShaderParameterAllocationMap& out);
+
         static std::string ShaderSourceDirectory;
         int MaxIncludeDepth = 10;
     };

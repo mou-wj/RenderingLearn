@@ -641,32 +641,24 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     out.PackedBinaryData.clear();
 
     std::string setId = "0";
-    std::string outProfile = "";
     switch (input.Frequency)
     {
-    case ERHIShaderFrequency::Compute:        outProfile = "cs_6_5";   setId = "0";  break;
-    case ERHIShaderFrequency::Vertex:         outProfile = "vs_6_5";   setId = "0"; break;
-    case ERHIShaderFrequency::Fragment:       outProfile = "ps_6_5";   setId = "1"; break;
-    case ERHIShaderFrequency::Geometry:       outProfile = "gs_6_5";   setId = "2"; break;
-    case ERHIShaderFrequency::TessControl:    outProfile = "hs_6_5";   setId = "3"; break;
-    case ERHIShaderFrequency::TessEvaluation: outProfile = "ds_6_5";   setId = "4"; break;
-    case ERHIShaderFrequency::Task:           outProfile = "as_6_5";   setId = "0"; break;
-    case ERHIShaderFrequency::Mesh:           outProfile = "ms_6_5";   setId = "1"; break;
-    case ERHIShaderFrequency::RayGen:         outProfile = "lib_6_5";   setId = "0"; break;
-    case ERHIShaderFrequency::ClosestHit:     outProfile = "lib_6_5";   setId = "1"; break;
-    case ERHIShaderFrequency::Miss:           outProfile = "lib_6_5";   setId = "2"; break;
-    case ERHIShaderFrequency::AnyHit:         outProfile = "lib_6_5";   setId = "1"; break;
-    case ERHIShaderFrequency::Intersection:   outProfile = "lib_6_5";   setId = "3"; break;
-    case ERHIShaderFrequency::Callable:       outProfile = "lib_6_5";   setId = "4"; break;
+    case ERHIShaderFrequency::Compute:         setId = "0";  break;
+    case ERHIShaderFrequency::Vertex:          setId = "0"; break;
+    case ERHIShaderFrequency::Fragment:        setId = "1"; break;
+    case ERHIShaderFrequency::Geometry:        setId = "2"; break;
+    case ERHIShaderFrequency::TessControl:     setId = "3"; break;
+    case ERHIShaderFrequency::TessEvaluation:  setId = "4"; break;
+    case ERHIShaderFrequency::Task:            setId = "0"; break;
+    case ERHIShaderFrequency::Mesh:            setId = "1"; break;
+    case ERHIShaderFrequency::RayGen:           setId = "0"; break;
+    case ERHIShaderFrequency::ClosestHit:       setId = "1"; break;
+    case ERHIShaderFrequency::Miss:             setId = "2"; break;
+    case ERHIShaderFrequency::AnyHit:           setId = "1"; break;
+    case ERHIShaderFrequency::Intersection:     setId = "3"; break;
+    case ERHIShaderFrequency::Callable:         setId = "4"; break;
     default:
         out.ErrorMessage = "Unsupported shader stage";
-        return;
-    }
-
-    std::string targetProfile = outProfile;
-    if (targetProfile.empty())
-    {
-        out.ErrorMessage = "Unsupported shader stage for DXC.";
         return;
     }
 
@@ -700,6 +692,320 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     AddArg(L"-fvk-t-shift"); AddArg(L"200"); AddArg(ToWide(setId));
     AddArg(L"-fvk-s-shift"); AddArg(L"300"); AddArg(ToWide(setId));
     AddArg(L"-fvk-u-shift"); AddArg(L"400"); AddArg(ToWide(setId));
+
+    std::vector<uint32_t> spirv;
+	CompileHLSLToSPIRV(preprocessedSource, input, argStorage, out, spirv);
+    if (spirv.empty()) {
+        return;
+    }
+
+
+    // 6. ʹ�� SPIRV-Cross ������Դ
+    ReflectParameterMapFromSPIRV(spirv, out.ParameterMap);
+
+
+    // 6. ������
+    out.PackedBinaryData.resize(spirv.size() * sizeof(uint32_t));
+    memcpy(out.PackedBinaryData.data(), spirv.data(), spirv.size() * sizeof(uint32_t));
+    spirv_cross::Compiler compiler(spirv);
+    SPIRVPackSource packSource;
+    packSource.compiler = &compiler;
+    packSource.spirvCode = &spirv;
+    packSource.frequency = input.Frequency;
+    packSource.entryPoint = input.EntryPoint;
+
+    SPIRVCompiledBinaryResultPacker packer;
+    std::vector<char> packedData;
+
+    if (packer.Pack(&packSource, packedData))
+    {
+        out.PackedBinaryData = std::move(packedData);
+        out.Success = true;
+    }
+}
+
+void ShaderCompiler::CompileToDirectX(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
+{
+
+}
+
+
+void ShaderCompiler::CompileToMetal(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
+{
+
+}
+
+void ShaderCompiler::CompileToOpenGL(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
+{
+
+}
+
+
+void ShaderCompiler::ReflectParameterMapFromSPIRV(const std::vector<uint32_t>& inputCode, ShaderParameterAllocationMap& out)
+{
+    // 6. ʹ�� SPIRV-Cross ������Դ
+    spirv_cross::Compiler compiler(inputCode);
+    spirv_cross::ShaderResources resourcesSC = compiler.get_shader_resources();
+
+    // ---------- Uniform Buffers ----------
+    for (const auto& ub : resourcesSC.uniform_buffers)
+    {
+        std::string bufferName = compiler.get_name(ub.id);
+        if (bufferName.empty()) {
+            bufferName = compiler.get_name(ub.base_type_id); // fallback ($Globals)
+        }
+
+        uint32_t binding = compiler.get_decoration(ub.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(ub.id, spv::DecorationDescriptorSet);
+
+        auto& type = compiler.get_type(ub.base_type_id);
+        uint32_t bufferSize = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
+
+        bool bIsLooseDataBlock = (bufferName.find("$Global") != std::string::npos);
+
+        // ============================================================
+        // ⭐ 1. 记录整个 UniformBuffer（Descriptor 用）
+        // ============================================================
+        out.AddParameterAllocation(
+            bufferName,
+            static_cast<uint16_t>(set),       // UE语义：BufferIndex=Set
+            static_cast<uint16_t>(binding),   // BaseIndex=Binding
+            static_cast<uint16_t>(bufferSize),
+            EShaderParameterType::UniformBuffer
+        );
+
+        // ============================================================
+        // ⭐ 2. 展开所有成员（关键！！！）
+        // ============================================================
+        uint32_t memberCount = static_cast<uint32_t>(type.member_types.size());
+
+        for (uint32_t i = 0; i < memberCount; i++)
+        {
+            std::string memberName = compiler.get_member_name(ub.base_type_id, i);
+
+            uint32_t memberOffset = compiler.type_struct_member_offset(type, i);
+
+            uint32_t memberSize = static_cast<uint32_t>(
+                compiler.get_declared_struct_member_size(type, i));
+
+            // ========================================================
+            // ⭐ 构造“扁平路径名”（必须和你 HLSL 完全一致）
+            // ========================================================
+            std::string fullName;
+
+            if (bIsLooseDataBlock)
+            {
+                // $Globals → 直接用成员名
+                fullName = memberName;
+            }
+            else
+            {
+                // 普通UB → BufferName_Member
+                fullName = memberName;
+            }
+
+            // ========================================================
+            // ⭐ 写入 ParameterMap（成员级）
+            // ========================================================
+            out.AddParameterAllocation(
+                fullName,
+                static_cast<uint16_t>(binding),       // ⭐ 指向所属UB binding
+                static_cast<uint16_t>(memberOffset),  // ⭐ offset（关键）
+                static_cast<uint16_t>(memberSize),
+                bIsLooseDataBlock
+                ? EShaderParameterType::LooseData
+                : EShaderParameterType::UniformBuffer
+            );
+        }
+    }
+
+    // ---------- Sampled Images (Texture + Sampler) ----------
+    for (const auto& img : resourcesSC.sampled_images)
+    {
+        std::string name = compiler.get_name(img.id);
+
+        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
+        out.AddParameterAllocation(
+            name,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
+            EShaderParameterType::SRV
+        );
+    }
+
+    // ---------- Separate Samplers ----------
+    for (const auto& sb : resourcesSC.separate_samplers)
+    {
+        std::string name = compiler.get_name(sb.id);
+
+        if (name.empty())
+            continue;
+
+        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
+        auto& type = compiler.get_type(sb.type_id);
+
+        uint32_t arraySize = 1;
+        if (!type.array.empty())
+            arraySize = type.array[0];
+
+        out.AddParameterAllocation(
+            name,
+            static_cast<uint16_t>(set),
+            static_cast<uint16_t>(binding),
+            static_cast<uint16_t>(arraySize),   // ⭐数组支持
+            EShaderParameterType::Sampler
+        );
+    }
+    // ---------- Separate Images ----------
+    for (const auto& img : resourcesSC.separate_images)
+    {
+        std::string name = compiler.get_name(img.id);
+        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
+        out.AddParameterAllocation(
+            name, (uint32_t)set, (uint32_t)binding, 1, EShaderParameterType::SRV
+        );
+    }
+
+    // ---------- Storage Images ----------
+    for (const auto& img : resourcesSC.storage_images)
+    {
+        std::string name = compiler.get_name(img.id);
+
+        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
+        out.AddParameterAllocation(
+            name,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
+            EShaderParameterType::UAV
+        );
+    }
+
+    // ---------- Storage Buffers ----------
+    for (const auto& sb : resourcesSC.storage_buffers)
+    {
+        std::string name = compiler.get_name(sb.id);
+        bool hasBinding = compiler.has_decoration(sb.id, spv::DecorationBinding);
+        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
+        auto& type = compiler.get_type(sb.base_type_id);
+        uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
+
+        out.AddParameterAllocation(
+            name,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
+            EShaderParameterType::UAV
+        );
+    }
+
+    // ���� Push Constants �ķ����߼�
+    for (const auto& pc : resourcesSC.push_constant_buffers)
+    {
+        // ��ȡ��� PC ���������Ϣ
+        auto& type = compiler.get_type(pc.base_type_id);
+
+        // �����ڲ���Ա������Щ��������ѡ�е� Loose Data��
+        for (uint32_t i = 0; i < type.member_types.size(); i++)
+        {
+            std::string name = compiler.get_member_name(pc.base_type_id, i);
+            uint32_t offset = compiler.type_struct_member_offset(type, i);
+            uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_member_size(type, i));
+
+            // ������� ParameterMap
+            out.AddParameterAllocation(
+                name,
+                0,      // BufferIndex �� PC ͨ��û���壬����Ϊ�ض���ʶ
+                static_cast<uint16_t>(offset), // BaseIndex ���� PC �� Offset
+                static_cast<uint16_t>(size),
+                EShaderParameterType::LooseData // �������
+            );
+        }
+    }
+
+    // ---------- Accelerations Structures ----------
+    for (const auto& sb : resourcesSC.acceleration_structures)
+    {
+        std::string name = compiler.get_name(sb.id);
+        bool hasBinding = compiler.has_decoration(sb.id, spv::DecorationBinding);
+        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
+        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
+        auto& type = compiler.get_type(sb.base_type_id);
+
+
+        out.AddParameterAllocation(
+            name,
+            static_cast<uint32_t>(set),
+            static_cast<uint32_t>(binding),
+            1,
+            EShaderParameterType::AccelerationStructure
+        );
+    }
+}
+
+void ShaderCompiler::CompileHLSLToSPIRV(const std::string& preprocessedSource, const ShaderCompileInput& input,
+    const std::vector<std::wstring>& compileParams, ShaderCompilationOutput& out, std::vector<uint32_t>& spirvOut)
+{
+
+    std::string outProfile = "";
+    switch (input.Frequency)
+    {
+    case ERHIShaderFrequency::Compute:        outProfile = "cs_6_5";     break;
+    case ERHIShaderFrequency::Vertex:         outProfile = "vs_6_5";   break;
+    case ERHIShaderFrequency::Fragment:       outProfile = "ps_6_5";   break;
+    case ERHIShaderFrequency::Geometry:       outProfile = "gs_6_5";   break;
+    case ERHIShaderFrequency::TessControl:    outProfile = "hs_6_5";   break;
+    case ERHIShaderFrequency::TessEvaluation: outProfile = "ds_6_5";   break;
+    case ERHIShaderFrequency::Task:           outProfile = "as_6_5";   break;
+    case ERHIShaderFrequency::Mesh:           outProfile = "ms_6_5";   break;
+    case ERHIShaderFrequency::RayGen:         outProfile = "lib_6_5";   break;
+    case ERHIShaderFrequency::ClosestHit:     outProfile = "lib_6_5";   break;
+    case ERHIShaderFrequency::Miss:           outProfile = "lib_6_5";   break;
+    case ERHIShaderFrequency::AnyHit:         outProfile = "lib_6_5";   break;
+    case ERHIShaderFrequency::Intersection:   outProfile = "lib_6_5";   break;
+    case ERHIShaderFrequency::Callable:       outProfile = "lib_6_5";   break;
+    default:
+        out.ErrorMessage = "Unsupported shader stage";
+        return;
+    }
+
+    std::string targetProfile = outProfile;
+    if (targetProfile.empty())
+    {
+        out.ErrorMessage = "Unsupported shader stage for DXC.";
+        return;
+    }
+
+    auto HasFlag = [&](EShaderCompileFlags flag)
+        {
+            return (static_cast<uint32_t>(input.Flags) & static_cast<uint32_t>(flag)) != 0;
+        };
+
+    Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+    if (FAILED(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler))))
+    {
+        out.ErrorMessage = "Failed to initialize DXC compiler.";
+        return;
+    }
+
+    std::vector<std::wstring> argStorage;
+    argStorage.reserve(64);
+    std::vector<LPCWSTR> dxcArgs;
+    auto AddArg = [&](const std::wstring& arg)
+        {
+            argStorage.push_back(arg);
+            dxcArgs.push_back(argStorage.back().c_str());
+        };
+
+    for (auto& arg : compileParams) {
+		AddArg(arg);
+    }
 
     AddArg(L"-E");
     AddArg(ToWide(input.EntryPoint));
@@ -758,7 +1064,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
     result->GetStatus(&compileStatus);
     if (FAILED(compileStatus))
     {
-        
+
         if (errorBlob && errorBlob->GetStringLength() > 0)
         {
             out.ErrorMessage = errorBlob->GetStringPointer();
@@ -774,7 +1080,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         return;
     }
 
-    
+
 
     Microsoft::WRL::ComPtr<IDxcBlob> spirvBlob;
     if (FAILED(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&spirvBlob), nullptr)) || !spirvBlob)
@@ -789,8 +1095,8 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
         return;
     }
 
-    std::vector<uint32_t> spirv(spirvBlob->GetBufferSize() / sizeof(uint32_t));
-    memcpy(spirv.data(), spirvBlob->GetBufferPointer(), spirvBlob->GetBufferSize());
+    spirvOut.resize(spirvBlob->GetBufferSize() / sizeof(uint32_t));
+    memcpy(spirvOut.data(), spirvBlob->GetBufferPointer(), spirvBlob->GetBufferSize());
 
     const uint32_t OpTypeImage = 25;
     auto StripImageFormat = [](std::vector<uint32_t>& spirv)
@@ -836,7 +1142,7 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
                 i += wc;
             }
         };
-    StripImageFormat(spirv);
+    StripImageFormat(spirvOut);
     auto WriteSPIRVToFile = [](const std::string& filePath, const std::vector<uint32_t>& spirvData) {
         if (spirvData.empty()) {
             std::cerr << "Error: SPIR-V data is empty." << std::endl;
@@ -866,260 +1172,9 @@ void ShaderCompiler::CompileToSPIRV(const std::string& preprocessedSource, const
             return false;
         }
         };
-    WriteSPIRVToFile("test.spv", spirv);
-
-
-    // 6. ʹ�� SPIRV-Cross ������Դ
-    spirv_cross::Compiler compiler(spirv);
-    spirv_cross::ShaderResources resourcesSC = compiler.get_shader_resources();
-
-    // ---------- Uniform Buffers ----------
-    for (const auto& ub : resourcesSC.uniform_buffers)
-    {
-        std::string bufferName = compiler.get_name(ub.id);
-        if (bufferName.empty()) {
-            bufferName = compiler.get_name(ub.base_type_id); // fallback ($Globals)
-        }
-
-        uint32_t binding = compiler.get_decoration(ub.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(ub.id, spv::DecorationDescriptorSet);
-
-        auto& type = compiler.get_type(ub.base_type_id);
-        uint32_t bufferSize = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
-
-        bool bIsLooseDataBlock = (bufferName.find("$Global") != std::string::npos);
-
-        // ============================================================
-        // ⭐ 1. 记录整个 UniformBuffer（Descriptor 用）
-        // ============================================================
-        out.ParameterMap.AddParameterAllocation(
-            bufferName,
-            static_cast<uint16_t>(set),       // UE语义：BufferIndex=Set
-            static_cast<uint16_t>(binding),   // BaseIndex=Binding
-            static_cast<uint16_t>(bufferSize),
-            EShaderParameterType::UniformBuffer
-        );
-
-        // ============================================================
-        // ⭐ 2. 展开所有成员（关键！！！）
-        // ============================================================
-        uint32_t memberCount = static_cast<uint32_t>(type.member_types.size());
-
-        for (uint32_t i = 0; i < memberCount; i++)
-        {
-            std::string memberName = compiler.get_member_name(ub.base_type_id, i);
-
-            uint32_t memberOffset = compiler.type_struct_member_offset(type, i);
-
-            uint32_t memberSize = static_cast<uint32_t>(
-                compiler.get_declared_struct_member_size(type, i));
-
-            // ========================================================
-            // ⭐ 构造“扁平路径名”（必须和你 HLSL 完全一致）
-            // ========================================================
-            std::string fullName;
-
-            if (bIsLooseDataBlock)
-            {
-                // $Globals → 直接用成员名
-                fullName = memberName;
-            }
-            else
-            {
-                // 普通UB → BufferName_Member
-                fullName = memberName;
-            }
-
-            // ========================================================
-            // ⭐ 写入 ParameterMap（成员级）
-            // ========================================================
-            out.ParameterMap.AddParameterAllocation(
-                fullName,
-                static_cast<uint16_t>(binding),       // ⭐ 指向所属UB binding
-                static_cast<uint16_t>(memberOffset),  // ⭐ offset（关键）
-                static_cast<uint16_t>(memberSize),
-                bIsLooseDataBlock
-                ? EShaderParameterType::LooseData
-                : EShaderParameterType::UniformBuffer
-            );
-        }
-    }
-
-    // ---------- Sampled Images (Texture + Sampler) ----------
-    for (const auto& img : resourcesSC.sampled_images)
-    {
-        std::string name = compiler.get_name(img.id);
-
-        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-        out.ParameterMap.AddParameterAllocation(
-            name,
-            static_cast<uint32_t>(set),
-            static_cast<uint32_t>(binding),
-            1,
-            EShaderParameterType::SRV
-        );
-    }
-
-    // ---------- Separate Samplers ----------
-    for (const auto& sb : resourcesSC.separate_samplers)
-    {
-        std::string name = compiler.get_name(sb.id);
-
-        if (name.empty())
-            continue;
-
-        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
-        auto& type = compiler.get_type(sb.type_id);
-
-        uint32_t arraySize = 1;
-        if (!type.array.empty())
-            arraySize = type.array[0];
-
-        out.ParameterMap.AddParameterAllocation(
-            name,
-            static_cast<uint16_t>(set),
-            static_cast<uint16_t>(binding),
-            static_cast<uint16_t>(arraySize),   // ⭐数组支持
-            EShaderParameterType::Sampler
-        );
-    }
-    // ---------- Separate Images ----------
-    for (const auto& img : resourcesSC.separate_images)
-    {
-        std::string name = compiler.get_name(img.id);
-        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-        out.ParameterMap.AddParameterAllocation(
-            name, (uint32_t)set, (uint32_t)binding, 1, EShaderParameterType::SRV
-        );
-    }
-
-    // ---------- Storage Images ----------
-    for (const auto& img : resourcesSC.storage_images)
-    {
-        std::string name = compiler.get_name(img.id);
-
-        uint32_t binding = compiler.get_decoration(img.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(img.id, spv::DecorationDescriptorSet);
-        out.ParameterMap.AddParameterAllocation(
-            name,
-            static_cast<uint32_t>(set),
-            static_cast<uint32_t>(binding),
-            1,
-            EShaderParameterType::UAV
-        );
-    }
-
-    // ---------- Storage Buffers ----------
-    for (const auto& sb : resourcesSC.storage_buffers)
-    {
-        std::string name = compiler.get_name(sb.id);
-        bool hasBinding = compiler.has_decoration(sb.id, spv::DecorationBinding);
-        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
-        auto& type = compiler.get_type(sb.base_type_id);
-        uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_size(type));
-
-        out.ParameterMap.AddParameterAllocation(
-            name,
-            static_cast<uint32_t>(set),
-            static_cast<uint32_t>(binding),
-            1,
-            EShaderParameterType::UAV
-        );
-    }
-
-    // ���� Push Constants �ķ����߼�
-    for (const auto& pc : resourcesSC.push_constant_buffers)
-    {
-        // ��ȡ��� PC ���������Ϣ
-        auto& type = compiler.get_type(pc.base_type_id);
-
-        // �����ڲ���Ա������Щ��������ѡ�е� Loose Data��
-        for (uint32_t i = 0; i < type.member_types.size(); i++)
-        {
-            std::string name = compiler.get_member_name(pc.base_type_id, i);
-            uint32_t offset = compiler.type_struct_member_offset(type, i);
-            uint32_t size = static_cast<uint32_t>(compiler.get_declared_struct_member_size(type, i));
-
-            // ������� ParameterMap
-            out.ParameterMap.AddParameterAllocation(
-                name,
-                0,      // BufferIndex �� PC ͨ��û���壬����Ϊ�ض���ʶ
-                static_cast<uint16_t>(offset), // BaseIndex ���� PC �� Offset
-                static_cast<uint16_t>(size),
-                EShaderParameterType::LooseData // �������
-            );
-        }
-    }
-
-    // ---------- Accelerations Structures ----------
-    for (const auto& sb : resourcesSC.acceleration_structures)
-    {
-        std::string name = compiler.get_name(sb.id);
-        bool hasBinding = compiler.has_decoration(sb.id, spv::DecorationBinding);
-        uint32_t binding = compiler.get_decoration(sb.id, spv::DecorationBinding);
-        uint32_t set = compiler.get_decoration(sb.id, spv::DecorationDescriptorSet);
-        auto& type = compiler.get_type(sb.base_type_id);
-        
-
-        out.ParameterMap.AddParameterAllocation(
-            name,
-            static_cast<uint32_t>(set),
-            static_cast<uint32_t>(binding),
-            1,
-            EShaderParameterType::AccelerationStructure
-        );
-    }
-
-    // 6. ������
-    out.PackedBinaryData.resize(spirv.size() * sizeof(uint32_t));
-    memcpy(out.PackedBinaryData.data(), spirv.data(), spirv.size() * sizeof(uint32_t));
-
-    SPIRVPackSource packSource;
-    packSource.compiler = &compiler;
-    packSource.spirvCode = &spirv;
-    packSource.frequency = input.Frequency;
-    packSource.entryPoint = input.EntryPoint;
-
-    SPIRVCompiledBinaryResultPacker packer;
-    std::vector<char> packedData;
-
-    if (packer.Pack(&packSource, packedData))
-    {
-        out.PackedBinaryData = std::move(packedData);
-        out.Success = true;
-    }
-}
-
-void ShaderCompiler::CompileToDirectX(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
-{
+    WriteSPIRVToFile("test.spv", spirvOut);
 
 }
-
-
-void ShaderCompiler::CompileToMetal(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
-{
-
-}
-
-void ShaderCompiler::CompileToOpenGL(const std::string& preprocessedSource, const ShaderCompileInput& input, ShaderCompilationOutput& out)
-{
-
-}
-
-
-
-
-
-
-
-
-
-
-
 
 
 void SPIRVCompiledBinaryResultPacker::Depack(const std::vector<char>& packedResult)
@@ -1419,4 +1474,193 @@ bool SPIRVCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& 
     }
     return true;
 }
+struct GLSLPackSource
+{
+    std::string GLSLCode;
+    spirv_cross::Compiler* compiler = nullptr;
+    RHI::ERHIShaderFrequency frequency = RHI::ERHIShaderFrequency::Unknown;
+    std::string entryPoint;
+};
+void GLSLCompiledBinaryResultPacker::Depack(const std::vector<char>& packedResult)
+{
+    size_t offset = 0;
+
+    auto read = [&](void* dst, size_t size) -> bool
+        {
+            if (offset + size > packedResult.size()) return false;
+            memcpy(dst, packedResult.data() + offset, size);
+            offset += size;
+            return true;
+        };
+
+    uint32_t glslSize = 0;
+    if (!read(&glslSize, sizeof(uint32_t))) return;
+
+    DepackedData.GLSLCode.resize(glslSize);
+    if (glslSize > 0 && !read(DepackedData.GLSLCode.data(), glslSize))
+    {
+        DepackedData.GLSLCode.clear();
+        return;
+    }
+
+    if (!read(&DepackedData.HeaderData.Frequency, sizeof(RHI::ERHIShaderFrequency))) return;
+    if (!read(DepackedData.HeaderData.EntryPoint, sizeof(DepackedData.HeaderData.EntryPoint))) return;
+    if (!read(&DepackedData.HeaderData.ShaderHash, sizeof(uint64_t))) return;
+
+    uint32_t resourceCount = 0;
+    if (!read(&resourceCount, sizeof(uint32_t))) return;
+
+    DepackedData.HeaderData.Resources.resize(resourceCount);
+    for (uint32_t i = 0; i < resourceCount; ++i)
+    {
+        if (!read(&DepackedData.HeaderData.Resources[i], sizeof(ResourceBindingInfo)))
+        {
+            DepackedData.HeaderData.Resources.clear();
+            return;
+        }
+    }
+
+    uint32_t uniformBufferCount = 0;
+    if (!read(&uniformBufferCount, sizeof(uint32_t))) return;
+
+    DepackedData.HeaderData.UniformBuffers.resize(uniformBufferCount);
+    for (uint32_t i = 0; i < uniformBufferCount; ++i)
+    {
+        if (!read(&DepackedData.HeaderData.UniformBuffers[i], sizeof(UniformBufferBindingInfo)))
+        {
+            DepackedData.HeaderData.UniformBuffers.clear();
+            return;
+        }
+    }
+
+    if (!read(&DepackedData.HeaderData.HasPushConstant, sizeof(bool))) return;
+
+    if (DepackedData.HeaderData.HasPushConstant)
+    {
+        if (!read(&DepackedData.HeaderData.PushConstant, sizeof(PushConstantInfo)))
+        {
+            DepackedData.HeaderData.HasPushConstant = false;
+            return;
+        }
+    }
+}
+bool GLSLCompiledBinaryResultPacker::Pack(void* packSource, std::vector<char>& packedResultOut)
+{
+    if (!packSource) return false;
+
+    GLSLPackSource* src = reinterpret_cast<GLSLPackSource*>(packSource);
+    if (!src->compiler) return false;
+
+    DepackedData.HeaderData.Frequency = src->frequency;
+    strncpy(DepackedData.HeaderData.EntryPoint, src->entryPoint.c_str(), sizeof(DepackedData.HeaderData.EntryPoint) - 1);
+    DepackedData.HeaderData.EntryPoint[sizeof(DepackedData.HeaderData.EntryPoint) - 1] = '\0';
+    DepackedData.GLSLCode = src->GLSLCode;
+    DepackedData.HeaderData.ShaderHash = std::hash<std::string>()(DepackedData.GLSLCode);
+
+    spirv_cross::Compiler* compiler = src->compiler;
+    auto resources = compiler->get_shader_resources();
+
+    DepackedData.HeaderData.Resources.clear();
+    DepackedData.HeaderData.UniformBuffers.clear();
+    DepackedData.HeaderData.HasPushConstant = false;
+
+    auto addResource = [&](const spirv_cross::Resource& res, EGLSLShaderResourceType resourceType)
+        {
+            ResourceBindingInfo info{};
+            if (compiler->has_decoration(res.id, spv::DecorationBinding))
+                info.Binding = compiler->get_decoration(res.id, spv::DecorationBinding);
+            else
+                info.Binding = 0;
+
+            const auto& typeInfo = compiler->get_type(res.type_id);
+            info.Count = !typeInfo.array.empty() ? static_cast<uint32_t>(typeInfo.array[0]) : 1;
+            info.Type = resourceType;
+
+            std::string name = compiler->get_name(res.id);
+            if (name.empty()) name = compiler->get_name(res.base_type_id);
+            if (!name.empty()) strncpy_s(info.Name, name.c_str(), sizeof(info.Name) - 1);
+
+            DepackedData.HeaderData.Resources.push_back(info);
+        };
+
+    for (const auto& ub : resources.uniform_buffers)
+    {
+        addResource(ub, EGLSLShaderResourceType::UniformBuffer);
+
+        UniformBufferBindingInfo info{};
+        if (compiler->has_decoration(ub.id, spv::DecorationBinding))
+            info.Binding = compiler->get_decoration(ub.id, spv::DecorationBinding);
+
+        std::string name = compiler->get_name(ub.id);
+        if (name.empty()) name = compiler->get_name(ub.base_type_id);
+        if (!name.empty()) strncpy_s(info.Name, name.c_str(), sizeof(info.Name) - 1);
+
+        const auto& type = compiler->get_type(ub.base_type_id);
+        info.Size = static_cast<uint32_t>(compiler->get_declared_struct_size(type));
+
+        DepackedData.HeaderData.UniformBuffers.push_back(info);
+    }
+
+    for (const auto& sb : resources.storage_buffers)
+        addResource(sb, EGLSLShaderResourceType::StorageBuffer);
+
+    for (const auto& img : resources.sampled_images)
+        addResource(img, EGLSLShaderResourceType::Texture);
+
+    for (const auto& img : resources.separate_images)
+        addResource(img, EGLSLShaderResourceType::Texture);
+
+    for (const auto& sampler : resources.separate_samplers)
+        addResource(sampler, EGLSLShaderResourceType::Sampler);
+
+    for (const auto& img : resources.storage_images)
+        addResource(img, EGLSLShaderResourceType::StorageImage);
+
+    for (const auto& buffer : resources.uniform_buffers)
+        addResource(buffer, EGLSLShaderResourceType::UniformTexelBuffer);
+
+    for (const auto& buffer : resources.storage_buffers)
+        addResource(buffer, EGLSLShaderResourceType::StorageTexelBuffer);
+
+    if (!resources.push_constant_buffers.empty())
+    {
+        auto& pcb = resources.push_constant_buffers[0];
+        const auto& type = compiler->get_type(pcb.base_type_id);
+
+        DepackedData.HeaderData.HasPushConstant = true;
+        DepackedData.HeaderData.PushConstant.Size = static_cast<uint32_t>(compiler->get_declared_struct_size(type));
+        DepackedData.HeaderData.PushConstant.Binding = 0;
+        DepackedData.HeaderData.PushConstant.IsMappedToUniformBuffer = false;
+    }
+
+    std::sort(DepackedData.HeaderData.Resources.begin(), DepackedData.HeaderData.Resources.end(), [](const ResourceBindingInfo& a, const ResourceBindingInfo& b) { return a.Binding < b.Binding; });
+
+    packedResultOut.clear();
+
+    auto write = [&](const void* data, size_t size) { const char* c = reinterpret_cast<const char*>(data); packedResultOut.insert(packedResultOut.end(), c, c + size); };
+
+    uint32_t glslSize = static_cast<uint32_t>(DepackedData.GLSLCode.size());
+    write(&glslSize, sizeof(uint32_t));
+    if (glslSize > 0) write(DepackedData.GLSLCode.data(), glslSize);
+
+    write(&DepackedData.HeaderData.Frequency, sizeof(RHI::ERHIShaderFrequency));
+    write(DepackedData.HeaderData.EntryPoint, sizeof(DepackedData.HeaderData.EntryPoint));
+    write(&DepackedData.HeaderData.ShaderHash, sizeof(uint64_t));
+
+    uint32_t resourceCount = static_cast<uint32_t>(DepackedData.HeaderData.Resources.size());
+    write(&resourceCount, sizeof(uint32_t));
+    for (const auto& resource : DepackedData.HeaderData.Resources)
+        write(&resource, sizeof(ResourceBindingInfo));
+
+    uint32_t uniformBufferCount = static_cast<uint32_t>(DepackedData.HeaderData.UniformBuffers.size());
+    write(&uniformBufferCount, sizeof(uint32_t));
+    for (const auto& buffer : DepackedData.HeaderData.UniformBuffers)
+        write(&buffer, sizeof(UniformBufferBindingInfo));
+
+    write(&DepackedData.HeaderData.HasPushConstant, sizeof(bool));
+    if (DepackedData.HeaderData.HasPushConstant)
+        write(&DepackedData.HeaderData.PushConstant, sizeof(PushConstantInfo));
+    return true;
+}
+
 } // namespace RenderCore

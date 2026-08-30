@@ -180,8 +180,9 @@ namespace Renderer
         cmd.Dispatch(groupX, groupY, groupZ);
 
         cmd.End();
-
-        auto fence = computeQueue->ExecuteContext(computeContext);
+        RHI::RHIFence fence;
+		fence.QueueType = RHI::EQueueType::Compute;
+        fence.Value = computeQueue->ExecuteContext(computeContext);
         Input.InputSDFTexture->GetTracker().UpdateLastAccessFence(fence);
         Input.OutputSDFTexture->GetTracker().UpdateLastAccessFence(fence);
         

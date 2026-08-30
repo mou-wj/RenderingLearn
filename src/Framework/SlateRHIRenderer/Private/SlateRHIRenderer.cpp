@@ -115,10 +115,10 @@ namespace SlateRHIRenderer {
             
             computeTransitionCmd.End();
             computeTransitionCmd.ExecuteAll();
-            auto transientComputeFence = RHI::GRHIApi->GetQueue(EQueueType::Compute)->ExecuteContext(computeTransitionContex);
+            auto transientComputeFenceVlue = RHI::GRHIApi->GetQueue(EQueueType::Compute)->ExecuteContext(computeTransitionContex);
             RHIWaitInfo waitInfoCompute;
             waitInfoCompute.QueueType = EQueueType::Compute;
-			waitInfoCompute.Value = transientComputeFence.Value;
+			waitInfoCompute.Value = transientComputeFenceVlue;
             graphicWaitInfos.push_back(waitInfoCompute);
         }
         else {
@@ -128,11 +128,14 @@ namespace SlateRHIRenderer {
 		graphicTransitionCmd.End();
 		
         
-        auto transientGraphicFence = RHI::GRHIApi->GetQueue(EQueueType::Graphics)->ExecuteContext({ graphicTransitionContex }, graphicWaitInfos);
+        auto transientGraphicFenceVlue = RHI::GRHIApi->GetQueue(EQueueType::Graphics)->ExecuteContext({ graphicTransitionContex }, graphicWaitInfos);
 
         RHI::RHIWaitInfo presentWait;
-        presentWait.QueueType = transientGraphicFence.QueueType;
-        presentWait.Value = transientGraphicFence.Value;
+        presentWait.QueueType = EQueueType::Graphics;
+        presentWait.Value = transientGraphicFenceVlue;
+        RHI::RHIFence transientGraphicFence;
+		transientGraphicFence.QueueType = EQueueType::Graphics;
+        transientGraphicFence.Value = transientGraphicFenceVlue;
 
         RHI::GRHIApi->GetPresentExecutor()->Present(rhiSwapchain.get(), { presentWait });
 

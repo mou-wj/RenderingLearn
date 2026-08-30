@@ -434,7 +434,9 @@ namespace Test {
                 {
                     waitInfos.push_back({ slot.ReadySync, EQueueType::Graphics, 0,RHI::ERHIPipelineStage::ColorAttachmentOutput });
                 }
-                auto fence = computeQueue->ExecuteContext({ ctx }, waitInfos);
+                RHI::RHIFence fence;
+                fence.QueueType = EQueueType::Compute;
+                fence.Value = computeQueue->ExecuteContext({ ctx }, waitInfos);
 
                 // 更新 tracker（关键！）
                 renderTarget->GetTracker().UpdateLastAccessFence(fence);

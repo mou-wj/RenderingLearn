@@ -41,10 +41,10 @@ public:
     RHI::EQueueType GetType() const override;
     RHI::RHIContextBase* AcquireCommandContext() override;
     RHI::RHIContextBase* ReleaseCommandContext(RHI::RHIContextBase* Context) override;
-    RHI::RHIFence ExecuteContext(RHI::RHIContextBase* context) override;
-    RHI::RHIFence ExecuteContext(const std::vector<RHI::RHIContextBase*>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
+    uint64_t ExecuteContext(RHI::RHIContextBase* context) override;
+    uint64_t ExecuteContext(const std::vector<RHI::RHIContextBase*>& Cmds, const std::vector<RHI::RHIWaitInfo>& WaitInfos) override;
     VulkanSemaphore* SubmitEmptyWithDependency(VkSemaphore timelineWait, uint64_t waitValue);
-    void WaitFence(RHIFence Fence) override;
+    void WaitValue(uint64_t Fence) override;
 
     void WaitIdle() override;
 

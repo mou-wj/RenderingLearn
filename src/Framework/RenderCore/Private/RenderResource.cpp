@@ -102,11 +102,12 @@ void RenderTexture::UploadData(const void* data, const RHI::RHIUpdateTextureRegi
 
 	GRHIApi->UpdateTexture(cmd, Texture.get(), data, updateRegion);
 	cmd.End();
-
-	auto fence = queue->ExecuteContext({ ctx }, {});
+	RHI::RHIFence fence;
+	fence.QueueType = lastQueueType;
+	fence.Value = queue->ExecuteContext({ ctx }, {});
 	GetTracker().UpdateSubresourceAccess(range, ERHIResourceAccess::TransferDest);
 	GetTracker().UpdateLastAccessFence(fence);
-	queue->WaitFence(fence);
+	queue->WaitValue(fence.Value);
 }
 void RenderTexture::ReadData(void* data, uint32_t mipIndex, uint32_t arraySlice, uint32_t planeSlice) {
 	if (!data)
@@ -217,14 +218,11 @@ void RenderTexture::ReadData(void* data, uint32_t mipIndex, uint32_t arraySlice,
 	//---------------------------------
 
 	cmd.End();
+	RHI::RHIFence fence;
+	fence.QueueType = lastQueueType;
+	fence.Value = queue->ExecuteContext( { ctx }, {});
 
-	auto fence =
-		queue->ExecuteContext(
-			{ ctx },
-			{});
-
-	queue->WaitFence(
-		fence);
+	queue->WaitValue(fence.Value);
 
 	//---------------------------------
 	// copy cpu data
@@ -326,8 +324,10 @@ void TransitionTextureImmediate(
 
 
 	}
-	auto fence = RHI::GRHIApi->GetQueue(currentQueueType)->ExecuteContext(contex);
-	RHI::GRHIApi->GetQueue(currentQueueType)->WaitFence(fence);
+	RHI::RHIFence fence;
+	fence.QueueType = currentQueueType;
+	fence.Value = RHI::GRHIApi->GetQueue(currentQueueType)->ExecuteContext(contex);
+	RHI::GRHIApi->GetQueue(currentQueueType)->WaitValue(fence.Value);
 	//更新 Tracker 状态
 	resource->GetTracker().UpdateSubresourceAccess(RHISubresourceRange{}, targetAccess);
 	resource->GetTracker().UpdateLastAccessFence(fence);
@@ -385,8 +385,10 @@ void TransitionBufferImmediate(
 
 
 	}
-	auto fence = RHI::GRHIApi->GetQueue(currentQueueType)->ExecuteContext(contex);
-	RHI::GRHIApi->GetQueue(currentQueueType)->WaitFence(fence);
+	RHI::RHIFence fence;
+	fence.QueueType = currentQueueType;
+    fence.Value = RHI::GRHIApi->GetQueue(currentQueueType)->ExecuteContext(contex);
+	RHI::GRHIApi->GetQueue(currentQueueType)->WaitValue(fence.Value);
 	resource->GetTracker().UpdateAccess(targetAccess);
 	resource->GetTracker().UpdateLastAccessFence(fence);
 	api->RHIReleaseTransition(transition);
@@ -442,10 +444,12 @@ void RenderBuffer::UploadData(const void* data, uint32_t size, uint32_t offset) 
 	GRHIApi->UpdateBuffer(cmd, Buffer.get(),data, region);
 	cmd.End();
 
-	auto fence = queue->ExecuteContext({ ctx }, {});
+	RHI::RHIFence fence;
+	fence.QueueType = lastQueueType;
+    fence.Value = queue->ExecuteContext({ ctx }, {});
 	GetTracker().UpdateAccess(ERHIResourceAccess::TransferDest);
 	GetTracker().UpdateLastAccessFence(fence);
-	queue->WaitFence(fence);
+	queue->WaitValue(fence.Value);
 }
 
 
@@ -630,7 +634,9 @@ RenderTextureSP CreateTexture(const std::string& Path)
 	GRHIApi->UpdateTexture(cmd, outTexture->GetRHI(), pixels, RHIUpdateTextureRegion::Create2DRegion(desc.Width, desc.Height));
 	cmd.End();
 	cmd.ExecuteAll();
-	auto fence = GRHIApi->GetQueue(EQueueType::Graphics)->ExecuteContext({ graphphicContex }, {});
+	RHI::RHIFence fence;
+	fence.QueueType = EQueueType::Graphics;
+	fence.Value  = GRHIApi->GetQueue(EQueueType::Graphics)->ExecuteContext({ graphphicContex }, {});
 	outTexture->GetTracker().UpdateLastAccessFence(fence);
 	outTexture->GetTracker().UpdateSubresourceAccess(RHI::RHISubresourceRange{}, ERHIResourceAccess::TransferDest);
 

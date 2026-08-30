@@ -1,19 +1,22 @@
 #pragma once
-#include "RHIApi.h"
-#include "OpenGLResource.h"
-#include "OpenGLPipelineState.h"
-#include "OpenGLTransientResource.h"
-#include "OpenGLContext.h"
-#include "OpenGLQueue.h"
-#include "glad/gl.h"
-#include <string>
 
-namespace RHIOpenGL
+#include "RHIApi.h" 
+
+#include <memory>
+#include <string>
+#include <unordered_map>
+
+namespace RHIDirectX12
 {
-    class RHIOPENGL_API OpenGLRHIApi : public RHI::RHIApi
+    class DirectX12Device;
+    class DirectX12Queue;
+    class DirectX12PresentExecutor;
+    class DirectX12StagingBuffer;
+
+    class RHIDIRECTX12_API DirectX12RHIApi : public RHI::RHIApi
     {
     public:
-        ~OpenGLRHIApi() override;
+        ~DirectX12RHIApi() override;
 
         bool Init() override;
         void Shutdown() override;
@@ -80,15 +83,20 @@ namespace RHIOpenGL
         RHI::RHITransientResourceManagerSP CreateTransientResourceManager() override;
 
     private:
-        RHI::RHIPlatformInfo PlatformInfo;
-
+        bool bInitialized = false;
+        RHI::RHIPlatformInfo PlatformInfo{};
+        std::unique_ptr<DirectX12Queue> GraphicsQueue;
+        std::unique_ptr<DirectX12Queue> ComputeQueue;
+        std::unique_ptr<DirectX12PresentExecutor> PresentExecutor;
+        std::unique_ptr<DirectX12Device> Device;
+        std::unordered_map<void*, std::shared_ptr<DirectX12StagingBuffer>> MappedStagingBuffers;
     };
 
-    class RHIOPENGL_API OpenGLRHIModule final : public RHI::RHIModule
+    class RHIDIRECTX12_API DirectX12RHIModule final : public RHI::RHIModule
     {
     public:
-        OpenGLRHIModule();
-        ~OpenGLRHIModule() override;
+        DirectX12RHIModule();
+        ~DirectX12RHIModule() override;
 
         void StartupModule() override;
         void ShutdownModule() override;
@@ -98,6 +106,6 @@ namespace RHIOpenGL
 
     private:
         bool bLoaded = false;
-        std::string ModuleName = "OpenGLRHI";
+        std::string ModuleName = "DirectX12RHI";
     };
 }

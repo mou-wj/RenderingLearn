@@ -424,7 +424,7 @@ namespace RHIOpenGL
         {
             return;
         }
-
+        
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glIndexBuffer->GetHandle());
         const GLenum indexType = glIndexBuffer->GetDesc().Stride == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
         glDrawElements(CurrentPrimitiveTopology, static_cast<GLsizei>(indexCount * instanceCount), indexType, reinterpret_cast<void*>(static_cast<uintptr_t>(firstIndex * static_cast<uint32_t>(glIndexBuffer->GetDesc().Stride))));

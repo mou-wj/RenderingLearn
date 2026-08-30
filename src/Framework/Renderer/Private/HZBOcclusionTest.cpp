@@ -212,9 +212,10 @@ namespace Renderer {
         const uint32_t groupX = (Input.PrimitiveCount + 63u) / 64u;
         cmd.Dispatch(groupX, 1, 1);
         cmd.End();
-
-        auto computeFence = computeQueue->ExecuteContext({ computeContext }, {});
-        computeQueue->WaitFence(computeFence);
+		RHI::RHIFence computeFence;
+		computeFence.QueueType = RHI::EQueueType::Compute;
+        computeFence.Value = computeQueue->ExecuteContext({ computeContext }, {});
+        computeQueue->WaitValue(computeFence.Value);
 
         instanceBoundsBuffer->GetTracker().UpdateAccess(RHI::ERHIResourceAccess::SRV);
         instanceBoundsBuffer->GetTracker().UpdateLastAccessFence(computeFence);
@@ -244,13 +245,15 @@ namespace Renderer {
         }
 
         readbackCmd.End();
-        auto readbackFence = computeQueue->ExecuteContext({ readbackContext }, {});
-        computeQueue->WaitFence(readbackFence);
+        auto readbackFenceValue = computeQueue->ExecuteContext({ readbackContext }, {});
+        computeQueue->WaitValue(readbackFenceValue);
 
         OutVisibilityFlags.resize(Input.PrimitiveCount);
         std::memcpy(OutVisibilityFlags.data(), mapped, Input.PrimitiveCount * sizeof(uint32_t));
         RHI::GRHIApi->Unmap(mapped);
-
+        RHI::RHIFence readbackFence;
+        readbackFence.Value = readbackFenceValue;
+        readbackFence.QueueType = RHI::EQueueType::Compute;
         Input.VisibilityFlagsBuffer->GetTracker().UpdateAccess(RHI::ERHIResourceAccess::TransferSrc);
         Input.VisibilityFlagsBuffer->GetTracker().UpdateLastAccessFence(readbackFence);
 

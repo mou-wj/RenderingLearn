@@ -83,32 +83,7 @@ namespace RHIOpenGL
         }
     }
 
-    static bool CompileOpenGLShader(GLuint shaderHandle, const std::vector<char>& source, const char* shaderName)
-    {
-        if (shaderHandle == 0)
-        {
-            return false;
-        }
-
-        const char* sourceText = source.empty() ? "" : source.data();
-        GLint sourceLength = static_cast<GLint>(source.size());
-        glShaderSource(shaderHandle, 1, &sourceText, sourceLength == 0 ? nullptr : &sourceLength);
-        glCompileShader(shaderHandle);
-
-        GLint compileStatus = GL_FALSE;
-        glGetShaderiv(shaderHandle, GL_COMPILE_STATUS, &compileStatus);
-        if (compileStatus == GL_FALSE)
-        {
-            GLint infoLogLength = 0;
-            glGetShaderiv(shaderHandle, GL_INFO_LOG_LENGTH, &infoLogLength);
-            std::vector<char> infoLog(static_cast<size_t>(infoLogLength > 0 ? infoLogLength : 1));
-            glGetShaderInfoLog(shaderHandle, static_cast<GLint>(infoLog.size()), nullptr, infoLog.data());
-            std::fprintf(stderr, "[OpenGLRHI] Failed to compile %s shader: %s\n", shaderName, infoLog.data());
-            return false;
-        }
-
-        return true;
-    }
+    
 
     OpenGLTexture::OpenGLTexture(const RHI::RHITextureDesc& desc)
         : RHI::RHITexture(desc)
@@ -168,6 +143,36 @@ namespace RHIOpenGL
     OpenGLUnorderedAccessView::OpenGLUnorderedAccessView(RHI::RHIViewableResource* Resource)
         : RHI::RHIUnorderedAccessView(Resource)
     {
+    }
+
+    bool OpenGLShaderBase::CompileOpenGLShader(GLuint shaderHandle, const std::vector<char>& packedSource, const char* shaderName)
+    {
+        if (shaderHandle == 0)
+        {
+            return false;
+        }
+        RenderCore::GLSLCompiledBinaryResultPacker packer;
+        packer.Depack(packedSource);
+        Reflection = packer.DepackedData.HeaderData;
+        auto& source = packer.DepackedData.GLSLCode;
+        const char* sourceText = source.empty() ? "" : source.data();
+        GLint sourceLength = static_cast<GLint>(source.size());
+        glShaderSource(shaderHandle, 1, &sourceText, sourceLength == 0 ? nullptr : &sourceLength);
+        glCompileShader(shaderHandle);
+
+        GLint compileStatus = GL_FALSE;
+        glGetShaderiv(shaderHandle, GL_COMPILE_STATUS, &compileStatus);
+        if (compileStatus == GL_FALSE)
+        {
+            GLint infoLogLength = 0;
+            glGetShaderiv(shaderHandle, GL_INFO_LOG_LENGTH, &infoLogLength);
+            std::vector<char> infoLog(static_cast<size_t>(infoLogLength > 0 ? infoLogLength : 1));
+            glGetShaderInfoLog(shaderHandle, static_cast<GLint>(infoLog.size()), nullptr, infoLog.data());
+            std::fprintf(stderr, "[OpenGLRHI] Failed to compile %s shader: %s\n", shaderName, infoLog.data());
+            return false;
+        }
+
+        return true;
     }
 
     bool OpenGLVertexShader::Compile(const std::vector<char>& source)

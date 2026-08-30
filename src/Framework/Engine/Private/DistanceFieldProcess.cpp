@@ -170,8 +170,10 @@ namespace Engine {
         cmd.Dispatch(groupX, 1, 1);
 
         cmd.End();
-
-        auto fence = computeQueue->ExecuteContext(computeContext);
+        RHI::RHIFence fence;
+		fence.QueueType = RHI::EQueueType::Compute;
+        auto fenceValue = computeQueue->ExecuteContext(computeContext);
+        fence.Value = fenceValue;
         Input.VertexBuffer->GetTracker().UpdateLastAccessFence(fence);
         Input.IndexBuffer->GetTracker().UpdateLastAccessFence(fence);
         Input.OutputSDFTexture->GetTracker().UpdateLastAccessFence(fence);
@@ -358,8 +360,10 @@ namespace Engine {
         cmd.Dispatch(groupX, groupY, groupZ);
 
         cmd.End();
-
-        auto fence = computeQueue->ExecuteContext(computeContext);
+        RHI::RHIFence fence;
+        fence.QueueType = RHI::EQueueType::Compute;
+        auto fenceValue = computeQueue->ExecuteContext(computeContext);
+        fence.Value = fenceValue;
         Input.SurfaceMaskTexture->GetTracker().UpdateLastAccessFence(fence);
         seedTextureA->GetTracker().UpdateLastAccessFence(fence);
         seedTextureB->GetTracker().UpdateLastAccessFence(fence);

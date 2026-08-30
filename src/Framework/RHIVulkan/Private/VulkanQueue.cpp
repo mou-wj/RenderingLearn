@@ -183,12 +183,12 @@ RHI::RHIContextBase* VulkanQueue::ReleaseCommandContext(RHI::RHIContextBase* Con
     return nullptr;
 }
 
-RHI::RHIFence VulkanQueue::ExecuteContext(RHI::RHIContextBase* contextBase)
+uint64_t VulkanQueue::ExecuteContext(RHI::RHIContextBase* contextBase)
 {
     return ExecuteContext({ contextBase }, {});
 }
 
-RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*>& Contexts, const std::vector<RHI::RHIWaitInfo>& WaitInfos)
+uint64_t VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*>& Contexts, const std::vector<RHI::RHIWaitInfo>& WaitInfos)
 {
     std::lock_guard<std::mutex> lock(FlushContextMutex_);
 
@@ -322,7 +322,7 @@ RHI::RHIFence VulkanQueue::ExecuteContext(const std::vector<RHI::RHIContextBase*
     result.QueueType = SubmitSyncPoint_->GetQueueType();
     result.Value = signalValue;
 
-    return result;
+    return result.Value;
 
 }
 
@@ -366,13 +366,13 @@ VulkanSemaphore* VulkanQueue::SubmitEmptyWithDependency(VkSemaphore timelineWait
 }
 
 
-void VulkanQueue::WaitFence(RHIFence Fence)
+void VulkanQueue::WaitValue(uint64_t FenceValue)
 {
-	if (Fence.QueueType != SubmitSyncPoint_->GetQueueType() || Fence.Value == 0)
+	if (FenceValue == 0)
 	{
 		return;
 	}
-    SubmitSyncPoint_->Wait(Fence.Value);
+    SubmitSyncPoint_->Wait(FenceValue);
 }
 
 // -------------------------------------------------------------------------------------------------

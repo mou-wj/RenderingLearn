@@ -2,6 +2,7 @@
 
 #include "RHIResource.h"
 #include "glad/gl.h"
+#include "ShaderCompiledDataPacker.h"
 #include <memory>
 #include <vector>
 
@@ -63,7 +64,15 @@ namespace RHIOpenGL
     };
     using OpenGLUnorderedAccessViewSP = std::shared_ptr<OpenGLUnorderedAccessView>;
 
-    class OpenGLVertexShader : public RHI::RHIVertexShader
+    class OpenGLShaderBase{
+    public:
+        RenderCore::GLSLCompiledBinaryResultPacker::Header GetShaderReflection() const { return Reflection; }
+        bool CompileOpenGLShader(GLuint shaderHandle, const std::vector<char>& source, const char* shaderName);
+    protected:
+        RenderCore::GLSLCompiledBinaryResultPacker::Header Reflection;
+    };
+
+    class OpenGLVertexShader : public RHI::RHIVertexShader,public OpenGLShaderBase
     {
     public:
         OpenGLVertexShader();
@@ -79,7 +88,7 @@ namespace RHIOpenGL
     };
     using OpenGLVertexShaderSP = std::shared_ptr<OpenGLVertexShader>;
 
-    class OpenGLFragmentShader : public RHI::RHIFragmentShader
+    class OpenGLFragmentShader : public RHI::RHIFragmentShader, public OpenGLShaderBase
     {
     public:
         OpenGLFragmentShader();
@@ -95,7 +104,7 @@ namespace RHIOpenGL
     };
     using OpenGLFragmentShaderSP = std::shared_ptr<OpenGLFragmentShader>;
 
-    class OpenGLComputeShader : public RHI::RHIComputeShader
+    class OpenGLComputeShader : public RHI::RHIComputeShader, public OpenGLShaderBase
     {
     public:
         OpenGLComputeShader();
@@ -111,7 +120,7 @@ namespace RHIOpenGL
     };
     using OpenGLComputeShaderSP = std::shared_ptr<OpenGLComputeShader>;
 
-    class OpenGLGeometryShader : public RHI::RHIGeometryShader
+    class OpenGLGeometryShader : public RHI::RHIGeometryShader, public OpenGLShaderBase
     {
     public:
         OpenGLGeometryShader();
@@ -127,7 +136,7 @@ namespace RHIOpenGL
     };
     using OpenGLGeometryShaderSP = std::shared_ptr<OpenGLGeometryShader>;
 
-    class OpenGLTessControlShader : public RHI::RHITessControlShader
+    class OpenGLTessControlShader : public RHI::RHITessControlShader, public OpenGLShaderBase
     {
     public:
         OpenGLTessControlShader();
@@ -143,7 +152,7 @@ namespace RHIOpenGL
     };
     using OpenGLTessControlShaderSP = std::shared_ptr<OpenGLTessControlShader>;
 
-    class OpenGLTessEvalShader : public RHI::RHITessEvalShader
+    class OpenGLTessEvalShader : public RHI::RHITessEvalShader, public OpenGLShaderBase
     {
     public:
         OpenGLTessEvalShader();

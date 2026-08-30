@@ -1206,7 +1206,9 @@ namespace RenderCore {
                 }
 
                 RHI::RHIWaitInfo lastTransInfo;
-                RHI::RHIFence fence = queue->ExecuteContext({ group.CmdContexts[q] }, waitInfos);
+                RHI::RHIFence fence;
+                fence.QueueType = queue->GetType();
+                fence.Value = queue->ExecuteContext({ group.CmdContexts[q] }, waitInfos);
                 Timeline[q] = fence.Value;
 
                 // 👉 关键：更新 fence

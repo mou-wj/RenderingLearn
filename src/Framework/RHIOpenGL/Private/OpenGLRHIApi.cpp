@@ -1,13 +1,10 @@
 #include "OpenGLRHIApi.h"
+#include "OpenGLPlatformSurport.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
 
 namespace RHIOpenGL
 {
@@ -44,86 +41,6 @@ namespace RHIOpenGL
         }
     }
 
- #if defined(_WIN32)
-    static GLADapiproc LoadOpenGLProcAddress(const char* name)
-    {
-        PROC proc = wglGetProcAddress(name);
-        const auto procValue = reinterpret_cast<uintptr_t>(proc);
-        if (proc == nullptr || procValue == 1 || procValue == 2 || procValue == 3 || procValue == static_cast<uintptr_t>(-1))
-        {
-            static HMODULE openGLModule = GetModuleHandleA("opengl32.dll");
-            if (!openGLModule)
-            {
-                openGLModule = LoadLibraryA("opengl32.dll");
-            }
-            proc = openGLModule ? GetProcAddress(openGLModule, name) : nullptr;
-        }
-
-        return reinterpret_cast<GLADapiproc>(proc);
-    }
-
-    static LRESULT CALLBACK OpenGLBootstrapWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
-    {
-        return DefWindowProcA(window, message, wParam, lParam);
-    }
-
-    static bool RegisterOpenGLBootstrapWindowClass(HINSTANCE instance)
-    {
-        WNDCLASSA windowClass{};
-        windowClass.style = CS_OWNDC;
-        windowClass.lpfnWndProc = OpenGLBootstrapWindowProc;
-        windowClass.hInstance = instance;
-        windowClass.lpszClassName = "RenderingLearnOpenGLBootstrap";
-
-        if (RegisterClassA(&windowClass) != 0)
-        {
-            return true;
-        }
-
-        return GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
-    }
-
-    static HGLRC CreateOpenGLBootstrapContext(HDC deviceContext)
-    {
-        PIXELFORMATDESCRIPTOR pixelFormatDescriptor{};
-        pixelFormatDescriptor.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-        pixelFormatDescriptor.nVersion = 1;
-        pixelFormatDescriptor.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-        pixelFormatDescriptor.iPixelType = PFD_TYPE_RGBA;
-        pixelFormatDescriptor.cColorBits = 32;
-        pixelFormatDescriptor.cDepthBits = 24;
-        pixelFormatDescriptor.cStencilBits = 8;
-        pixelFormatDescriptor.iLayerType = PFD_MAIN_PLANE;
-
-        const int pixelFormat = ChoosePixelFormat(deviceContext, &pixelFormatDescriptor);
-        if (pixelFormat == 0 || !SetPixelFormat(deviceContext, pixelFormat, &pixelFormatDescriptor))
-        {
-            return nullptr;
-        }
-
-        return wglCreateContext(deviceContext);
-    }
-
-    using WGLCreateContextAttribsProc = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
-
-    static HGLRC TryCreateOpenGL43Context(HDC deviceContext, HGLRC shareContext)
-    {
-        auto createContextAttribs = reinterpret_cast<WGLCreateContextAttribsProc>(
-            wglGetProcAddress("wglCreateContextAttribsARB"));
-        if (!createContextAttribs)
-        {
-            return nullptr;
-        }
-
-        const int attributes[] = {
-            0x2091, 4, // WGL_CONTEXT_MAJOR_VERSION_ARB
-            0x2092, 3, // WGL_CONTEXT_MINOR_VERSION_ARB
-            0x9126, 0x00000001, // WGL_CONTEXT_PROFILE_MASK_ARB: core profile
-            0
-        };
-        return createContextAttribs(deviceContext, shareContext, attributes);
-    }
- #endif
 
     OpenGLRHIApi::~OpenGLRHIApi() {
         Shutdown();
@@ -135,142 +52,20 @@ namespace RHIOpenGL
         PlatformInfo.DepthRange = RHI::EDepthRange::ZeroToOne;
         PlatformInfo.EnableRayTracing = false;
 
- #if !defined(_WIN32)
-        std::cerr << "[OpenGLRHI] Bootstrap context is currently implemented for Win32 only" << std::endl;
-        return false;
- #else
-        const HINSTANCE instance = GetModuleHandleA(nullptr);
-        if (!RegisterOpenGLBootstrapWindowClass(instance))
-        {
-            std::cerr << "[OpenGLRHI] Failed to register bootstrap window class" << std::endl;
-            return false;
-        }
-
-        HWND bootstrapWindow = CreateWindowExA(
-            0,
-            "RenderingLearnOpenGLBootstrap",
-            "RenderingLearn OpenGL Bootstrap",
-            WS_POPUP,
-            0,
-            0,
-            1,
-            1,
-            nullptr,
-            nullptr,
-            instance,
-            nullptr);
-        if (!bootstrapWindow)
-        {
-            std::cerr << "[OpenGLRHI] Failed to create bootstrap window" << std::endl;
-            return false;
-        }
-
-        HDC deviceContext = GetDC(bootstrapWindow);
-        if (!deviceContext)
-        {
-            DestroyWindow(bootstrapWindow);
-            std::cerr << "[OpenGLRHI] Failed to get bootstrap device context" << std::endl;
-            return false;
-        }
-
-        HGLRC legacyContext = CreateOpenGLBootstrapContext(deviceContext);
-        if (!legacyContext || !wglMakeCurrent(deviceContext, legacyContext))
-        {
-            if (legacyContext)
-            {
-                wglDeleteContext(legacyContext);
-            }
-            ReleaseDC(bootstrapWindow, deviceContext);
-            DestroyWindow(bootstrapWindow);
-            std::cerr << "[OpenGLRHI] Failed to create bootstrap WGL context" << std::endl;
-            return false;
-        }
-
-        const int bootstrapVersion = gladLoadGL(LoadOpenGLProcAddress);
-        if (bootstrapVersion == 0)
-        {
-            wglMakeCurrent(nullptr, nullptr);
-            wglDeleteContext(legacyContext);
-            ReleaseDC(bootstrapWindow, deviceContext);
-            DestroyWindow(bootstrapWindow);
-            std::cerr << "[OpenGLRHI] gladLoadGL failed for bootstrap WGL context" << std::endl;
-            return false;
-        }
-
-        HGLRC modernContext = TryCreateOpenGL43Context(deviceContext, nullptr);
-        if (modernContext)
-        {
-            wglMakeCurrent(nullptr, nullptr);
-            wglDeleteContext(legacyContext);
-            if (!wglMakeCurrent(deviceContext, modernContext))
-            {
-                wglDeleteContext(modernContext);
-                ReleaseDC(bootstrapWindow, deviceContext);
-                DestroyWindow(bootstrapWindow);
-                std::cerr << "[OpenGLRHI] Failed to activate OpenGL 4.3 context" << std::endl;
-                return false;
-            }
-            legacyContext = modernContext;
-        }
-
-        const int version = gladLoadGL(LoadOpenGLProcAddress);
-        if (version == 0)
-        {
-            wglMakeCurrent(nullptr, nullptr);
-            wglDeleteContext(legacyContext);
-            ReleaseDC(bootstrapWindow, deviceContext);
-            DestroyWindow(bootstrapWindow);
-            std::cerr << "[OpenGLRHI] gladLoadGL failed" << std::endl;
-            return false;
-        }
-
-        BootstrapWindow = bootstrapWindow;
-        BootstrapDeviceContext = deviceContext;
-        BootstrapGLContext = legacyContext;
-        // 3. ¼ÆËãÆ«ÒÆÁ¿ (¶ÔÆë Header Ö®ºóµÄµØÖ·)
+        // 3. ï¿½ï¿½ï¿½ï¿½Æ«ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ Header Ö®ï¿½ï¿½Äµï¿½Ö·)
         RHI::G_RHITransition_PrivateDataOffset = 1;
 
-        // 4. ¼ÆËã×Ü·ÖÅä´óÐ¡
+        // 4. ï¿½ï¿½ï¿½ï¿½ï¿½Ü·ï¿½ï¿½ï¿½ï¿½Ð¡
         RHI::G_RHITransition_TotalSize = 2;
 
-
-        std::cout << "[OpenGLRHI] OpenGL environment initialized. GL version: "
-                  << GLAD_VERSION_MAJOR(version) << "." << GLAD_VERSION_MINOR(version)
-                  << std::endl;
-        return true;
- #endif
+        return InitializePlatformSurport();
     }
 
     void OpenGLRHIApi::Shutdown()
     {
-        DestroyBootstrapContext();
+        ShutdownPlatformSurport();
     }
 
-    void OpenGLRHIApi::DestroyBootstrapContext()
-    {
- #if defined(_WIN32)
-        auto window = static_cast<HWND>(BootstrapWindow);
-        auto deviceContext = static_cast<HDC>(BootstrapDeviceContext);
-        auto glContext = static_cast<HGLRC>(BootstrapGLContext);
-
-        if (glContext)
-        {
-            wglMakeCurrent(nullptr, nullptr);
-            wglDeleteContext(glContext);
-        }
-        if (window && deviceContext)
-        {
-            ReleaseDC(window, deviceContext);
-        }
-        if (window)
-        {
-            DestroyWindow(window);
-        }
- #endif
-        BootstrapWindow = nullptr;
-        BootstrapDeviceContext = nullptr;
-        BootstrapGLContext = nullptr;
-    }
 
     const RHI::RHIPlatformInfo& OpenGLRHIApi::GetPlatformInfo() const
     {
@@ -571,18 +366,7 @@ namespace RHIOpenGL
 
     RHI::RHIQueue* OpenGLRHIApi::GetQueue(RHI::EQueueType Type)
     {
-        static OpenGLQueue graphicsQueue(RHI::EQueueType::Graphics);
-        static OpenGLQueue computeQueue(RHI::EQueueType::Compute);
-
-        switch (Type)
-        {
-        case RHI::EQueueType::Graphics:
-            return &graphicsQueue;
-        case RHI::EQueueType::Compute:
-            return &computeQueue;
-        default:
-            return &graphicsQueue;
-        }
+		return OpenGLQueueManager::GetInstance().GetQueue(Type);
     }
 
     RHI::RHIPresentExecutor* OpenGLRHIApi::GetPresentExecutor()

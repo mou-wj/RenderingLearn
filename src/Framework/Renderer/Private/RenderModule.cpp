@@ -224,7 +224,9 @@ namespace Renderer {
         //生成diffuse的mipmap
 
         cmdlist.End();
-        auto fence = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
+        RHI::RHIFence fence;
+		fence.QueueType = RHI::EQueueType::Compute;
+        fence.Value = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
         InHDRTexture->GetTracker().UpdateLastAccessFence(fence);
         OutDiffuseIBL->GetTracker().UpdateLastAccessFence(fence);
         OutSpecularIBL->GetTracker().UpdateLastAccessFence(fence);
@@ -280,7 +282,9 @@ namespace Renderer {
         cmdlist.Dispatch(groupX, groupY, 1);
         //生成diffuse的mipmap
         cmdlist.End();
-        auto fence = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
+        RHI::RHIFence fence;
+        fence.QueueType = RHI::EQueueType::Compute;
+        fence.Value = GRHIApi->GetQueue(RHI::EQueueType::Compute)->ExecuteContext(computeContex);
         GlobalIBLLutTexture->GetTracker().UpdateLastAccessFence(fence);
         //写出测试
         //SaveTexture(GlobalIBLLutTexture.get(), "IBLLut.png",0,0);
